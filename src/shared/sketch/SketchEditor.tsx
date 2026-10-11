@@ -189,6 +189,14 @@ export interface SketchEditorHandle {
   insertImage(path: string, name?: string): Promise<void>
   setColor(color: string): void
   color: string
+  /** v0.14 (Texture Paint): the engine, for watching `version` and reading the flattened picture. */
+  engine: SketchEngine
+  /** The flattened picture with background. */
+  render(): HTMLCanvasElement
+  /** Paint a stroke at canvas points from outside (e.g. a 3D view), with the current brush, colour and layer. */
+  paintDown(p: InputPoint, time: number): boolean
+  paintMove(p: InputPoint, time: number): void
+  paintUp(): void
 }
 
 /** A raster editor: pressure brushes, layers with blend modes, selection, mirror and references (v0.5). */
@@ -733,7 +741,33 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
     for (const a of await pickAndImportAssets(root, 'image')) await insertImage(a.path, a.name.replace(/\.[^.]+$/, ''))
   }
 
-  useImperativeHandle(editorRef, () => ({ insertImage, setColor, color }))
+  // v0.14: strokes from outside the canvas (Texture Paint's 3D view), through the same brush, pipeline and undo.
+  const outside = useRef<PenPipeline | null>(null)
+  const paintDown = (p: InputPoint, time: number) => {
+    if (!activeLayer || !activeLayer.visible || !hasPixels(activeLayer) || activeLayer.text || lockedInTree(doc.layers, activeLayer.id)) return false
+    const erase = tool === 'eraser'
+    const own = lib.brushes.find((b) => b.id === (erase ? lib.eraserId : lib.brushId)) ?? brush
+    const ov = input.overrides
+    const strokeBrush = { ...own, streamline: ov.streamline ?? own.streamline, stabilization: ov.stabilization ?? own.stabilization, tether: 0 }
+    outside.current = new PenPipeline({ streamline: strokeBrush.streamline, stabilization: input.stabilization, motionFilter: input.motionFilter })
+    const pt = outside.current.push(p, time)[0] ?? p
+    engine.beginStroke({ layer: activeLayer, brush: strokeBrush, color, symmetry: 'off', erase, smudge: tool === 'smudge', mirror: symmetryMirror(liveGuide, activeLayer.id) }, pt)
+    setVersion(engine.version)
+    return true
+  }
+  const paintMove = (p: InputPoint, time: number) => {
+    if (!outside.current) return
+    for (const q of outside.current.push(p, time)) engine.strokeTo(q)
+    setVersion(engine.version)
+  }
+  const paintUp = () => {
+    if (!outside.current) return
+    for (const q of outside.current.flush()) engine.strokeTo(q)
+    outside.current = null
+    markDirty(engine.endStroke())
+    files.stroked()
+  }
+  useImperativeHandle(editorRef, () => ({ insertImage, setColor, color, engine, render: () => engine.render(docRef.current), paintDown, paintMove, paintUp }))
 
   const exportPng = async () => {
     await saveBinaryFile({
