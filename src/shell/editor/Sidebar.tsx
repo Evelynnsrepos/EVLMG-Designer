@@ -22,6 +22,12 @@ import { BACKGROUND_TOOLS, deleteToolContent, hideTool, toolHasContent } from '.
 /** Colours for tools and folders in the sidebar (v0.13); null = none. */
 const TOOL_COLORS: (string | null)[] = [null, '#e03131', '#f08c00', '#f5b301', '#2f9e44', '#0c8599', '#1971c2', '#7048e8', '#c2255c']
 
+/** A right-click menu at the pointer that opens upward in the lower half of the window, so it is never cut off (v0.13). */
+const menuAt = (x: number, y: number): React.CSSProperties =>
+  y > window.innerHeight / 2
+    ? { position: 'fixed', left: x, bottom: window.innerHeight - y, maxHeight: y - 8, overflowY: 'auto' }
+    : { position: 'fixed', left: x, top: y, maxHeight: window.innerHeight - y - 8, overflowY: 'auto' }
+
 /** Always-visible component sidebar (SB-1..SB-7). */
 export function Sidebar() {
   const meta = useProjectStore((s) => s.meta)
@@ -33,6 +39,7 @@ export function Sidebar() {
   const [search, setSearch] = useState('')
   const [dropOn, setDropOn] = useState<string | null>(null)
   const [folderMenu, setFolderMenu] = useState<{ id: Id; x: number; y: number } | null>(null)
+  const [docMenu, setDocMenu] = useState<{ id: Id; title: string; x: number; y: number } | null>(null)
   const [moreOpen, setMoreOpen] = useState(() => {
     try {
       return localStorage.getItem('egd.sidebar.more') !== '0'
@@ -83,6 +90,14 @@ export function Sidebar() {
     const f: SidebarFolder = { id: newId(), name: name.trim(), tools: withTool ? [withTool] : [] }
     updateMeta({ folders: [...folders.map((x) => ({ ...x, tools: x.tools.filter((t) => t !== withTool) })), f], favorites: withTool ? favorites.filter((x) => x !== withTool) : favorites })
   }
+  const deleteDocument = async (id: Id, title: string) => {
+    const ok = await confirmDialog({ title: 'Delete document?', message: `"${title}" will be deleted permanently.`, confirmLabel: 'Delete', danger: true })
+    if (!ok) return
+    const open = leaves(useProjectStore.getState().meta?.layout ?? null).find((p) => p.documentId === id)
+    if (open) await closePanel(open.id)
+    await useProjectStore.getState().removeDocument(id)
+  }
+
   /** Drop tool `from` onto tool `to`: it moves there, and joins `to`'s folder or stars like `to`. */
   const moveTool = (from: ComponentType, to: ComponentType) => {
     if (from === to) return
@@ -197,13 +212,11 @@ export function Sidebar() {
                       <button
                         className="sidebar-row sidebar-doc"
                         onClick={(e) => (e.shiftKey ? openComponent(m.type, d.id) : void replaceWithComponent(m.type, d.id))}
-                        onContextMenu={async (e) => {
-                          // v0.13: right-click renames (a double-click used to, but it also opened the document twice).
+                        onContextMenu={(e) => {
                           e.preventDefault()
-                          const title = await promptDialog('Rename', d.title)
-                          if (title?.trim()) useProjectStore.getState().renameDocument(d.id, title.trim())
+                          setDocMenu({ id: d.id, title: d.title, x: e.clientX, y: e.clientY })
                         }}
-                        title={`${d.title} (right-click to rename, Shift-click to open next to the others)`}
+                        title={`${d.title} (right-click to rename or delete, Shift-click to open next to the others)`}
                         {...dragProps(m.type, d.id)}
                       >
                         <span>{d.title}</span>
@@ -212,18 +225,7 @@ export function Sidebar() {
                       <button
                         className="icon-btn sidebar-doc-delete"
                         title="Delete document"
-                        onClick={async () => {
-                          const ok = await confirmDialog({
-                            title: 'Delete document?',
-                            message: `"${d.title}" will be deleted permanently.`,
-                            confirmLabel: 'Delete',
-                            danger: true,
-                          })
-                          if (!ok) return
-                          const open = leaves(useProjectStore.getState().meta?.layout ?? null).find((p) => p.documentId === d.id)
-                          if (open) await closePanel(open.id)
-                          await useProjectStore.getState().removeDocument(d.id)
-                        }}
+                        onClick={() => void deleteDocument(d.id, d.title)}
                       >
                         <Trash2 size={13} />
                       </button>
@@ -318,7 +320,8 @@ export function Sidebar() {
         </button>
         {toolMenu && (
           <div className="menu-backdrop" onMouseDown={() => setToolMenu(null)} onContextMenu={(e) => e.preventDefault()}>
-            <div className="menu" style={{ position: 'fixed', left: toolMenu.x, top: toolMenu.y }} onMouseDown={(e) => e.stopPropagation()}>
+            <div className="menu" style={menuAt(toolMenu.x, toolMenu.y)} onMouseDown={(e) => e.stopPropagation()}>
+              <div className="sidebar-menu-label">Colour</div>
               <div className="sidebar-swatches" aria-label="Colour">
                 {TOOL_COLORS.map((c) => (
                   <button
@@ -341,20 +344,46 @@ export function Sidebar() {
                 .filter((f) => !f.tools.includes(toolMenu.manifest.type))
                 .map((f) => (
                   <button key={f.id} onClick={() => (intoFolder(toolMenu.manifest.type, f.id), setToolMenu(null))}>
-                    Move to {f.name}
+                    Put in folder “{f.name}”
                   </button>
                 ))}
               {folderOf(toolMenu.manifest.type) && <button onClick={() => (intoFolder(toolMenu.manifest.type, null), setToolMenu(null))}>Take out of the folder</button>}
-              <button onClick={() => (void newFolder(toolMenu.manifest.type), setToolMenu(null))}>New folder with this tool…</button>
+              <button onClick={() => (void newFolder(toolMenu.manifest.type), setToolMenu(null))}>Put in a new folder…</button>
               <button className="danger" onClick={() => void closeTool(toolMenu.manifest)}>
                 Close tool
               </button>
             </div>
           </div>
         )}
+        {docMenu && (
+          <div className="menu-backdrop" onMouseDown={() => setDocMenu(null)} onContextMenu={(e) => e.preventDefault()}>
+            <div className="menu" style={menuAt(docMenu.x, docMenu.y)} onMouseDown={(e) => e.stopPropagation()}>
+              <button
+                onClick={async () => {
+                  const d = docMenu
+                  setDocMenu(null)
+                  const title = await promptDialog('Rename', d.title)
+                  if (title?.trim()) useProjectStore.getState().renameDocument(d.id, title.trim())
+                }}
+              >
+                Rename
+              </button>
+              <button
+                className="danger"
+                onClick={() => {
+                  const d = docMenu
+                  setDocMenu(null)
+                  void deleteDocument(d.id, d.title)
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        )}
         {folderMenu && (
           <div className="menu-backdrop" onMouseDown={() => setFolderMenu(null)} onContextMenu={(e) => e.preventDefault()}>
-            <div className="menu" style={{ position: 'fixed', left: folderMenu.x, top: folderMenu.y }} onMouseDown={(e) => e.stopPropagation()}>
+            <div className="menu" style={menuAt(folderMenu.x, folderMenu.y)} onMouseDown={(e) => e.stopPropagation()}>
               <div className="sidebar-swatches" aria-label="Folder colour">
                 {TOOL_COLORS.map((c) => (
                   <button
