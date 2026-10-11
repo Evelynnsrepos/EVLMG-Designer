@@ -536,6 +536,16 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Everything is local: the AI helper runs on this computer, nothing leaves your PC, it works offline and no training data is collected. Your ideas stay your ideas: it does not write stories, scenes, dialogue, names or ideas for you, and turns such requests away. It is optional, like the grammar check: download the AI helper in Settings, then turn on Show the Ask your project tool there; until then it does not appear in Add tool.',
     ],
   },
+  'texture-paint': {
+    title: 'Texture Paint',
+    body: [
+      'Paint 3D models. Pick a model (GLB works best; OBJ and FBX too) and a texture size. The model is on the left, its texture on the right, and both update as you paint.',
+      'Paint on the model with the left button: the brush lands on the texture spot under the pointer. Drag next to the model or with the right button to turn it, the middle button to move, the wheel to zoom. A stroke that crosses a seam continues on the other side of the seam on the texture.',
+      'The right side is a full Draw canvas: every brush, layers, blend modes, adjustment layers, selections and undo. A model that brings its own texture starts with it as a layer.',
+      'UV layout adds the model’s UV layout as a locked guide layer that is left out of exports, so you can see where each part of the model sits on the texture.',
+      'Export the texture like any drawing (PNG and more), or GLB to save the model with its painted texture, ready for Godot, Unity or Unreal.',
+    ],
+  },
   reviews: {
     title: 'Reviews',
     body: [

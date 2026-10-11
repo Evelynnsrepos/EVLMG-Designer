@@ -53,6 +53,7 @@ export const COMPONENT_TYPES = [
   'storyboard',
   'ui-flow',
   'ask',
+  'texture-paint',
 ] as const
 
 export type BuiltInComponentType = (typeof COMPONENT_TYPES)[number]
