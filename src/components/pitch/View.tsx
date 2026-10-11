@@ -55,6 +55,7 @@ export default function View({ documentId, active }: PanelProps) {
   const vision = useDocument<VisionLite>('vision', 'vision', () => ({})).data ?? {}
   const [sel, setSel] = useState(0)
   const [presenting, setPresenting] = useState<number | null>(null)
+  const [dragFrom, setDragFrom] = useState<number | null>(null)
   if (!doc.data) return null
   const slides = doc.data.slides
   const set = (fn: (s: Slide[]) => Slide[]) => doc.update((d) => ({ ...d, slides: fn(d.slides) }))
@@ -87,7 +88,6 @@ export default function View({ documentId, active }: PanelProps) {
     setSel(j)
   }
   const move = (i: number, by: number) => moveTo(i, i + by)
-  const [dragFrom, setDragFrom] = useState<number | null>(null)
 
   return (
     <div className="pi">
