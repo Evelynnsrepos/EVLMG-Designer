@@ -179,7 +179,9 @@ Made by **Evelopment Games**. Follow along, share what you build, and suggest fe
 |---|---|
 | Windows | `*_x64-setup.exe` |
 | macOS (Apple Silicon and Intel) | `*_universal.dmg` (read [Mac](#mac) below first) |
-| Linux | `*.AppImage` (any distro) or `*.deb` |
+| Linux | `*.AppImage` (any distro), `*.deb`, or `*.flatpak` (any distro with Flatpak, NixOS too) |
+
+The Flatpak: `flatpak install Evelopment.Games.Designer_<version>_x86_64.flatpak`. On NixOS, turn Flatpak on first with `services.flatpak.enable = true;` in your system configuration.
 
 Or build it from source as described below. It takes a few minutes the first time.
 
