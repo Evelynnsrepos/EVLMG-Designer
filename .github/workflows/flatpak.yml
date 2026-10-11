@@ -11,7 +11,7 @@ jobs:
   flatpak:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
       options: --privileged
     steps:
       - uses: actions/checkout@v4
@@ -19,13 +19,13 @@ jobs:
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           bundle: evelopment-games-designer.flatpak
-          manifest-path: packaging/flatpak/io.github.Evelynnsrepos.Evelopment_Games_Designer.yml
+          manifest-path: packaging/flatpak/io.github.Evelynnsrepos.Evelopment-Games-Designer.yml
           cache-key: flatpak-builder-${{ github.sha }}
       - name: Every library the app needs is in the runtime
         run: |
           flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak --user install -y --noninteractive evelopment-games-designer.flatpak
-          missing=$(flatpak run --command=sh io.github.Evelynnsrepos.Evelopment_Games_Designer -c 'ldd /app/bin/evelopment-games-designer | grep "not found"' || true)
+          missing=$(flatpak run --command=sh io.github.Evelynnsrepos.Evelopment-Games-Designer -c 'ldd /app/bin/evelopment-games-designer | grep "not found"' || true)
           echo "$missing"
           test -z "$missing"
       - name: Flathub linter
@@ -34,7 +34,7 @@ jobs:
           flatpak --user install -y --noninteractive flathub org.flatpak.Builder
           # Shown as annotations, so the results can be read without signing in.
           for kind in manifest appstream; do
-            f=packaging/flatpak/io.github.Evelynnsrepos.Evelopment_Games_Designer.yml
-            [ "$kind" = appstream ] && f=packaging/flatpak/io.github.Evelynnsrepos.Evelopment_Games_Designer.metainfo.xml
+            f=packaging/flatpak/io.github.Evelynnsrepos.Evelopment-Games-Designer.yml
+            [ "$kind" = appstream ] && f=packaging/flatpak/io.github.Evelynnsrepos.Evelopment-Games-Designer.metainfo.xml
             out=$(flatpak run --command=flatpak-builder-lint org.flatpak.Builder $kind $f 2>&1) || { echo "$out"; echo "$out" | while IFS= read -r line; do [ -n "$line" ] && echo "::warning title=Flathub linter ($kind)::$line"; done; }
           done

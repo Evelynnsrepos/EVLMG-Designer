@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.Evelynnsrepos.Evelopment_Games_Designer</id>
+  <id>io.github.Evelynnsrepos.Evelopment-Games-Designer</id>
   <name>Evelopment Games Designer</name>
   <summary>Design your whole game in one free program</summary>
   <metadata_license>CC0-1.0</metadata_license>
@@ -23,7 +23,7 @@
     </ul>
     <p>No generative AI: every idea and every stroke is yours. Everything stays on your computer.</p>
   </description>
-  <launchable type="desktop-id">io.github.Evelynnsrepos.Evelopment_Games_Designer.desktop</launchable>
+  <launchable type="desktop-id">io.github.Evelynnsrepos.Evelopment-Games-Designer.desktop</launchable>
   <url type="homepage">https://github.com/Evelynnsrepos/Evelopment-Games-Designer</url>
   <url type="bugtracker">https://github.com/Evelynnsrepos/Evelopment-Games-Designer/issues</url>
   <screenshots>
