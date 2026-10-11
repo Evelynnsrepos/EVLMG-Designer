@@ -141,10 +141,10 @@ export function CanvasDialog(p: { doc: SketchDoc; engine: SketchEngine; busy: bo
             <h4>{UI.turn}</h4>
             <div className="sketch-canvas-actions">
               <button className="btn" disabled={p.busy} onClick={() => apply(flipCanvas(doc.width, doc.height, 'x'))}>
-                <FlipHorizontal2 size={14} /> {UI.flipX}
+                <FlipVertical2 size={14} /> {UI.flipX}
               </button>
               <button className="btn" disabled={p.busy} onClick={() => apply(flipCanvas(doc.width, doc.height, 'y'))}>
-                <FlipVertical2 size={14} /> {UI.flipY}
+                <FlipHorizontal2 size={14} /> {UI.flipY}
               </button>
               <button className="btn" disabled={p.busy} onClick={() => apply(rotateCanvas(doc.width, doc.height, -1))}>
                 <RotateCcwSquare size={14} /> {UI.rotL}

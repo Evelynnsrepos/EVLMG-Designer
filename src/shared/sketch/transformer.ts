@@ -41,7 +41,8 @@ type Drag =
 export class Transformer {
   mode: XfMode = 'free'
   interp: Interpolation = 'bilinear'
-  snapping = true
+  /** Off by default (v0.13): sticking to the middle line got in the way of placing things near it. */
+  snapping = false
   /** Snap distance in screen pixels. */
   snapDistance = 10
   magnetics = false
@@ -176,6 +177,9 @@ export class Transformer {
     if (i >= 0) {
       const kind = this.mode === 'warp' ? 'mesh' : this.mode === 'distort' ? 'corner' : 'scale'
       this.drag = { kind, index: i, from: p, s0: kind === 'mesh' ? toWarp(s) : s }
+    } else if (this.mode !== 'warp' && this.mode !== 'distort' && !inside(s, p) && HANDLES.slice(0, 4).some(([u, v]) => Math.hypot(mapPoint(s, u, v).x - p.x, mapPoint(s, u, v).y - p.y) * scale < 40)) {
+      // v0.13: drag just outside any corner to turn, not only from the handle above the box.
+      this.drag = { kind: 'rotate', from: p, s0: s }
     } else this.drag = { kind: 'move', from: p, s0: s }
   }
 
@@ -302,4 +306,14 @@ export function useTransformer(engine: SketchEngine, sel: Selector, opts: { acti
     return () => window.removeEventListener('keydown', down)
   }, [xf, sel, opts.active])
   return xf
+}
+
+/** True when `p` is inside the transformed box (its corners form a convex shape). */
+function inside(s: XfState, p: Pt): boolean {
+  const q = HANDLES.slice(0, 4).map(([u, v]) => mapPoint(s, u, v))
+  const sides = q.map((a, i) => {
+    const b = q[(i + 1) % 4]
+    return Math.sign((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x))
+  })
+  return sides.every((x) => x >= 0) || sides.every((x) => x <= 0)
 }

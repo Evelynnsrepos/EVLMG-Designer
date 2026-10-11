@@ -36,9 +36,14 @@ export class Selector {
   private wand: { data: ImageData; at: Pt; base: number; mask: Uint8Array } | null = null
   onChange: () => void = () => {}
 
+  /** The shape the selection tool (M) comes back with: the last one picked while it was on (v0.13). */
+  selectionShape: SelShape = 'rect'
+  selectionTool = false
+
   /** Change settings (from the bar) and redraw. */
   patch(p: Partial<Pick<Selector, 'shape' | 'mode' | 'threshold' | 'featherRadius' | 'showMask' | 'offset'>>) {
     if (p.shape && p.shape !== this.shape) this.cancelDraft()
+    if (p.shape && this.selectionTool) this.selectionShape = p.shape
     Object.assign(this, p)
     this.changed()
   }
@@ -304,10 +309,13 @@ export function useSelector(engine: SketchEngine, active: boolean, tool: string)
   useEffect(() => {
     sel.listen(() => setVersion(sel.version))
   }, [sel])
-  // The rectangle tool (M) draws rectangles; the lasso tool (L) goes back to freehand.
+  // The lasso tool (L) draws freehand. The selection tool (M) keeps the last shape picked for it
+  // (rectangle at first), so choosing lasso, ellipse or wand there sticks (v0.13).
   useEffect(() => {
-    if (tool === 'rect' && sel.shape !== 'rect') sel.patch({ shape: 'rect' })
-    if (tool === 'lasso' && sel.shape === 'rect') sel.patch({ shape: 'freehand' })
+    sel.selectionTool = false
+    if (tool === 'rect') sel.patch({ shape: sel.selectionShape })
+    if (tool === 'lasso') sel.patch({ shape: 'freehand' })
+    sel.selectionTool = tool === 'rect'
   }, [sel, tool])
   // Enter closes a polygon, Escape drops a shape being drawn.
   useEffect(() => {

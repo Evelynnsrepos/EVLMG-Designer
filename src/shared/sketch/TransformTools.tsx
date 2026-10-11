@@ -39,10 +39,10 @@ export function TransformBar({ xf, onDone, onCancel }: { xf: Transformer; onDone
       ))}
       <span className="sketch-sep" />
       <button className="icon-btn sketch-tool" title={UI.flipX} aria-label={UI.flipX} onClick={() => xf.flip('x')}>
-        <FlipHorizontal2 size={15} />
+        <FlipVertical2 size={15} />
       </button>
       <button className="icon-btn sketch-tool" title={UI.flipY} aria-label={UI.flipY} onClick={() => xf.flip('y')}>
-        <FlipVertical2 size={15} />
+        <FlipHorizontal2 size={15} />
       </button>
       <button className="icon-btn sketch-tool" title={UI.rotate} aria-label={UI.rotate} onClick={() => xf.rotate45()}>
         <RotateCw size={15} />

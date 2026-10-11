@@ -122,8 +122,8 @@ const UI = {
   redo: 'Redo (Ctrl+Y)',
   fill: 'Fill the selection or layer with the color',
   clear: 'Clear the selection or layer (Delete)',
-  flipX: 'Flip horizontally',
-  flipY: 'Flip vertically',
+  flipX: 'Flip the picture horizontally (Shift: only this layer)',
+  flipY: 'Flip the picture vertically (Shift: only this layer)',
   deselect: 'Deselect (Ctrl+D)',
   moveSelection: 'Move selection',
   library: 'Brush library',
@@ -942,8 +942,9 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
         <span className="sketch-sep" />
         <ToolButton icon={PaintBucket} label={UI.fill} onClick={() => activeLayer && markDirty(engine.fill(activeLayer.id, color, activeLayer.alphaLock))} />
         <ToolButton icon={Trash2} label={UI.clear} onClick={() => activeLayer && markDirty(engine.clear(activeLayer.id))} />
-        <ToolButton icon={FlipHorizontal2} label={UI.flipX} onClick={() => activeLayer && markDirty(engine.flip(activeLayer.id, 'x'))} />
-        <ToolButton icon={FlipVertical2} label={UI.flipY} onClick={() => activeLayer && markDirty(engine.flip(activeLayer.id, 'y'))} />
+        {/* v0.12: these flip the whole picture; Shift only the layer. Lucide's FlipVertical2 is the one with the vertical mirror line. */}
+        <ToolButton icon={FlipVertical2} label={UI.flipX} onClick={(e) => runAction(e?.shiftKey ? 'flipLayerX' : 'flipCanvasX')} />
+        <ToolButton icon={FlipHorizontal2} label={UI.flipY} onClick={(e) => runAction(e?.shiftKey ? 'flipLayerY' : 'flipCanvasY')} />
         <AdjustMenu open={adjustMenu} onOpen={setAdjustMenu} onPick={setAdjust} />
         {sel.active && (
           <>
@@ -1164,7 +1165,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   )
 }
 
-function ToolButton(p: { icon: LucideIcon; label: string; onClick: () => void; active?: boolean; disabled?: boolean }) {
+function ToolButton(p: { icon: LucideIcon; label: string; onClick: (e?: React.MouseEvent) => void; active?: boolean; disabled?: boolean }) {
   return (
     <button className={`icon-btn sketch-tool${p.active ? ' is-active' : ''}`} title={p.label} aria-label={p.label} aria-pressed={p.active} disabled={p.disabled} onClick={p.onClick}>
       <p.icon size={16} />
