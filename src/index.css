@@ -88,3 +88,8 @@ h3 {
   margin: 0;
   font-weight: 600;
 }
+
+/* v0.13: a pen dragging a slider inside a scrolling panel was taken as a scroll gesture, so the slider stuck. */
+input[type='range'] {
+  touch-action: none;
+}

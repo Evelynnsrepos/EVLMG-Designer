@@ -302,3 +302,25 @@ function concat(parts: Uint8Array[]) {
   }
   return out
 }
+
+/**
+ * The disc picker's inner circle (v0.13): saturation and brightness live on a square, the picker is round.
+ * These map the square (-1..1 on both axes) onto the disc and back (elliptical grid mapping), so every spot
+ * in the circle is a colour and every colour has a spot in the circle.
+ */
+export function squareToDisc(u: number, v: number): { x: number; y: number } {
+  return { x: u * Math.sqrt(1 - (v * v) / 2), y: v * Math.sqrt(1 - (u * u) / 2) }
+}
+
+export function discToSquare(x: number, y: number): { u: number; v: number } {
+  // Outside the circle counts as its edge, so dragging past it keeps working.
+  const r = Math.hypot(x, y)
+  if (r > 1) {
+    x /= r
+    y /= r
+  }
+  const s2 = 2 * Math.SQRT2
+  const part = (a: number, b: number) => 0.5 * Math.sqrt(Math.max(0, 2 + a * a - b * b + s2 * a)) - 0.5 * Math.sqrt(Math.max(0, 2 + a * a - b * b - s2 * a))
+  const clamp = (n: number) => Math.max(-1, Math.min(1, n))
+  return { u: clamp(part(x, y)), v: clamp(part(y, x)) }
+}

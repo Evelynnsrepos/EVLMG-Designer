@@ -11,7 +11,10 @@ import {
   hexToHsb,
   hexToRgb,
   hsbToHex,
+  discToSquare,
+  hsbToRgb,
   parseAco,
+  squareToDisc,
   parseAse,
   parseHexInput,
   parseSwatches,
@@ -253,18 +256,47 @@ function Disc({ color, setColor }: PickerProps) {
   const [hsb, keep] = useHsb(color)
   const [h, s, b] = hsb
   const ring = usePad((x, y) => setColor(keep([((Math.atan2(x - 0.5, 0.5 - y) * 180) / Math.PI + 360) % 360, s || 1, b || 1])))
-  const inner = usePad((x, y) => setColor(keep([h, x, 1 - y])))
+  // The inner circle is a real disc: its edge is the square's edge, so every colour can be reached and moved (v0.13).
+  const inner = usePad((x, y) => {
+    const q = discToSquare(x * 2 - 1, y * 2 - 1)
+    setColor(keep([h, (q.u + 1) / 2, (1 - q.v) / 2]))
+  })
+  const dot = squareToDisc(s * 2 - 1, (1 - b) * 2 - 1)
   const a = (h * Math.PI) / 180
   return (
     <div className="cp-disc">
       <div className="cp-ring" onPointerDown={(e) => (e.target === e.currentTarget ? ring(e) : undefined)}>
         <span className="cp-ring-dot" style={{ left: `${50 + 45 * Math.sin(a)}%`, top: `${50 - 45 * Math.cos(a)}%`, background: hsbToHex([h, 1, 1]) }} />
-        <div className="cp-disc-inner" style={{ ['--hue' as string]: hsbToHex([h, 1, 1]) }} onPointerDown={inner}>
-          <span className="cp-dot" style={{ left: `${s * 100}%`, top: `${(1 - b) * 100}%`, background: color }} />
+        <div className="cp-disc-inner" onPointerDown={inner}>
+          <DiscShade hue={h} />
+          <span className="cp-dot" style={{ left: `${(dot.x + 1) * 50}%`, top: `${(dot.y + 1) * 50}%`, background: color }} />
         </div>
       </div>
     </div>
   )
+}
+
+/** The saturation/brightness disc for one hue, painted through the same mapping the pointer uses. */
+function DiscShade({ hue }: { hue: number }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const c = ref.current?.getContext('2d')
+    if (!c) return
+    const n = c.canvas.width
+    const img = c.createImageData(n, n)
+    for (let y = 0; y < n; y++)
+      for (let x = 0; x < n; x++) {
+        const q = discToSquare(((x + 0.5) / n) * 2 - 1, ((y + 0.5) / n) * 2 - 1)
+        const [r, g, b] = hsbToRgb([hue, (q.u + 1) / 2, (1 - q.v) / 2])
+        const i = (y * n + x) * 4
+        img.data[i] = r
+        img.data[i + 1] = g
+        img.data[i + 2] = b
+        img.data[i + 3] = 255
+      }
+    c.putImageData(img, 0, 0)
+  }, [hue])
+  return <canvas ref={ref} width={146} height={146} className="cp-disc-shade" />
 }
 
 function Classic({ color, setColor }: PickerProps) {

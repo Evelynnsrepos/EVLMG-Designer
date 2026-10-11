@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { colorName, extractPalette, harmony, hexToHsb, hsbToHex, parseAco, parseAse, parseHexInput, parseSwatches, writeAse, writeSwatches } from './color'
+import { colorName, discToSquare, squareToDisc, extractPalette, harmony, hexToHsb, hsbToHex, parseAco, parseAse, parseHexInput, parseSwatches, writeAse, writeSwatches } from './color'
 
 describe('colour', () => {
   it('converts between hex and HSB', () => {
@@ -60,5 +60,20 @@ describe('colour', () => {
     ;[...'Hey'].forEach((c, i) => b.setUint16(o + 4 + i * 2, c.charCodeAt(0)))
     const p = parseAco(b.buffer, 'A')
     expect(p.colors).toEqual([{ hex: '#ff0080', name: 'Hey' }])
+  })
+})
+
+describe('round disc picker', () => {
+  it('maps the square onto the circle and back', () => {
+    for (const [u, v] of [[0, 0], [1, 1], [-1, 1], [0.3, -0.7], [1, 0]]) {
+      const d = squareToDisc(u, v)
+      expect(Math.hypot(d.x, d.y)).toBeLessThanOrEqual(1.000001)
+      const back = discToSquare(d.x, d.y)
+      expect(back.u).toBeCloseTo(u, 5)
+      expect(back.v).toBeCloseTo(v, 5)
+    }
+  })
+  it('treats a spot outside the circle as its edge', () => {
+    expect(discToSquare(2, 2).u).toBeCloseTo(1, 5)
   })
 })
