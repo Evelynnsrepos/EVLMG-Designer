@@ -9,6 +9,7 @@ import { useAiHelper } from '@/shared/spell'
 import { RaritiesHost } from '@/shared/categories'
 import { DialogHost } from '@/shared/ui'
 import { DrawingShelfHost } from '@/shared/drawingShelf'
+import { installRangeFill } from '@/shared/rangeFill'
 import { HelpHost } from '@/shell/help/HelpHost'
 import { SettingsHost } from '@/shell/settings/SettingsDialog'
 import { loadAllPlugins } from '@/shell/plugins/plugins'
@@ -18,6 +19,8 @@ import { useJoinRequests } from '@/shell/collab/joinRequests'
 
 // Shared projects go online when opened (core/collab).
 installCollaboration()
+// Every slider shows its fill (v0.14).
+installRangeFill()
 
 export default function App() {
   const screen = useAppStore((s) => s.screen)

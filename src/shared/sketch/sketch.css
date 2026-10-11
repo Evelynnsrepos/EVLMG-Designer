@@ -608,49 +608,6 @@
   opacity: 0.45;
 }
 
-/* Sliders: a coloured track that fills up to the value, and a round knob that glows. */
-.sketch-slider input[type='range'][style*='--fill'] {
-  --fill: 50%;
-  appearance: none;
-  height: 22px;
-  background: transparent;
-  cursor: pointer;
-}
-.sketch-slider input[type='range'][style*='--fill']:focus {
-  outline: none;
-}
-.sketch-slider input[type='range'][style*='--fill']::-webkit-slider-runnable-track {
-  height: 6px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 70%, #fff) 0, var(--accent) var(--fill), var(--bg-hover) var(--fill));
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
-}
-.sketch-slider input[type='range'][style*='--fill']::-webkit-slider-thumb {
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  margin-top: -5px;
-  border-radius: 50%;
-  background: #fff;
-  border: 3px solid var(--accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent), 0 2px 6px rgba(0, 0, 0, 0.4);
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
-}
-.sketch-slider input[type='range'][style*='--fill']:hover::-webkit-slider-thumb,
-.sketch-slider input[type='range'][style*='--fill']:active::-webkit-slider-thumb {
-  transform: scale(1.18);
-  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 30%, transparent), 0 2px 8px rgba(0, 0, 0, 0.45);
-}
-.sketch-slider input[type='range'][style*='--fill']:disabled {
-  cursor: default;
-}
-.sketch-slider input[type='range'][style*='--fill']:disabled::-webkit-slider-thumb {
-  border-color: var(--text-muted);
-  box-shadow: none;
-}
-.sketch-slider input[type='range'][style*='--fill']:disabled::-webkit-slider-runnable-track {
-  background: linear-gradient(90deg, var(--text-muted) var(--fill), var(--bg-hover) var(--fill));
-}
 .sketch-slider-value {
   font-variant-numeric: tabular-nums;
 }
