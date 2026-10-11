@@ -81,3 +81,8 @@ jobs:
             Mac: the `.dmg` (Apple Silicon and Intel). It is unsigned, see the README's Mac section for the one-time "Open Anyway" step.
           releaseDraft: false
           args: ${{ matrix.args }}
+
+  # The .flatpak for Linux (NixOS and every other distro with Flatpak), built from the .deb above.
+  flatpak:
+    needs: build
+    uses: ./.github/workflows/flatpak.yml

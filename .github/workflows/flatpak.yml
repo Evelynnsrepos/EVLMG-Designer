@@ -1,12 +1,20 @@
-# Builds the Flatpak (from the released .deb) and checks it with Flathub's linter, so the
-# Flathub submission and its updates are tested on Linux even though development happens on Windows.
+# Builds the Flatpak from a release's Linux .deb and attaches the .flatpak file to that release.
+# Runs after every release (called by release.yml), by hand, and on changes to the recipe on main
+# (then for the version in package.json). Not for Flathub: Flathub needs a recipe written without AI
+# that builds from source, see packaging/flatpak/README.md.
 name: Flatpak
 on:
   workflow_dispatch:
+  workflow_call:
   push:
+    branches: [main]
     paths:
       - 'packaging/flatpak/**'
       - '.github/workflows/flatpak.yml'
+
+permissions:
+  contents: write
+
 jobs:
   flatpak:
     runs-on: ubuntu-latest
@@ -15,12 +23,24 @@ jobs:
       options: --privileged
     steps:
       - uses: actions/checkout@v4
+      - name: Point the recipe at this version's .deb
+        id: version
+        run: |
+          v=$(sed -n 's/.*"version": "\(.*\)".*/\1/p' package.json | head -1)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          url="https://github.com/${{ github.repository }}/releases/download/v$v/Evelopment.Games.Designer_${v}_amd64.deb"
+          curl -fsSL -o egd.deb "$url"
+          sha=$(sha256sum egd.deb | cut -d' ' -f1)
+          m=packaging/flatpak/io.github.Evelynnsrepos.Evelopment-Games-Designer.yml
+          sed -i "s#url: .*\.deb#url: $url#; s#sha256: .*#sha256: '$sha'#" "$m"
+          grep -n "url:\|sha256:" "$m"
       - name: Build
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           bundle: evelopment-games-designer.flatpak
           manifest-path: packaging/flatpak/io.github.Evelynnsrepos.Evelopment-Games-Designer.yml
           cache-key: flatpak-builder-${{ github.sha }}
+          upload-artifact: false
       - name: Every library the app needs is in the runtime
         run: |
           flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
@@ -28,13 +48,19 @@ jobs:
           missing=$(flatpak run --command=sh io.github.Evelynnsrepos.Evelopment-Games-Designer -c 'ldd /app/bin/evelopment-games-designer | grep "not found"' || true)
           echo "$missing"
           test -z "$missing"
-      - name: Flathub linter
-        continue-on-error: true
+      - name: Attach it to the release
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          flatpak --user install -y --noninteractive flathub org.flatpak.Builder
-          # Shown as annotations, so the results can be read without signing in.
-          for kind in manifest appstream; do
-            f=packaging/flatpak/io.github.Evelynnsrepos.Evelopment-Games-Designer.yml
-            [ "$kind" = appstream ] && f=packaging/flatpak/io.github.Evelynnsrepos.Evelopment-Games-Designer.metainfo.xml
-            out=$(flatpak run --command=flatpak-builder-lint org.flatpak.Builder $kind $f 2>&1) || { echo "$out"; echo "$out" | while IFS= read -r line; do [ -n "$line" ] && echo "::warning title=Flathub linter ($kind)::$line"; done; }
-          done
+          v=${{ steps.version.outputs.version }}
+          api=https://api.github.com/repos/${{ github.repository }}
+          curl -fsSL -H "Authorization: Bearer $TOKEN" "$api/releases/tags/v$v" > release.json
+          id=$(python3 -c "import json; print(json.load(open('release.json'))['id'])")
+          name="Evelopment.Games.Designer_${v}_x86_64.flatpak"
+          # Replace an older upload of the same file.
+          old=$(python3 -c "import json; print(next((a['id'] for a in json.load(open('release.json'))['assets'] if a['name'] == '$name'), ''))")
+          if [ -n "$old" ]; then curl -fsS -X DELETE -H "Authorization: Bearer $TOKEN" "$api/releases/assets/$old"; fi
+          curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/octet-stream" \
+            --data-binary @evelopment-games-designer.flatpak \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/$id/assets?name=$name" > /dev/null
+          echo "Attached $name to v$v"
