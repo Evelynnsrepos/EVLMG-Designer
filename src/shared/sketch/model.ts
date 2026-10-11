@@ -9,6 +9,7 @@ import { newId, type AssetPath, type Id } from '@/core/model'
 import type { BlendMode } from './blend'
 import type { DrawingGuide } from './guides'
 import type { AnimationSettings, PageSettings } from './assist'
+import type { AdjustValues } from './adjust/filters'
 import type { SketchText } from './text'
 
 export { BLEND_MODES, type BlendMode } from './blend'
@@ -28,7 +29,7 @@ export interface SketchLayer {
   image: AssetPath | null
   // Sketch Pro layer features; all optional so older drawings open unchanged.
   /** 'group' holds other layers (they point to it with `parent`); 'mask' hides the layer below where it is dark. */
-  kind?: 'group' | 'mask'
+  kind?: 'group' | 'mask' | 'adjust'
   /** The group this layer is in; null/missing = top level. */
   parent?: Id | null
   /** Group folded shut in the layer list. */
@@ -41,6 +42,14 @@ export interface SketchLayer {
   private?: boolean
   /** Text layer: the text is drawn into the layer again whenever this changes (Sketch Pro). */
   text?: SketchText
+  /** Adjustment layer (v0.13): changes the colours of everything below it, without changing those layers. */
+  adjust?: LayerAdjust
+}
+
+/** The colour adjustments a layer can be: hue/saturation/brightness, colour balance, curves or a gradient map. */
+export interface LayerAdjust {
+  id: 'hsb' | 'balance' | 'curves' | 'gradient'
+  values: AdjustValues
 }
 
 /** An image floating over the canvas to draw from; not part of the picture. */

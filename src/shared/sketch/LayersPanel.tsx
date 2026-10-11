@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Ellipsis, Eye, EyeOff, Folder, FolderPlus, ListChecks, Lock, Merge, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Ellipsis, Eye, EyeOff, Folder, FolderPlus, ListChecks, Lock, Merge, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Id } from '@/core/model'
 import { saveBinaryFile, safeFileName } from '@/core/export'
@@ -24,6 +24,9 @@ import {
   ungroup,
 } from './layers'
 import './layers.css'
+import { FilterControls } from './adjust/AdjustStudio'
+import { defaultValues, filterDef } from './adjust/filters'
+import type { LayerAdjust } from './model'
 import { BLEND_MODES, newLayer, nextLayerName, updateLayer, type BlendMode, type SketchDoc, type SketchLayer } from './model'
 
 const UI = {
@@ -38,6 +41,7 @@ const UI = {
   more: 'Layer options',
   opacity: 'Opacity',
   picked: (n: number) => `${n} layers picked`,
+  adjustLayer: 'New adjustment layer: changes the colours of everything below it, and can be changed or removed any time',
   pickMany: 'Pick several layers: tap layers to add or remove them (or Ctrl-click, Shift-click)',
   mergePicked: 'Merge',
   groupPicked: 'Group',
@@ -115,6 +119,16 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
     host.adopt(layer.id)
     engine.setLayerImage(layer.id, null)
     if (paint) host.markDirty(engine.edit(layer.id, paint))
+    update((d) => ({ ...d, layers: insertAbove(d.layers, layer, host.activeId) }))
+    host.setActive(layer.id)
+  }
+
+  // v0.13: adjustment layers.
+  const [adjustMenu, setAdjustMenu] = useState(false)
+  const addAdjust = (id: LayerAdjust['id']) => {
+    setAdjustMenu(false)
+    const layer: SketchLayer = { ...newLayer(filterDef(id).label), kind: 'adjust', adjust: { id, values: defaultValues(id, engine.width, engine.height) } }
+    host.adopt(layer.id)
     update((d) => ({ ...d, layers: insertAbove(d.layers, layer, host.activeId) }))
     host.setActive(layer.id)
   }
@@ -247,7 +261,8 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
 
   type Item = { label: string; run: () => void; on?: boolean; off?: boolean; danger?: boolean }
   const menuItems = (l: SketchLayer): Item[] => {
-    const group = isGroup(l)
+    // Adjustment layers have no pixels of their own, like groups.
+    const group = isGroup(l) || l.kind === 'adjust'
     const mask = l.kind === 'mask'
     const below = siblingBelow(doc.layers, l.id)
     const items: (Item | false)[] = [
@@ -324,6 +339,20 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
         >
           <ListChecks size={16} />
         </button>
+        <span className="sketch-adjust-add">
+          <button className={`icon-btn sketch-tool${adjustMenu ? ' is-active' : ''}`} title={UI.adjustLayer} aria-label={UI.adjustLayer} onClick={() => setAdjustMenu(!adjustMenu)}>
+            <SlidersHorizontal size={16} />
+          </button>
+          {adjustMenu && (
+            <div className="menu sketch-adjust-menu">
+              {(['hsb', 'balance', 'curves', 'gradient'] as const).map((id) => (
+                <button key={id} onClick={() => addAdjust(id)}>
+                  {filterDef(id).label}
+                </button>
+              ))}
+            </div>
+          )}
+        </span>
         <button className="icon-btn sketch-tool" title={UI.addGroup} aria-label={UI.addGroup} onClick={addGroup}>
           <FolderPlus size={16} />
         </button>
@@ -336,6 +365,11 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
           <Plus size={16} />
         </button>
       </div>
+      {active?.kind === 'adjust' && active.adjust && (
+        <div className="sketch-adjust-settings">
+          <FilterControls id={active.adjust.id} values={active.adjust.values} onChange={(values) => set(active.id, { adjust: { ...active.adjust!, values } })} />
+        </div>
+      )}
       {picked.size > 1 && (
         <div className="sketch-picked">
           <span>{UI.picked(picked.size)}</span>

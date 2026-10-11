@@ -6,6 +6,7 @@ import { GlCompositor, parseHex, type GlLayer, type GlSource } from './gl'
 import { layerTree, type LayerNode } from './layers'
 import { mirrored, type InputPoint, type SketchDoc, type SketchLayer, type SymmetryMode } from './model'
 import { applyRelief } from './relief'
+import { runCpu } from './adjust/cpu'
 import { TileHistory, tilesIn, type Rect } from './tiles'
 
 /**
@@ -568,7 +569,8 @@ export class SketchEngine {
 
   /** Flatten the visible layers (with the live stroke) into one canvas at document size. */
   render(doc: LayerStack, withBackground = true): HTMLCanvasElement {
-    if (this.gpu && !this.gpu.lost) {
+    // ponytail: adjustment layers run on the CPU, so a picture with one is blended in Canvas 2D; move them to GLSL if big canvases lag.
+    if (this.gpu && !this.gpu.lost && !doc.layers.some((l) => l.kind === 'adjust')) {
       try {
         return this.renderGpu(doc, withBackground)
       } catch {
@@ -628,6 +630,7 @@ export class SketchEngine {
       ctx.fillStyle = doc.backgroundColor
       ctx.fillRect(0, 0, this.width, this.height)
     }
+    this.stackOrder = doc.layers
     this.compose2d(ctx, layerTree(doc.layers), 0)
     ctx.globalCompositeOperation = 'source-over'
     ctx.globalAlpha = 1
@@ -638,6 +641,22 @@ export class SketchEngine {
   private pool: Canvas2D[] = []
   /** The last group at each depth that layers may clip to (Canvas 2D path). */
   private groupBases: Canvas2D[] = []
+  /** Layers in document order, for the adjustment layer cache. */
+  private stackOrder: SketchLayer[] = []
+  private adjustCache = new Map<Id, { sig: string; c: Canvas2D }>()
+
+  /** What an adjustment layer makes of the picture below it (`below`), cached until something under it changes. */
+  private adjusted(layer: SketchLayer, below: CanvasRenderingContext2D): HTMLCanvasElement {
+    const i = this.stackOrder.findIndex((l) => l.id === layer.id)
+    const sig = [JSON.stringify(layer.adjust), ...this.stackOrder.slice(0, i).map((l) => `${l.id}:${this.layerVersions.get(l.id) ?? 0}:${l.visible}:${l.opacity}:${l.blend}:${l.clip}:${l.parent ?? ''}:${this.livePixels(l).live ? this.version : 0}`)].join('|')
+    const hit = this.adjustCache.get(layer.id)
+    if (hit && hit.sig === sig) return hit.c.canvas
+    const c = hit?.c ?? this.canvas()
+    const img = below.getImageData(0, 0, this.width, this.height)
+    c.ctx.putImageData(layer.adjust ? runCpu(layer.adjust.id, layer.adjust.values, img) : img, 0, 0)
+    this.adjustCache.set(layer.id, { sig, c })
+    return c.canvas
+  }
   private pooled(i: number): Canvas2D {
     const c = (this.pool[i] ??= this.canvas())
     c.ctx.globalCompositeOperation = 'source-over'
@@ -680,6 +699,10 @@ export class SketchEngine {
           base = { canvas: keep.canvas, mask: m, opacity }
         }
         if (!layer.visible) continue
+      } else if (layer.kind === 'adjust') {
+        // An adjustment layer is the picture below, recoloured; it is never a clipping base.
+        if (!layer.visible) continue
+        src = this.adjusted(layer, ctx)
       } else {
         src = this.livePixels(layer).canvas
         if (!layer.clip) base = { canvas: this.ensure(layer.id).canvas, mask: m, opacity }

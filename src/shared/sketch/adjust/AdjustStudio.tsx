@@ -1,5 +1,5 @@
 import { Shuffle, SlidersHorizontal, Stamp, Waves } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Id } from '@/core/model'
 import type { BrushSettings, StrokePoint } from '../brushes'
 import { CurveEditor } from '../CurveEditor'
@@ -268,8 +268,6 @@ function FilterStudio(p: AdjustStudioProps & { id: FilterId }) {
   const def = filterDef(p.id)
   const [values, setValues] = useState<AdjustValues>(() => defaultValues(p.id, engine.width, engine.height))
   const [paintOn, setPaintOn] = useState(false)
-  const [range, setRange] = useState<ToneRange>('midtones')
-  const [channel, setChannel] = useState<CurveChannel>('all')
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
   const session = useSession(
     () => new AdjustSession(engine, layerId),
@@ -299,7 +297,7 @@ function FilterStudio(p: AdjustStudioProps & { id: FilterId }) {
   useKeys(apply, onClose, true)
 
   const main = def.params.find((q) => q.key === def.main)
-  const hist = useMemo(() => (p.id === 'curves' && session ? histogram(session.pixels().data, channel) : null), [p.id, session, channel])
+  const histFor = useCallback((c: CurveChannel) => (p.id === 'curves' && session ? histogram(session.pixels().data, c) : null), [p.id, session])
 
   const onDown = (e: React.PointerEvent) => {
     if (!session) return
@@ -330,7 +328,6 @@ function FilterStudio(p: AdjustStudioProps & { id: FilterId }) {
     drag.current = null
   }
 
-  const params = def.params.filter((q) => (!q.range || q.range === range) && (!q.when || values.v[q.when[0]] === q.when[1]))
   const hint = paintOn ? UI.paintHint : [main ? UI.dragHint(main.label) : '', def.center ? UI.centerHint : ''].filter(Boolean).join(' ')
 
   return (
@@ -375,8 +372,28 @@ function FilterStudio(p: AdjustStudioProps & { id: FilterId }) {
           </>
         }
       >
-        {p.id === 'balance' && <Seg<ToneRange> value={range} options={TONE_RANGES.map((r) => ({ id: r, label: UI.ranges[r] }))} onChange={setRange} />}
-        {p.id === 'curves' && (
+        <FilterControls id={p.id} values={values} onChange={setValues} histogram={histFor} />
+        {hint && <p className="adjust-hint">{hint}</p>}
+        {session && !session.onGpu && <p className="adjust-hint">{UI.noGpu}</p>}
+      </Panel>
+    </>
+  )
+}
+
+/** The settings of a colour or effect adjustment: tone ranges, curves, gradient and sliders. Shared by the
+ * Adjustments studio and adjustment layers (v0.13). */
+export function FilterControls({ id, values, onChange, histogram: hist0 }: { id: FilterId; values: AdjustValues; onChange(next: AdjustValues): void; histogram?(channel: CurveChannel): Uint32Array | null }) {
+  const def = filterDef(id)
+  const [range, setRange] = useState<ToneRange>('midtones')
+  const [channel, setChannel] = useState<CurveChannel>('all')
+  const hist = useMemo(() => hist0?.(channel) ?? null, [hist0, channel])
+  const setValues = (fn: (x: AdjustValues) => AdjustValues) => onChange(fn(values))
+  const set = (key: string, v: number) => setValues((x) => ({ ...x, v: { ...x.v, [key]: v } }))
+  const params = def.params.filter((q) => (!q.range || q.range === range) && (!q.when || values.v[q.when[0]] === q.when[1]))
+  return (
+    <>
+        {id === 'balance' && <Seg<ToneRange> value={range} options={TONE_RANGES.map((r) => ({ id: r, label: UI.ranges[r] }))} onChange={setRange} />}
+        {id === 'curves' && (
           <div className="adjust-curves">
             <Seg<CurveChannel> value={channel} options={CURVE_CHANNELS.map((c) => ({ id: c, label: UI.channels[c] }))} onChange={setChannel} />
             <CurveEditor
@@ -389,7 +406,7 @@ function FilterStudio(p: AdjustStudioProps & { id: FilterId }) {
             />
           </div>
         )}
-        {p.id === 'gradient' && <GradientEditor stops={values.gradient} onChange={(gradient) => setValues((x) => ({ ...x, gradient }))} />}
+        {id === 'gradient' && <GradientEditor stops={values.gradient} onChange={(gradient) => setValues((x) => ({ ...x, gradient }))} />}
         <div className="adjust-params">
           {params.map((q) =>
             q.options ? (
@@ -412,9 +429,6 @@ function FilterStudio(p: AdjustStudioProps & { id: FilterId }) {
             </button>
           )}
         </div>
-        {hint && <p className="adjust-hint">{hint}</p>}
-        {session && !session.onGpu && <p className="adjust-hint">{UI.noGpu}</p>}
-      </Panel>
     </>
   )
 }

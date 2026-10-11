@@ -19,7 +19,7 @@ export interface LayerNode {
 export const isGroup = (l: SketchLayer) => l.kind === 'group'
 export const isMask = (l: SketchLayer) => l.kind === 'mask'
 /** Layers with their own paintable pixels (pixel layers and masks). */
-export const hasPixels = (l: SketchLayer) => l.kind !== 'group'
+export const hasPixels = (l: SketchLayer) => l.kind !== 'group' && l.kind !== 'adjust'
 
 /** The group a layer is really in: a parent that is missing, not a group, or would make a loop counts as top level. */
 function parentOf(byId: Map<Id, SketchLayer>, l: SketchLayer): Id | null {

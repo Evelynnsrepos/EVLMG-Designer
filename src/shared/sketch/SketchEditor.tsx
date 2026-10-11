@@ -47,7 +47,7 @@ import { FloatingPanel, useSpot } from './FloatingPanel'
 import { maxLayers } from './tiles'
 import './sketch.css'
 // Sketch Pro: layers, selections (feat/sketch-layers)
-import { exportLayers, insertAbove, isGroup, lockedInTree } from './layers'
+import { exportLayers, hasPixels, insertAbove, isGroup, lockedInTree } from './layers'
 import { LayersPanel, type LayerHost } from './LayersPanel'
 import { SelectionBar, SelectionMaskView, SelectionOutline } from './SelectionTools'
 import { useSelector } from './selector'
@@ -543,7 +543,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
     } else if (t === 'text') {
       textTool.down(p)
     } else if (t === 'brush' || t === 'eraser' || t === 'smudge') {
-      if (!activeLayer.visible || isGroup(activeLayer) || activeLayer.text || lockedInTree(doc.layers, activeLayer.id)) return
+      if (!activeLayer.visible || !hasPixels(activeLayer) || activeLayer.text || lockedInTree(doc.layers, activeLayer.id)) return
       const own = lib.brushes.find((b) => b.id === (t === 'eraser' ? lib.eraserId : lib.brushId)) ?? brush
       // Smoothing, stabilization and tether are the brush's own, unless ticked in the side panel to use other values.
       const ov = input.overrides
@@ -568,7 +568,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
       const ref = doc.layers.find((l) => l.reference && !isGroup(l))
       sel.down(p, e, () => engine.pixels(doc, ref?.id ?? null))
     } else if (t === 'move') {
-      if (!activeLayer.visible || isGroup(activeLayer) || lockedInTree(doc.layers, activeLayer.id)) return
+      if (!activeLayer.visible || !hasPixels(activeLayer) || lockedInTree(doc.layers, activeLayer.id)) return
       if (activeLayer.text) return textTool.down(p, true)
       // Transform: the first press lifts the pixels; later presses move, scale, turn or bend them.
       if (!xf.active && !xf.begin(activeLayer.id)) return
@@ -1015,7 +1015,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
               onFill={() => activeLayer && markDirty(engine.fill(activeLayer.id, color, activeLayer.alphaLock))}
               onClear={() => activeLayer && markDirty(engine.clear(activeLayer.id))}
               onCopyPaste={() => {
-                if (!activeLayer || isGroup(activeLayer)) return
+                if (!activeLayer || !hasPixels(activeLayer)) return
                 const piece = engine.canvas()
                 piece.ctx.drawImage(engine.layerCanvas(activeLayer.id), 0, 0)
                 piece.ctx.globalCompositeOperation = 'destination-in'

@@ -212,3 +212,24 @@
   background: var(--bg-elevated);
   box-shadow: var(--shadow);
 }
+
+/* v0.13: adjustment layers */
+.sketch-adjust-add {
+  position: relative;
+}
+.sketch-adjust-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+  min-width: 200px;
+}
+.sketch-adjust-settings {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  margin: 4px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+}
