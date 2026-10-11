@@ -63,8 +63,8 @@ describe('asset sync', () => {
     stops.push(() => hostNet.stop(), () => guestNet.stop(), () => hostAssets.stop(), () => guestAssets.stop())
     await guestNet.start()
 
-    await until(() => guestAssets.received.length === 1)
+    await until(() => guestAssets.received.length === 1, 5000)
     expect(await fs.readBinary('/guest/assets/images/0b5a6d7e-1111-4222-8333-444455556666.png')).toEqual(big)
     expect(await fs.exists('/guest/assets/audio/0b5a6d7e-1111-4222-8333-444455557777.mp3')).toBe(false)
-  }, 30_000) // the shared Windows build machine once needed more than 10 s
+  }, 30_000)
 })
