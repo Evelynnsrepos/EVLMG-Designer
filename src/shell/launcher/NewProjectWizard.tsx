@@ -94,7 +94,7 @@ export function NewProjectWizard() {
         {step === 2 && (
           <>
             <h2>Which tools does this project need?</h2>
-            <p className="muted">Start from a genre or pick tools yourself. You can add more later from the sidebar.</p>
+            <p className="muted">Start from a preset (a genre, or just writing, drawing or worldbuilding) or pick tools yourself. You can add more later from the sidebar.</p>
             <div className="template-row">
               {TEMPLATES.map((t) => (
                 <button

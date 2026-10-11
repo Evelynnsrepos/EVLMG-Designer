@@ -109,11 +109,74 @@ export const TEMPLATES: Template[] = [
     ],
     tasks: ['Define the daily loop', 'Plan the seasons', 'List crops and recipes', 'Write the townsfolk'],
   },
+  // v0.13: projects that are not (only) a game.
+  {
+    id: 'story',
+    name: 'Just write a story',
+    description: 'Writing with characters, places, a timeline, names and a family tree, nothing else in the way.',
+    components: ['writer', 'story-writer', 'wiki', 'character-list', 'town-list', 'timeline', 'family-tree', 'names', 'calendar', 'principles', 'brainstorm'],
+    genre: 'Story',
+    pillars: [],
+    tasks: ['Write the first chapter', 'Introduce the main characters', 'Sketch the timeline'],
+  },
+  {
+    id: 'art',
+    name: 'Drawing and art',
+    description: 'Draw, collect references on moodboards, keep a design language and an asset list.',
+    components: ['sketch', 'moodboard', 'design-language', 'asset-pool', 'storyboard', 'brainstorm', 'tasks'],
+    genre: 'Art',
+    pillars: [],
+    tasks: ['Collect references on a moodboard', 'Draw the first sketches', 'Decide the colour palette'],
+  },
+  {
+    id: 'world',
+    name: 'Worldbuilding',
+    description: 'A whole world: wiki, maps, cosmos, timeline, calendar, factions, peoples and names.',
+    components: ['wiki', 'map', 'cosmos', 'timeline', 'calendar', 'factions', 'names', 'town-list', 'character-list', 'family-tree', 'writer', 'brainstorm'],
+    genre: 'Worldbuilding',
+    pillars: [],
+    tasks: ['Draw the first map', 'List the factions', 'Set up the calendar and eras'],
+  },
+  {
+    id: 'levels',
+    name: 'Level design',
+    description: 'Level layouts with tilesets, maps, enemies and items, pacing and playtests.',
+    components: [...PLAN, 'level-layout', 'map', 'enemy-list', 'item-list', 'pacing', 'playtests', 'sketch'],
+    genre: 'Level design',
+    pillars: [
+      ['Readable spaces', 'Players always know where they can go.'],
+      ['Teach, test, twist', 'Each level introduces an idea, tests it, then turns it around.'],
+      ['Rewarded curiosity', 'Exploring off the main path pays off.'],
+    ],
+    tasks: ['Block out the first level', 'Add a tileset', 'Plan the pacing', 'Playtest the first level'],
+  },
+  {
+    id: 'tabletop',
+    name: 'Tabletop / pen and paper',
+    description: 'Characters, monsters, items, maps, quests and the world for a campaign or a board game.',
+    components: ['character-list', 'enemy-list', 'item-list', 'town-list', 'map', 'quests', 'wiki', 'factions', 'names', 'timeline', 'writer'],
+    genre: 'Tabletop',
+    pillars: [],
+    tasks: ['Write the first session', 'Prepare the main villain', 'Draw the starting town'],
+  },
+  {
+    id: 'pitch',
+    name: 'Plan and pitch',
+    description: 'Vision, pillars, scope, tasks, the core loop and a pitch deck, to plan a game before building it.',
+    components: ['vision', 'scope', 'tasks', 'gameplay-loop', 'principles', 'pitch', 'moodboard', 'writer'],
+    genre: '',
+    pillars: [
+      ['One clear hook', 'The idea fits in one sentence.'],
+      ['Small enough to finish', 'Scope matches the time and team.'],
+      ['Fun first', 'Prototype the core loop before anything else.'],
+    ],
+    tasks: ['Write the one-sentence pitch', 'Pick three pillars', 'Cut the scope to a first version', 'Build the pitch deck'],
+  },
 ]
 
 /** Fill the new project's vision page and task board from the template. */
 export async function applyTemplate(root: string, t: Template) {
-  const vision = await loadDocumentNow<Record<string, unknown>>(root, 'vision', 'vision', () => ({}))
+  const vision = t.pillars.length || t.genre ? await loadDocumentNow<Record<string, unknown>>(root, 'vision', 'vision', () => ({})) : null
   if (vision)
     updateDocument<Record<string, unknown>>(
       root,
