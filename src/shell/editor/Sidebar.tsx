@@ -1,6 +1,6 @@
-import { ArrowLeft, ArrowRight, BookOpen, Search, Star, Boxes, ChevronDown, ChevronRight, CircleHelp, House, PanelLeftClose, PanelLeftOpen, Palette, Plus, Gem, Settings, Trash2, Users } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpen, FolderClosed, FolderOpen, Search, Star, Boxes, ChevronDown, ChevronRight, CircleHelp, House, PanelLeftClose, PanelLeftOpen, Palette, Plus, Gem, Settings, Trash2, Users } from 'lucide-react'
 import { useState } from 'react'
-import type { ComponentType, Id } from '@/core/model'
+import { newId, type ComponentType, type Id, type SidebarFolder } from '@/core/model'
 import { allManifests, getManifest, type ComponentManifest } from '@/core/registry'
 import { useProjectStore, useSettings } from '@/core/state'
 import { shownTool } from './optionalTools'
@@ -19,6 +19,9 @@ import { PresenceDots, ShareDialog, TeammateDots } from '../collab/CollabDialogs
 import { CloseToolDialog, RestoreToolDialog, type CloseChoice, type RestoreChoice } from './ToolDialogs'
 import { BACKGROUND_TOOLS, deleteToolContent, hideTool, toolHasContent } from './toolContent'
 
+/** Colours for tools and folders in the sidebar (v0.13); null = none. */
+const TOOL_COLORS: (string | null)[] = [null, '#e03131', '#f08c00', '#f5b301', '#2f9e44', '#0c8599', '#1971c2', '#7048e8', '#c2255c']
+
 /** Always-visible component sidebar (SB-1..SB-7). */
 export function Sidebar() {
   const meta = useProjectStore((s) => s.meta)
@@ -28,7 +31,8 @@ export function Sidebar() {
   const [themeOpen, setThemeOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const [dropOn, setDropOn] = useState<ComponentType | null>(null)
+  const [dropOn, setDropOn] = useState<string | null>(null)
+  const [folderMenu, setFolderMenu] = useState<{ id: Id; x: number; y: number } | null>(null)
   const [moreOpen, setMoreOpen] = useState(() => {
     try {
       return localStorage.getItem('egd.sidebar.more') !== '0'
@@ -60,7 +64,26 @@ export function Sidebar() {
     .filter((m): m is ComponentManifest => !!m && shownTool(m.type, askProject))
     .filter((m) => !q || m.name.toLowerCase().includes(q) || meta.documents.some((d) => d.type === m.type && d.title.toLowerCase().includes(q)))
   const toggleFavorite = (type: ComponentType) => updateMeta({ favorites: favorites.includes(type) ? favorites.filter((t) => t !== type) : [...favorites, type] })
-  /** Drop tool `from` onto tool `to`: it moves there, and becomes starred or not like `to`. */
+  // v0.13: colours and folders.
+  const toolColors = meta.toolColors ?? {}
+  const folders = meta.folders ?? []
+  const setFolders = (next: SidebarFolder[]) => updateMeta({ folders: next })
+  const folderOf = (t: ComponentType) => folders.find((f) => f.tools.includes(t))
+  const shown = new Set(enabled.map((m) => m.type))
+  const topTools = enabled.filter((m) => favorites.includes(m.type))
+  const shownFolders = folders
+    .map((folder) => ({ folder, tools: folder.tools.filter((t) => shown.has(t) && !favorites.includes(t)).map(getManifest).filter((m): m is ComponentManifest => !!m) }))
+    .filter((x) => !q || x.tools.length || x.folder.name.toLowerCase().includes(q))
+  const restTools = enabled.filter((m) => !favorites.includes(m.type) && !folderOf(m.type))
+  const intoFolder = (t: ComponentType, folderId: Id | null) =>
+    updateMeta({ folders: folders.map((f) => ({ ...f, tools: f.id === folderId ? [...f.tools.filter((x) => x !== t), t] : f.tools.filter((x) => x !== t) })), favorites: favorites.filter((x) => x !== t) })
+  const newFolder = async (withTool?: ComponentType) => {
+    const name = await promptDialog('New folder', 'Folder')
+    if (!name?.trim()) return
+    const f: SidebarFolder = { id: newId(), name: name.trim(), tools: withTool ? [withTool] : [] }
+    updateMeta({ folders: [...folders.map((x) => ({ ...x, tools: x.tools.filter((t) => t !== withTool) })), f], favorites: withTool ? favorites.filter((x) => x !== withTool) : favorites })
+  }
+  /** Drop tool `from` onto tool `to`: it moves there, and joins `to`'s folder or stars like `to`. */
   const moveTool = (from: ComponentType, to: ComponentType) => {
     if (from === to) return
     const without = (list: ComponentType[]) => list.filter((t) => t !== from)
@@ -68,7 +91,12 @@ export function Sidebar() {
       const i = list.indexOf(to)
       return i < 0 ? [...list, from] : [...list.slice(0, i), from, ...list.slice(i)]
     }
-    updateMeta({ enabledComponents: insert(without(meta.enabledComponents)), favorites: favorites.includes(to) ? insert(without(favorites)) : without(favorites) })
+    const target = favorites.includes(to) ? null : folderOf(to)
+    updateMeta({
+      enabledComponents: insert(without(meta.enabledComponents)),
+      favorites: favorites.includes(to) ? insert(without(favorites)) : without(favorites),
+      folders: folders.map((f) => ({ ...f, tools: f.id === target?.id ? insert(without(f.tools)) : without(f.tools) })),
+    })
   }
   const available = allManifests().filter((m) => !meta.enabledComponents.includes(m.type) && shownTool(m.type, askProject))
 
@@ -110,35 +138,10 @@ export function Sidebar() {
       e.dataTransfer.setData(DRAG_MIME, JSON.stringify(payload))
       e.dataTransfer.effectAllowed = 'copy'
     },
+    onDragEnd: () => setDropOn(null),
   })
 
-  return (
-    <nav className={`sidebar${collapsed ? ' collapsed' : ''}`} aria-label="Components">
-      <div className="sidebar-top">
-        <button className="sidebar-row" onClick={() => void backToProjects()} title="Back to projects">
-          <House size={16} />
-          {!collapsed && <span>Projects</span>}
-        </button>
-        {!collapsed && <div className="sidebar-project" title={meta.name}>{meta.name}</div>}
-        <JumpButtons />
-      </div>
-
-      {!collapsed && (
-        <label className="sidebar-search">
-          <Search size={14} />
-          <input
-            className="input"
-            placeholder="Search tools and documents"
-            aria-label="Search tools and documents"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => e.key === 'Escape' && (e.preventDefault(), setSearch(''))}
-          />
-        </label>
-      )}
-      <div className="sidebar-list" data-tour="sidebar-list">
-        {q && enabled.length === 0 && <div className="sidebar-menu-note">Nothing matches.</div>}
-        {enabled.map((m) => {
+  const renderTool = (m: ComponentManifest) => {
           const docs = meta.documents.filter((d) => d.type === m.type && (!q || m.name.toLowerCase().includes(q) || d.title.toLowerCase().includes(q)))
           const isOpen = q ? true : (expanded[m.type] ?? true)
           const fav = favorites.includes(m.type)
@@ -146,6 +149,8 @@ export function Sidebar() {
             <div key={m.type}>
               <div
                 className={`sidebar-item${dropOn === m.type ? ' drop-target' : ''}`}
+                style={toolColors[m.type] ? ({ ['--tool-color' as string]: toolColors[m.type] } as React.CSSProperties) : undefined}
+                data-colored={toolColors[m.type] ? '' : undefined}
                 onDragOver={(e) => {
                   if (!e.dataTransfer.types.includes(DRAG_MIME)) return
                   e.preventDefault()
@@ -231,7 +236,70 @@ export function Sidebar() {
               )}
             </div>
           )
-        })}
+  }
+
+  return (
+    <nav className={`sidebar${collapsed ? ' collapsed' : ''}`} aria-label="Components">
+      <div className="sidebar-top">
+        <button className="sidebar-row" onClick={() => void backToProjects()} title="Back to projects">
+          <House size={16} />
+          {!collapsed && <span>Projects</span>}
+        </button>
+        {!collapsed && <div className="sidebar-project" title={meta.name}>{meta.name}</div>}
+        <JumpButtons />
+      </div>
+
+      {!collapsed && (
+        <label className="sidebar-search">
+          <Search size={14} />
+          <input
+            className="input"
+            placeholder="Search tools and documents"
+            aria-label="Search tools and documents"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === 'Escape' && (e.preventDefault(), setSearch(''))}
+          />
+        </label>
+      )}
+      <div className="sidebar-list" data-tour="sidebar-list">
+        {q && enabled.length === 0 && <div className="sidebar-menu-note">Nothing matches.</div>}
+        {topTools.map(renderTool)}
+        {shownFolders.map(({ folder: f, tools }) => (
+          <div key={f.id} className="sidebar-folder" style={f.color ? ({ ['--tool-color' as string]: f.color } as React.CSSProperties) : undefined}>
+            <div
+              className={`sidebar-item sidebar-folder-head${dropOn === f.id ? ' drop-target' : ''}`}
+              onDragOver={(e) => {
+                if (!e.dataTransfer.types.includes(DRAG_MIME)) return
+                e.preventDefault()
+                setDropOn(f.id)
+              }}
+              onDragLeave={() => setDropOn(null)}
+              onDrop={(e) => {
+                setDropOn(null)
+                const raw = e.dataTransfer.getData(DRAG_MIME)
+                if (!raw) return
+                e.preventDefault()
+                intoFolder((JSON.parse(raw) as DragPayload).type, f.id)
+              }}
+            >
+              <button
+                className="sidebar-row"
+                title={`${f.name} (right-click to rename, colour or remove; drop tools here)`}
+                onClick={() => setFolders(folders.map((x) => (x.id === f.id ? { ...x, collapsed: !x.collapsed } : x)))}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setFolderMenu({ id: f.id, x: e.clientX, y: e.clientY })
+                }}
+              >
+                {f.collapsed && !q ? <FolderClosed size={16} /> : <FolderOpen size={16} />}
+                {!collapsed && <span>{f.name}</span>}
+              </button>
+            </div>
+            {(!f.collapsed || q) && <div className="sidebar-folder-tools">{tools.map(renderTool)}</div>}
+          </div>
+        ))}
+        {restTools.map(renderTool)}
         <button className="sidebar-row" title="Add tool" data-tour="add-component" onClick={openAdd}>
           <Plus size={16} />
           {!collapsed && <span>Add tool</span>}
@@ -251,8 +319,65 @@ export function Sidebar() {
         {toolMenu && (
           <div className="menu-backdrop" onMouseDown={() => setToolMenu(null)} onContextMenu={(e) => e.preventDefault()}>
             <div className="menu" style={{ position: 'fixed', left: toolMenu.x, top: toolMenu.y }} onMouseDown={(e) => e.stopPropagation()}>
+              <div className="sidebar-swatches" aria-label="Colour">
+                {TOOL_COLORS.map((c) => (
+                  <button
+                    key={c ?? 'none'}
+                    className={`sidebar-swatch${(toolColors[toolMenu.manifest.type] ?? null) === c ? ' on' : ''}`}
+                    style={{ background: c ?? 'transparent' }}
+                    title={c ? 'Colour' : 'No colour'}
+                    aria-label={c ? `Colour ${c}` : 'No colour'}
+                    onClick={() => {
+                      const next = { ...toolColors }
+                      if (c) next[toolMenu.manifest.type] = c
+                      else delete next[toolMenu.manifest.type]
+                      updateMeta({ toolColors: next })
+                      setToolMenu(null)
+                    }}
+                  />
+                ))}
+              </div>
+              {folders
+                .filter((f) => !f.tools.includes(toolMenu.manifest.type))
+                .map((f) => (
+                  <button key={f.id} onClick={() => (intoFolder(toolMenu.manifest.type, f.id), setToolMenu(null))}>
+                    Move to {f.name}
+                  </button>
+                ))}
+              {folderOf(toolMenu.manifest.type) && <button onClick={() => (intoFolder(toolMenu.manifest.type, null), setToolMenu(null))}>Take out of the folder</button>}
+              <button onClick={() => (void newFolder(toolMenu.manifest.type), setToolMenu(null))}>New folder with this tool…</button>
               <button className="danger" onClick={() => void closeTool(toolMenu.manifest)}>
                 Close tool
+              </button>
+            </div>
+          </div>
+        )}
+        {folderMenu && (
+          <div className="menu-backdrop" onMouseDown={() => setFolderMenu(null)} onContextMenu={(e) => e.preventDefault()}>
+            <div className="menu" style={{ position: 'fixed', left: folderMenu.x, top: folderMenu.y }} onMouseDown={(e) => e.stopPropagation()}>
+              <div className="sidebar-swatches" aria-label="Folder colour">
+                {TOOL_COLORS.map((c) => (
+                  <button
+                    key={c ?? 'none'}
+                    className="sidebar-swatch"
+                    style={{ background: c ?? 'transparent' }}
+                    aria-label={c ? `Colour ${c}` : 'No colour'}
+                    onClick={() => (setFolders(folders.map((f) => (f.id === folderMenu.id ? { ...f, color: c } : f))), setFolderMenu(null))}
+                  />
+                ))}
+              </div>
+              <button
+                onClick={async () => {
+                  const f = folders.find((x) => x.id === folderMenu.id)
+                  setFolderMenu(null)
+                  const name = f && (await promptDialog('Rename folder', f.name))
+                  if (f && name?.trim()) setFolders(folders.map((x) => (x.id === f.id ? { ...x, name: name.trim() } : x)))
+                }}
+              >
+                Rename
+              </button>
+              <button className="danger" onClick={() => (setFolders(folders.filter((f) => f.id !== folderMenu.id)), setFolderMenu(null))}>
+                Remove folder (the tools stay)
               </button>
             </div>
           </div>

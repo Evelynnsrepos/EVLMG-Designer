@@ -322,3 +322,38 @@
 .sidebar-item.drop-target {
   box-shadow: inset 0 2px 0 var(--accent);
 }
+
+/* v0.13: tool colours and folders in the sidebar */
+.sidebar-item[data-colored] > .sidebar-row:first-child,
+.sidebar-folder[style] > .sidebar-folder-head > .sidebar-row {
+  box-shadow: inset 3px 0 0 var(--tool-color);
+}
+.sidebar-item[data-colored] > .sidebar-row:first-child svg,
+.sidebar-folder[style] > .sidebar-folder-head svg {
+  color: var(--tool-color);
+}
+.sidebar-folder-tools {
+  margin-left: 10px;
+  padding-left: 4px;
+  border-left: 1px solid var(--tool-color, var(--border));
+}
+.sidebar-folder-head .sidebar-row {
+  font-weight: 600;
+}
+.sidebar-swatches {
+  display: flex;
+  gap: 4px;
+  padding: 4px 6px 6px;
+}
+.sidebar-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.sidebar-swatch.on {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}

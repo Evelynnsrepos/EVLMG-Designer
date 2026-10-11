@@ -49,6 +49,10 @@ export interface ProjectMeta {
   fonts?: Partial<Record<ComponentType, string>>
   /** v0.13: starred tools, shown at the top of the sidebar in this order. */
   favorites?: ComponentType[]
+  /** v0.13: a colour per tool in the sidebar, for organising. */
+  toolColors?: Partial<Record<ComponentType, string>>
+  /** v0.13: sidebar folders, each holding tools in its own order. */
+  folders?: SidebarFolder[]
   /** v0.13: an optional picture for the project, shown on its card on the start screen. */
   image?: AssetPath | null
   createdAt: string
@@ -98,4 +102,13 @@ export interface RecentProject {
   stats: ProjectStats
   /** The project's picture (from its meta), so the start screen needn't open every project. */
   image?: string | null
+}
+
+/** A folder in the sidebar (v0.13). */
+export interface SidebarFolder {
+  id: Id
+  name: string
+  color?: string | null
+  collapsed?: boolean
+  tools: ComponentType[]
 }
