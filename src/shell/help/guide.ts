@@ -238,6 +238,8 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Colors: disc, classic, harmony, value (HSB, RGB, hex) and palettes, with a second color and recent colors. Drag the color onto the canvas to fill an area (drag sideways while holding to change how far it spreads).',
       'Layers: 26 blend modes, groups, layer masks, clipping masks, alpha lock, lock, a reference layer for fills, hide from export, merge, and drag a layer out of the list to save it as PNG. Text layers stay editable (T); fonts can be imported.',
       'Selections: automatic (magic wand), freehand, polygon, rectangle and ellipse, with add, remove, invert, feather, save and load. The Move tool transforms: freeform, uniform, distort and warp, with snapping.',
+      'Adjustment layers (the sliders button in the Layers header): hue, saturation and brightness, colour balance, curves or a gradient map that change everything below them and can be changed or removed any time. Clip one to a layer to change only that layer. Layers can clip to a group too, and clipped layers fade and hide with their base. The tick-list button picks several layers with a pen or finger (or Ctrl-click, Shift-click).',
+      'The flip buttons in the top bar mirror the whole picture; Shift-click flips only the active layer. While transforming, drag just outside a corner to turn; snapping to the edges and middle can be switched on in the transform bar.',
       'Adjustments: hue, color balance, curves, gradient map, blurs, noise, sharpen, bloom, glitch, halftone and chromatic aberration, on the whole layer or painted in with the pen. Liquify pushes and twirls pixels; Clone (Alt-click a source) copies them.',
       'Drawing guides: grid, isometric, perspective and symmetry (including radial). Drawing Assist makes strokes on a layer follow the guide.',
       'QuickShape: draw a rough line, circle, rectangle or triangle and keep holding at the end. It snaps to a clean shape; Edit shape lets you drag its points, and Shift gives a perfect one.',
@@ -394,6 +396,8 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Sketch levels and dungeons on a grid. Pick a tile on the left (floor, wall, door, water, lava, stairs, start, exit, enemy, boss, chest, key, trap, NPC) and paint with the brush.',
       'Room draws a whole room as you drag: floor inside, walls around, and doors you already placed stay. Fill floods an area, Erase clears tiles, and right-click with Fill empties an area.',
       'Note pins a numbered note on the map for puzzles, secrets or ambushes; the notes are listed on the right. The palette counts how many enemies, chests and so on the level has. Export saves the level as a PNG.',
+      'Tilesets: Add a tileset image (a drawing from Draw works too) and set the size of one tile. Click a tile and paint, fill or erase with it, like in Godot. Plan tiles like enemies and chests show on top of the picture tiles.',
+      'Godot scene saves the picture tiles as a Godot 4 TileMap scene with its TileSet into your Godot project (egd/levels/), ready to open.',
     ],
   },
   achievements: {
@@ -409,6 +413,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     body: [
       'Each document is a language. Pick a preset (Elvish, Dwarvish, Orcish, Japanese-like, Norse-like, Latin) or set the sounds yourself: consonants, vowels, syllable shapes like CV or CVC, how many syllables, endings and letter pairs to avoid.',
       'Generate makes a batch of names that sound like they belong together. Click a name to keep it.',
+      'Real-world styles: search the list (German, Polish, Canadian, Japanese and about 50 more) and Generate mixes real first and family names of that style. Tick New names to get made-up names that sound like it instead.',
       'The dictionary holds the words of your language; the dice makes one up for you. Translate turns any text into the language: dictionary words use your word, every other word gets a made-up word that stays the same every time.',
     ],
   },
@@ -495,7 +500,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     title: 'Pitch Deck',
     body: [
       'Make slides to pitch your game. Build from project starts a deck with a title slide, your vision, selling points and design pillars (from Vision & Pillars) and slides of characters and items with their pictures.',
-      'Each slide has a layout: title, text, picture and text, design pillars, or a selection of items, characters, towns or enemies. Change the order with the arrows.',
+      'Each slide has a layout: title, text, picture and text, design pillars, or a selection of items, characters, towns or enemies. Drag slides in the list to change the order, or use the arrows.',
       'Present shows the deck full screen. Click or use the arrow keys, space or Enter to move on, and Esc to stop.',
     ],
   },

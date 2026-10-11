@@ -86,7 +86,7 @@ and Qwen models, Apache-2.0). There is no closed part, no account and no trackin
 - **A font for every tool**, chosen per project.
 - **Design Book**: turn the project into one game design document with a cover, contents, images and info boxes, as a web page or PDF.
 - **Review status and comments** on every tool window and entry, from Idea to Final, with a Reviews board.
-- **Genre templates**: start a new project as an RPG, action game, roguelike, strategy game, visual novel, gacha or cozy game and get the right tools, a vision page with pillars and a starter task list.
+- **Project presets**: start a new project as an RPG, action game, roguelike, strategy game, visual novel, gacha or cozy game, or just to write a story, draw, build a world, design levels, run a tabletop campaign or plan and pitch, and get the right tools, a vision page with pillars and a starter task list.
 - **Engine export**: send your items, characters, towns, enemies, quests, dialogue and translations to Godot 4, Unity or Unreal, or as plain JSON.
 
 ### The tools
@@ -108,7 +108,7 @@ and Qwen models, Apache-2.0). There is no closed part, no account and no trackin
 | **Level Calculator** | XP curves, stat growth, and damage per level against a fixed defense or an enemy from your Enemy List. |
 | **Resource Calculator** | How many resources and how much play time a goal takes, using level-up costs and enemy drop rates. |
 | **Cosmos Creator** | Universes, galaxies, solar systems, planets, moons and more in an isometric view: a node graph at the top level and orbits inside galaxies and solar systems, with moons around their planets and your own pictures for any body. |
-| **Draw** | A full painting app: pen pressure and tilt, about 120 editable brushes (plus .abr, .brush and .brushset import), 26 blend modes, groups and masks, selections and transform, adjustments, liquify, guides and symmetry, text layers, animation, time-lapse, 250 undo steps, canvases up to 8K, and PSD import and export. |
+| **Draw** | A full painting app: pen pressure and tilt, about 120 editable brushes (plus .abr, .brush and .brushset import), 26 blend modes, groups, masks and adjustment layers, selections and transform, adjustments, liquify, guides and symmetry, text layers, animation, time-lapse, 250 undo steps, canvases up to 8K, and PSD import and export. |
 | **Design Language** | The look of your game on one board. Works like the Moodboard: images, cutouts, and your drawings from Draw as stickers. |
 | **Asset Pool** | Every asset the game still needs (icons, sprites, models, sounds, music…) with status and pictures. Add one for every item, character, town or enemy at once, or paste a checklist. |
 | **Wave Planner** | Waves of enemies with timing, health growth and drops, the damage per second each wave needs, and which weapons can keep up. |
@@ -124,9 +124,9 @@ and Qwen models, Apache-2.0). There is no closed part, no account and no trackin
 | **Crafting & Recipes** | Recipes with ingredients, stations and times, a crafting tree and the raw materials anything needs. |
 | **Factions** | Factions with leaders, members and towns, and a matrix of how they feel about each other. |
 | **Family Tree** | Characters from the Character List as a family tree with parents, children and partners. |
-| **Level Layout** | Paint levels and dungeons on a tile grid: rooms, doors, enemies, loot, spawns and numbered notes. |
+| **Level Layout** | Paint levels and dungeons on a tile grid: rooms, doors, enemies, loot, spawns and numbered notes, with your own tileset images and export as a Godot 4 TileMap scene. |
 | **Achievements** | Achievements with how they unlock, points, rewards, hidden ones and how rare they should be. |
-| **Names & Languages** | Generate names from a language's sounds and build a small made-up language with a dictionary and translator. |
+| **Names & Languages** | Generate names in about 50 real-world styles (German, Polish, Japanese…) or from a made-up language's sounds, and build that language with a dictionary and translator. |
 | **Calendar & Eras** | Your world's months, weekdays and eras, a month view and a date calculator; timelines show era years. |
 | **Economy Simulator** | Currency sources and sinks simulated over hours of play: balances, purchases and inflation warnings. |
 | **Combat Simulator** | Two teams fight many times with a damage formula: win rates, fight length, damage and an example fight. |
