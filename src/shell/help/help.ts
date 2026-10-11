@@ -21,8 +21,9 @@ export const TOURS: Record<TourId, TourStep[]> = {
   ],
   editor: [
     { title: 'Your project', text: 'This is the editor. Here is a quick look at how it works.' },
-    { target: 'sidebar-list', title: 'Your tools', text: 'Click a tool to show it, Shift-click to open it next to the others. Tools with several documents list them underneath; click New to add one, double-click to rename.' },
-    { target: 'workspace', title: 'Side by side', text: 'Drag a tool from the sidebar onto an open panel to split the screen. Press Esc for Layout Mode to close or move panels.' },
+    { target: 'sidebar-list', title: 'Your tools', text: 'Click a tool to show it, Shift-click to open it next to the others. Tools with several documents list them underneath; click New to add one, right-click to rename.' },
+    { target: 'workspace', title: 'Side by side', text: 'Shift-click a tool, or drag it from the sidebar onto an open panel, to split the screen.' },
+    { target: 'workspace', title: 'Esc: arrange and close', text: 'Press Esc any time for Layout Mode: drag tools to new places, use the arrows to swap them, or the big X to close one. Press Esc again to go back to work.' },
     { target: 'add-component', title: 'More tools', text: 'Add any tool to this project whenever you need it. Right-click a tool to close it again.' },
     { target: 'project-look', title: 'Make it yours', text: 'Give this project its own accent color, background and wallpaper.' },
     { target: 'help', title: 'Need help?', text: 'Report a problem here, or press F1 for the user guide. Everything saves automatically, so just start creating.' },

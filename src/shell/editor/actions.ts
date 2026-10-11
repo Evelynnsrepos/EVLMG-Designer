@@ -2,7 +2,6 @@ import { newId, type ComponentType, type Id } from '@/core/model'
 import { getManifest } from '@/core/registry'
 import { importAssetFromBlob } from '@/core/assets'
 import { clearDocumentCache, flushAll, postIntent, useAppStore, useProjectStore } from '@/core/state'
-import { confirmDialog } from '@/shared/dialogs'
 import { autoPlacement, findOpen, insertPanel, leaves, neighbor, removePanel, swapPanels, type Direction, type DropSide } from '../workspace/layoutTree'
 
 /**
@@ -46,21 +45,12 @@ export function openComponent(type: ComponentType, documentId: Id | null = null,
 }
 
 /**
- * Plain click in the sidebar (v0.4): show only this component. Everything is
- * saved first; with more than one panel open the user confirms (Enter = yes).
+ * Plain click in the sidebar (v0.4): show only this component. Everything is saved first.
+ * v0.13: no question any more; Shift-click opens next to the others instead.
  */
 export async function replaceWithComponent(type: ComponentType, documentId: Id | null = null) {
   const { root, meta } = useProjectStore.getState()
   if (!root || !meta) return
-  const open = leaves(meta.layout)
-  if (open.length > 1) {
-    const ok = await confirmDialog({
-      title: 'Close the open tools?',
-      message: `This closes the ${open.length} open tools and shows only this one. Everything is saved. Shift-click a tool to open it next to the others instead.`,
-      confirmLabel: 'Close and open',
-    })
-    if (!ok) return
-  }
   const docId = resolveDocument(type, documentId)
   const current = leaves(useProjectStore.getState().meta!.layout)
   const keep = current.length === 1 && current[0].type === type && current[0].documentId === docId ? current[0] : null
@@ -70,11 +60,12 @@ export async function replaceWithComponent(type: ComponentType, documentId: Id |
   useAppStore.getState().setActivePanel(panel.id)
 }
 
-/** Create a new document for a multi-document component and open it (SB-4). */
-export function newDocument(type: ComponentType) {
+/** Create a new document for a multi-document component and open it (SB-4): alone, or next to the others. */
+export function newDocument(type: ComponentType, replace = false) {
   const manifest = getManifest(type)
   const doc = useProjectStore.getState().addDocument(type, manifest?.newDocumentTitle ?? 'Untitled')
-  openComponent(type, doc.id)
+  if (replace) void replaceWithComponent(type, doc.id)
+  else openComponent(type, doc.id)
 }
 
 /** Close a panel; everything is saved first (ED-8). */

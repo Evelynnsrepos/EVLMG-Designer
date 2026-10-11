@@ -137,11 +137,13 @@ export function Sidebar() {
                       <button
                         className="sidebar-row sidebar-doc"
                         onClick={(e) => (e.shiftKey ? openComponent(m.type, d.id) : void replaceWithComponent(m.type, d.id))}
-                        onDoubleClick={async () => {
-                          const title = await promptDialog('Rename document', d.title)
+                        onContextMenu={async (e) => {
+                          // v0.13: right-click renames (a double-click used to, but it also opened the document twice).
+                          e.preventDefault()
+                          const title = await promptDialog('Rename', d.title)
                           if (title?.trim()) useProjectStore.getState().renameDocument(d.id, title.trim())
                         }}
-                        title={`${d.title} (double-click to rename)`}
+                        title={`${d.title} (right-click to rename, Shift-click to open next to the others)`}
                         {...dragProps(m.type, d.id)}
                       >
                         <span>{d.title}</span>
@@ -167,7 +169,7 @@ export function Sidebar() {
                       </button>
                     </div>
                   ))}
-                  <button className="sidebar-row sidebar-doc sidebar-new" onClick={() => newDocument(m.type)}>
+                  <button className="sidebar-row sidebar-doc sidebar-new" title="New (Shift-click to open it next to the others)" onClick={(e) => newDocument(m.type, !e.shiftKey)}>
                     <Plus size={13} /> <span>New</span>
                   </button>
                 </div>
