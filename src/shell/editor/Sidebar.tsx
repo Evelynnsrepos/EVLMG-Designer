@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, BookOpen, Boxes, ChevronDown, ChevronRight, CircleHelp, House, PanelLeftClose, PanelLeftOpen, Palette, Plus, Gem, Settings, Trash2, Users } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpen, Search, Star, Boxes, ChevronDown, ChevronRight, CircleHelp, House, PanelLeftClose, PanelLeftOpen, Palette, Plus, Gem, Settings, Trash2, Users } from 'lucide-react'
 import { useState } from 'react'
 import type { ComponentType, Id } from '@/core/model'
 import { allManifests, getManifest, type ComponentManifest } from '@/core/registry'
@@ -27,6 +27,8 @@ export function Sidebar() {
   const [addOpen, setAddOpen] = useState<React.CSSProperties | null>(null)
   const [themeOpen, setThemeOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [dropOn, setDropOn] = useState<ComponentType | null>(null)
   const [moreOpen, setMoreOpen] = useState(() => {
     try {
       return localStorage.getItem('egd.sidebar.more') !== '0'
@@ -49,7 +51,25 @@ export function Sidebar() {
   const askProject = useSettings((s) => s.askProject)
   if (!meta) return null
   const collapsed = meta.sidebarCollapsed
-  const enabled = meta.enabledComponents.map(getManifest).filter((m): m is ComponentManifest => !!m && shownTool(m.type, askProject))
+  const favorites = meta.favorites ?? []
+  // v0.13: starred tools first, then the rest in the order the user dragged them into.
+  const order = [...favorites.filter((t) => meta.enabledComponents.includes(t)), ...meta.enabledComponents.filter((t) => !favorites.includes(t))]
+  const q = search.trim().toLowerCase()
+  const enabled = order
+    .map(getManifest)
+    .filter((m): m is ComponentManifest => !!m && shownTool(m.type, askProject))
+    .filter((m) => !q || m.name.toLowerCase().includes(q) || meta.documents.some((d) => d.type === m.type && d.title.toLowerCase().includes(q)))
+  const toggleFavorite = (type: ComponentType) => updateMeta({ favorites: favorites.includes(type) ? favorites.filter((t) => t !== type) : [...favorites, type] })
+  /** Drop tool `from` onto tool `to`: it moves there, and becomes starred or not like `to`. */
+  const moveTool = (from: ComponentType, to: ComponentType) => {
+    if (from === to) return
+    const without = (list: ComponentType[]) => list.filter((t) => t !== from)
+    const insert = (list: ComponentType[]) => {
+      const i = list.indexOf(to)
+      return i < 0 ? [...list, from] : [...list.slice(0, i), from, ...list.slice(i)]
+    }
+    updateMeta({ enabledComponents: insert(without(meta.enabledComponents)), favorites: favorites.includes(to) ? insert(without(favorites)) : without(favorites) })
+  }
   const available = allManifests().filter((m) => !meta.enabledComponents.includes(m.type) && shownTool(m.type, askProject))
 
   /** The Add tool menu opens below the button, or above it when there is little room. */
@@ -103,13 +123,43 @@ export function Sidebar() {
         <JumpButtons />
       </div>
 
+      {!collapsed && (
+        <label className="sidebar-search">
+          <Search size={14} />
+          <input
+            className="input"
+            placeholder="Search tools and documents"
+            aria-label="Search tools and documents"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === 'Escape' && (e.preventDefault(), setSearch(''))}
+          />
+        </label>
+      )}
       <div className="sidebar-list" data-tour="sidebar-list">
+        {q && enabled.length === 0 && <div className="sidebar-menu-note">Nothing matches.</div>}
         {enabled.map((m) => {
-          const docs = meta.documents.filter((d) => d.type === m.type)
-          const isOpen = expanded[m.type] ?? true
+          const docs = meta.documents.filter((d) => d.type === m.type && (!q || m.name.toLowerCase().includes(q) || d.title.toLowerCase().includes(q)))
+          const isOpen = q ? true : (expanded[m.type] ?? true)
+          const fav = favorites.includes(m.type)
           return (
             <div key={m.type}>
-              <div className="sidebar-item">
+              <div
+                className={`sidebar-item${dropOn === m.type ? ' drop-target' : ''}`}
+                onDragOver={(e) => {
+                  if (!e.dataTransfer.types.includes(DRAG_MIME)) return
+                  e.preventDefault()
+                  setDropOn(m.type)
+                }}
+                onDragLeave={() => setDropOn(null)}
+                onDrop={(e) => {
+                  setDropOn(null)
+                  const raw = e.dataTransfer.getData(DRAG_MIME)
+                  if (!raw) return
+                  e.preventDefault()
+                  moveTool((JSON.parse(raw) as DragPayload).type, m.type)
+                }}
+              >
                 <button
                   className="sidebar-row"
                   title={`${m.name} (Shift-click to open next to the others)`}
@@ -124,6 +174,11 @@ export function Sidebar() {
                   {!collapsed && <span>{m.name}</span>}
                   {!collapsed && <TeammateDots at={m.type} wholeType={m.multiDocument && !isOpen} />}
                 </button>
+                {!collapsed && (
+                  <button className={`icon-btn sidebar-star${fav ? ' on' : ''}`} title={fav ? 'Unstar (stays at the top while starred)' : 'Star: keep this tool at the top'} aria-label={fav ? `Unstar ${m.name}` : `Star ${m.name}`} aria-pressed={fav} onClick={() => toggleFavorite(m.type)}>
+                    <Star size={13} fill={fav ? 'currentColor' : 'none'} />
+                  </button>
+                )}
                 {!collapsed && m.multiDocument && (
                   <button className="icon-btn" title={isOpen ? 'Collapse' : 'Expand'} onClick={() => setExpanded({ ...expanded, [m.type]: !isOpen })}>
                     {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
