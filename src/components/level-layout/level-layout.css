@@ -176,3 +176,11 @@
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+
+/* v0.14: tiles that block movement */
+.lv-atlas-tile.solid {
+  box-shadow: inset 0 0 0 2px rgba(224, 49, 49, 0.9);
+}
+.lv-solid {
+  font-size: 12px;
+}

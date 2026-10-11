@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bucket, counts, createLevelDoc, godotScene, room } from './model'
+import { bucket, counts, createLevelDoc, godotScene, isBlocked, room } from './model'
 
 describe('level layout', () => {
   it('builds rooms with walls and keeps doors', () => {
@@ -30,5 +30,24 @@ describe('Godot export', () => {
     // x=3, y=2 → (2 << 16) | 3; source 0, column 1 → 1 << 16; row 0
     expect(scene).toContain(`PackedInt32Array(${(2 << 16) | 3}, ${1 << 16}, 0)`)
     expect(scene).toContain('[node name="Crypt 1" type="TileMap"]')
+    expect(scene).not.toContain('physics_layer_0')
+  })
+
+  it('gives blocking tiles a collision shape and blocked cells a static body', () => {
+    const d = {
+      ...createLevelDoc(),
+      tilesets: [{ id: 't', name: 'Town', image: 'a.png', tileSize: 16, columns: 2, rows: 1, width: 32, height: 16, solid: ['1:0'] }],
+      art: { '0,0': '0:1:0', '1,0': '0:0:0' },
+      blocked: { '5,5': true as const },
+    }
+    expect(isBlocked(d, 0, 0)).toBe(true)
+    expect(isBlocked(d, 1, 0)).toBe(false)
+    expect(isBlocked(d, 5, 5)).toBe(true)
+    const scene = godotScene(d, 'Town', () => 'res://t.png')
+    expect(scene).toContain('physics_layer_0/collision_layer = 1')
+    expect(scene).toContain('1:0/0/physics_layer_0/polygon_0/points = PackedVector2Array(-8, -8, 8, -8, 8, 8, -8, 8)')
+    expect(scene).not.toContain('0:0/0/physics_layer_0')
+    expect(scene).toContain('[node name="Blocked" type="StaticBody2D" parent="."]')
+    expect(scene).toContain('position = Vector2(88, 88)')
   })
 })

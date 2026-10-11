@@ -1,4 +1,4 @@
-import { Brush, Download, Eraser, ImagePlus, PaintBucket, Square, StickyNote, Trash2 } from 'lucide-react'
+import { Ban, Brush, Download, Eraser, ImagePlus, PaintBucket, Square, StickyNote, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PanelProps } from '@/core/registry'
 import { useDocument, useProjectStore, useUndoRedoKeys } from '@/core/state'
@@ -7,10 +7,10 @@ import { assetUrl, pickAndImportAssets, resolveAssetPath, useAssetUrls } from '@
 import { getFs } from '@/core/fs'
 import { newId } from '@/core/model'
 import { NumberInput, PresetHeader } from '@/shared/calculators'
-import { artKey, bucket, cellKey, counts, createLevelDoc, godotScene, MARKERS, newNote, parseArt, room, tileColor, TILES, type LevelDoc, type TileId, type Tileset } from './model'
+import { artKey, bucket, cellKey, counts, createLevelDoc, godotScene, isBlocked, MARKERS, newNote, parseArt, room, tileColor, TILES, type LevelDoc, type TileId, type Tileset } from './model'
 import './level-layout.css'
 
-type Tool = 'paint' | 'erase' | 'room' | 'fill' | 'note'
+type Tool = 'paint' | 'erase' | 'room' | 'fill' | 'note' | 'block'
 const CELL = 22
 
 /** Level / dungeon layout editor (v0.10). */
@@ -25,12 +25,15 @@ export default function View({ documentId, active }: PanelProps) {
   const root = useProjectStore((s) => s.root)
   const [exported, setExported] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
-  const [drag, setDrag] = useState<{ x: number; y: number; tiles: Record<string, TileId>; art: Record<string, string> } | null>(null)
+  const [drag, setDrag] = useState<{ x: number; y: number; tiles: Record<string, TileId>; art: Record<string, string>; blocked: Record<string, true>; unblock?: boolean } | null>(null)
+  // v0.14: where nothing can walk, shown as a red overlay.
+  const [showBlocked, setShowBlocked] = useState(true)
+  const last = useRef<{ x: number; y: number } | null>(null)
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
   const [noteId, setNoteId] = useState<string | null>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const d = doc.data
-  const shown = useMemo(() => (drag && d ? { ...d, tiles: drag.tiles, art: drag.art } : d), [drag, d])
+  const shown = useMemo(() => (drag && d ? { ...d, tiles: drag.tiles, art: drag.art, blocked: drag.blocked } : d), [drag, d])
   const sets = useMemo(() => d?.tilesets ?? [], [d?.tilesets])
   const urlOf = useAssetUrls(sets.map((t) => t.image))
   const [images, setImages] = useState<Record<string, HTMLImageElement>>({})
@@ -96,6 +99,22 @@ export default function View({ documentId, active }: PanelProps) {
       ctx.lineTo(c.width, y * s + 0.5)
       ctx.stroke()
     }
+    if (showBlocked) {
+      ctx.fillStyle = 'rgba(224, 49, 49, 0.35)'
+      ctx.strokeStyle = 'rgba(224, 49, 49, 0.9)'
+      ctx.lineWidth = 1.5
+      for (let y = 0; y < shown.height; y++)
+        for (let x = 0; x < shown.width; x++) {
+          if (!isBlocked(shown, x, y)) continue
+          ctx.fillRect(x * s, y * s, s, s)
+          ctx.beginPath()
+          ctx.moveTo(x * s + 4, y * s + 4)
+          ctx.lineTo(x * s + s - 4, y * s + s - 4)
+          ctx.moveTo(x * s + s - 4, y * s + 4)
+          ctx.lineTo(x * s + 4, y * s + s - 4)
+          ctx.stroke()
+        }
+    }
     shown.notes.forEach((n, i) => {
       ctx.fillStyle = '#ffe27a'
       ctx.fillRect(n.x * s + 2, n.y * s + 2, s - 4, s - 4)
@@ -105,7 +124,7 @@ export default function View({ documentId, active }: PanelProps) {
       ctx.textBaseline = 'middle'
       ctx.fillText(String(i + 1), n.x * s + s / 2, n.y * s + s / 2 + 1)
     })
-  }, [shown, sets, images, urlOf])
+  }, [shown, sets, images, urlOf, showBlocked])
 
   if (!d) return null
   const cellAt = (e: React.MouseEvent) => {
@@ -113,18 +132,25 @@ export default function View({ documentId, active }: PanelProps) {
     return { x: Math.floor(((e.clientX - r.left) / r.width) * d.width), y: Math.floor(((e.clientY - r.top) / r.height) * d.height) }
   }
   const inside = (p: { x: number; y: number }) => p.x >= 0 && p.y >= 0 && p.x < d.width && p.y < d.height
-  const apply = (tiles: Record<string, TileId>, artMap = d.art ?? {}) => doc.update((x) => ({ ...x, tiles, art: artMap }))
+  const apply = (tiles: Record<string, TileId>, artMap = d.art ?? {}, blocked = d.blocked ?? {}) => doc.update((x) => ({ ...x, tiles, art: artMap, blocked }))
   /** One cell painted (or erased: the picture tile first, then the plan tile). */
-  const paintAt = (cur: { tiles: Record<string, TileId>; art: Record<string, string> }, p: { x: number; y: number }) => {
+  const paintAt = (cur: { tiles: Record<string, TileId>; art: Record<string, string>; blocked: Record<string, true>; unblock?: boolean }, p: { x: number; y: number }) => {
     const k = cellKey(p.x, p.y)
     const tiles = { ...cur.tiles }
     const artMap = { ...cur.art }
+    const blocked = { ...cur.blocked }
+    if (tool === 'block') {
+      // Starting on a blocked cell unblocks for the whole drag, otherwise it blocks.
+      if (cur.unblock) delete blocked[k]
+      else blocked[k] = true
+      return { tiles, art: artMap, blocked, unblock: cur.unblock }
+    }
     if (tool === 'erase') {
       if (artMap[k]) delete artMap[k]
       else delete tiles[k]
     } else if (art) artMap[k] = art
     else tiles[k] = tile
-    return { tiles, art: artMap }
+    return { tiles, art: artMap, blocked }
   }
 
   const onDown = (e: React.MouseEvent) => {
@@ -141,18 +167,25 @@ export default function View({ documentId, active }: PanelProps) {
       doc.update((x) => ({ ...x, notes: [...x.notes, n] }))
       return setNoteId(n.id)
     }
-    const start = { tiles: d.tiles, art: d.art ?? {} }
+    const start = { tiles: d.tiles, art: d.art ?? {}, blocked: d.blocked ?? {}, unblock: tool === 'block' && (!!d.blocked?.[cellKey(p.x, p.y)] || e.button === 2) }
+    last.current = p
     setDrag({ x: p.x, y: p.y, ...(tool === 'room' ? start : paintAt(start, p)) })
   }
   const onMove = (e: React.MouseEvent) => {
     const p = cellAt(e)
     setHover(inside(p) ? p : null)
     if (!drag || !inside(p)) return
-    if (tool === 'room') setDrag({ ...drag, tiles: room(d, drag.x, drag.y, p.x, p.y) })
-    else setDrag({ ...drag, ...paintAt(drag, p) })
+    if (tool === 'room') return setDrag({ ...drag, tiles: room(d, drag.x, drag.y, p.x, p.y) })
+    // Every cell between the last one and this one, so a fast drag leaves no gaps (v0.14).
+    const from = last.current ?? p
+    const n = Math.max(Math.abs(p.x - from.x), Math.abs(p.y - from.y))
+    let next = drag
+    for (let i = 1; i <= n; i++) next = { ...next, ...paintAt(next, { x: Math.round(from.x + ((p.x - from.x) * i) / n), y: Math.round(from.y + ((p.y - from.y) * i) / n) }) }
+    last.current = p
+    if (n) setDrag(next)
   }
   const onUp = () => {
-    if (drag) apply(drag.tiles, drag.art)
+    if (drag) apply(drag.tiles, drag.art, drag.blocked)
     setDrag(null)
   }
 
@@ -213,6 +246,7 @@ export default function View({ documentId, active }: PanelProps) {
     { id: 'fill', icon: PaintBucket, label: 'Fill' },
     { id: 'erase', icon: Eraser, label: 'Erase' },
     { id: 'note', icon: StickyNote, label: 'Note' },
+    { id: 'block', icon: Ban, label: 'Blocked: mark where nothing can walk (click a blocked cell or right-click to clear)' },
   ]
 
   return (
@@ -243,6 +277,9 @@ export default function View({ documentId, active }: PanelProps) {
           <Download size={14} /> Godot scene
         </button>
         {exported && <span className="muted">{exported}</span>}
+        <label className="ld-inline" title="Show where nothing can walk">
+          <input type="checkbox" checked={showBlocked} onChange={(e) => setShowBlocked(e.target.checked)} /> Blocked
+        </label>
         <span className="lv-hover">{hover ? `${hover.x}, ${hover.y}` : ''}</span>
       </div>
       <div className="lv-body">
@@ -275,7 +312,7 @@ export default function View({ documentId, active }: PanelProps) {
                   return (
                     <button
                       key={key}
-                      className={`lv-atlas-tile${art === key ? ' on' : ''}`}
+                      className={`lv-atlas-tile${art === key ? ' on' : ''}${t.solid?.includes(`${col}:${row}`) ? ' solid' : ''}`}
                       aria-label={`Tile ${col}, ${row}`}
                       style={{ backgroundImage: `url("${urlOf(t.image)}")`, backgroundSize: `${t.columns * 100}% ${t.rows * 100}%`, backgroundPosition: `${t.columns > 1 ? (col / (t.columns - 1)) * 100 : 0}% ${t.rows > 1 ? (row / (t.rows - 1)) * 100 : 0}%` }}
                       onClick={() => (setArt(key), tool === 'erase' || tool === 'note' || tool === 'room' ? setTool('paint') : null)}
@@ -285,6 +322,23 @@ export default function View({ documentId, active }: PanelProps) {
               </div>
             </div>
           ))}
+          {art && sets[parseArt(art).set] && (
+            <label className="sketch-check lv-solid">
+              <input
+                type="checkbox"
+                checked={!!sets[parseArt(art).set].solid?.includes(`${parseArt(art).col}:${parseArt(art).row}`)}
+                onChange={(e) => {
+                  const a = parseArt(art)
+                  const id = `${a.col}:${a.row}`
+                  doc.update((x) => ({
+                    ...x,
+                    tilesets: (x.tilesets ?? []).map((t, j) => (j === a.set ? { ...t, solid: e.target.checked ? [...(t.solid ?? []), id] : (t.solid ?? []).filter((v) => v !== id) } : t)),
+                  }))
+                }}
+              />
+              This tile blocks movement (fences, walls, houses)
+            </label>
+          )}
           <button className="btn btn-ghost" onClick={() => void addTileset()}>
             <ImagePlus size={14} /> Add a tileset image
           </button>

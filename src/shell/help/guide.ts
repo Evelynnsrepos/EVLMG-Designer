@@ -398,6 +398,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Note pins a numbered note on the map for puzzles, secrets or ambushes; the notes are listed on the right. The palette counts how many enemies, chests and so on the level has. Export saves the level as a PNG.',
       'Tilesets: Add a tileset image (a drawing from Draw works too) and set the size of one tile. Click a tile and paint, fill or erase with it, like in Godot. Plan tiles like enemies and chests show on top of the picture tiles.',
       'Godot scene saves the picture tiles as a Godot 4 TileMap scene with its TileSet into your Godot project (egd/levels/), ready to open.',
+      'Blocked (the crossed-out circle) marks cells where nothing can walk, shown in red; click a blocked cell or right-click to clear. Select a tileset tile and tick This tile blocks movement for fences, walls and houses: every place you paint it is blocked. The Godot scene gives those tiles collision and adds the hand-blocked cells as a static body.',
     ],
   },
   achievements: {
