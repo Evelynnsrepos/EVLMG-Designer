@@ -47,6 +47,8 @@ export interface ProjectMeta {
   theme?: ProjectTheme
   /** v0.12: a font per tool (family name), chosen with Aa in the tool's header; missing = the app font. */
   fonts?: Partial<Record<ComponentType, string>>
+  /** v0.13: an optional picture for the project, shown on its card on the start screen. */
+  image?: AssetPath | null
   createdAt: string
   updatedAt: string
 }
@@ -92,4 +94,6 @@ export interface RecentProject {
   description: string
   lastOpened: string
   stats: ProjectStats
+  /** The project's picture (from its meta), so the start screen needn't open every project. */
+  image?: string | null
 }

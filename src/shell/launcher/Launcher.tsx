@@ -2,6 +2,7 @@ import { CircleHelp, FileArchive, FolderOpen, Image, MoreHorizontal, Moon, Plus,
 import { useCallback, useEffect, useState } from 'react'
 import { saveBinaryFile, safeFileName } from '@/core/export'
 import { getFs } from '@/core/fs'
+import { assetUrl, pickAndImportAssets } from '@/core/assets'
 import type { RecentProject } from '@/core/model'
 import { deleteProject, importProjectZip, isProjectFolder, loadProject, readRecents, removeRecent, saveMeta, upsertRecent, zipProject } from '@/core/project'
 import { useAppStore, useProjectStore } from '@/core/state'
@@ -155,6 +156,25 @@ function ProjectCard({
     onChanged()
   }
 
+  /** v0.13: an optional picture on the project's card. */
+  const setImage = async (pick: boolean) => {
+    setMenu(false)
+    const [asset] = pick ? await pickAndImportAssets(project.path, 'image', 'Picture for the project') : []
+    if (pick && !asset) return
+    const loaded = await loadProject(project.path)
+    await saveMeta(project.path, { ...loaded.meta, image: asset?.path ?? null })
+    await upsertRecent({ ...project, image: asset?.path ?? null })
+    onChanged()
+  }
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    if (project.image) void assetUrl(project.path, project.image).then((u) => live && setImageUrl(u))
+    return () => {
+      live = false
+    }
+  }, [project.path, project.image])
+
   const exportZip = async () => {
     setMenu(false)
     try {
@@ -181,6 +201,7 @@ function ProjectCard({
   return (
     <div className={`project-card${missing ? ' missing' : ''}`}>
       <button className="project-card-main" onClick={onOpen} disabled={missing}>
+        {project.image && imageUrl && <img className="project-card-image" src={imageUrl} alt="" />}
         <h3>{project.name}</h3>
         {project.description && <p className="muted">{project.description}</p>}
         <div className="project-stats">
@@ -216,6 +237,8 @@ function ProjectCard({
             <>
               <button onClick={() => void editMeta('name')}>Rename</button>
               <button onClick={() => void editMeta('description')}>Edit description</button>
+              <button onClick={() => void setImage(true)}>{project.image ? 'Change picture…' : 'Add a picture…'}</button>
+              {project.image && <button onClick={() => void setImage(false)}>Remove picture</button>}
               <button onClick={() => void getFs().revealInFolder(project.path)}>Show in folder</button>
               <button onClick={() => void exportZip()}>Export as zip…</button>
               <button

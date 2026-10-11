@@ -189,3 +189,12 @@
   background: var(--accent);
   color: var(--accent-text);
 }
+
+/* v0.13: the project's own picture on its card */
+.project-card-image {
+  width: calc(100% + 60px);
+  margin: -16px -44px 4px -16px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: var(--radius) var(--radius) 0 0;
+}

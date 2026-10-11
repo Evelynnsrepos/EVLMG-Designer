@@ -110,6 +110,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
       path: root,
       name: meta.name,
       description: meta.description,
+      image: meta.image ?? null,
       lastOpened: new Date().toISOString(),
       stats: await computeStats(root),
     })
