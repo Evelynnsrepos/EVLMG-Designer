@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.Evelynnsrepos.Evelopment_Games_Designer</id>
+  <name>Evelopment Games Designer</name>
+  <summary>Design your whole game in one free program</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <developer id="io.github.evelynnsrepos">
+    <name>Evelopment Games</name>
+  </developer>
+  <description>
+    <p>
+      An all-in-one game design tool. Write your story and design documents, build a wiki, draw maps and levels,
+      paint, collect ideas on boards, and keep items, characters, towns and enemies in lists that every other tool knows about.
+    </p>
+    <ul>
+      <li>Writer, Wiki, timelines, branching stories and dialogue</li>
+      <li>Item, character, town and enemy lists with stats, rarities and links between everything</li>
+      <li>Map Creator, Level Layout with tilesets and Godot export, Cosmos Creator</li>
+      <li>Draw: a full painting tool with pressure brushes, layers and blend modes</li>
+      <li>Calculators for damage, levels, resources, economy, gacha and combat</li>
+      <li>Export to Godot, Unity and Unreal; work together peer to peer</li>
+    </ul>
+    <p>No generative AI: every idea and every stroke is yours. Everything stays on your computer.</p>
+  </description>
+  <launchable type="desktop-id">io.github.Evelynnsrepos.Evelopment_Games_Designer.desktop</launchable>
+  <url type="homepage">https://github.com/Evelynnsrepos/Evelopment-Games-Designer</url>
+  <url type="bugtracker">https://github.com/Evelynnsrepos/Evelopment-Games-Designer/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/Evelynnsrepos/Evelopment-Games-Designer/main/docs/images/launcher.jpg</image>
+      <caption>Your projects</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/Evelynnsrepos/Evelopment-Games-Designer/main/docs/images/items.jpg</image>
+      <caption>Item list with rarities and stats</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/Evelynnsrepos/Evelopment-Games-Designer/main/docs/images/brainstorm.jpg</image>
+      <caption>Brainstorm board</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/Evelynnsrepos/Evelopment-Games-Designer/main/docs/images/story.jpg</image>
+      <caption>Branching story writer</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/Evelynnsrepos/Evelopment-Games-Designer/main/docs/images/timeline.jpg</image>
+      <caption>Timelines</caption>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.14.0" date="2026-10-11">
+      <description>
+        <p>Texture Paint (experimental) for painting 3D models, walkable and blocked tiles in Level Layout with Godot collision, new sliders, a close button on every tool and a Moodboard eraser.</p>
+      </description>
+    </release>
+  </releases>
+</component>

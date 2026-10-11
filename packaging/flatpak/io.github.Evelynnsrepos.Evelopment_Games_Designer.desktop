@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Evelopment Games Designer
+Comment=Design your whole game in one free program
+Exec=evelopment-games-designer
+Icon=io.github.Evelynnsrepos.Evelopment_Games_Designer
+Categories=Development;Graphics;Office;
+Keywords=game;design;worldbuilding;writing;wiki;map;drawing;
+StartupWMClass=evelopment-games-designer

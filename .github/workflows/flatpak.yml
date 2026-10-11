@@ -1,0 +1,36 @@
+# Builds the Flatpak (from the released .deb) and checks it with Flathub's linter, so the
+# Flathub submission and its updates are tested on Linux even though development happens on Windows.
+name: Flatpak
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'packaging/flatpak/**'
+      - '.github/workflows/flatpak.yml'
+jobs:
+  flatpak:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: evelopment-games-designer.flatpak
+          manifest-path: packaging/flatpak/io.github.Evelynnsrepos.Evelopment_Games_Designer.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+      - name: Every library the app needs is in the runtime
+        run: |
+          flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak --user install -y --noninteractive evelopment-games-designer.flatpak
+          missing=$(flatpak run --command=sh io.github.Evelynnsrepos.Evelopment_Games_Designer -c 'ldd /app/bin/evelopment-games-designer | grep "not found"' || true)
+          echo "$missing"
+          test -z "$missing"
+      - name: Flathub linter
+        continue-on-error: true
+        run: |
+          flatpak --user install -y --noninteractive flathub org.flatpak.Builder
+          flatpak run --command=flatpak-builder-lint org.flatpak.Builder manifest packaging/flatpak/io.github.Evelynnsrepos.Evelopment_Games_Designer.yml
+          flatpak run --command=flatpak-builder-lint org.flatpak.Builder appstream packaging/flatpak/io.github.Evelynnsrepos.Evelopment_Games_Designer.metainfo.xml

@@ -1,0 +1,40 @@
+# Flatpak for Evelopment Games Designer (Flathub). Repackages the Linux build from the GitHub release.
+# Update with every release: the .deb url and sha256 below, and a <release> line in the metainfo.
+id: io.github.Evelynnsrepos.Evelopment_Games_Designer
+runtime: org.gnome.Platform
+runtime-version: '48'
+sdk: org.gnome.Sdk
+command: evelopment-games-designer
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  # Working together peer to peer, the optional spell helper download and plugins from GitHub.
+  - --share=network
+  # Recording voice notes on boards.
+  - --socket=pulseaudio
+  # Projects are normal folders anywhere in your home, and exports go wherever you choose.
+  - --filesystem=home
+modules:
+  - name: evelopment-games-designer
+    buildsystem: simple
+    sources:
+      - type: file
+        url: https://github.com/Evelynnsrepos/Evelopment-Games-Designer/releases/download/v0.14.0/Evelopment.Games.Designer_0.14.0_amd64.deb
+        sha256: 'c71d087c0abf35ba21f96605c93accece734bd013ecc61a6016dbea2fd994d1e'
+        only-arches: [x86_64]
+        dest-filename: egd.deb
+      - type: file
+        path: io.github.Evelynnsrepos.Evelopment_Games_Designer.metainfo.xml
+      - type: file
+        path: io.github.Evelynnsrepos.Evelopment_Games_Designer.desktop
+    build-commands:
+      - ar -x egd.deb
+      - tar -xf data.tar.gz
+      - install -Dm755 usr/bin/evelopment-games-designer /app/bin/evelopment-games-designer
+      - install -Dm644 usr/share/icons/hicolor/32x32/apps/evelopment-games-designer.png /app/share/icons/hicolor/32x32/apps/io.github.Evelynnsrepos.Evelopment_Games_Designer.png
+      - install -Dm644 usr/share/icons/hicolor/128x128/apps/evelopment-games-designer.png /app/share/icons/hicolor/128x128/apps/io.github.Evelynnsrepos.Evelopment_Games_Designer.png
+      - install -Dm644 usr/share/icons/hicolor/256x256@2/apps/evelopment-games-designer.png /app/share/icons/hicolor/256x256/apps/io.github.Evelynnsrepos.Evelopment_Games_Designer.png
+      - install -Dm644 io.github.Evelynnsrepos.Evelopment_Games_Designer.desktop /app/share/applications/io.github.Evelynnsrepos.Evelopment_Games_Designer.desktop
+      - install -Dm644 io.github.Evelynnsrepos.Evelopment_Games_Designer.metainfo.xml /app/share/metainfo/io.github.Evelynnsrepos.Evelopment_Games_Designer.metainfo.xml
