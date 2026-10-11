@@ -22,6 +22,10 @@ export interface GlLayer {
   mask?: GlSource | null
   /** The clipping base's own mask, so clipped layers follow it too. */
   clipMask?: GlSource | null
+  /** The clipping base's opacity (0 when it is hidden): clipped layers fade with it (v0.13). */
+  clipOpacity?: number
+  /** Set on a group that layers clip to: its blended result is kept as their clipping texture (v0.13). */
+  clipBase?: boolean
 }
 
 /** Pixels the compositor keeps as a texture. */
@@ -42,6 +46,7 @@ uniform sampler2D maskTex;
 uniform sampler2D clipMaskTex;
 uniform int mode;
 uniform float opacity;
+uniform float clipOpacity;
 uniform bool useClip;
 uniform bool useMask;
 uniform bool useClipMask;
@@ -54,7 +59,7 @@ void main() {
   vec4 s = texture(src, uv);
   float as = s.a * opacity;
   if (useMask) as *= dot(texture(maskTex, uv).rgb, LUMA);
-  if (useClip) as *= texture(clipTex, uv).a * (useClipMask ? dot(texture(clipMaskTex, uv).rgb, LUMA) : 1.0);
+  if (useClip) as *= texture(clipTex, uv).a * clipOpacity * (useClipMask ? dot(texture(clipMaskTex, uv).rgb, LUMA) : 1.0);
   float ab = b.a;
   float ao = as + ab * (1.0 - as);
   vec3 bc = ab > 0.0 ? b.rgb / ab : vec3(0.0);
@@ -98,6 +103,8 @@ export class GlCompositor {
   /** Two render targets per group depth (0 = the picture), made when first needed. */
   private levels: { tex: WebGLTexture; fb: WebGLFramebuffer }[][] = []
   private empty: WebGLTexture
+  /** Blended results of groups that other layers clip to. */
+  private groupTex = new Map<string, { tex: WebGLTexture; fb: WebGLFramebuffer }>()
   lost = false
 
   static create(width: number, height: number, colorSpace: PredefinedColorSpace = 'srgb'): GlCompositor | null {
@@ -220,6 +227,7 @@ export class GlCompositor {
     const loc = (n: string) => gl.getUniformLocation(this.blendProg, n)
     for (const layer of layers) {
       const src = layer.children ? this.compose(layer.children, depth + 1, null, byKey) : this.upload(layer)
+      if (layer.children && layer.clipBase) this.keepGroup(layer.key, src)
       gl.useProgram(this.blendProg)
       gl.uniform1i(loc('dst'), 0)
       gl.uniform1i(loc('src'), 1)
@@ -234,7 +242,7 @@ export class GlCompositor {
       gl.bindTexture(gl.TEXTURE_2D, src)
       const clip = layer.clipTo ? byKey.get(layer.clipTo) : undefined
       gl.activeTexture(gl.TEXTURE2)
-      gl.bindTexture(gl.TEXTURE_2D, clip ? this.upload(clip) : this.empty)
+      gl.bindTexture(gl.TEXTURE_2D, clip ? (clip.children ? (this.groupTex.get(clip.key)?.tex ?? this.empty) : this.upload(clip)) : this.empty)
       gl.activeTexture(gl.TEXTURE3)
       gl.bindTexture(gl.TEXTURE_2D, layer.mask ? this.upload(layer.mask) : this.empty)
       const clipMask = clip && layer.clipMask
@@ -242,6 +250,7 @@ export class GlCompositor {
       gl.bindTexture(gl.TEXTURE_2D, clipMask ? this.upload(clipMask) : this.empty)
       gl.uniform1i(loc('mode'), blendIndex(layer.blend))
       gl.uniform1f(loc('opacity'), layer.opacity)
+      gl.uniform1f(loc('clipOpacity'), layer.clipOpacity ?? 1)
       gl.uniform1i(loc('useClip'), clip ? 1 : 0)
       gl.uniform1i(loc('useMask'), layer.mask ? 1 : 0)
       gl.uniform1i(loc('useClipMask'), clipMask ? 1 : 0)
@@ -249,6 +258,26 @@ export class GlCompositor {
       cur = next
     }
     return targets[cur].tex
+  }
+
+  /** Copy a group's blended result into its own texture, so layers clipped to it can use it after the group's targets are reused. */
+  private keepGroup(key: string, src: WebGLTexture) {
+    const gl = this.gl
+    let t = this.groupTex.get(key)
+    if (!t) {
+      const tex = this.texture()
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, this.canvas.width, this.canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+      const fb = gl.createFramebuffer()!
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fb)
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0)
+      this.groupTex.set(key, (t = { tex, fb }))
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb)
+    gl.useProgram(this.copyProg)
+    gl.activeTexture(gl.TEXTURE0)
+    gl.bindTexture(gl.TEXTURE_2D, src)
+    gl.uniform1i(gl.getUniformLocation(this.copyProg, 'src'), 0)
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
   }
 
   /** One pixel of the last render, straight RGBA 0..255 (y from the top). */

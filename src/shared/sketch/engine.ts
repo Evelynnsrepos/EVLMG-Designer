@@ -600,18 +600,21 @@ export class SketchEngine {
     let base: GlLayer | null = null
     for (const { layer, children, mask } of nodes) {
       const m = mask?.visible ? this.glSource(mask, keys) : null
-      const clip = layer.clip && base ? { clipTo: base.key, clipMask: base.mask } : { clipTo: null }
+      // Clipped layers follow the base's pixels, mask, opacity and visibility (v0.13).
+      if (layer.clip && base) base.clipBase = true
+      const clip = layer.clip && base ? { clipTo: base.key, clipMask: base.mask, clipOpacity: base.opacity } : { clipTo: null }
       if (children) {
-        // Groups are never clipping bases; hidden groups are skipped with everything inside.
-        if (!layer.clip) base = null
-        if (!layer.visible) continue
-        out.push({ source: this.scratch.canvas, version: 0, key: layer.id, opacity: layer.opacity, blend: layer.blend, mask: m, ...clip, children: this.glNodes(children, keys) })
+        // v0.13: a group can be a clipping base too. A hidden one stays in the stack, invisible, for its clipped layers.
+        const entry: GlLayer = { source: this.scratch.canvas, version: 0, key: layer.id, opacity: layer.visible ? layer.opacity : 0, blend: layer.blend, mask: m, ...clip, children: this.glNodes(children, keys) }
+        if (!layer.clip) base = entry
+        out.push(entry)
         continue
       }
       const entry: GlLayer = { ...this.glSource(layer, keys), opacity: layer.opacity, blend: layer.blend, mask: m, ...clip }
-      if (!layer.clip) base = entry
       // A clipping base must be in the stack even when hidden, with no effect of its own.
-      out.push(layer.visible ? entry : { ...entry, opacity: 0 })
+      const shown = layer.visible ? entry : { ...entry, opacity: 0 }
+      if (!layer.clip) base = shown
+      out.push(shown)
     }
     return out
   }
@@ -633,6 +636,8 @@ export class SketchEngine {
 
   /** Canvases for groups and masked layers, per group depth (Canvas 2D path). */
   private pool: Canvas2D[] = []
+  /** The last group at each depth that layers may clip to (Canvas 2D path). */
+  private groupBases: Canvas2D[] = []
   private pooled(i: number): Canvas2D {
     const c = (this.pool[i] ??= this.canvas())
     c.ctx.globalCompositeOperation = 'source-over'
@@ -657,20 +662,27 @@ export class SketchEngine {
   }
 
   private compose2d(ctx: CanvasRenderingContext2D, nodes: LayerNode[], depth: number) {
-    let base: { canvas: HTMLCanvasElement; mask: HTMLCanvasElement | null } | null = null
+    let base: { canvas: HTMLCanvasElement; mask: HTMLCanvasElement | null; opacity: number } | null = null
     for (const { layer, children, mask } of nodes) {
       const m = mask?.visible ? this.maskAlpha(mask) : null
       const clipTo = layer.clip ? base : null
+      const opacity = layer.visible ? layer.opacity : 0
       let src: HTMLCanvasElement
       if (children) {
-        if (!layer.clip) base = null
-        if (!layer.visible) continue
+        // v0.13: groups are clipping bases too; their result is kept so later groups can reuse the pool.
         const g = this.pooled(depth * 2)
         this.compose2d(g.ctx, children, depth + 1)
         src = g.canvas
+        if (!layer.clip) {
+          const keep = (this.groupBases[depth] ??= this.canvas())
+          keep.ctx.clearRect(0, 0, this.width, this.height)
+          keep.ctx.drawImage(src, 0, 0)
+          base = { canvas: keep.canvas, mask: m, opacity }
+        }
+        if (!layer.visible) continue
       } else {
         src = this.livePixels(layer).canvas
-        if (!layer.clip) base = { canvas: this.ensure(layer.id).canvas, mask: m }
+        if (!layer.clip) base = { canvas: this.ensure(layer.id).canvas, mask: m, opacity }
         if (!layer.visible) continue
       }
       if (m || clipTo) {
@@ -680,7 +692,9 @@ export class SketchEngine {
         t.ctx.globalCompositeOperation = 'destination-in'
         if (m) t.ctx.drawImage(m, 0, 0)
         if (clipTo) {
+          t.ctx.globalAlpha = clipTo.opacity
           t.ctx.drawImage(clipTo.canvas, 0, 0)
+          t.ctx.globalAlpha = 1
           if (clipTo.mask) t.ctx.drawImage(clipTo.mask, 0, 0)
         }
         src = t.canvas

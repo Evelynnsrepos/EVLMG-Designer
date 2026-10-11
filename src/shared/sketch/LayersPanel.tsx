@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Ellipsis, Eye, EyeOff, Folder, FolderPlus, Lock, Merge, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Ellipsis, Eye, EyeOff, Folder, FolderPlus, ListChecks, Lock, Merge, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Id } from '@/core/model'
 import { saveBinaryFile, safeFileName } from '@/core/export'
@@ -38,6 +38,7 @@ const UI = {
   more: 'Layer options',
   opacity: 'Opacity',
   picked: (n: number) => `${n} layers picked`,
+  pickMany: 'Pick several layers: tap layers to add or remove them (or Ctrl-click, Shift-click)',
   mergePicked: 'Merge',
   groupPicked: 'Group',
   deletePicked: 'Delete',
@@ -224,8 +225,10 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
     if (src) addLayer((ctx) => ctx.drawImage(src, 0, 0))
   }
 
+  // v0.13: picking several layers without a keyboard (pens, touch).
+  const [pickMany, setPickMany] = useState(false)
   const pick = (e: React.MouseEvent, id: Id) => {
-    if (e.ctrlKey || e.metaKey) {
+    if (e.ctrlKey || e.metaKey || pickMany) {
       const next = new Set(picked)
       if (!next.size && host.activeId) next.add(host.activeId)
       if (next.has(id)) next.delete(id)
@@ -309,6 +312,18 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
         <h4>{UI.layers}</h4>
         <span className="sketch-spacer" />
         {headerExtra}
+        <button
+          className={`icon-btn sketch-tool${pickMany ? ' is-active' : ''}`}
+          title={UI.pickMany}
+          aria-label={UI.pickMany}
+          aria-pressed={pickMany}
+          onClick={() => {
+            if (pickMany) setPicked(new Set())
+            setPickMany(!pickMany)
+          }}
+        >
+          <ListChecks size={16} />
+        </button>
         <button className="icon-btn sketch-tool" title={UI.addGroup} aria-label={UI.addGroup} onClick={addGroup}>
           <FolderPlus size={16} />
         </button>
