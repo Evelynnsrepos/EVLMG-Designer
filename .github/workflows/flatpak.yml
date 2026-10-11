@@ -32,5 +32,9 @@ jobs:
         continue-on-error: true
         run: |
           flatpak --user install -y --noninteractive flathub org.flatpak.Builder
-          flatpak run --command=flatpak-builder-lint org.flatpak.Builder manifest packaging/flatpak/io.github.Evelynnsrepos.Evelopment_Games_Designer.yml
-          flatpak run --command=flatpak-builder-lint org.flatpak.Builder appstream packaging/flatpak/io.github.Evelynnsrepos.Evelopment_Games_Designer.metainfo.xml
+          # Shown as annotations, so the results can be read without signing in.
+          for kind in manifest appstream; do
+            f=packaging/flatpak/io.github.Evelynnsrepos.Evelopment_Games_Designer.yml
+            [ "$kind" = appstream ] && f=packaging/flatpak/io.github.Evelynnsrepos.Evelopment_Games_Designer.metainfo.xml
+            out=$(flatpak run --command=flatpak-builder-lint org.flatpak.Builder $kind $f 2>&1) || { echo "$out"; echo "$out" | tr -d '' | while IFS= read -r line; do [ -n "$line" ] && echo "::warning title=Flathub linter ($kind)::$line"; done; }
+          done
