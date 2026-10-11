@@ -66,3 +66,31 @@
   font-size: 15px;
   font-style: italic;
 }
+
+/* v0.13: real-world name styles */
+.nm-styles {
+  display: grid;
+  gap: 6px;
+}
+.nm-style-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 150px;
+  overflow: auto;
+}
+.nm-style-list button {
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.nm-style-list button.on {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}

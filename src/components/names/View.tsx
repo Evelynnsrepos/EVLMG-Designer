@@ -6,6 +6,7 @@ import { NumberInput, PresetHeader } from '@/shared/calculators'
 import '@/shared/listDetail/listDetail.css'
 import { createLanguageDoc, makeWord, names, newWord, PRESETS, rng, translate, type LanguageDoc } from './model'
 import './names.css'
+import { NAME_STYLES, styleNames } from './styles'
 
 /** Name generator and small conlang builder (v0.10). */
 export default function View({ documentId, active }: PanelProps) {
@@ -13,10 +14,16 @@ export default function View({ documentId, active }: PanelProps) {
   useUndoRedoKeys(doc, active)
   const [batch, setBatch] = useState<string[]>([])
   const [text, setText] = useState('The king returns to the old forest.')
+  // v0.13: real-world name styles (German, Polish, Canadian…), searchable.
+  const [style, setStyle] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [invent, setInvent] = useState(false)
+  const shownStyles = NAME_STYLES.filter((s) => s.name.toLowerCase().includes(query.trim().toLowerCase()))
   if (!doc.data) return null
   const d = doc.data
   const set = (patch: Partial<LanguageDoc>) => doc.update((x) => ({ ...x, ...patch }))
-  const roll = () => setBatch(names(d, 24))
+  const picked = NAME_STYLES.find((s) => s.name === style)
+  const roll = () => setBatch(picked ? styleNames(picked, 24, invent, rng(Date.now())) : names(d, 24))
   const field = (key: 'consonants' | 'vowels' | 'patterns' | 'forbidden' | 'endings', label: string, hint: string) => (
     <label className="ld-field">
       <span>{label}</span>
@@ -60,6 +67,25 @@ export default function View({ documentId, active }: PanelProps) {
               <Dices size={14} /> Generate
             </button>
           </h3>
+          <div className="nm-styles">
+            <input className="input" placeholder={`Search ${NAME_STYLES.length} name styles…`} aria-label="Search name styles" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <div className="nm-style-list" role="radiogroup" aria-label="Name style">
+              <button role="radio" aria-checked={!style} className={!style ? 'on' : ''} onClick={() => setStyle(null)}>
+                Your language (the sounds on the left)
+              </button>
+              {shownStyles.map((s) => (
+                <button key={s.name} role="radio" aria-checked={style === s.name} className={style === s.name ? 'on' : ''} onClick={() => setStyle(s.name)}>
+                  {s.name}
+                </button>
+              ))}
+              {shownStyles.length === 0 && <span className="muted">No style matches.</span>}
+            </div>
+            {picked && (
+              <label className="sketch-check">
+                <input type="checkbox" checked={invent} onChange={(e) => setInvent(e.target.checked)} /> New names that sound like it (not real ones)
+              </label>
+            )}
+          </div>
           {batch.length === 0 && <p className="muted">Press Generate for a batch of names. Click a name to keep it.</p>}
           <div className="nm-names">
             {batch.map((n) => (
