@@ -599,6 +599,32 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
     if (e.key === ' ') setSpaceDown(false)
   }
 
+  // v0.13: shortcuts also work while the focus is elsewhere in this tool (a side panel button, the toolbar),
+  // not only right after clicking the canvas. Typing in a field still goes to the field.
+  const keys = useRef({ onKeyDown, onKeyUp })
+  useEffect(() => {
+    keys.current = { onKeyDown, onKeyUp }
+  })
+  useEffect(() => {
+    if (!props.active) return
+    const forward = (kind: 'onKeyDown' | 'onKeyUp') => (e: KeyboardEvent) => {
+      const root = rootRef.current
+      const t = e.target as Node | null
+      if (!root || e.defaultPrevented || e.key === 'Escape' || (t && root.contains(t)) || isTypingTarget(e.target)) return
+      if (!(t === document.body || (t && root.closest('.panel')?.contains(t)))) return
+      const shim = { key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey, target: e.target, nativeEvent: e, preventDefault: () => e.preventDefault() }
+      keys.current[kind](shim as unknown as React.KeyboardEvent)
+    }
+    const down = forward('onKeyDown')
+    const up = forward('onKeyUp')
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+    }
+  }, [props.active])
+
   // ---- transform handles ----
 
   const transformable = (n: NodeBase) => {
