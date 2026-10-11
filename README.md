@@ -37,7 +37,7 @@ calculators all live in one project, and they all know about each other. Free, o
 - 🧩 **Everything in one place.** No more juggling a wiki here, a spreadsheet for drop rates there and a whiteboard
   app somewhere else. An item you create can be linked from the Wiki, dropped by an enemy and counted by the
   Resource Calculator.
-- 🎨 **Your ideas, made by you.** No generative AI: the app never writes stories or makes images for you.
+- 🎨 **Your ideas, made by you.** No AI-generated art or stories: the app never writes stories or makes images for you.
   Optional small helpers that run on your own computer can check spelling and grammar and look things up in your own
   notes. They are off until you turn them on, and they never write anything for you.
 - 🔓 **Fully open source.** The app is [GPL-3.0](LICENSE), and everything it is built from is open source too: all
