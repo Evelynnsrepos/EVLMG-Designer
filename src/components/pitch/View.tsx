@@ -76,16 +76,18 @@ export default function View({ documentId, active }: PanelProps) {
     set((list) => [...list, ...deck])
   }
 
-  const move = (i: number, by: number) => {
-    const j = i + by
-    if (j < 0 || j >= slides.length) return
+  /** Put slide `i` at position `j` (v0.13: drag in the list, or the arrows). */
+  const moveTo = (i: number, j: number) => {
+    if (i === j || j < 0 || j >= slides.length) return
     set((list) => {
       const next = [...list]
-      ;[next[i], next[j]] = [next[j], next[i]]
+      next.splice(j, 0, ...next.splice(i, 1))
       return next
     })
     setSel(j)
   }
+  const move = (i: number, by: number) => moveTo(i, i + by)
+  const [dragFrom, setDragFrom] = useState<number | null>(null)
 
   return (
     <div className="pi">
@@ -107,7 +109,24 @@ export default function View({ documentId, active }: PanelProps) {
         <div className="pi-list">
           {slides.length === 0 && <p className="muted">No slides yet. Build from project fills a deck from your vision, pillars, characters and items.</p>}
           {slides.map((x, i) => (
-            <button key={x.id} className={`pi-thumb${i === sel ? ' on' : ''}`} onClick={() => setSel(i)}>
+            <button
+              key={x.id}
+              className={`pi-thumb${i === sel ? ' on' : ''}${dragFrom !== null && dragFrom !== i ? ' drop' : ''}`}
+              title="Drag to reorder"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'move'
+                setDragFrom(i)
+              }}
+              onDragOver={(e) => dragFrom !== null && e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault()
+                if (dragFrom !== null) moveTo(dragFrom, i)
+                setDragFrom(null)
+              }}
+              onDragEnd={() => setDragFrom(null)}
+              onClick={() => setSel(i)}
+            >
               <span>{i + 1}</span>
               {x.title || LAYOUTS.find((l) => l.id === x.layout)?.label}
             </button>

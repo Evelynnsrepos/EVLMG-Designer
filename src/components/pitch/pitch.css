@@ -186,3 +186,11 @@
   color: rgb(255 255 255 / 0.5);
   font-size: 13px;
 }
+
+/* v0.13: dragging a slide shows where it can go. */
+.pi-thumb[draggable='true'] {
+  cursor: grab;
+}
+.pi-thumb.drop:hover {
+  outline: 2px dashed var(--accent);
+}
