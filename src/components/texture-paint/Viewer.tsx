@@ -187,7 +187,11 @@ export function Viewer({ bytes, path, target, onOriginal, handleRef }: { bytes: 
         const material = new THREE.MeshStandardMaterial({ map: sc.texture, roughness: 0.85, metalness: 0 })
         const meshes = meshesOf(object)
         if (!meshes.some((m) => m.geometry.getAttribute('uv'))) setError('This model has no UV layout, so it cannot hold a texture. Unwrap it in your 3D program first (in Blender: UV > Smart UV Project), then import it again.')
-        for (const m of meshes) m.material = material
+        for (const m of meshes) {
+          m.material = material
+          // Files without normals would look faceted.
+          if (!m.geometry.getAttribute('normal')) m.geometry.computeVertexNormals()
+        }
         // Centre and fit the model in view.
         const bounds = new THREE.Box3().setFromObject(object)
         const centre = bounds.getCenter(new THREE.Vector3())
@@ -217,7 +221,8 @@ export function Viewer({ bytes, path, target, onOriginal, handleRef }: { bytes: 
       c.width = width
       c.height = height
       const g = c.getContext('2d')!
-      g.strokeStyle = 'rgba(255, 255, 255, 0.85)'
+      // Magenta reads on light and dark textures alike.
+      g.strokeStyle = 'rgba(255, 0, 255, 0.85)'
       g.lineWidth = Math.max(1, width / 1024)
       g.beginPath()
       for (const mesh of meshesOf(m)) {

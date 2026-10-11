@@ -537,8 +537,9 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     ],
   },
   'texture-paint': {
-    title: 'Texture Paint',
+    title: 'Texture Paint (experimental)',
     body: [
+      'Texture Paint is experimental: it can be slow with big models or textures, some model files may not load right, and it may still change. A warning says so each time it opens.',
       'Paint 3D models. Pick a model (GLB works best; OBJ and FBX too) and a texture size. The model is on the left, its texture on the right, and both update as you paint.',
       'Paint on the model with the left button: the brush lands on the texture spot under the pointer. Drag next to the model or with the right button to turn it, the middle button to move, the wheel to zoom. A stroke that crosses a seam continues on the other side of the seam on the texture.',
       'The right side is a full Draw canvas: every brush, layers, blend modes, adjustment layers, selections and undo. A model that brings its own texture starts with it as a layer.',

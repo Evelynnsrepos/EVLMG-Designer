@@ -64,3 +64,26 @@
   font-size: 11px;
   color: var(--text-muted);
 }
+
+/* Experimental: shown each time the tool opens. */
+.tp-warning {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(640px, calc(100% - 24px));
+  padding: 10px 12px;
+  border: 1px solid #f0a020;
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+}
+.tp {
+  position: relative;
+}

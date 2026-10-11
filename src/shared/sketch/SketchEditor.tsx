@@ -38,6 +38,7 @@ import {
   nextLayerName,
   type InputPoint,
   type SketchDoc,
+  type SketchLayer,
   type SymmetryMode,
 } from './model'
 import { gentle, HOLD_MS, keys, outline as shapeOutline, perfect, recognize, resize, type Shape } from './quickshape'
@@ -185,8 +186,8 @@ export interface SketchEditorProps {
 }
 
 export interface SketchEditorHandle {
-  /** Put an image from the project's assets on a new layer, fitted into the canvas. */
-  insertImage(path: string, name?: string): Promise<void>
+  /** Put an image from the project's assets on a new layer, fitted into the canvas (or stretched over all of it with `fill`). */
+  insertImage(path: string, name?: string, opts?: { fill?: boolean; layer?: Partial<SketchLayer> }): Promise<void>
   setColor(color: string): void
   color: string
   /** v0.14 (Texture Paint): the engine, for watching `version` and reading the flattened picture. */
@@ -718,19 +719,20 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   useTextLayers(layerHost, fontsReady)
   const textTool = useTextTool(layerHost)
 
-  const insertImage = async (path: string, name = 'Image') => {
+  const insertImage = async (path: string, name = 'Image', opts: { fill?: boolean; layer?: Partial<SketchLayer> } = {}) => {
     if (!root) return
     const bytes = await getFs().readBinary(await resolveAssetPath(root, path))
     const bmp = await createImageBitmap(new Blob([bytes as BlobPart]))
-    const layer = newLayer(name)
-    const s = Math.min(1, (doc.width * 0.8) / bmp.width, (doc.height * 0.8) / bmp.height)
-    const w = bmp.width * s
-    const h = bmp.height * s
+    const layer = { ...newLayer(name), ...opts.layer }
+    const s = opts.fill ? 1 : Math.min(1, (doc.width * 0.8) / bmp.width, (doc.height * 0.8) / bmp.height)
+    const w = opts.fill ? doc.width : bmp.width * s
+    const h = opts.fill ? doc.height : bmp.height * s
     loaded.current.set(layer.id, null)
     engine.setLayerImage(layer.id, null)
     engine.edit(layer.id, (ctx) => ctx.drawImage(bmp, (doc.width - w) / 2, (doc.height - h) / 2, w, h))
     const i = docRef.current.layers.findIndex((l) => l.id === activeLayer?.id)
     update((d) => ({ ...d, layers: [...d.layers.slice(0, i + 1), layer, ...d.layers.slice(i + 1)] }))
+    if (opts.fill) return markDirty(layer.id)
     setActiveLayerId(layer.id)
     setTool('move')
     markDirty(layer.id)
@@ -767,7 +769,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
     markDirty(engine.endStroke())
     files.stroked()
   }
-  useImperativeHandle(editorRef, () => ({ insertImage, setColor, color, engine, render: () => engine.render(docRef.current), paintDown, paintMove, paintUp }))
+  useImperativeHandle(editorRef, () => ({ insertImage, setColor, color, engine, render: () => engine.render({ ...docRef.current, layers: exportLayers(docRef.current.layers) }), paintDown, paintMove, paintUp }))
 
   const exportPng = async () => {
     await saveBinaryFile({

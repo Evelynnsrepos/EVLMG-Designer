@@ -45,6 +45,8 @@ export default function View({ documentId, active }: PanelProps) {
   const viewer = useRef<ViewerHandle>(null)
   const [bytes, setBytes] = useState<ArrayBuffer | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  // Experimental: say so every time the tool opens.
+  const [warned, setWarned] = useState(false)
   const model = doc.data?.model ?? null
 
   useEffect(() => {
@@ -76,12 +78,20 @@ export default function View({ documentId, active }: PanelProps) {
 
   if (!doc.data || !target) return null
   const d = doc.data
+  const warning = !warned && (
+    <div className="tp-warning" role="alert">
+      <strong>Texture Paint is experimental.</strong> It can be slow with big models or textures, some model files may not load right, and things may still change. Keep a copy of your model files.
+      <button className="btn btn-primary" onClick={() => setWarned(true)}>
+        OK
+      </button>
+    </div>
+  )
 
-  if (!d.started) return <Start model={d.modelName} onPick={async () => {
+  if (!d.started) return <>{warning}<Start model={d.modelName} onPick={async () => {
     if (!root) return
     const m = await importModel(root)
     if (m) doc.update((x) => ({ ...x, model: m.path, modelName: m.name }))
-  }} onStart={(size) => doc.update((x) => ({ ...x, ...createSketchDoc(size, size), backgroundColor: '#ffffff', started: true }))} />
+  }} onStart={(size) => doc.update((x) => ({ ...x, ...createSketchDoc(size, size), backgroundColor: '#ffffff', started: true }))} /></>
 
   /** The model's own texture becomes the first layer, once, when the texture is still empty. */
   const onOriginal = async (img: CanvasImageSource) => {
@@ -92,7 +102,7 @@ export default function View({ documentId, active }: PanelProps) {
     c.getContext('2d')!.drawImage(img, 0, 0, d.width, d.height)
     const blob = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/png'))
     const asset = blob && (await importAssetFromBlob(root, blob, 'image', 'texture.png'))
-    if (asset) await editor.current.insertImage(asset.path, 'Original texture')
+    if (asset) await editor.current.insertImage(asset.path, 'Original texture', { fill: true })
   }
 
   const addUvLayer = async () => {
@@ -101,9 +111,8 @@ export default function View({ documentId, active }: PanelProps) {
     const blob = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/png'))
     const asset = blob && (await importAssetFromBlob(root, blob, 'image', 'uv-layout.png'))
     if (!asset) return
-    await editor.current.insertImage(asset.path, 'UV layout')
-    // A guide only: left out of exports and locked against painting.
-    doc.update((x) => ({ ...x, layers: x.layers.map((l) => (l.name === 'UV layout' ? { ...l, private: true, locked: true, opacity: 0.6 } : l)) }))
+    // A guide only: left out of exports and of the model, and locked against painting.
+    await editor.current.insertImage(asset.path, 'UV layout', { fill: true, layer: { private: true, locked: true, opacity: 0.6 } })
   }
 
   const exportGlb = async () => {
@@ -124,6 +133,7 @@ export default function View({ documentId, active }: PanelProps) {
 
   return (
     <div className="tp">
+      {warning}
       <div className="tp-left">
         <div className="tp-bar">
           <span className="tp-name" title={d.modelName}>
