@@ -36,5 +36,5 @@ jobs:
           for kind in manifest appstream; do
             f=packaging/flatpak/io.github.Evelynnsrepos.Evelopment_Games_Designer.yml
             [ "$kind" = appstream ] && f=packaging/flatpak/io.github.Evelynnsrepos.Evelopment_Games_Designer.metainfo.xml
-            out=$(flatpak run --command=flatpak-builder-lint org.flatpak.Builder $kind $f 2>&1) || { echo "$out"; echo "$out" | tr -d '' | while IFS= read -r line; do [ -n "$line" ] && echo "::warning title=Flathub linter ($kind)::$line"; done; }
+            out=$(flatpak run --command=flatpak-builder-lint org.flatpak.Builder $kind $f 2>&1) || { echo "$out"; echo "$out" | while IFS= read -r line; do [ -n "$line" ] && echo "::warning title=Flathub linter ($kind)::$line"; done; }
           done
