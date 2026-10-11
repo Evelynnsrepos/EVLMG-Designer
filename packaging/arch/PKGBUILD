@@ -1,7 +1,7 @@
 # Builds the app from this checkout and installs it as a normal Arch package.
 # Usage: cd packaging/arch && makepkg -si
 pkgname=evelopment-games-designer
-pkgver=0.13.1
+pkgver=0.14.0
 pkgrel=1
 pkgdesc="All-in-one game design tool: writing, wiki, maps, boards, lists and calculators"
 arch=('x86_64' 'aarch64')
