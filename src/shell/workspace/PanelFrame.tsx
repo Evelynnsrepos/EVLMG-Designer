@@ -52,6 +52,10 @@ export function PanelFrame({ panel }: { panel: Panel }) {
         <span className="panel-title">{title}</span>
         {manifest && <ToolFontButton type={panel.type} />}
         {manifest && panel.type !== 'reviews' && <ReviewButton target={{ kind: 'doc', type: panel.type, id: panel.documentId }} title={title} />}
+        {/* v0.14: close this tool without Layout Mode. */}
+        <button className="panel-close" title="Close this tool (everything is saved)" aria-label={`Close ${title}`} onClick={() => void closePanel(panel.id)}>
+          <X size={12} />
+        </button>
       </header>
       <div className="panel-body" style={fontStyle}>
         <PanelErrorBoundary name={title}>

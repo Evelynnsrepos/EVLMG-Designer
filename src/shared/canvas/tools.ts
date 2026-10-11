@@ -1,10 +1,11 @@
-import { Circle, Hand, MousePointer2, MoveUpRight, Pencil, Slash, Square, StickyNote, Type } from 'lucide-react'
+import { Circle, Eraser, Hand, MousePointer2, MoveUpRight, Pencil, Slash, Square, StickyNote, Type } from 'lucide-react'
 import { newId, type Id } from '@/core/model'
 import { rectFromPoints, rectsIntersect, simplifyPoints, snapAngle } from './geometry'
-import { addNodes, selectableNodes, translateNodes } from './scene'
+import { addNodes, deleteNodes, selectableNodes, translateNodes } from './scene'
 import { NOTE_COLORS } from './nodeTypes'
 import type { CanvasApi, CanvasTool, EllipseNode, LineNode, NodeBase, NoteNode, Point, RectNode, TextNode, ToolPointerEvent } from './types'
 import { useSettings } from '@/core/state'
+import { worldToLocal } from './transform'
 import { HOLD_MS, keys, outline, perfect, recognize, resize, type Shape } from '../sketch/quickshape'
 
 /** Labels kept as constants so they can be translated later. */
@@ -18,6 +19,7 @@ export const TOOL_LABELS = {
   pen: 'Pen',
   text: 'Text',
   note: 'Sticky note',
+  eraser: 'Eraser (drag over drawn lines to remove them)',
 }
 
 /** Pointer travel (screen px) before a press counts as a drag. */
@@ -364,3 +366,59 @@ export const textTool = (options: ToolOptions<TextNode> = {}): CanvasTool<any> =
 export function defaultTools(): CanvasTool<any>[] {
   return [selectTool, handTool, rectTool(), ellipseTool(), lineTool(), arrowTool(), penTool(), textTool(), noteTool()]
 }
+
+/** Distance from p to the segment a-b. */
+function segmentDistance(p: Point, ax: number, ay: number, bx: number, by: number) {
+  const dx = bx - ax
+  const dy = by - ay
+  const l = dx * dx + dy * dy || 1
+  const t = Math.max(0, Math.min(1, ((p.x - ax) * dx + (p.y - ay) * dy) / l))
+  return Math.hypot(ax + t * dx - p.x, ay + t * dy - p.y)
+}
+
+/**
+ * Eraser (E, v0.14): drag over drawn lines (pen strokes, lines, arrows) to remove them; one undo step per drag.
+ * ponytail: removes whole strokes, not parts of them; split strokes at the eraser if partial erasing is wanted.
+ */
+export const eraserTool = (options: { shortcut?: string } = {}): CanvasTool<any> => ({
+  id: 'eraser',
+  label: TOOL_LABELS.eraser,
+  icon: Eraser,
+  shortcut: options.shortcut ?? 'E',
+  cursor: 'cell',
+  pointerDown(e, api) {
+    if (e.button !== 0) return
+    const gone = new Set<Id>()
+    const eraseAt = (p: Point) => {
+      const reach = 8 / api.viewport.scale
+      let changed = false
+      for (const n of api.scene.nodes as LineNode[]) {
+        if (n.kind !== 'line' || n.locked || gone.has(n.id)) continue
+        const local = worldToLocal(p, n)
+        const r = reach / Math.max(0.01, Math.min(Math.abs(n.scaleX ?? 1), Math.abs(n.scaleY ?? 1)))
+        const pts = n.points
+        for (let i = 0; i + 3 < pts.length || (i === 0 && pts.length === 2); i += 2) {
+          const d = pts.length === 2 ? Math.hypot(pts[0] - local.x, pts[1] - local.y) : segmentDistance(local, pts[i], pts[i + 1], pts[i + 2], pts[i + 3])
+          if (d <= r + (n.strokeWidth ?? 2) / 2) {
+            gone.add(n.id)
+            changed = true
+            break
+          }
+        }
+      }
+      if (changed) api.preview((s) => deleteNodes(s, gone))
+    }
+    eraseAt(e.world)
+    return {
+      move(m) {
+        eraseAt(m.world)
+      },
+      up() {
+        if (gone.size) api.commitPreview()
+      },
+      cancel() {
+        api.preview(null)
+      },
+    }
+  },
+})

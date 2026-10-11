@@ -283,3 +283,22 @@
   border-radius: var(--radius);
   font-size: 16px;
 }
+
+/* v0.14: a small x to close the tool, right of the Review button */
+.panel-close {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 18px;
+  margin-left: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.panel-close:hover {
+  background: color-mix(in srgb, var(--danger) 25%, transparent);
+  color: var(--text);
+}
