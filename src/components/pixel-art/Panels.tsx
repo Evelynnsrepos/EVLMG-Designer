@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, Lock, Pause, Play, Plus, Tag, Tr
 import { useEffect, useRef, useState } from 'react'
 import { newId } from '@/core/model'
 import { toCanvas } from '@/shared/pixel/codec'
+import { BUILTIN_PALETTES } from '@/shared/pixel/color'
 import { ramp, tagFrames, type Img, type LoopMode, type PixelDoc, type PixelTag } from '@/shared/pixel/model'
 
 type Update = (fn: (d: PixelDoc) => PixelDoc) => void
@@ -317,6 +318,117 @@ export function Preview({ d, frameImg, playTag }: { d: PixelDoc; frameImg(i: num
         </span>
       </strong>
       <canvas ref={ref} className="px-preview" style={{ width: d.width * scale, height: d.height * scale }} />
+    </div>
+  )
+}
+
+/** Colour mode, ready-made palettes, palette from the picture, reducing to the palette and palette variants. */
+export function ColorsPanel(p: {
+  d: PixelDoc
+  update: Update
+  setMode(mode: PixelDoc['colorMode']): void
+  fromPicture(): void
+  reduceAll(dither: boolean): void
+  variant: string | null
+  setVariant(id: string | null): void
+}) {
+  const [dither, setDither] = useState(false)
+  const edit = useRef<HTMLInputElement>(null)
+  const [editing, setEditing] = useState<number | null>(null)
+  const v = p.d.variants?.find((x) => x.id === p.variant)
+  const setVariantColors = (colors: string[]) => p.update((d) => ({ ...d, variants: (d.variants ?? []).map((x) => (x.id === p.variant ? { ...x, colors } : x)) }))
+  return (
+    <div className="px-panel">
+      <label className="px-row" title="Palette only: every colour you paint snaps to the palette. Grays: only grays.">
+        Colours
+        <select className="input" value={p.d.colorMode ?? ''} onChange={(e) => p.setMode((e.target.value || undefined) as PixelDoc['colorMode'])}>
+          <option value="">Any colour</option>
+          <option value="indexed">Palette only</option>
+          <option value="gray">Grays</option>
+        </select>
+      </label>
+      <label className="px-row" title="Replace the palette with a ready-made one; your pixels stay as they are">
+        Palette
+        <select
+          className="input"
+          value=""
+          onChange={(e) => {
+            const pal = BUILTIN_PALETTES.find((x) => x.name === e.target.value)
+            if (pal) p.update((d) => ({ ...d, palette: [...pal.colors] }))
+          }}
+        >
+          <option value="">Load…</option>
+          {BUILTIN_PALETTES.map((x) => (
+            <option key={x.name} value={x.name}>
+              {x.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="px-row px-wrap">
+        <button className="btn btn-ghost" title="The colours this frame uses become the palette" onClick={p.fromPicture}>
+          From picture
+        </button>
+        <button className="btn btn-ghost" title="Move every pixel in every frame to its closest palette colour" onClick={() => p.reduceAll(dither)}>
+          Reduce to palette
+        </button>
+        <label className="px-row" title="Mix neighbouring palette colours for smoother shades">
+          <input type="checkbox" checked={dither} onChange={(e) => setDither(e.target.checked)} /> dither
+        </label>
+      </div>
+      <label className="px-row" title="Palette variants: try other colours on the whole animation without changing it">
+        Variant
+        <select className="input" value={p.variant ?? ''} onChange={(e) => p.setVariant(e.target.value || null)}>
+          <option value="">Original</option>
+          {(p.d.variants ?? []).map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.name}
+            </option>
+          ))}
+        </select>
+        <button
+          className="icon-btn"
+          title="New variant from the palette"
+          onClick={() => {
+            const id = newId()
+            p.update((d) => ({ ...d, variants: [...(d.variants ?? []), { id, name: `Variant ${(d.variants?.length ?? 0) + 1}`, colors: [...d.palette] }] }))
+            p.setVariant(id)
+          }}
+        >
+          <Plus size={13} />
+        </button>
+      </label>
+      {v && (
+        <>
+          <input className="input" value={v.name} aria-label="Variant name" onChange={(e) => p.update((d) => ({ ...d, variants: (d.variants ?? []).map((x) => (x.id === v.id ? { ...x, name: e.target.value } : x)) }))} />
+          <div className="px-swatches">
+            {p.d.palette.map((c, i) => (
+              <button
+                key={`${c}${i}`}
+                className="px-swatch"
+                style={{ background: v.colors[i] ?? c }}
+                title={`${c} shows as ${v.colors[i] ?? c} · click to change`}
+                onClick={() => {
+                  setEditing(i)
+                  edit.current!.value = v.colors[i] ?? c
+                  edit.current!.click()
+                }}
+              />
+            ))}
+            <input
+              ref={edit}
+              type="color"
+              className="px-hidden"
+              aria-hidden
+              tabIndex={-1}
+              onChange={(e) => editing !== null && setVariantColors(p.d.palette.map((c, i) => (i === editing ? e.target.value : (v.colors[i] ?? c))))}
+            />
+          </div>
+          <button className="btn btn-ghost" onClick={() => (p.update((d) => ({ ...d, variants: (d.variants ?? []).filter((x) => x.id !== v.id) })), p.setVariant(null))}>
+            <Trash2 size={13} /> Delete variant
+          </button>
+        </>
+      )}
     </div>
   )
 }

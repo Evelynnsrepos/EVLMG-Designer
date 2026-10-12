@@ -48,7 +48,8 @@ import {
   type Img,
   type PixelDoc,
 } from '@/shared/pixel/model'
-import { LayersPanel, PalettePanel, Preview, Timeline } from './Panels'
+import { ColorsPanel, LayersPanel, PalettePanel, Preview, Timeline } from './Panels'
+import { grayHex, grayscale, nearest, paletteOf, reduce, swapColors } from '@/shared/pixel/color'
 import { bounds, combine, cut, flipImg, imgMask, lassoMask, maskImg, outline, paste, placeMask, rectMask, rotate90, wandMask, wrapShift, type Combine, type Mask } from './selection'
 import './pixel-art.css'
 
@@ -291,6 +292,8 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const [seamless, setSeamless] = useState(false)
   const [onion, setOnion] = useState(false)
   const [preview, setPreview] = useState(false)
+  // A palette variant shown instead of the palette (preview only).
+  const [variant, setVariant] = useState<string | null>(null)
   const [showGrid, setShowGrid] = useState(true)
   const [zoom, setZoom] = useState(() => Math.max(1, Math.min(32, Math.floor(480 / Math.max(d.width, d.height)))))
   const [layerId, setLayerId] = useState(d.layers[d.layers.length - 1].id)
@@ -369,7 +372,8 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
         if (fi < d.frames.length - 1) g.drawImage(toCanvas(frameImg(fi + 1)), at[0], at[1])
         g.globalAlpha = 1
       }
-      const img = toCanvas(frameImg(fi))
+      const v = d.variants?.find((x) => x.id === variant)
+      const img = toCanvas(v ? swapColors(frameImg(fi), d.palette, v.colors) : frameImg(fi))
       if (seamless)
         for (let y = 0; y < 3; y++)
           for (let x = 0; x < 3; x++) {
@@ -579,7 +583,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   /** Paint the whole stroke again from the layer's pixels before it started. */
   const render = (l: Live, end: Pt) => {
     const img = cloneImg(l.base)
-    const color = hexToRgba(l.button === 2 ? colors[1] : colors[0])
+    const color = hexToRgba(paintHex(l.button === 2 ? colors[1] : colors[0]))
     let pts: Pt[] = []
     if (tool === 'pencil' || tool === 'eraser' || tool === 'shade') pts = clean && size === 1 ? cleanPath(l.path) : l.path
     else if (tool === 'line') pts = line(l.start[0], l.start[1], end[0], end[1])
@@ -668,7 +672,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       const q = wrap(p)
       if (q[0] < 0 || q[1] < 0 || q[0] >= d.width || q[1] >= d.height) return
       const img = cloneImg(base)
-      const c = hexToRgba(e.button === 2 ? colors[1] : colors[0])
+      const c = hexToRgba(paintHex(e.button === 2 ? colors[1] : colors[0]))
       for (const [x, y] of floodPoints(base, q[0], q[1], contiguous)) if (ditherOn(x, y, dither) && (!mask || mask[y * d.width + x])) setPx(img, x, y, c)
       return commit(key, img)
     }
@@ -809,7 +813,26 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     commit(key, img)
     if (mask) setMask(placeMask(d.width, d.height, pm, piece.width, x, y))
   }
-  const outlineSel = () => commit(curKey(), outline(celImg(d.cels[curKey()], d.width, d.height), hexToRgba(colors[0]), mask))
+  const outlineSel = () => commit(curKey(), outline(celImg(d.cels[curKey()], d.width, d.height), hexToRgba(paintHex(colors[0])), mask))
+  /** In palette-only mode every painted colour snaps to the palette; in gray mode it turns gray. */
+  const paintHex = (hex: string) => (d.colorMode === 'indexed' ? nearest(d.palette, hex) : d.colorMode === 'gray' ? grayHex(hex) : hex)
+  /** Every cel changed by `fn` (one undo step). */
+  const mapCels = (fn: (img: Img) => Img, patch: Partial<PixelDoc> = {}) =>
+    update((x) => {
+      const cels: Record<string, string> = {}
+      for (const [k, url] of Object.entries(x.cels)) {
+        const next = encode(fn(celImg(url, x.width, x.height)))
+        if (next) cels[k] = next
+      }
+      return { ...x, ...patch, cels }
+    })
+  const setMode = async (mode: PixelDoc['colorMode']) => {
+    if (mode === 'indexed' && !(await confirmDialog({ title: 'Palette only?', message: 'Every pixel moves to its closest palette colour, and new colours snap to the palette. Undo brings the old colours back.', confirmLabel: 'Use the palette' }))) return
+    if (mode === 'gray' && !(await confirmDialog({ title: 'Grays only?', message: 'Every pixel and palette colour turns gray. Undo brings the colours back.', confirmLabel: 'Make it gray' }))) return
+    if (mode === 'indexed') mapCels((img) => reduce(img, d.palette), { colorMode: mode })
+    else if (mode === 'gray') mapCels(grayscale, { colorMode: mode, palette: [...new Set(d.palette.map(grayHex))] })
+    else update((x) => ({ ...x, colorMode: undefined }))
+  }
   const clearSel = () => {
     if (!mask) return
     const img = cloneImg(celImg(d.cels[curKey()], d.width, d.height))
@@ -1071,6 +1094,17 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
               update={update}
               onImport={() => void importPalette()}
               onExport={() => void saveBinaryFile({ title: 'Save palette', defaultName: `${base}.gpl`, bytes: new TextEncoder().encode(paletteToGpl(title, d.palette)), filter: { name: 'GIMP palette', extensions: ['gpl'] } })}
+            />
+          )}
+          {!inMap && (
+            <ColorsPanel
+              d={d}
+              update={update}
+              setMode={(m) => void setMode(m)}
+              fromPicture={() => update((x) => ({ ...x, palette: paletteOf(frameImg(fi)) }))}
+              reduceAll={(dither) => mapCels((img) => reduce(img, d.palette, dither))}
+              variant={variant}
+              setVariant={setVariant}
             />
           )}
           {preview && d.kind === 'sprite' && !inMap && (

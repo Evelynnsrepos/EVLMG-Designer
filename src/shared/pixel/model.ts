@@ -62,6 +62,10 @@ export interface PixelDoc {
   map?: { width: number; height: number; layers: TileMapLayer[] }
   /** The tileset in the project's tile library (shared with Level Layout) this file keeps up to date. */
   libraryId?: Id
+  /** v0.16: 'indexed' paints only palette colours, 'gray' only grays; missing = any colour. */
+  colorMode?: 'indexed' | 'gray'
+  /** v0.16: palette variants (enemy colours, team colours): colour i of the palette shown as colour i of the variant. */
+  variants?: { id: Id; name: string; colors: string[] }[]
 }
 
 /** The starter palette: 16 colours picked for this app (black, white, three ramps and a few accents). */
