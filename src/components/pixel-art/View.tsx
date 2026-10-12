@@ -300,7 +300,13 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const [stamp, setStamp] = useState({ col: 0, row: 0, w: 1, h: 1 })
   // Mirrors and turn for placed tiles (FLIP_H, FLIP_V, TRANSPOSE bits).
   const [tileFlags, setTileFlags] = useState(0)
-  const [mapDraft, setMapDraft] = useState<Record<string, number> | null>(null)
+  const [mapDraft, setDraftState] = useState<Record<string, number> | null>(null)
+  // Kept in a ref too: a quick click lets go before the state has re-rendered.
+  const draft = useRef<Record<string, number> | null>(null)
+  const setMapDraft = (v: Record<string, number> | null) => {
+    draft.current = v
+    setDraftState(v)
+  }
   const [playing, setPlaying] = useState(false)
   const [playTag, setPlayTag] = useState<string | null>(null)
   const [menu, setMenu] = useState(false)
@@ -455,9 +461,8 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
 
   // Map and tiles have their own tools.
   useEffect(() => {
-    if (inMap && !MAP_TOOLS.some((t) => t.id === tool)) setTool('tile')
-    if (!inMap && tool.startsWith('tile')) setTool('pencil')
-  }, [inMap, tool])
+    setTool(inMap ? 'tile' : 'pencil')
+  }, [inMap])
 
   // ---- Playback ----
   useEffect(() => {
@@ -717,8 +722,8 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const onMove = (e: React.PointerEvent) => {
     const p = pos(e)
     hover.current = p
-    if (mapDraft) {
-      setMapDraft(placeTiles(mapDraft, p, (e.buttons & 2) === 2))
+    if (draft.current) {
+      setMapDraft(placeTiles(draft.current, p, (e.buttons & 2) === 2))
       return
     }
     const sel = selecting.current
@@ -744,8 +749,8 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     draw()
   }
   const onUp = () => {
-    if (mapDraft) {
-      commitMap(mapDraft)
+    if (draft.current) {
+      commitMap(draft.current)
       setMapDraft(null)
     }
     const sel = selecting.current
