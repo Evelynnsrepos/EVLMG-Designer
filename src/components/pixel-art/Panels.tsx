@@ -1,9 +1,9 @@
-import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, Lock, Pause, Play, Plus, Tag, Trash2, Unlock, Wand2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, Link2, Lock, Pause, Play, Plus, Tag, Trash2, Unlink, Unlock, Wand2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { newId } from '@/core/model'
 import { toCanvas } from '@/shared/pixel/codec'
 import { BUILTIN_PALETTES } from '@/shared/pixel/color'
-import { ramp, tagFrames, type Img, type LoopMode, type PixelDoc, type PixelTag } from '@/shared/pixel/model'
+import { ramp, resolveKey, tagFrames, type Img, type LoopMode, type PixelDoc, type PixelTag } from '@/shared/pixel/model'
 
 type Update = (fn: (d: PixelDoc) => PixelDoc) => void
 
@@ -137,9 +137,23 @@ export function LayersPanel(p: { d: PixelDoc; layerId: string; setLayerId(id: st
       {p.d.layers
         .filter((l) => l.id === p.layerId)
         .map((l) => (
-          <label key={l.id} className="px-row" title="Layer opacity">
-            Opacity <input type="range" min={0} max={1} step={0.05} value={l.opacity} onChange={(e) => set(l.id, { opacity: Number(e.target.value) })} />
-          </label>
+          <div key={l.id} className="px-panel">
+            <label className="px-row" title="Layer opacity">
+              Opacity <input type="range" min={0} max={1} step={0.05} value={l.opacity} onChange={(e) => set(l.id, { opacity: Number(e.target.value) })} />
+            </label>
+            <label className="px-row" title="How this layer mixes with the layers below">
+              Blend
+              <select className="input" value={l.blend ?? ''} onChange={(e) => set(l.id, { blend: (e.target.value || undefined) as PixelDoc['layers'][number]['blend'] })}>
+                <option value="">Normal</option>
+                <option value="multiply">Multiply (shadows)</option>
+                <option value="screen">Screen (light)</option>
+                <option value="add">Add (glow)</option>
+              </select>
+            </label>
+            <label className="px-row" title="A tracing layer: shown faintly while you draw and left out of every export">
+              <input type="checkbox" checked={!!l.reference} onChange={(e) => set(l.id, { reference: e.target.checked || undefined })} /> Reference (not exported)
+            </label>
+          </div>
         ))}
     </div>
   )
@@ -169,12 +183,40 @@ export function Timeline(p: {
     })
     p.setFrame(p.frame + 1)
   }
+  /** A new frame showing the same pixels as this one; drawing on either changes both. */
+  const link = () => {
+    const f = { id: newId(), duration: d.frames[p.frame].duration }
+    change((x) => {
+      const cels = { ...x.cels }
+      const from = x.frames[p.frame].id
+      for (const l of x.layers) if (x.cels[`${l.id}:${from}`]) cels[`${l.id}:${f.id}`] = x.cels[`${l.id}:${from}`].startsWith('@') ? x.cels[`${l.id}:${from}`] : `@${from}`
+      return { ...x, frames: [...x.frames.slice(0, p.frame + 1), f, ...x.frames.slice(p.frame + 1)], cels }
+    })
+    p.setFrame(p.frame + 1)
+  }
+  /** This frame gets its own copy of linked pixels. */
+  const unlink = () =>
+    change((x) => {
+      const cels = { ...x.cels }
+      const id = x.frames[p.frame].id
+      for (const l of x.layers) {
+        const k = `${l.id}:${id}`
+        if (cels[k]?.startsWith('@')) cels[k] = x.cels[resolveKey(x.cels, k)]
+      }
+      return { ...x, cels }
+    })
+  const linked = d.layers.some((l) => d.cels[`${l.id}:${d.frames[p.frame].id}`]?.startsWith('@'))
   const remove = () => {
     const gone = d.frames[p.frame].id
     change((x) => ({
       ...x,
       frames: x.frames.filter((f) => f.id !== gone),
-      cels: Object.fromEntries(Object.entries(x.cels).filter(([k]) => !k.endsWith(`:${gone}`))),
+      // Frames linked to the one that goes keep its pixels.
+      cels: Object.fromEntries(
+        Object.entries(x.cels)
+          .filter(([k]) => !k.endsWith(`:${gone}`))
+          .map(([k, v]) => [k, v === `@${gone}` ? x.cels[resolveKey(x.cels, `${k.slice(0, k.indexOf(':'))}:${gone}`)] : v]),
+      ),
       tags: x.tags
         .map((t) => ({ ...t, from: t.from > p.frame ? t.from - 1 : t.from, to: t.to >= p.frame ? t.to - 1 : t.to }))
         .filter((t) => t.to >= t.from),
@@ -214,6 +256,14 @@ export function Timeline(p: {
         <button className="btn btn-ghost" title="Copy this frame" onClick={() => add(true)}>
           <Copy size={13} /> Copy
         </button>
+        <button className="btn btn-ghost" title="A new frame with the same pixels: drawing on one changes both" onClick={link}>
+          <Link2 size={13} /> Link
+        </button>
+        {linked && (
+          <button className="btn btn-ghost" title="Give this frame its own copy of the pixels" onClick={unlink}>
+            <Unlink size={13} /> Unlink
+          </button>
+        )}
         <button className="icon-btn" title="Move frame left" onClick={() => move(-1)}>
           ←
         </button>
@@ -242,6 +292,7 @@ export function Timeline(p: {
         {d.frames.map((f, i) => (
           <button key={f.id} className={`px-frame${i === p.frame ? ' on' : ''}`} onClick={() => p.setFrame(i)} title={`Frame ${i + 1}`}>
             <Thumb img={p.frameImg(i)} />
+            {d.layers.some((l) => d.cels[`${l.id}:${f.id}`]?.startsWith('@')) && <Link2 size={10} className="px-linkmark" />}
             <span>
               {i + 1} · {f.duration}ms
             </span>

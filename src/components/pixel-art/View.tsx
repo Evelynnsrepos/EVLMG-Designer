@@ -37,6 +37,8 @@ import {
   parsePalette,
   rectPoints,
   replaceColor,
+  resolveKey,
+  isLink,
   rgbaToHex,
   setPx,
   shadeStep,
@@ -335,9 +337,13 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
 
   const imgOf = (layerId: string, frameId: string) => {
     const key = celKey(layerId, frameId)
-    return live.current?.key === key ? live.current.img : celImg(d.cels[key], d.width, d.height)
+    const real = resolveKey(d.cels, key)
+    return live.current?.key === real ? live.current.img : celImg(d.cels[real], d.width, d.height)
   }
-  const frameImg = (i: number) => composite(d.layers.map((l) => ({ visible: l.visible, opacity: l.opacity, img: imgOf(l.id, d.frames[i].id) })), d.width, d.height)
+  /** The frame as it is exported: reference layers left out. */
+  const frameImg = (i: number) => composite(d.layers.filter((l) => !l.reference).map((l) => ({ visible: l.visible, opacity: l.opacity, blend: l.blend, img: imgOf(l.id, d.frames[i].id) })), d.width, d.height)
+  /** Reference layers of a frame, drawn faintly under the picture while you draw. */
+  const refImg = (i: number) => (d.layers.some((l) => l.reference && l.visible) ? composite(d.layers.filter((l) => l.reference).map((l) => ({ visible: l.visible, opacity: l.opacity, img: imgOf(l.id, d.frames[i].id) })), d.width, d.height) : null)
 
   // ---- Drawing on screen ----
   const draw = () => {
@@ -373,6 +379,12 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
         g.globalAlpha = 1
       }
       const v = d.variants?.find((x) => x.id === variant)
+      const ref = refImg(fi)
+      if (ref) {
+        g.globalAlpha = 0.45
+        g.drawImage(toCanvas(ref), at[0], at[1])
+        g.globalAlpha = 1
+      }
       const img = toCanvas(v ? swapColors(frameImg(fi), d.palette, v.colors) : frameImg(fi))
       if (seamless)
         for (let y = 0; y < 3; y++)
@@ -658,7 +670,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       const q = wrap(p)
       if (tool === 'wand') {
         if (q[0] < 0 || q[1] < 0 || q[0] >= d.width || q[1] >= d.height) return
-        return setMask(combine(mask, wandMask(celImg(d.cels[celKey(layer.id, d.frames[fi].id)], d.width, d.height), q[0], q[1], contiguous), how))
+        return setMask(combine(mask, wandMask(celImg(d.cels[curKey()], d.width, d.height), q[0], q[1], contiguous), how))
       }
       e.currentTarget.setPointerCapture(e.pointerId)
       selecting.current = { start: q, path: [q], how, preview: null }
@@ -666,7 +678,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     }
     if (layer.locked || !layer.visible) return setNote(layer.locked ? 'This layer is locked.' : 'This layer is hidden.')
     const frameId = inMap ? d.frames[0].id : d.frames[fi].id
-    const key = celKey(layer.id, frameId)
+    const key = resolveKey(d.cels, celKey(layer.id, frameId))
     const base = cloneImg(celImg(d.cels[key], d.width, d.height))
     if (tool === 'fill') {
       const q = wrap(p)
@@ -788,6 +800,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     update((x) => {
       const cels = { ...x.cels }
       for (const [k, url] of Object.entries(x.cels)) {
+        if (isLink(url)) continue
         const img = cloneImg(celImg(url, x.width, x.height))
         if (!replaceColor(img, from, to)) continue
         const next = encode(img)
@@ -796,7 +809,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       return { ...x, cels, palette: x.palette.map((c) => (c === from ? to : c)) }
     })
 
-  const curKey = () => celKey(layer.id, d.frames[inMap ? 0 : fi].id)
+  const curKey = () => resolveKey(d.cels, celKey(layer.id, d.frames[inMap ? 0 : fi].id))
   const all = () => rectMask(d.width, d.height, 0, 0, d.width - 1, d.height - 1)
   /** Change the selected pixels (or the whole layer) with `fn`, kept centred where they were. */
   const transform = (fn: (img: Img) => Img) => {
@@ -821,6 +834,10 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     update((x) => {
       const cels: Record<string, string> = {}
       for (const [k, url] of Object.entries(x.cels)) {
+        if (isLink(url)) {
+          cels[k] = url
+          continue
+        }
         const next = encode(fn(celImg(url, x.width, x.height)))
         if (next) cels[k] = next
       }
@@ -945,6 +962,9 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
 
   const tools = inMap ? MAP_TOOLS : TOOLS
   const css = (n: number) => n * zoom
+  // Wide or tall pixels: the canvas is stretched on screen only.
+  const ax = (d.pixelAspect ?? 1) > 1 ? (d.pixelAspect ?? 1) : 1
+  const ay = (d.pixelAspect ?? 1) < 1 ? 1 / (d.pixelAspect ?? 1) : 1
   const cw = inMap && d.map ? d.map.width * ts : d.width * (seamless ? 3 : 1)
   const ch = inMap && d.map ? d.map.height * ts : d.height * (seamless ? 3 : 1)
 
@@ -1026,6 +1046,14 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
         <button className={`icon-btn${showGrid ? ' on' : ''}`} title="Grid" onClick={() => setShowGrid(!showGrid)}>
           <Grid3x3 size={15} />
         </button>
+        <label className="px-row" title="Pixel shape: wide or tall pixels like some old consoles (on screen only)">
+          Pixels
+          <select className="input" value={d.pixelAspect ?? 1} onChange={(e) => update((x) => ({ ...x, pixelAspect: Number(e.target.value) === 1 ? undefined : Number(e.target.value) }))}>
+            <option value={1}>Square</option>
+            <option value={2}>Wide 2:1</option>
+            <option value={0.5}>Tall 1:2</option>
+          </select>
+        </label>
         <label className="px-row" title="Zoom (whole steps keep pixels square)">
           Zoom <input type="range" min={1} max={48} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} /> {zoom}×
         </label>
@@ -1112,7 +1140,8 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
           )}
         </aside>
         <div className="px-stage">
-          <div className="px-canvas" style={{ width: css(cw), height: css(ch) }}>
+          <div className="px-canvas" style={{ width: css(cw) * ax, height: css(ch) * ay }}>
+            <div className="px-canvas-inner" style={{ width: css(cw), height: css(ch), transform: ax !== 1 || ay !== 1 ? `scale(${ax}, ${ay})` : undefined }}>
             <canvas
               ref={canvas}
               style={{ width: css(cw), height: css(ch) }}
@@ -1124,6 +1153,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
               onWheel={(e) => e.ctrlKey && (e.preventDefault(), setZoom((z) => Math.max(1, Math.min(48, z + (e.deltaY < 0 ? 1 : -1)))))}
             />
             <canvas ref={overlay} className="px-overlay" style={{ width: css(cw), height: css(ch) }} />
+            </div>
           </div>
         </div>
         <aside className="px-side right">

@@ -53,7 +53,7 @@ export function useDecoded(urls: string[]): number {
   const [n, setN] = useState(0)
   useEffect(() => {
     let gone = false
-    for (const u of urls) if (!decoded.has(u)) void decode(u).then((img) => (decoded.set(u, img), gone || setN((x) => x + 1)))
+    for (const u of urls) if (u.startsWith('data:') && !decoded.has(u)) void decode(u).then((img) => (decoded.set(u, img), gone || setN((x) => x + 1)))
     return () => {
       gone = true
     }

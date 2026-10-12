@@ -324,3 +324,14 @@
   justify-content: center;
   gap: 8px;
 }
+.px-canvas-inner {
+  position: absolute;
+  inset: 0 auto auto 0;
+  transform-origin: 0 0;
+}
+.px-linkmark {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  color: var(--accent);
+}

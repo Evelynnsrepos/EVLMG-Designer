@@ -15,6 +15,10 @@ export interface PixelLayer {
   /** 0..1 */
   opacity: number
   locked?: boolean
+  /** v0.16: how the layer mixes with the ones below. */
+  blend?: 'multiply' | 'screen' | 'add'
+  /** v0.16: a tracing layer: shown faintly while drawing, left out of every export. */
+  reference?: boolean
 }
 
 export interface PixelFrame {
@@ -52,7 +56,7 @@ export interface PixelDoc {
   /** Bottom first. */
   layers: PixelLayer[]
   frames: PixelFrame[]
-  /** "layerId:frameId" → PNG data URL; missing = empty. */
+  /** "layerId:frameId" → PNG data URL; missing = empty. "@frameId" = linked: the same pixels as that frame (v0.16). */
   cels: Record<string, string>
   tags: PixelTag[]
   /** '#rrggbb' */
@@ -62,6 +66,8 @@ export interface PixelDoc {
   map?: { width: number; height: number; layers: TileMapLayer[] }
   /** The tileset in the project's tile library (shared with Level Layout) this file keeps up to date. */
   libraryId?: Id
+  /** v0.16: wide (2) or tall (0.5) pixels, for retro systems; shown that way, missing = square. */
+  pixelAspect?: number
   /** v0.16: 'indexed' paints only palette colours, 'gray' only grays; missing = any colour. */
   colorMode?: 'indexed' | 'gray'
   /** v0.16: palette variants (enemy colours, team colours): colour i of the palette shown as colour i of the variant. */
@@ -83,6 +89,17 @@ export function startDoc(kind: PixelDoc['kind'], width: number, height: number, 
 }
 
 export const celKey = (layer: Id, frame: Id) => `${layer}:${frame}`
+
+/** The cel that really holds the pixels: a linked cel ("@frameId") points at the same layer in another frame. */
+export function resolveKey(cels: Record<string, string>, key: string): string {
+  for (let i = 0; i < 8; i++) {
+    const v = cels[key]
+    if (!v?.startsWith('@')) return key
+    key = `${key.slice(0, key.indexOf(':'))}:${v.slice(1)}`
+  }
+  return key
+}
+export const isLink = (v: string | undefined) => !!v?.startsWith('@')
 
 // ---- Pixels ----------------------------------------------------------------
 
@@ -235,19 +252,30 @@ export function mirror(points: [number, number][], w: number, h: number, sym: { 
   return out
 }
 
-/** Flatten visible layers of one frame (normal blending with layer opacity). */
-export function composite(layers: { visible: boolean; opacity: number; img: Img | undefined }[], width: number, height: number): Img {
+const BLENDS = {
+  multiply: (s: number, d: number) => (s * d) / 255,
+  screen: (s: number, d: number) => 255 - ((255 - s) * (255 - d)) / 255,
+  add: (s: number, d: number) => Math.min(255, s + d),
+}
+
+/** Flatten visible layers of one frame (layer opacity, and multiply/screen/add where a layer asks for it). */
+export function composite(layers: { visible: boolean; opacity: number; img: Img | undefined; blend?: PixelLayer['blend'] }[], width: number, height: number): Img {
   const out = blank(width, height)
   const d = out.data
   for (const l of layers) {
     if (!l.visible || !l.img) continue
     const s = l.img.data
+    const mix = l.blend ? BLENDS[l.blend] : null
     for (let i = 0; i < d.length; i += 4) {
       const a = (s[i + 3] / 255) * l.opacity
       if (!a) continue
       const da = d[i + 3] / 255
       const oa = a + da * (1 - a)
-      for (let c = 0; c < 3; c++) d[i + c] = (s[i + c] * a + d[i + c] * da * (1 - a)) / oa
+      for (let c = 0; c < 3; c++) {
+        // Blending only changes the colour where there is something below.
+        const src = mix && da ? mix(s[i + c], d[i + c]) * da + s[i + c] * (1 - da) : s[i + c]
+        d[i + c] = (src * a + d[i + c] * da * (1 - a)) / oa
+      }
       d[i + 3] = oa * 255
     }
   }

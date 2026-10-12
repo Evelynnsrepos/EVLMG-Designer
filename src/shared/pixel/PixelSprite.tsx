@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Id } from '@/core/model'
 import { useDocument, useProjectStore } from '@/core/state'
 import { celImg, toCanvas, useDecoded } from './codec'
-import { composite, createPixelDoc, tagFrames, type PixelDoc } from './model'
+import { composite, createPixelDoc, resolveKey, tagFrames, type PixelDoc } from './model'
 
 /** A sprite from a Pixel Art file on an entry (v0.16): the file and, optionally, the tag that plays. */
 export interface SpriteRef {
@@ -28,7 +28,7 @@ export function PixelSprite({ sprite, size, animate = true }: { sprite: SpriteRe
     const c = ref.current
     if (!c || !d?.frames[frame]) return
     const f = d.frames[frame].id
-    const img = composite(d.layers.map((l) => ({ visible: l.visible, opacity: l.opacity, img: celImg(d.cels[`${l.id}:${f}`], d.width, d.height) })), d.width, d.height)
+    const img = composite(d.layers.filter((l) => !l.reference).map((l) => ({ visible: l.visible, opacity: l.opacity, blend: l.blend, img: celImg(d.cels[resolveKey(d.cels, `${l.id}:${f}`)], d.width, d.height) })), d.width, d.height)
     c.width = d.width
     c.height = d.height
     c.getContext('2d')!.drawImage(toCanvas(img), 0, 0)

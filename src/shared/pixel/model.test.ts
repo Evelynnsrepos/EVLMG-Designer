@@ -68,3 +68,15 @@ describe('sprite sheet import', () => {
     expect(getPx(frames[1], 1, 1)).toEqual([4, 5, 6, 255])
   })
 })
+
+describe('layers and links', () => {
+  it('multiplies, and follows linked cels to the frame that holds the pixels', async () => {
+    const { composite, resolveKey } = await import('./model')
+    const a = blank(1, 1)
+    setPx(a, 0, 0, [200, 100, 50, 255])
+    const b = blank(1, 1)
+    setPx(b, 0, 0, [128, 255, 0, 255])
+    expect(getPx(composite([{ visible: true, opacity: 1, img: a }, { visible: true, opacity: 1, img: b, blend: 'multiply' }], 1, 1), 0, 0)).toEqual([100, 100, 0, 255])
+    expect(resolveKey({ 'L:f2': '@f1', 'L:f3': '@f2', 'L:f1': 'data:x' }, 'L:f3')).toBe('L:f1')
+  })
+})
