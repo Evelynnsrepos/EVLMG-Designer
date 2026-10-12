@@ -53,6 +53,7 @@ export const SHORTCUT_GROUPS = [
       { id: 'pixel.lassofill', label: 'Lasso fill', keys: ['f'] },
       { id: 'pixel.gradient', label: 'Dithered gradient', keys: ['d'] },
       { id: 'pixel.spray', label: 'Spray', keys: ['a'] },
+      { id: 'pixel.text', label: 'Text', keys: ['t'] },
       { id: 'pixel.rect', label: 'Rectangle', keys: ['u'] },
       { id: 'pixel.ellipse', label: 'Ellipse', keys: ['o'] },
       { id: 'pixel.fill', label: 'Fill', keys: ['g'] },

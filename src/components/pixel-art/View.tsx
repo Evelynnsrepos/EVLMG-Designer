@@ -1,4 +1,4 @@
-import { Blend, Brush, Sparkles, Circle, Dices, Download, LassoSelect, Spline, SprayCan, Stamp, Eraser, FlipHorizontal2, FlipVertical2, Grid3x3, Lasso, Layers, Map as MapIcon, Move, PaintBucket, Pipette, RotateCcw, RotateCw, Slash, Square, SquareDashed, SunMoon, Upload, WandSparkles } from 'lucide-react'
+import { Blend, Brush, Type, Sparkles, Circle, Dices, Download, LassoSelect, Spline, SprayCan, Stamp, Eraser, FlipHorizontal2, FlipVertical2, Grid3x3, Lasso, Layers, Map as MapIcon, Move, PaintBucket, Pipette, RotateCcw, RotateCw, Slash, Square, SquareDashed, SunMoon, Upload, WandSparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { importAssetFromBlob, resolveAssetPath } from '@/core/assets'
 import { saveBinaryFile, safeFileName } from '@/core/export'
@@ -8,7 +8,9 @@ import type { PanelProps } from '@/core/registry'
 import { isShortcut } from '@/core/shortcuts'
 import { loadDocumentNow, postIntent, updateDocument, useDocument, useIntentHandler, useProjectStore, isTextField, useUndoRedoKeys, type UseDocumentResult } from '@/core/state'
 import { NumberInput, PresetHeader } from '@/shared/calculators'
-import { confirmDialog } from '@/shared/dialogs'
+import { confirmDialog, promptDialog } from '@/shared/dialogs'
+import { cssFamily, GENERIC_FONTS, systemFonts } from '@/shared/fontList'
+import { maybeStartTour } from '@/shell/help/help'
 import { pickFiles } from '@/shared/sketch/files/io'
 import { encodeGif } from '@/shared/sketch/files/gif'
 import { createLibrary, drawTile, FLIP_H, FLIP_V, LIBRARY_ID, tilePixel, tileRect, TRANSPOSE, turnFlags, type TileLibrary } from '@/shared/tileset'
@@ -61,7 +63,7 @@ import { grayHex, grayscale, nearest, paletteOf, reduce, swapColors } from '@/sh
 import { bounds, combine, cut, flipImg, imgMask, lassoMask, maskImg, outline, paste, placeMask, rectMask, rotate90, rotateAny, scaleImg, wandMask, wrapShift, type Combine, type Mask } from './selection'
 import './pixel-art.css'
 
-type Tool = 'pencil' | 'eraser' | 'line' | 'curve' | 'rect' | 'ellipse' | 'fill' | 'lassofill' | 'gradient' | 'spray' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill' | 'tileRandom' | 'auto'
+type Tool = 'pencil' | 'eraser' | 'line' | 'curve' | 'rect' | 'ellipse' | 'fill' | 'lassofill' | 'gradient' | 'spray' | 'text' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill' | 'tileRandom' | 'auto'
 type Pt = [number, number]
 
 /** Pixel Art (v0.16): sprites, animations, tilesets and tilemaps. */
@@ -314,6 +316,7 @@ const TOOLS: { id: Tool; icon: typeof Brush; label: string; key: string }[] = [
   { id: 'lassofill', icon: LassoSelect, label: 'Lasso fill: draw around an area to fill it', key: 'pixel.lassofill' },
   { id: 'gradient', icon: Blend, label: 'Dithered gradient from the main to the second colour (drag its direction)', key: 'pixel.gradient' },
   { id: 'spray', icon: SprayCan, label: 'Spray (size sets how wide)', key: 'pixel.spray' },
+  { id: 'text', icon: Type, label: 'Text: click where it starts; any font, drawn with hard pixels', key: 'pixel.text' },
   { id: 'picker', icon: Pipette, label: 'Eyedropper (or Alt-click)', key: 'pixel.picker' },
   { id: 'shade', icon: SunMoon, label: 'Shade brush: left click one palette step lighter, right click darker', key: 'pixel.shade' },
   { id: 'select', icon: SquareDashed, label: 'Select a rectangle (Shift adds, Ctrl takes away)', key: 'pixel.select' },
@@ -339,6 +342,7 @@ type Live = { key: string; base: Img; img: Img; start: Pt; path: Pt[]; button: n
 function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<PixelDoc> & { data: PixelDoc }; documentId: string; title: string; active: boolean }) {
   const d = doc.data
   useUndoRedoKeys(doc, active)
+  useEffect(() => maybeStartTour('pixel'), [])
   const root = useProjectStore((s) => s.root)
   const lib = useDocument<TileLibrary>('level-layout', LIBRARY_ID, createLibrary)
   const update = (fn: (x: PixelDoc) => PixelDoc) => doc.update(fn)
@@ -350,6 +354,9 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   // v0.16: how strokes put colour down, pen pressure, and a brush made from a selection.
   const [ink, setInk] = useState<'normal' | 'lockAlpha' | 'replace' | 'colorOnly'>('normal')
   const [pressure, setPressure] = useState(false)
+  // Text tool: the font and its size in pixels.
+  const [font, setFont] = useState('sans-serif')
+  const [fontPx, setFontPx] = useState(8)
   const [brushImg, setBrushImg] = useState<{ piece: Img; mask: Mask; tint: boolean } | null>(null)
   // A curve waits for its second drag after the first one.
   const curve = useRef<{ key: string; base: Img; a: Pt; b: Pt } | null>(null)
@@ -404,7 +411,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const hover = useRef<Pt | null>(null)
 
   const urls = useMemo(() => Object.values(d.cels), [d.cels])
-  useDecoded(urls)
+  const decodedCount = useDecoded(urls)
   const fi = Math.min(frame, d.frames.length - 1)
   const layer = d.layers.find((l) => l.id === layerId) ?? d.layers[d.layers.length - 1]
   const ts = d.tileSize ?? 16
@@ -420,7 +427,19 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     return celImg(d.cels[real], d.width, d.height)
   }
   /** The frame as it is exported: reference layers left out. */
-  const frameImg = (i: number) => composite(d.layers.filter((l) => !l.reference).map((l) => ({ visible: l.visible, opacity: l.opacity, blend: l.blend, img: imgOf(l.id, d.frames[i].id) })), d.width, d.height)
+  // Flattened frames are kept until the file changes (thumbnails and onion skin would redo them on every redraw).
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- a new cache whenever pixels, layers or frames change
+  const frameCache = useMemo(() => new Map<number, Img>(), [d.cels, d.layers, d.frames, d.width, d.height, decodedCount])
+  const frameImg = (i: number) => {
+    // The frame being drawn on right now is always fresh.
+    const busy = live.current?.key ?? curve.current?.key
+    const drawing = !!busy && d.layers.some((l) => resolveKey(d.cels, celKey(l.id, d.frames[i].id)) === busy)
+    const hit = !drawing && frameCache.get(i)
+    if (hit) return hit
+    const img = composite(d.layers.filter((l) => !l.reference).map((l) => ({ visible: l.visible, opacity: l.opacity, blend: l.blend, img: imgOf(l.id, d.frames[i].id) })), d.width, d.height)
+    if (!drawing) frameCache.set(i, img)
+    return img
+  }
   /** Reference layers of a frame, drawn faintly under the picture while you draw. */
   const refImg = (i: number) => (d.layers.some((l) => l.reference && l.visible) ? composite(d.layers.filter((l) => l.reference).map((l) => ({ visible: l.visible, opacity: l.opacity, img: imgOf(l.id, d.frames[i].id) })), d.width, d.height) : null)
 
@@ -891,6 +910,18 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     })
   }
 
+  /** Text at p in the main colour: drawn at the font's pixel size and cut to hard pixels (no soft edges). */
+  const addText = async (p: Pt) => {
+    const text = (await promptDialog('Text', ''))?.trim()
+    if (!text) return
+    const key = curKey()
+    const img = cloneImg(celImg(d.cels[key], d.width, d.height))
+    const t = textImg(text, font, fontPx)
+    const c = hexToRgba(paintHex(colors[0]))
+    for (let y = 0; y < t.height; y++) for (let x = 0; x < t.width; x++) if (t.data[(y * t.width + x) * 4 + 3] >= 128 && (!mask || mask[(p[1] + y) * d.width + p[0] + x])) setPx(img, p[0] + x, p[1] + y, c)
+    commit(key, img)
+  }
+
   const pick = (p: Pt, button: number) => {
     if (inMap) {
       const v = mapLayer?.cells[`${p[0]},${p[1]}`]
@@ -954,6 +985,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       return
     }
     if (layer.locked || !layer.visible) return setNote(layer.locked ? 'This layer is locked.' : 'This layer is hidden.')
+    if (tool === 'text') return void addText(wrap(p))
     if (d.kind === 'tileset' && !inMap && p[0] >= 0 && p[1] >= 0 && p[0] < d.width && p[1] < d.height) setFocusTile(Math.floor(p[1] / ts) * cols + Math.floor(p[0] / ts))
     const frameId = inMap ? d.frames[0].id : d.frames[fi].id
     const key = resolveKey(d.cels, celKey(layer.id, frameId))
@@ -1319,7 +1351,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       <div className="px-head">
         <PresetHeader documentId={documentId} kind={d.kind === 'tileset' ? 'Tileset' : 'Sprite'} undo={doc.undo} redo={doc.redo} canUndo={doc.canUndo} canRedo={doc.canRedo} />
       </div>
-      <div className="px-toolbar">
+      <div className="px-toolbar" data-tour="px-tools">
         {tools.map((t) => (
           <button key={t.id} className={`icon-btn${tool === t.id ? ' on' : ''}`} title={t.label} aria-label={t.label} onClick={() => setTool(t.id)}>
             <t.icon size={16} />
@@ -1359,6 +1391,18 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                   ×
                 </button>
               </span>
+            )}
+            {tool === 'text' && (
+              <label className="px-row" title="Font and size in pixels; any font works, CJK included">
+                <select className="input" value={font} onChange={(e) => setFont(e.target.value)}>
+                  {[...GENERIC_FONTS, ...systemFonts()].map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
+                <input className="input px-ms" type="number" min={4} max={128} value={fontPx} onChange={(e) => setFontPx(Math.max(4, Math.min(128, Number(e.target.value) || 8)))} /> px
+              </label>
             )}
             <label className="px-row" title="Pen pressure sets the pencil size, up to the size slider">
               <input type="checkbox" checked={pressure} onChange={(e) => setPressure(e.target.checked)} /> Pressure
@@ -1443,7 +1487,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
             <MapIcon size={14} /> {inMap ? 'Map' : 'Tiles'}
           </button>
         )}
-        <span className="px-menu">
+        <span className="px-menu" data-tour="px-files">
           <button className="btn btn-ghost" onClick={() => setMenu(!menu)}>
             <Download size={14} /> Files
           </button>
@@ -1512,7 +1556,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
         </div>
       )}
       <div className="px-body">
-        <aside className="px-side">
+        <aside className="px-side" data-tour="px-palette">
           {inMap && d.map ? (
             <TilePicker set={frameImg(0)} ts={ts} stamp={stamp} onStamp={(s) => (setStamp(s), tool !== 'tile' && tool !== 'tileFill' ? setTool('tile') : null)} />
           ) : (
@@ -1542,7 +1586,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
             <Preview d={d} frameImg={frameImg} playTag={playTag} />
           )}
         </aside>
-        <div className="px-stage">
+        <div className="px-stage" data-tour="px-canvas">
           <div className="px-canvas" style={{ width: css(cw) * ax, height: css(ch) * ay }}>
             <div className="px-canvas-inner" style={{ width: css(cw), height: css(ch), transform: ax !== 1 || ay !== 1 ? `scale(${ax}, ${ay})` : undefined }}>
             <canvas
@@ -1559,7 +1603,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
             </div>
           </div>
         </div>
-        <aside className="px-side right">
+        <aside className="px-side right" data-tour="px-layers">
           {inMap && d.map ? (
             <MapPanel d={d} mapLayerId={mapLayer?.id ?? ''} setMapLayerId={setMapLayerId} update={update} />
           ) : (
@@ -1813,4 +1857,19 @@ function paletteStrip(palette: string[]): Img {
     for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) setPx(img, (i % cols) * 32 + x, Math.floor(i / cols) * 32 + y, rgba)
   })
   return img
+}
+
+/** Text as pixels: drawn with the font at its pixel size; the caller keeps only the solid pixels. */
+function textImg(text: string, family: string, px: number): Img {
+  const c = document.createElement('canvas')
+  const g = c.getContext('2d')!
+  const fontCss = `${px}px ${cssFamily(family)}`
+  g.font = fontCss
+  c.width = Math.max(1, Math.ceil(g.measureText(text).width))
+  c.height = Math.ceil(px * 1.3)
+  g.font = fontCss
+  g.textBaseline = 'top'
+  g.fillText(text, 0, 0)
+  const d = g.getImageData(0, 0, c.width, c.height)
+  return { width: d.width, height: d.height, data: d.data }
 }

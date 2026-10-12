@@ -2,7 +2,7 @@ import { create } from 'zustand'
 
 /** Help state: the user guide dialog and the step-by-step tours. */
 
-export type TourId = 'launcher' | 'editor'
+export type TourId = 'launcher' | 'editor' | 'pixel'
 
 export interface TourStep {
   /** `data-tour` value of the element to highlight; no target = centered card. */
@@ -27,6 +27,15 @@ export const TOURS: Record<TourId, TourStep[]> = {
     { target: 'add-component', title: 'More tools', text: 'Add any tool to this project whenever you need it. Right-click a tool to close it again.' },
     { target: 'project-look', title: 'Make it yours', text: 'Give this project its own accent color, background and wallpaper.' },
     { target: 'help', title: 'Need help?', text: 'Report a problem here, or press F1 for the user guide. Everything saves automatically, so just start creating.' },
+  ],
+  pixel: [
+    { title: 'Pixel Art in a minute', text: 'Every stroke lands on whole pixels, in exactly the colour you picked. Here is where everything is.' },
+    { target: 'px-tools', title: 'Tools', text: 'Pencil (B), eraser (E), line (L), shapes, fill (G), eyedropper (I) and more. Hover a tool to see what it does. Clean lines keeps 1 px lines tidy.' },
+    { target: 'px-palette', title: 'Colours', text: 'Click a swatch for the main colour, right-click for the second. Double-click a swatch to change it, and every pixel in that colour changes too. Ramp adds shades of a colour.' },
+    { target: 'px-canvas', title: 'Draw', text: 'Left button paints the main colour, right button the second. Ctrl+wheel zooms. Alt-click picks a colour from the picture.' },
+    { target: 'px-layers', title: 'Layers', text: 'Put outlines, colours and shading on their own layers. A reference layer is for tracing and never exported.' },
+    { target: 'px-timeline', title: 'Animate', text: 'Add or copy frames, give each a duration, and turn on Onion skin to see the frames around. Tags name a run of frames like walk or attack. Enter plays.' },
+    { target: 'px-files', title: 'Use it in your game', text: 'Export PNG, GIF, a sprite sheet or Godot SpriteFrames. Tilesets go straight to Level Layout. F1 has the full guide.' },
   ],
 }
 

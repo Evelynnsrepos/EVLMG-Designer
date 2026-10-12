@@ -253,7 +253,7 @@ export function Timeline(p: {
   const newTag = () => change((x) => ({ ...x, tags: [...x.tags, { id: newId(), name: `Tag ${x.tags.length + 1}`, from: p.frame, to: p.frame, color: TAG_COLORS[x.tags.length % TAG_COLORS.length], loop: 'forward' }] }))
 
   return (
-    <div className="px-timeline">
+    <div className="px-timeline" data-tour="px-timeline">
       <div className="px-timeline-bar">
         <button className="icon-btn" title={p.playing ? 'Stop' : 'Play'} aria-label={p.playing ? 'Stop' : 'Play'} onClick={p.togglePlay}>
           {p.playing ? <Pause size={15} /> : <Play size={15} />}
