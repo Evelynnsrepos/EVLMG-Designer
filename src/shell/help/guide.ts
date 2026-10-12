@@ -27,6 +27,38 @@ export const BASICS: Record<string, GuideTopic> = {
       'Single-letter keys only work in the tool you clicked last, so typing in one tool never triggers another. Inside a text field, keys type as usual.',
     ],
   },
+  pixel: {
+    title: 'Pixel art crash course',
+    body: [
+      'New to pixel art? Add the Pixel Art tool, pick Sprite and a small size: 16 × 16 or 32 × 32 is plenty for a character. Small canvases are faster to draw and easier to keep clean.',
+      '1. Pick a few colours first. The starter palette works, or load a ready-made one (Colours panel, Palette). Fewer colours make a cleaner picture; order each ramp from dark to light so the Shade brush can step through it.',
+      '2. Draw the outline with the pencil at size 1. Clean lines is on, so freehand lines lose the doubled corner pixels. Shift with the Line tool keeps clean angles.',
+      '3. Fill the shapes with Fill (G), then shade: the Shade brush (S) makes a pixel one palette step lighter (left click) or darker (right click). Dither (the slider) mixes two colours in a checker pattern for soft shading.',
+      '4. Animate: Copy the frame, change it a little, and turn on Onion skin to see the frames around it. Give each frame a duration, name runs of frames with Tags (idle, walk) and press Enter to play. Preview shows the loop while you draw.',
+      '5. Use it: Files exports a PNG (scaled up with sharp pixels), a GIF, a sprite sheet or Godot SpriteFrames. Or pick the file under Sprite on a character, enemy or item page to see it play there.',
+    ],
+    tips: ['Ctrl+wheel zooms, Alt-click picks a colour, X swaps the two colours, [ and ] change the pencil size.', 'Tracing a sketch? In Draw, Send to Pixel Art puts it here as a reference layer that is never exported.'],
+  },
+  sprites: {
+    title: 'Sprites across your project',
+    body: [
+      'A Pixel Art file can show up all over the project. On a character, enemy, town or item page, and on abilities and achievements, the Sprite box picks a Pixel Art file and the tag that plays (like idle). It then plays on the card and the page instead of the picture.',
+      'Pixel Art can also send things on: a frame or the map to the Moodboard, Design Language, Asset Pool or Storyboard; the whole animation to the Storyboard with its timing; and the palette to Design Language as colour swatches. From Draw, Send to Pixel Art turns a sketch into a tracing layer.',
+      'For the game itself, Files → Godot SpriteFrames saves the frames and one animation per tag into your Godot project (egd/sprites/), ready for an AnimatedSprite2D. Sprite sheets with JSON work for other engines.',
+      'Small textures (64 to 256 px) in Texture Paint show hard pixels on the model, for a pixel-art look in 3D.',
+    ],
+  },
+  levels: {
+    title: 'From tiles to a Godot level',
+    body: [
+      '1. Make the tiles: in Pixel Art pick Tileset and map, choose a tile size (8, 16 or 32 px) and draw the tiles on the grid. Already have a tileset picture? Add it in Level Layout instead. Have a finished map picture? Open a map picture rebuilds its tiles.',
+      '2. Paint a map right in Pixel Art (Tab switches to the map), or send the tileset to Level Layout: Files → Use in Level Layout puts it in the project\'s tile library and keeps it up to date as you draw. Every level in the project can use it.',
+      '3. In Level Layout, paint with the tiles on layers: ground below, fences and fountains above. Pick several tiles to paint them as a stamp, mirror or turn them, or use Random tiles for grass that does not repeat. Select and move shifts whole parts of the level.',
+      '4. Mark where nothing can walk: tick blocks movement on fence and wall tiles, or paint cells with the Blocked brush. Isometric levels use diamond cells for 32 × 16 tiles.',
+      '5. Godot scene saves the level into your Godot project (egd/levels/) as a TileMap with one layer per layer, collision on blocked tiles and a static body for hand-blocked cells. Open it in Godot and it is ready to walk around in.',
+    ],
+    tips: ['Tiles look blurry? Keep Sharp pixel art on in Settings.', 'Seams between tiles in the engine? Save the tileset with extruded edges (Pixel Art, Files) and set margin 1, spacing 2 there.'],
+  },
   workspace: {
     title: 'Workspace and Layout Mode',
     body: [
@@ -137,6 +169,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     body: [
       'Every item in your game in one table: image, rarity, value, stats and your own custom categories.',
       'Click New item to create one, then fill in its details. Each item shows which enemies drop it, taken from the Enemy List.',
+      'Sprite (on the page, under the picture) picks a Pixel Art file and the tag that plays; it plays on the card and the page instead of the picture',
     ],
     tips: ['Items can be linked with [[links]] and turned into a Wiki article with a live info box.'],
   },
@@ -145,6 +178,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     body: [
       'Characters with portraits, family, nation, clan, race and links to other characters.',
       'Relations are stored by reference, so renaming a character updates it everywhere.',
+      'Sprite (on the page, under the picture) picks a Pixel Art file and the tag that plays; it plays on the card and the page instead of the picture',
     ],
   },
   'town-list': {
@@ -152,6 +186,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     body: [
       'Towns with nation, race, religion and links.',
       'Cities you place in the Map Creator are towns from this list, so a town and its map city are always the same thing.',
+      'Sprite (on the page, under the picture) picks a Pixel Art file and the tag that plays; it plays on the card and the page instead of the picture',
     ],
   },
   'enemy-list': {
@@ -159,6 +194,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     body: [
       'Enemies with combat stats, growth per level, resistances, drop tables and where they are found.',
       'Drop tables point at items from the Item List. The Level and Resource Calculators can use your enemies directly.',
+      'Sprite (on the page, under the picture) picks a Pixel Art file and the tag that plays; it plays on the card and the page instead of the picture',
     ],
   },
   wiki: {
@@ -254,6 +290,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Animation and pages: turn on Animation to treat each top-level layer as a frame with onion skin and playback, or Pages for a sketchbook. Send frames or pages to the Storyboard.',
       'Time-lapse records your drawing as you go and can be replayed or exported as video. Import and export PSD (with layers), PNG, JPEG, TIFF, GIF and WebM, or use Send to… to put the picture on a Moodboard, a Design Language board or into the Asset Pool.',
       'Every drawing stays in the project. Wherever you can add a picture (an entry, the Writer, the Pitch Deck, the Storyboard and more), a window first shows your drawings to pick from; Choose a file… opens the file picker as before.',
+      'Send to → Pixel Art puts the drawing into the open Pixel Art file as a tracing layer, scaled to fit, to draw pixel art over it',
     ],
     tips: ['Space or the middle mouse button pans, the mouse wheel zooms, 0 fits the canvas into view.', 'Undo goes back 250 steps. Everything saves by itself a moment after you stop drawing.'],
   },
@@ -263,6 +300,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Pin down the look of your game: style references, color swatches, shapes and examples of what fits and what does not.',
       'It works exactly like a Moodboard: add images, cut them out, draw, write notes, and use layers.',
       'The brush button opens your drawings from the Draw tool; click one to place it as a sticker. Pictures sent from Draw land here too.',
+      'From Pixel Art, Files → Send the palette to Design Language adds the palette here as colour swatches',
     ],
   },
   'asset-pool': {
@@ -373,6 +411,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'List the abilities and spells of your game: type (attack, spell, heal, buff, passive, utility), element, range, cost, cooldown, cast time, a picture and who can use them.',
       'Give an ability its number with a formula from the library or one of your Damage Calculator presets, and change any input just for this ability. The page shows the value, the value per second (by cooldown or cast time) and per point of cost.',
       'Compare all in a table lists every ability side by side; click a column to sort, for example by damage per second, to spot the ones that are too strong.',
+      'Sprite picks an animated icon from a Pixel Art file (and the tag that plays); it shows instead of the picture',
     ],
   },
   crafting: {
@@ -438,6 +477,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'List your achievements with a type, a picture, what players see, how it unlocks, the reward and points. Progress achievements get a number of steps, like 100 slimes.',
       'Mark achievements as hidden until unlocked, and set how many players you expect to get each one, so you can balance easy and rare ones.',
       'The toolbar adds up the points and warns when you go over 1000, the usual budget for a full game on consoles.',
+      'Sprite picks an animated icon from a Pixel Art file (and the tag that plays); it shows instead of the picture',
     ],
   },
   names: {
@@ -549,6 +589,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     body: [
       'Plan cutscenes frame by frame. Each frame has a picture (a sketch, a screenshot, anything), a shot like wide or close-up, a camera move, how many seconds it lasts, what happens, the dialogue and the sound.',
       'Add, duplicate and reorder frames in the strip. Play animatic shows the frames one after another for their seconds with the dialogue as subtitles, so you can feel the timing of the scene.',
+      'From Pixel Art, Files → Send the animation to Storyboard adds every frame (or the picked tag) as frames here, with their timing',
     ],
   },
   'ui-flow': {
@@ -576,6 +617,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'The right side is a full Draw canvas: every brush, layers, blend modes, adjustment layers, selections and undo. A model that brings its own texture starts with it as a layer.',
       'UV layout adds the model’s UV layout as a locked guide layer that is left out of exports, so you can see where each part of the model sits on the texture.',
       'Export the texture like any drawing (PNG and more), or GLB to save the model with its painted texture, ready for Godot, Unity or Unreal.',
+      'Small textures (64, 128 or 256 px) are shown with hard pixels on the model, for pixel-art 3D',
     ],
   },
   reviews: {

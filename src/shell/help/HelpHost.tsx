@@ -1,4 +1,4 @@
-import { BookOpen, Bug, CircleHelp, Compass, ExternalLink, FolderGit2, Keyboard, LayoutPanelLeft, Link2, Palette, Puzzle, Rocket, Save, Search, ShieldCheck, SpellCheck, Users, Wrench, X, type LucideIcon } from 'lucide-react'
+import { BookOpen, Bug, Grid2x2, Map as MapIcon, Sparkles, CircleHelp, Compass, ExternalLink, FolderGit2, Keyboard, LayoutPanelLeft, Link2, Palette, Puzzle, Rocket, Save, Search, ShieldCheck, SpellCheck, Users, Wrench, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { allManifests } from '@/core/registry'
 import { isShortcut } from '@/core/shortcuts'
@@ -15,6 +15,9 @@ import './help.css'
 const BASIC_ICONS: Record<string, LucideIcon> = {
   start: Rocket,
   shortcuts: Keyboard,
+  pixel: Grid2x2,
+  sprites: Sparkles,
+  levels: MapIcon,
   workspace: LayoutPanelLeft,
   tools: Wrench,
   saving: Save,
