@@ -1,5 +1,7 @@
-import { ChevronDown, ChevronRight, Grid3x3, ImagePlus, PanelBottom, PictureInPicture2, RefreshCw, Search, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Grid2x2, Grid3x3, ImagePlus, PanelBottom, PictureInPicture2, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { postIntent } from '@/core/state'
+import { openComponent } from '@/shell/editor/actions'
 import type { TileImage } from './images'
 import { tileRect, type Stamp, type Tileset } from './model'
 
@@ -124,6 +126,9 @@ export function TilesetDock(p: Props) {
               </button>
               <button className="btn btn-ghost lv-btn" title="Swap in a new version of the picture; names, blocking tiles and painted levels stay" onClick={() => p.onReplace(current)}>
                 <RefreshCw size={14} /> Replace
+              </button>
+              <button className="btn btn-ghost lv-btn" title="Open this tileset in Pixel Art to draw its tiles; changes come back here" onClick={() => (postIntent('pixel-art', { action: 'edit-tileset', id: current.id }), openComponent('pixel-art'))}>
+                <Grid2x2 size={14} /> Edit in Pixel Art
               </button>
               <button className="icon-btn" title="Remove this tileset from the project" onClick={() => p.onRemove(current)}>
                 <Trash2 size={14} />

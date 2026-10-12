@@ -43,6 +43,26 @@ export const SHORTCUT_GROUPS = [
       { id: 'level.block', label: 'Blocked', keys: ['x'] },
     ],
   },
+  {
+    name: 'Pixel Art',
+    items: [
+      { id: 'pixel.pencil', label: 'Pencil', keys: ['b'] },
+      { id: 'pixel.eraser', label: 'Eraser', keys: ['e'] },
+      { id: 'pixel.line', label: 'Line', keys: ['l'] },
+      { id: 'pixel.rect', label: 'Rectangle', keys: ['u'] },
+      { id: 'pixel.ellipse', label: 'Ellipse', keys: ['o'] },
+      { id: 'pixel.fill', label: 'Fill', keys: ['g'] },
+      { id: 'pixel.picker', label: 'Eyedropper', keys: ['i'] },
+      { id: 'pixel.shade', label: 'Shade brush', keys: ['s'] },
+      { id: 'pixel.swap', label: 'Swap the two colours', keys: ['x'] },
+      { id: 'pixel.bigger', label: 'Bigger pencil', keys: [']'] },
+      { id: 'pixel.smaller', label: 'Smaller pencil', keys: ['['] },
+      { id: 'pixel.prev', label: 'Previous frame', keys: [','] },
+      { id: 'pixel.next', label: 'Next frame', keys: ['.'] },
+      { id: 'pixel.play', label: 'Play / stop', keys: ['enter'] },
+      { id: 'pixel.mode', label: 'Tiles / map (tilesets)', keys: ['tab'] },
+    ],
+  },
 ] as const
 
 export type ShortcutId = (typeof SHORTCUT_GROUPS)[number]['items'][number]['id']
