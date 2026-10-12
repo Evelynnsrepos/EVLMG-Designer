@@ -1,5 +1,5 @@
 import { newId, type Id } from '@/core/model'
-import type { Tileset, TileLibrary } from '@/shared/tileset'
+import { godotAlternative, type Tileset, type TileLibrary } from '@/shared/tileset'
 
 export { createLibrary, grid, guessTileSize, LIBRARY_ID, tileRect, type TileLibrary, type Tileset } from '@/shared/tileset'
 
@@ -60,10 +60,10 @@ export interface LevelDoc {
   art?: Record<string, string>
 }
 
-export const artKey = (set: Id, col: number, row: number) => `${set}:${col}:${row}`
+export const artKey = (set: Id, col: number, row: number, flags = 0) => `${set}:${col}:${row}${flags ? `:${flags}` : ''}`
 export const parseArt = (v: string) => {
-  const [set, col, row] = v.split(':')
-  return { set, col: Number(col), row: Number(row) }
+  const [set, col, row, flags] = v.split(':')
+  return { set, col: Number(col), row: Number(row), flags: Number(flags) || 0 }
 }
 
 export const createLevelDoc = (): LevelDoc => ({ width: 40, height: 28, tiles: {}, notes: [], layers: [newLayer('Ground')] })
@@ -231,7 +231,8 @@ export function godotScene(d: LevelDoc, sets: Tileset[], name: string, imagePath
       const a = parseArt(v)
       const s = source.get(a.set)
       if (s === undefined) continue
-      data.push(((y << 16) | (x & 0xffff)) | 0, (s | (a.col << 16)) | 0, a.row | 0)
+      // Mirrors and turns ride on the alternative tile number, as Godot's transform flags.
+      data.push(((y << 16) | (x & 0xffff)) | 0, (s | (a.col << 16)) | 0, (a.row | (godotAlternative(a.flags) << 16)) | 0)
     }
     lines.push(`layer_${n}/name = "${l.name.replace(/"/g, "'")}"`)
     if (l.hidden) lines.push(`layer_${n}/enabled = false`)

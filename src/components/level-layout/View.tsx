@@ -9,6 +9,7 @@ import { newId } from '@/core/model'
 import { formatCombo, isShortcut, keysOf } from '@/core/shortcuts'
 import { NumberInput, PresetHeader } from '@/shared/calculators'
 import { confirmDialog } from '@/shared/dialogs'
+import { drawTile } from '@/shared/tileset'
 import { useTilesetImages } from './images'
 import { ImportDialog, type ImportValues } from './ImportDialog'
 import {
@@ -126,7 +127,7 @@ export default function View({ documentId, active }: PanelProps) {
         const img = images[a.set]
         if (!t || !img) continue
         const r = tileRect(t, a.col, a.row)
-        ctx.drawImage(img, r.x, r.y, r.size, r.size, x * s, y * s, s, s)
+        drawTile(ctx, img, r.x, r.y, r.size, x * s, y * s, s, a.flags)
         painted.add(k)
       }
     }

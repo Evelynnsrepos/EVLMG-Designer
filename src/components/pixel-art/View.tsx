@@ -11,8 +11,8 @@ import { NumberInput, PresetHeader } from '@/shared/calculators'
 import { confirmDialog } from '@/shared/dialogs'
 import { pickFiles } from '@/shared/sketch/files/io'
 import { encodeGif } from '@/shared/sketch/files/gif'
-import { createLibrary, LIBRARY_ID, tileRect, type TileLibrary } from '@/shared/tileset'
-import { openComponent } from '@/shell/editor/actions'
+import { createLibrary, drawTile, FLIP_H, FLIP_V, LIBRARY_ID, tilePixel, tileRect, TRANSPOSE, turnFlags, type TileLibrary } from '@/shared/tileset'
+import { IMAGE_TARGETS, openComponent, sendImageTo } from '@/shell/editor/actions'
 import { readAse } from './ase'
 import { celImg, decode, encode, pngBytes, toCanvas, useDecoded } from '@/shared/pixel/codec'
 import { godotSpriteFrames, sheetCell, sheetColumns, sheetJson } from './exports'
@@ -298,6 +298,8 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const [mapMode, setMapMode] = useState(false)
   const [mapLayerId, setMapLayerId] = useState(d.map?.layers[0]?.id ?? '')
   const [stamp, setStamp] = useState({ col: 0, row: 0, w: 1, h: 1 })
+  // Mirrors and turn for placed tiles (FLIP_H, FLIP_V, TRANSPOSE bits).
+  const [tileFlags, setTileFlags] = useState(0)
   const [mapDraft, setMapDraft] = useState<Record<string, number> | null>(null)
   const [playing, setPlaying] = useState(false)
   const [playTag, setPlayTag] = useState<string | null>(null)
@@ -344,7 +346,8 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
         const cells = ml.id === mapLayer?.id && mapDraft ? mapDraft : ml.cells
         for (const [k, n] of Object.entries(cells)) {
           const [x, y] = k.split(',').map(Number)
-          g.drawImage(set, (n % cols) * ts, Math.floor(n / cols) * ts, ts, ts, x * ts, y * ts, ts, ts)
+          const t = tileOf(n)
+          drawTile(g, set, (t.n % cols) * ts, Math.floor(t.n / cols) * ts, ts, x * ts, y * ts, ts, t.flags)
         }
       }
     } else {
@@ -541,7 +544,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       height: d.map.height,
       tiles: {},
       notes: [],
-      layers: d.map.layers.map((ml) => ({ id: newId(), name: ml.name, ...(ml.visible ? {} : { hidden: true }), art: Object.fromEntries(Object.entries(ml.cells).map(([k, n]) => [k, `${id}:${n % cols}:${Math.floor(n / cols)}`])) })),
+      layers: d.map.layers.map((ml) => ({ id: newId(), name: ml.name, ...(ml.visible ? {} : { hidden: true }), art: Object.fromEntries(Object.entries(ml.cells).map(([k, v]) => [k, `${id}:${tileOf(v).n % cols}:${Math.floor(tileOf(v).n / cols)}${tileOf(v).flags ? `:${tileOf(v).flags}` : ''}`])) })),
     }
     await loadDocumentNow(root, 'level-layout', levelId, () => level)
     updateDocument(root, 'level-layout', levelId, (x) => x)
@@ -561,9 +564,11 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   /** Map pixel → tileset pixel under it (Draw pixels on the map edits the tile everywhere). */
   const mapToSet = (p: Pt): Pt | null => {
     const cell = `${Math.floor(p[0] / ts)},${Math.floor(p[1] / ts)}`
-    const n = mapLayer?.cells[cell]
-    if (n === undefined) return null
-    return [(n % cols) * ts + (((p[0] % ts) + ts) % ts), Math.floor(n / cols) * ts + (((p[1] % ts) + ts) % ts)]
+    const v = mapLayer?.cells[cell]
+    if (v === undefined) return null
+    const { n, flags } = tileOf(v)
+    const [sx, sy] = tilePixel(flags, ((p[0] % ts) + ts) % ts, ((p[1] % ts) + ts) % ts, ts)
+    return [(n % cols) * ts + sx, Math.floor(n / cols) * ts + sy]
   }
 
   /** Paint the whole stroke again from the layer's pixels before it started. */
@@ -598,8 +603,12 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
 
   const pick = (p: Pt, button: number) => {
     if (inMap) {
-      const n = mapLayer?.cells[`${p[0]},${p[1]}`]
-      if (n !== undefined) setStamp({ col: n % cols, row: Math.floor(n / cols), w: 1, h: 1 })
+      const v = mapLayer?.cells[`${p[0]},${p[1]}`]
+      if (v !== undefined) {
+        const { n, flags } = tileOf(v)
+        setStamp({ col: n % cols, row: Math.floor(n / cols), w: 1, h: 1 })
+        setTileFlags(flags)
+      }
       return setTool('tile')
     }
     const q = wrap(p)
@@ -619,7 +628,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       const cells = { ...mapLayer.cells }
       if (tool === 'tileFill') {
         const from = cells[`${p[0]},${p[1]}`]
-        const n = stamp.row * cols + stamp.col
+        const n = (stamp.row * cols + stamp.col) | (tileFlags << 16)
         const stack: Pt[] = [p]
         const seen = new Set<string>()
         while (stack.length) {
@@ -685,13 +694,22 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     const next = { ...cells }
     const w = tool === 'tile' ? stamp.w : 1
     const h = tool === 'tile' ? stamp.h : 1
-    for (let y = 0; y < h; y++)
-      for (let x = 0; x < w; x++) {
+    // A turned stamp swaps its width and height; each placed tile carries the same mirrors and turn.
+    const [W, H] = tileFlags & TRANSPOSE ? [h, w] : [w, h]
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
         const cx = p[0] + x
         const cy = p[1] + y
         if (cx < 0 || cy < 0 || cx >= d.map.width || cy >= d.map.height) continue
-        if (tool === 'tileErase' || erase) delete next[`${cx},${cy}`]
-        else next[`${cx},${cy}`] = (stamp.row + y) * cols + stamp.col + x
+        if (tool === 'tileErase' || erase) {
+          delete next[`${cx},${cy}`]
+          continue
+        }
+        let [sx, sy] = [x, y]
+        if (tileFlags & FLIP_V) sy = H - 1 - sy
+        if (tileFlags & FLIP_H) sx = W - 1 - sx
+        if (tileFlags & TRANSPOSE) [sx, sy] = [sy, sx]
+        next[`${cx},${cy}`] = ((stamp.row + sy) * cols + stamp.col + sx) | (tileFlags << 16)
       }
     return next
   }
@@ -865,11 +883,13 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     const img = blank(d.map.width * ts, d.map.height * ts)
     for (const ml of d.map.layers) {
       if (!ml.visible) continue
-      for (const [k, n] of Object.entries(ml.cells)) {
+      for (const [k, v] of Object.entries(ml.cells)) {
         const [mx, my] = k.split(',').map(Number)
+        const { n, flags } = tileOf(v)
         for (let y = 0; y < ts; y++)
           for (let x = 0; x < ts; x++) {
-            const c = getPx(set, (n % cols) * ts + x, Math.floor(n / cols) * ts + y)
+            const [sx, sy] = tilePixel(flags, x, y, ts)
+            const c = getPx(set, (n % cols) * ts + sx, Math.floor(n / cols) * ts + sy)
             if (c[3]) setPx(img, mx * ts + x, my * ts + y, c)
           }
       }
@@ -911,6 +931,24 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
             <t.icon size={16} />
           </button>
         ))}
+        {inMap && (
+          <>
+            <button className={`icon-btn${tileFlags & FLIP_H ? ' on' : ''}`} title="Place tiles mirrored left to right" onClick={() => setTileFlags(turnFlags(tileFlags, 'h'))}>
+              <FlipHorizontal2 size={15} />
+            </button>
+            <button className={`icon-btn${tileFlags & FLIP_V ? ' on' : ''}`} title="Place tiles mirrored upside down" onClick={() => setTileFlags(turnFlags(tileFlags, 'v'))}>
+              <FlipVertical2 size={15} />
+            </button>
+            <button className={`icon-btn${tileFlags & TRANSPOSE ? ' on' : ''}`} title="Turn placed tiles a quarter clockwise" onClick={() => setTileFlags(turnFlags(tileFlags, 'cw'))}>
+              <RotateCw size={15} />
+            </button>
+            {tileFlags !== 0 && (
+              <button className="btn btn-ghost" title="Place tiles as drawn" onClick={() => setTileFlags(0)}>
+                Reset
+              </button>
+            )}
+          </>
+        )}
         <span className="px-sep" />
         {!inMap && (
           <>
@@ -1000,6 +1038,11 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                 </>
               )}
               <button onClick={() => void importImage()}>Add a picture as a layer</button>
+              {IMAGE_TARGETS.map((t) => (
+                <button key={t.type} onClick={() => void pngBytes(inMap ? mapImg() : frameImg(fi), scale).then((b) => sendImageTo(t.type, new Blob([b as Uint8Array<ArrayBuffer>], { type: 'image/png' }), title))}>
+                  Send {inMap ? 'the map' : 'this frame'} to {t.label}
+                </button>
+              ))}
             </div>
           )}
         </span>
@@ -1205,3 +1248,6 @@ function edge(g: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y
   g.moveTo(x0, y0)
   g.lineTo(x1, y1)
 }
+
+/** A map cell: the tile number and its mirror/turn bits (stored above bit 16). */
+const tileOf = (v: number) => ({ n: v & 0xffff, flags: v >> 16 })
