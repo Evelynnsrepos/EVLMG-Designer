@@ -15,7 +15,8 @@ export interface TexturePaintDoc extends SketchDoc {
 export const createTexturePaintDoc = (): TexturePaintDoc => ({ ...createSketchDoc(2048, 2048), started: false, model: null, modelName: '' })
 
 export const MODEL_EXTENSIONS = ['glb', 'gltf', 'obj', 'fbx']
-export const TEXTURE_SIZES = [1024, 2048, 4096]
+/** Small sizes are for pixel-art textures, shown with hard pixels on the model (v0.16). */
+export const TEXTURE_SIZES = [64, 128, 256, 1024, 2048, 4096]
 
 /** glTF keeps UV (0,0) at the top left of the image; OBJ and FBX at the bottom left. */
 export const uvFlipped = (modelPath: string) => !/\.(glb|gltf)$/i.test(modelPath)

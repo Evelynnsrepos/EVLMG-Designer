@@ -5,6 +5,7 @@ import type { PanelProps } from '@/core/registry'
 import { useProjectStore, useUndoRedoKeys } from '@/core/state'
 import { NumberInput, useDamagePresets } from '@/shared/calculators'
 import { ImagePicker } from '@/shared/entityList'
+import { PixelSprite, SpritePicker } from '@/shared/pixel/PixelSprite'
 import { formatNumber, libraryFor } from '@/shared/formulas'
 import { Field, ListDetail, useItems } from '@/shared/listDetail'
 import { ProofTextarea } from '@/shared/spell'
@@ -114,7 +115,10 @@ function AbilityPage({
     <div className="ld-page">
       <div className="wide ld-inline">
         <div style={{ width: 72 }}>
-          <ImagePicker path={a.image} alt={a.name} onChange={(image) => edit({ image })} />
+          <>
+            {a.sprite ? <PixelSprite sprite={a.sprite} size={96} /> : <ImagePicker path={a.image} alt={a.name} onChange={(image) => edit({ image })} />}
+            <SpritePicker sprite={a.sprite} onChange={(sprite) => edit({ sprite })} />
+          </>
         </div>
         <input className="input" style={{ flex: 1, fontSize: 18, fontWeight: 600 }} value={a.name} onChange={(e) => edit({ name: e.target.value })} aria-label="Name" />
       </div>

@@ -72,9 +72,27 @@ export default function View({ documentId, active }: PanelProps) {
 
   // From Level Layout: "Edit in Pixel Art" opens a library tileset as a new tileset file.
   useIntentHandler('pixel-art', (intent) => {
-    if (intent.action !== 'edit-tileset' || typeof intent.id !== 'string' || !root) return
-    void editTileset(root, intent.id)
+    if (!root) return
+    if (intent.action === 'edit-tileset' && typeof intent.id === 'string') void editTileset(root, intent.id)
+    // A picture from Draw (or elsewhere) becomes a tracing layer, scaled down to fit the canvas.
+    if (intent.action === 'add-image' && typeof intent.path === 'string') void addReference(root, intent.path, typeof intent.name === 'string' ? intent.name : 'Reference')
   })
+  const addReference = async (root: string, path: string, name: string) => {
+    const src = await decode(await getFs().readBinary(await resolveAssetPath(root, path))).catch(() => null)
+    if (!src) return
+    const base = doc.data?.started ? doc.data : ({ ...createPixelDoc(), ...startDoc('sprite', 64, 64) } as PixelDoc)
+    const k = Math.min(base.width / src.width, base.height / src.height)
+    const c = document.createElement('canvas')
+    c.width = base.width
+    c.height = base.height
+    const g = c.getContext('2d')!
+    g.imageSmoothingQuality = 'high'
+    g.drawImage(toCanvas(src), (base.width - src.width * k) / 2, (base.height - src.height * k) / 2, src.width * k, src.height * k)
+    const data = g.getImageData(0, 0, c.width, c.height)
+    const layer = { ...newPixelLayer(name), reference: true, opacity: 0.6 }
+    const url = encode({ width: data.width, height: data.height, data: data.data })
+    doc.update(() => ({ ...base, layers: [layer, ...base.layers], cels: url ? { ...base.cels, [celKey(layer.id, base.frames[0].id)]: url } : base.cels }))
+  }
 
   if (!doc.data) return null
   if (!doc.data.started) return <Start onStart={(patch) => doc.update((x) => ({ ...x, ...patch }))} />
@@ -1454,7 +1472,10 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                 </>
               )}
               <button onClick={() => void importImage()}>Add a picture as a layer</button>
-              {IMAGE_TARGETS.map((t) => (
+              <button title="The palette as colour swatches on the Design Language board" onClick={() => void pngBytes(paletteStrip(d.palette), 1).then((b) => sendImageTo('design-language', new Blob([b as Uint8Array<ArrayBuffer>], { type: 'image/png' }), `${title} palette`))}>
+                Send the palette to Design Language
+              </button>
+              {IMAGE_TARGETS.filter((t) => t.type !== 'pixel-art').map((t) => (
                 <button key={t.type} onClick={() => void pngBytes(inMap ? mapImg() : frameImg(fi), scale).then((b) => sendImageTo(t.type, new Blob([b as Uint8Array<ArrayBuffer>], { type: 'image/png' }), title))}>
                   Send {inMap ? 'the map' : 'this frame'} to {t.label}
                 </button>
@@ -1759,4 +1780,16 @@ function tinted(img: Img, color: string): HTMLCanvasElement {
   g.fillStyle = color
   g.fillRect(0, 0, c.width, c.height)
   return c
+}
+
+/** The palette as a strip of 32 px swatches, 8 to a row. */
+function paletteStrip(palette: string[]): Img {
+  const n = Math.max(1, palette.length)
+  const cols = Math.min(8, n)
+  const img = blank(cols * 32, Math.ceil(n / cols) * 32)
+  palette.forEach((c, i) => {
+    const rgba = hexToRgba(c)
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) setPx(img, (i % cols) * 32 + x, Math.floor(i / cols) * 32 + y, rgba)
+  })
+  return img
 }

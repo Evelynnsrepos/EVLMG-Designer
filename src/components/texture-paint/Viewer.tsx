@@ -90,6 +90,12 @@ export function Viewer({ bytes, path, target, onOriginal, handleRef }: { bytes: 
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE }
     const texture = new THREE.CanvasTexture(live.current.target.texture())
     texture.colorSpace = THREE.SRGBColorSpace
+    // Pixel-art sized textures keep hard pixels on the model.
+    if (live.current.target.size.width <= 256) {
+      texture.magFilter = THREE.NearestFilter
+      texture.minFilter = THREE.NearestFilter
+      texture.generateMipmaps = false
+    }
     scene.current = { renderer, scene: s, camera, controls, texture, model: null }
 
     const size = () => {

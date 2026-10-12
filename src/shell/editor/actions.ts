@@ -115,6 +115,7 @@ export const IMAGE_TARGETS: { type: ComponentType; label: string }[] = [
   { type: 'design-language', label: 'Design Language' },
   { type: 'asset-pool', label: 'Asset Pool' },
   { type: 'storyboard', label: 'Storyboard' },
+  { type: 'pixel-art', label: 'Pixel Art (as a tracing layer)' },
 ]
 
 /**

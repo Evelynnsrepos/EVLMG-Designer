@@ -34,6 +34,8 @@ export interface Ability {
   /** Characters who can use it. */
   users: Id[]
   image: string | null
+  /** v0.16: an icon from Pixel Art (and the tag that plays), shown instead of the picture. */
+  sprite?: { doc: string; tag?: string } | null
 }
 
 export interface AbilitiesDoc {
