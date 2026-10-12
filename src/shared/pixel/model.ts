@@ -395,3 +395,56 @@ export function sliceSheet(img: Img, cw: number, ch: number): Img[] {
     }
   return out
 }
+
+/** One tile's pixels (tile n of a sheet `cols` tiles wide). */
+export function tilePixels(set: Img, n: number, cols: number, ts: number): Img {
+  const out = blank(ts, ts)
+  const [x0, y0] = [(n % cols) * ts, Math.floor(n / cols) * ts]
+  for (let y = 0; y < ts; y++) out.data.set(set.data.subarray(((y0 + y) * set.width + x0) * 4, ((y0 + y) * set.width + x0 + ts) * 4), y * ts * 4)
+  return out
+}
+export const sameImg = (a: Img, b: Img) => a.data.length === b.data.length && a.data.every((v, i) => v === b.data[i])
+export const emptyImg = (a: Img) => a.data.every((v, i) => i % 4 !== 3 || v === 0)
+
+/**
+ * A finished map picture cut into tiles: identical tiles kept once (empty ones left out),
+ * packed into a sheet `cols` tiles wide, and the map of which tile goes where.
+ */
+export function tilesFromMap(img: Img, ts: number, cols = 16) {
+  const w = Math.floor(img.width / ts)
+  const h = Math.floor(img.height / ts)
+  const tiles: Img[] = []
+  const cells: Record<string, number> = {}
+  const all = blank(w * ts, h * ts)
+  for (let y = 0; y < all.height; y++) all.data.set(img.data.subarray(y * img.width * 4, (y * img.width + all.width) * 4), y * all.width * 4)
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const t = tilePixels(all, y * w + x, w, ts)
+      if (emptyImg(t)) continue
+      let n = tiles.findIndex((o) => sameImg(o, t))
+      if (n < 0) n = tiles.push(t) - 1
+      cells[`${x},${y}`] = n
+    }
+  const c = Math.max(1, Math.min(cols, tiles.length))
+  const sheet = blank(c * ts, Math.max(1, Math.ceil(tiles.length / c)) * ts)
+  tiles.forEach((t, n) => {
+    for (let y = 0; y < ts; y++) sheet.data.set(t.data.subarray(y * ts * 4, (y + 1) * ts * 4), (((Math.floor(n / c) * ts + y) * sheet.width) + (n % c) * ts) * 4)
+  })
+  return { sheet, cells, width: w, height: h, count: tiles.length }
+}
+
+/** Each tile surrounded by a copy of its own edge pixels (1 px), so engines do not show seams between tiles. */
+export function extrude(set: Img, ts: number): Img {
+  const cols = Math.floor(set.width / ts)
+  const rows = Math.floor(set.height / ts)
+  const out = blank(cols * (ts + 2), rows * (ts + 2))
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      for (let y = -1; y <= ts; y++)
+        for (let x = -1; x <= ts; x++) {
+          const sx = c * ts + Math.max(0, Math.min(ts - 1, x))
+          const sy = r * ts + Math.max(0, Math.min(ts - 1, y))
+          setPx(out, c * (ts + 2) + 1 + x, r * (ts + 2) + 1 + y, getPx(set, sx, sy))
+        }
+  return out
+}

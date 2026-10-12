@@ -1,4 +1,4 @@
-import { Blend, Brush, Circle, Dices, Download, LassoSelect, Spline, SprayCan, Stamp, Eraser, FlipHorizontal2, FlipVertical2, Grid3x3, Lasso, Layers, Map as MapIcon, Move, PaintBucket, Pipette, RotateCcw, RotateCw, Slash, Square, SquareDashed, SunMoon, Upload, WandSparkles } from 'lucide-react'
+import { Blend, Brush, Sparkles, Circle, Dices, Download, LassoSelect, Spline, SprayCan, Stamp, Eraser, FlipHorizontal2, FlipVertical2, Grid3x3, Lasso, Layers, Map as MapIcon, Move, PaintBucket, Pipette, RotateCcw, RotateCw, Slash, Square, SquareDashed, SunMoon, Upload, WandSparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { importAssetFromBlob, resolveAssetPath } from '@/core/assets'
 import { saveBinaryFile, safeFileName } from '@/core/export'
@@ -46,6 +46,11 @@ import {
   startDoc,
   tagFrames,
   tileColumns,
+  tilePixels,
+  sameImg,
+  emptyImg,
+  tilesFromMap,
+  extrude,
   tileRows,
   type Img,
   type PixelDoc,
@@ -56,7 +61,7 @@ import { grayHex, grayscale, nearest, paletteOf, reduce, swapColors } from '@/sh
 import { bounds, combine, cut, flipImg, imgMask, lassoMask, maskImg, outline, paste, placeMask, rectMask, rotate90, wandMask, wrapShift, type Combine, type Mask } from './selection'
 import './pixel-art.css'
 
-type Tool = 'pencil' | 'eraser' | 'line' | 'curve' | 'rect' | 'ellipse' | 'fill' | 'lassofill' | 'gradient' | 'spray' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill' | 'tileRandom'
+type Tool = 'pencil' | 'eraser' | 'line' | 'curve' | 'rect' | 'ellipse' | 'fill' | 'lassofill' | 'gradient' | 'spray' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill' | 'tileRandom' | 'auto'
 type Pt = [number, number]
 
 /** Pixel Art (v0.16): sprites, animations, tilesets and tilemaps. */
@@ -120,6 +125,24 @@ function Start({ onStart }: { onStart(patch: Partial<PixelDoc>): void }) {
     if (!img) return setError('This file could not be read.')
     // A first guess: one row of square frames.
     setSheet({ img, cw: Math.min(img.width, img.height), ch: img.height })
+  }
+  const openMap = async () => {
+    const [f] = await pickFiles('Open a map picture', ['png', 'gif'])
+    if (!f) return
+    const img = await decode(f.bytes).catch(() => null)
+    if (!img) return setError('This file could not be read.')
+    const r = tilesFromMap(img, tile)
+    if (!r.count) return setError('No tiles found: the picture is empty or smaller than one tile.')
+    const layer = newPixelLayer('Tiles')
+    const frame = newFrame()
+    const url = encode(r.sheet)
+    onStart({
+      ...startDoc('tileset', r.sheet.width, r.sheet.height, tile),
+      layers: [layer],
+      frames: [frame],
+      cels: url ? { [celKey(layer.id, frame.id)]: url } : {},
+      map: { width: r.width, height: r.height, layers: [{ id: newId(), name: 'Map', visible: true, cells: r.cells }] },
+    })
   }
   const fromSheet = () => {
     if (!sheet) return
@@ -196,6 +219,9 @@ function Start({ onStart }: { onStart(patch: Partial<PixelDoc>): void }) {
       </button>
       <button className="btn" onClick={() => void openFile()}>
         <Upload size={14} /> Open a file (.ase, .aseprite, PNG)
+      </button>
+      <button className="btn" title="A finished map picture: cut into tiles (identical ones kept once) and rebuilt as a tileset with its map" onClick={() => void openMap()}>
+        <Upload size={14} /> Open a map picture (rebuild its tiles at {tile} px)
       </button>
       <button className="btn" onClick={() => void openSheet()}>
         <Upload size={14} /> Open a sprite sheet (cut into frames)
@@ -274,7 +300,9 @@ const MAP_TOOLS: { id: Tool; icon: typeof Brush; label: string }[] = [
   { id: 'tile', icon: Layers, label: 'Place tiles (drag over the tile picture to pick several)' },
   { id: 'tileErase', icon: Eraser, label: 'Remove tiles' },
   { id: 'tileFill', icon: PaintBucket, label: 'Fill with tiles' },
+  { id: 'tileRandom', icon: Dices, label: 'Random tiles: each cell gets one of the picked tiles (pick several, e.g. grass variants)' },
   { id: 'pencil', icon: Brush, label: 'Draw pixels: changes the tile everywhere it is used' },
+  { id: 'auto', icon: Sparkles, label: 'Draw new tiles: draw freely; changed cells become new tiles (identical ones are reused)' },
   { id: 'picker', icon: Pipette, label: 'Pick a tile from the map' },
 ]
 
@@ -316,6 +344,8 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const [stamp, setStamp] = useState({ col: 0, row: 0, w: 1, h: 1 })
   // Mirrors and turn for placed tiles (FLIP_H, FLIP_V, TRANSPOSE bits).
   const [tileFlags, setTileFlags] = useState(0)
+  // The tile last drawn on in the tiles view, shown repeated 3 × 3 to see its seams.
+  const [focusTile, setFocusTile] = useState<number | null>(null)
   const [mapDraft, setDraftState] = useState<Record<string, number> | null>(null)
   // Kept in a ref too: a quick click lets go before the state has re-rendered.
   const draft = useRef<Record<string, number> | null>(null)
@@ -371,6 +401,10 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       const set = toCanvas(frameImg(0))
       for (const ml of d.map.layers) {
         if (!ml.visible) continue
+        if (ml.id === mapLayer?.id && live.current?.key === 'map') {
+          g.drawImage(toCanvas(live.current.img), 0, 0)
+          continue
+        }
         const cells = ml.id === mapLayer?.id && mapDraft ? mapDraft : ml.cells
         for (const [k, n] of Object.entries(cells)) {
           const [x, y] = k.split(',').map(Number)
@@ -443,6 +477,33 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     if (showGrid && d.kind === 'tileset') {
       g.strokeStyle = 'rgba(77,171,247,0.6)'
       lines(g, ts)
+      const S = ts * s
+      if (!inMap && d.map) {
+        // Tile numbers, and unused tiles shaded so they are easy to spot.
+        const used = new Set(d.map.layers.flatMap((ml) => Object.values(ml.cells).map((v) => tileOf(v).n)))
+        for (let n = 0; n < cols * tileRows(d); n++) {
+          const [x, y] = [(n % cols) * S, Math.floor(n / cols) * S]
+          if (!used.has(n)) {
+            g.fillStyle = 'rgba(0,0,0,0.22)'
+            g.fillRect(x, y, S, S)
+          }
+          if (S >= 28) {
+            g.fillStyle = 'rgba(255,255,255,0.75)'
+            g.font = `${Math.max(9, Math.min(13, S / 5))}px sans-serif`
+            g.fillText(String(n), x + 3, y + Math.max(10, Math.min(14, S / 4)))
+          }
+        }
+      }
+      if (inMap && mapLayer && (tool === 'tile' || tool === 'tileFill')) {
+        // Every place the picked tile is used.
+        g.strokeStyle = 'rgba(255, 213, 79, 0.9)'
+        const n = stamp.row * cols + stamp.col
+        for (const [k, v] of Object.entries(mapLayer.cells)) {
+          if (tileOf(v).n !== n) continue
+          const [x, y] = k.split(',').map(Number)
+          g.strokeRect(x * S + 1.5, y * S + 1.5, S - 3, S - 3)
+        }
+      }
     }
     const shown = selecting.current?.preview ?? mask
     if (shown && !inMap) {
@@ -590,7 +651,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     const r = canvas.current!.getBoundingClientRect()
     const x = Math.floor(((e.clientX - r.left) / r.width) * canvas.current!.width)
     const y = Math.floor(((e.clientY - r.top) / r.height) * canvas.current!.height)
-    if (inMap) return tool === 'pencil' ? [x, y] : [Math.floor(x / ts), Math.floor(y / ts)]
+    if (inMap) return tool === 'pencil' || tool === 'auto' ? [x, y] : [Math.floor(x / ts), Math.floor(y / ts)]
     return seamless ? [x - d.width, y - d.height] : [x, y]
   }
   const wrap = (p: Pt): Pt => (seamless ? [((p[0] % d.width) + d.width) % d.width, ((p[1] % d.height) + d.height) % d.height] : p)
@@ -704,6 +765,94 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     }
   }
 
+  /** The current map layer as one picture (for drawing new tiles freely). */
+  const mapRaster = (cells: Record<string, number>) => {
+    const set = frameImg(0)
+    const img = blank(d.map!.width * ts, d.map!.height * ts)
+    for (const [k, v] of Object.entries(cells)) {
+      const [mx, my] = k.split(',').map(Number)
+      const { n, flags } = tileOf(v)
+      for (let y = 0; y < ts; y++)
+        for (let x = 0; x < ts; x++) {
+          const [sx, sy] = tilePixel(flags, x, y, ts)
+          setPx(img, mx * ts + x, my * ts + y, getPx(set, (n % cols) * ts + sx, Math.floor(n / cols) * ts + sy))
+        }
+    }
+    return img
+  }
+  /** Draw new tiles: the stroke on the layer picture (pencil, or eraser with the right button). */
+  const renderAuto = (l: Live) => {
+    const img = cloneImg(l.base)
+    const c: RGBA = l.button === 2 ? [0, 0, 0, 0] : hexToRgba(paintHex(colors[0]))
+    const brush = brushOffsets(size, round)
+    for (const [x, y] of clean && size === 1 ? cleanPath(l.path) : l.path) for (const [bx, by] of brush) if (ditherOn(x + bx, y + by, dither) || l.button === 2) setPx(img, x + bx, y + by, c)
+    l.img = img
+  }
+  /** Cells the stroke changed become tiles: an identical tile is reused, a new one goes into a free slot (the tileset grows when full). */
+  const commitAuto = (l: Live) => {
+    if (!d.map || !mapLayer) return
+    const set = cloneImg(frameImg(0))
+    let rows = tileRows(d)
+    const used = new Set(d.map.layers.flatMap((ml) => Object.values(ml.cells).map((v) => tileOf(v).n)))
+    const cells = { ...mapLayer.cells }
+    // The pixels written to the current layer of the tileset (frame 1).
+    const key = resolveKey(d.cels, celKey(layer.id, d.frames[0].id))
+    let layerImg = cloneImg(celImg(d.cels[key], d.width, d.height))
+    let height = d.height
+    for (let my = 0; my < d.map.height; my++)
+      for (let mx = 0; mx < d.map.width; mx++) {
+        const before = tilePixels(l.base, my * d.map.width + mx, d.map.width, ts)
+        const after = tilePixels(l.img, my * d.map.width + mx, d.map.width, ts)
+        if (sameImg(before, after)) continue
+        if (emptyImg(after)) {
+          delete cells[`${mx},${my}`]
+          continue
+        }
+        let n = -1
+        for (let i = 0; i < cols * rows && n < 0; i++) if (sameImg(tilePixels(set, i, cols, ts), after)) n = i
+        if (n < 0) {
+          for (let i = 0; i < cols * rows && n < 0; i++) if (!used.has(i) && emptyImg(tilePixels(set, i, cols, ts))) n = i
+          if (n < 0) {
+            // No free slot: one more row of tiles.
+            n = cols * rows
+            rows++
+            height += ts
+            const grown = blank(d.width, height)
+            grown.data.set(layerImg.data)
+            layerImg = grown
+            const s2 = blank(d.width, height)
+            s2.data.set(set.data)
+            set.data = s2.data
+            set.height = height
+          }
+          for (let y = 0; y < ts; y++)
+            for (let x = 0; x < ts; x++) {
+              const c = getPx(after, x, y)
+              setPx(layerImg, (n % cols) * ts + x, Math.floor(n / cols) * ts + y, c)
+              setPx(set, (n % cols) * ts + x, Math.floor(n / cols) * ts + y, c)
+            }
+          used.add(n)
+        }
+        cells[`${mx},${my}`] = n
+      }
+    const grow = height !== d.height
+    update((x) => {
+      const cels = { ...x.cels }
+      // A taller tileset: every other cel gets the new empty row too.
+      if (grow)
+        for (const [k, url] of Object.entries(x.cels)) {
+          if (isLink(url) || k === key) continue
+          const g2 = blank(x.width, height)
+          g2.data.set(celImg(url, x.width, x.height).data)
+          const e = encode(g2)
+          if (e) cels[k] = e
+        }
+      const url = encode(layerImg)
+      if (url) cels[key] = url
+      return { ...x, height, cels, map: x.map && { ...x.map, layers: x.map.layers.map((ml) => (ml.id === mapLayer.id ? { ...ml, cells } : ml)) } }
+    })
+  }
+
   const pick = (p: Pt, button: number) => {
     if (inMap) {
       const v = mapLayer?.cells[`${p[0]},${p[1]}`]
@@ -725,6 +874,14 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     if (e.button === 1) return
     const p = pos(e)
     if (tool === 'picker' || (e.altKey && !inMap)) return pick(p, e.button)
+    if (inMap && tool === 'auto') {
+      if (!mapLayer || !d.map) return
+      e.currentTarget.setPointerCapture(e.pointerId)
+      const base = mapRaster(mapLayer.cells)
+      live.current = { key: 'map', base, img: base, start: p, path: [p], button: e.button }
+      renderAuto(live.current)
+      return draw()
+    }
     if (inMap && tool !== 'pencil') {
       if (!mapLayer || !d.map) return
       e.currentTarget.setPointerCapture(e.pointerId)
@@ -759,6 +916,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       return
     }
     if (layer.locked || !layer.visible) return setNote(layer.locked ? 'This layer is locked.' : 'This layer is hidden.')
+    if (d.kind === 'tileset' && !inMap && p[0] >= 0 && p[1] >= 0 && p[0] < d.width && p[1] < d.height) setFocusTile(Math.floor(p[1] / ts) * cols + Math.floor(p[0] / ts))
     const frameId = inMap ? d.frames[0].id : d.frames[fi].id
     const key = resolveKey(d.cels, celKey(layer.id, frameId))
     const base = cloneImg(celImg(d.cels[key], d.width, d.height))
@@ -814,6 +972,10 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
           delete next[`${cx},${cy}`]
           continue
         }
+        if (tool === 'tileRandom') {
+          next[`${cx},${cy}`] = ((stamp.row + Math.floor(Math.random() * stamp.h)) * cols + stamp.col + Math.floor(Math.random() * stamp.w)) | (tileFlags << 16)
+          continue
+        }
         let [sx, sy] = [x, y]
         if (tileFlags & FLIP_V) sy = H - 1 - sy
         if (tileFlags & FLIP_H) sx = W - 1 - sx
@@ -842,6 +1004,12 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     if (l.float) {
       l.at = p
       dropFloat(l, p[0] - l.start[0], p[1] - l.start[1])
+      return draw()
+    }
+    if (l.key === 'map') {
+      const last = l.path[l.path.length - 1]
+      if (last[0] !== p[0] || last[1] !== p[1]) l.path.push(...line(last[0], last[1], p[0], p[1]).slice(1))
+      renderAuto(l)
       return draw()
     }
     if (tool === 'pencil' || tool === 'eraser' || tool === 'shade' || tool === 'lassofill') {
@@ -875,6 +1043,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     const l = live.current
     if (!l) return
     live.current = null
+    if (l.key === 'map') return commitAuto(l)
     if (tool === 'curve' && !l.ctrl) {
       // Keep the line on screen and wait for the drag that bends it.
       curve.current = { key: l.key, base: l.base, a: l.start, b: hover.current ?? l.start }
@@ -1042,6 +1211,18 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       }
     }
     return img
+  }
+  /** The map as tile numbers: CSV (the picked map layer, -1 = empty) or JSON (every layer, with mirror and turn bits). */
+  const exportMapData = async (kind: 'csv' | 'json') => {
+    if (!d.map) return
+    const grid = (cells: Record<string, number>) => Array.from({ length: d.map!.height }, (_, y) => Array.from({ length: d.map!.width }, (_, x) => cells[`${x},${y}`] ?? -1))
+    const text =
+      kind === 'csv'
+        ? grid(mapLayer?.cells ?? {})
+            .map((r) => r.map((v) => (v < 0 ? -1 : tileOf(v).n)).join(','))
+            .join('\n') + '\n'
+        : JSON.stringify({ width: d.map.width, height: d.map.height, tileSize: ts, tilesetColumns: cols, layers: d.map.layers.map((ml) => ({ name: ml.name, visible: ml.visible, tiles: grid(ml.cells).flat().map((v) => (v < 0 ? -1 : tileOf(v).n)), flags: grid(ml.cells).flat().map((v) => (v < 0 ? 0 : tileOf(v).flags)) })) }, null, 2)
+    await saveBinaryFile({ title: `Export the map as ${kind.toUpperCase()}`, defaultName: `${base}_map.${kind}`, bytes: new TextEncoder().encode(text), filter: { name: kind.toUpperCase(), extensions: [kind] } })
   }
   const importImage = async () => {
     const [f] = await pickFiles('Add a picture as a new layer', ['png', 'gif'])
@@ -1214,6 +1395,11 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                 <>
                   <button onClick={() => savePng(frameImg(0), `${base}_tiles.png`)}>Tileset PNG</button>
                   <button onClick={() => savePng(mapImg(), `${base}_map.png`)}>Map PNG</button>
+                  <button title="Each tile with a copy of its edge pixels around it, against seams in game engines (there: margin 1, spacing 2)" onClick={() => savePng(extrude(frameImg(0), ts), `${base}_tiles_extruded.png`)}>
+                    Tileset PNG, edges extruded
+                  </button>
+                  <button onClick={() => void exportMapData('csv')}>Map as CSV</button>
+                  <button onClick={() => void exportMapData('json')}>Map as JSON</button>
                   <button onClick={() => void pushTileset(true).then((id) => id && setNote('This tileset is in Level Layout now and stays up to date.'))}>Use in Level Layout</button>
                   <button onClick={() => void sendMap()}>Send the map to Level Layout</button>
                 </>
@@ -1260,6 +1446,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
               setVariant={setVariant}
             />
           )}
+          {d.kind === 'tileset' && !inMap && focusTile !== null && <TileRepeat tile={tilePixels(frameImg(0), focusTile, cols, ts)} n={focusTile} />}
           {preview && d.kind === 'sprite' && !inMap && (
             <Preview d={d} frameImg={frameImg} playTag={playTag} />
           )}
@@ -1475,4 +1662,25 @@ function bezier(a: Pt, c: Pt, b: Pt): Pt[] {
     prev = p
   }
   return out
+}
+
+/** A tile repeated 3 × 3, so its edges show whether it tiles without seams. */
+function TileRepeat({ tile, n }: { tile: Img; n: number }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const c = ref.current
+    if (!c) return
+    c.width = tile.width * 3
+    c.height = tile.height * 3
+    const g = c.getContext('2d')!
+    const t = toCanvas(tile)
+    for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) g.drawImage(t, x * tile.width, y * tile.height)
+  })
+  const k = Math.max(1, Math.floor(180 / (tile.width * 3)))
+  return (
+    <div className="px-panel">
+      <strong>Tile {n} repeated</strong>
+      <canvas ref={ref} className="px-preview" style={{ width: tile.width * 3 * k, height: tile.height * 3 * k }} />
+    </div>
+  )
 }

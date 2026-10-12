@@ -80,3 +80,17 @@ describe('layers and links', () => {
     expect(resolveKey({ 'L:f2': '@f1', 'L:f3': '@f2', 'L:f1': 'data:x' }, 'L:f3')).toBe('L:f1')
   })
 })
+
+describe('tiles from a map picture', () => {
+  it('keeps identical tiles once and extrudes edges', async () => {
+    const { tilesFromMap, extrude } = await import('./model')
+    const img = blank(6, 2)
+    for (const x of [0, 1, 4, 5]) for (const y of [0, 1]) setPx(img, x, y, [9, 9, 9, 255])
+    const r = tilesFromMap(img, 2)
+    expect(r.count).toBe(1)
+    expect(r.cells).toEqual({ '0,0': 0, '2,0': 0 })
+    const e = extrude(r.sheet, 2)
+    expect([e.width, e.height]).toEqual([4, 4])
+    expect(getPx(e, 0, 0)).toEqual([9, 9, 9, 255])
+  })
+})
