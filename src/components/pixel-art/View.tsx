@@ -6,7 +6,7 @@ import { getFs } from '@/core/fs'
 import { newId } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
 import { isShortcut } from '@/core/shortcuts'
-import { loadDocumentNow, updateDocument, useDocument, useIntentHandler, useProjectStore, isTextField, useUndoRedoKeys, type UseDocumentResult } from '@/core/state'
+import { loadDocumentNow, postIntent, updateDocument, useDocument, useIntentHandler, useProjectStore, isTextField, useUndoRedoKeys, type UseDocumentResult } from '@/core/state'
 import { NumberInput, PresetHeader } from '@/shared/calculators'
 import { confirmDialog } from '@/shared/dialogs'
 import { pickFiles } from '@/shared/sketch/files/io'
@@ -332,6 +332,9 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const [sym, setSym] = useState({ x: false, y: false })
   const [seamless, setSeamless] = useState(false)
   const [onion, setOnion] = useState(false)
+  // Onion skin: how many frames before and after, and red/blue tint for telling them apart.
+  const [onionCount, setOnionCount] = useState(1)
+  const [onionTint, setOnionTint] = useState(true)
   const [preview, setPreview] = useState(false)
   // Transforms change every frame of the layer, not only this one.
   const [allFrames, setAllFrames] = useState(false)
@@ -422,13 +425,15 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       c.height = d.height * reps
       g.clearRect(0, 0, c.width, c.height)
       const at = seamless ? [d.width, d.height] : [0, 0]
-      if (onion && d.frames.length > 1) {
-        g.globalAlpha = 0.28
-        if (fi > 0) g.drawImage(toCanvas(frameImg(fi - 1)), at[0], at[1])
-        g.globalAlpha = 0.16
-        if (fi < d.frames.length - 1) g.drawImage(toCanvas(frameImg(fi + 1)), at[0], at[1])
-        g.globalAlpha = 1
-      }
+      if (onion && d.frames.length > 1)
+        for (let k = onionCount; k >= 1; k--)
+          for (const dir of [-1, 1]) {
+            const j = fi + dir * k
+            if (j < 0 || j >= d.frames.length) continue
+            g.globalAlpha = (dir < 0 ? 0.32 : 0.2) / k
+            g.drawImage(onionTint ? tinted(frameImg(j), dir < 0 ? '#e03131' : '#1c7ed6') : toCanvas(frameImg(j)), at[0], at[1])
+            g.globalAlpha = 1
+          }
       const v = d.variants?.find((x) => x.id === variant)
       const ref = refImg(fi)
       if (ref) {
@@ -1242,6 +1247,17 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
         : JSON.stringify({ width: d.map.width, height: d.map.height, tileSize: ts, tilesetColumns: cols, layers: d.map.layers.map((ml) => ({ name: ml.name, visible: ml.visible, tiles: grid(ml.cells).flat().map((v) => (v < 0 ? -1 : tileOf(v).n)), flags: grid(ml.cells).flat().map((v) => (v < 0 ? 0 : tileOf(v).flags)) })) }, null, 2)
     await saveBinaryFile({ title: `Export the map as ${kind.toUpperCase()}`, defaultName: `${base}_map.${kind}`, bytes: new TextEncoder().encode(text), filter: { name: kind.toUpperCase(), extensions: [kind] } })
   }
+  const toStoryboard = async () => {
+    if (!root) return
+    const order = tagFrames(d.tags.find((t) => t.id === playTag) ?? null, d.frames.length)
+    const frames: { path: string; name: string; seconds: number }[] = []
+    for (const i of order) {
+      const asset = await importAssetFromBlob(root, new Blob([(await pngBytes(frameImg(i), Math.max(scale, 4))) as Uint8Array<ArrayBuffer>], { type: 'image/png' }), 'image', `${base}_${i + 1}.png`)
+      if (asset) frames.push({ path: asset.path, name: `${title} ${i + 1}`, seconds: d.frames[i].duration / 1000 })
+    }
+    postIntent('storyboard', { action: 'add-frames', frames })
+    openComponent('storyboard')
+  }
   const importImage = async () => {
     const [f] = await pickFiles('Add a picture as a new layer', ['png', 'gif'])
     if (!f) return
@@ -1360,6 +1376,18 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                 <input type="checkbox" checked={onion} onChange={(e) => setOnion(e.target.checked)} /> Onion skin
               </label>
             )}
+            {d.kind === 'sprite' && onion && (
+              <label className="px-row" title="How many frames before and after; tinted: earlier frames red, later ones blue">
+                <select className="input" value={onionCount} onChange={(e) => setOnionCount(Number(e.target.value))}>
+                  {[1, 2, 3, 4].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                <input type="checkbox" checked={onionTint} onChange={(e) => setOnionTint(e.target.checked)} /> tint
+              </label>
+            )}
             {d.kind === 'sprite' && (
               <label className="px-row" title="Preview window: the animation loops next to the palette while you draw">
                 <input type="checkbox" checked={preview} onChange={(e) => setPreview(e.target.checked)} /> Preview
@@ -1408,6 +1436,9 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                   <button onClick={() => void exportGif()}>GIF animation{playTag ? ' (the picked tag)' : ''}</button>
                   <button onClick={() => void exportSheet()}>Sprite sheet + JSON</button>
                   <button onClick={() => void exportGodot()}>Godot SpriteFrames</button>
+                  <button title="Every frame (or the picked tag) as Storyboard frames, with their timing" onClick={() => void toStoryboard()}>
+                    Send the animation to Storyboard
+                  </button>
                 </>
               ) : (
                 <>
@@ -1718,4 +1749,14 @@ function TileRepeat({ tile, n }: { tile: Img; n: number }) {
       <canvas ref={ref} className="px-preview" style={{ width: tile.width * 3 * k, height: tile.height * 3 * k }} />
     </div>
   )
+}
+
+/** A frame in one flat colour, for a tinted onion skin. */
+function tinted(img: Img, color: string): HTMLCanvasElement {
+  const c = toCanvas(img)
+  const g = c.getContext('2d')!
+  g.globalCompositeOperation = 'source-atop'
+  g.fillStyle = color
+  g.fillRect(0, 0, c.width, c.height)
+  return c
 }

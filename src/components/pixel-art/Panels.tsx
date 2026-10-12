@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, Link2, Lock, Pause, Play, Plus, Tag, Trash2, Unlink, Unlock, Wand2 } from 'lucide-react'
+import { ArrowDown, ArrowLeftRight, ArrowUp, Copy, Eye, EyeOff, Link2, Lock, Pause, Play, Plus, Tag, Trash2, Unlink, Unlock, Wand2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { newId } from '@/core/model'
 import { toCanvas } from '@/shared/pixel/codec'
@@ -206,23 +206,39 @@ export function Timeline(p: {
       return { ...x, cels }
     })
   const linked = d.layers.some((l) => d.cels[`${l.id}:${d.frames[p.frame].id}`]?.startsWith('@'))
+  // Shift-click picks a run of frames: delete, duration and reverse then work on all of them.
+  const [range, setRange] = useState<[number, number] | null>(null)
+  const picked = range ? [Math.min(...range), Math.max(...range)] : [p.frame, p.frame]
+  const inPick = (i: number) => i >= picked[0] && i <= picked[1]
   const remove = () => {
-    const gone = d.frames[p.frame].id
-    change((x) => ({
-      ...x,
-      frames: x.frames.filter((f) => f.id !== gone),
-      // Frames linked to the one that goes keep its pixels.
-      cels: Object.fromEntries(
-        Object.entries(x.cels)
-          .filter(([k]) => !k.endsWith(`:${gone}`))
-          .map(([k, v]) => [k, v === `@${gone}` ? x.cels[resolveKey(x.cels, `${k.slice(0, k.indexOf(':'))}:${gone}`)] : v]),
-      ),
-      tags: x.tags
-        .map((t) => ({ ...t, from: t.from > p.frame ? t.from - 1 : t.from, to: t.to >= p.frame ? t.to - 1 : t.to }))
-        .filter((t) => t.to >= t.from),
-    }))
-    p.setFrame(Math.max(0, p.frame - 1))
+    const gone = new Set(d.frames.filter((_, i) => inPick(i)).map((f) => f.id))
+    if (gone.size >= d.frames.length) return
+    change((x) => {
+      const kept = x.frames.map((f, i) => [f, i] as const).filter(([f]) => !gone.has(f.id))
+      const cels: Record<string, string> = {}
+      for (const [k, v] of Object.entries(x.cels)) {
+        if (gone.has(k.slice(k.indexOf(':') + 1))) continue
+        // Frames linked to one that goes keep its pixels.
+        cels[k] = v.startsWith('@') && gone.has(v.slice(1)) ? x.cels[resolveKey(x.cels, `${k.slice(0, k.indexOf(':'))}:${v.slice(1)}`)] : v
+      }
+      const at = (old: number) => kept.findIndex(([, i]) => i >= old)
+      const tags = x.tags
+        .map((t) => {
+          const inside = kept.filter(([, i]) => i >= t.from && i <= t.to)
+          return inside.length ? { ...t, from: at(inside[0][1]), to: at(inside[inside.length - 1][1]) } : null
+        })
+        .filter((t): t is PixelTag => !!t)
+      return { ...x, frames: kept.map(([f]) => f), cels, tags }
+    })
+    setRange(null)
+    p.setFrame(Math.max(0, picked[0] - 1))
   }
+  /** The picked frames (or all of them) in reverse order. */
+  const reverse = () =>
+    change((x) => {
+      const [a, b] = range ? picked : [0, x.frames.length - 1]
+      return { ...x, frames: [...x.frames.slice(0, a), ...x.frames.slice(a, b + 1).reverse(), ...x.frames.slice(b + 1)] }
+    })
   const move = (by: number) => {
     const j = p.frame + by
     if (j < 0 || j >= d.frames.length) return
@@ -270,7 +286,10 @@ export function Timeline(p: {
         <button className="icon-btn" title="Move frame right" onClick={() => move(1)}>
           →
         </button>
-        <button className="icon-btn" title="Delete frame" disabled={d.frames.length < 2} onClick={remove}>
+        <button className="btn btn-ghost" title={range ? 'Reverse the picked frames' : 'Reverse all frames'} onClick={reverse}>
+          <ArrowLeftRight size={13} /> Reverse
+        </button>
+        <button className="icon-btn" title={range ? 'Delete the picked frames' : 'Delete frame'} disabled={d.frames.length < 2} onClick={remove}>
           <Trash2 size={13} />
         </button>
         <label className="px-row" title="How long this frame shows">
@@ -280,7 +299,7 @@ export function Timeline(p: {
             min={10}
             max={10000}
             value={d.frames[p.frame].duration}
-            onChange={(e) => change((x) => ({ ...x, frames: x.frames.map((f, i) => (i === p.frame ? { ...f, duration: Math.max(10, Math.round(Number(e.target.value) || 100)) } : f)) }))}
+            onChange={(e) => change((x) => ({ ...x, frames: x.frames.map((f, i) => (inPick(i) ? { ...f, duration: Math.max(10, Math.round(Number(e.target.value) || 100)) } : f)) }))}
           />
           ms ({Math.round(1000 / d.frames[p.frame].duration)} fps)
         </label>
@@ -290,7 +309,16 @@ export function Timeline(p: {
       </div>
       <div className="px-frames">
         {d.frames.map((f, i) => (
-          <button key={f.id} className={`px-frame${i === p.frame ? ' on' : ''}`} onClick={() => p.setFrame(i)} title={`Frame ${i + 1}`}>
+          <button
+            key={f.id}
+            className={`px-frame${i === p.frame ? ' on' : ''}${range && inPick(i) ? ' picked' : ''}`}
+            onClick={(e) => {
+              if (e.shiftKey) return setRange([p.frame, i])
+              setRange(null)
+              p.setFrame(i)
+            }}
+            title={`Frame ${i + 1} (Shift-click to pick several)`}
+          >
             <Thumb img={p.frameImg(i)} />
             {d.layers.some((l) => d.cels[`${l.id}:${f.id}`]?.startsWith('@')) && <Link2 size={10} className="px-linkmark" />}
             <span>
