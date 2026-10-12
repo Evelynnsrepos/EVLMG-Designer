@@ -345,3 +345,21 @@ export function tagFrames(tag: Pick<PixelTag, 'from' | 'to' | 'loop'> | null, co
   if (tag?.loop === 'pingpong') return [...fwd, ...fwd.slice(1, -1).reverse()]
   return fwd
 }
+
+/** A sprite sheet cut into frames of cw × ch, left to right and top to bottom; empty cells are skipped. */
+export function sliceSheet(img: Img, cw: number, ch: number): Img[] {
+  const out: Img[] = []
+  for (let y0 = 0; y0 + ch <= img.height; y0 += ch)
+    for (let x0 = 0; x0 + cw <= img.width; x0 += cw) {
+      const f = blank(cw, ch)
+      let any = false
+      for (let y = 0; y < ch; y++)
+        for (let x = 0; x < cw; x++) {
+          const c = getPx(img, x0 + x, y0 + y)
+          if (c[3]) any = true
+          setPx(f, x, y, c)
+        }
+      if (any) out.push(f)
+    }
+  return out
+}

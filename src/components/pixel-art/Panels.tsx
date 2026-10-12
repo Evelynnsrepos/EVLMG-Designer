@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, Lock, Pause, Play, Plus, Tag, Tr
 import { useEffect, useRef, useState } from 'react'
 import { newId } from '@/core/model'
 import { toCanvas } from './codec'
-import { ramp, type Img, type LoopMode, type PixelDoc, type PixelTag } from './model'
+import { ramp, tagFrames, type Img, type LoopMode, type PixelDoc, type PixelTag } from './model'
 
 type Update = (fn: (d: PixelDoc) => PixelDoc) => void
 
@@ -283,4 +283,40 @@ function Thumb({ img }: { img: Img }) {
     c.getContext('2d')!.drawImage(toCanvas(img), 0, 0)
   }, [img])
   return <canvas ref={ref} className="px-thumb" />
+}
+
+/** Preview window: the animation (or the picked tag) loops here at 1×, 2× or 4× while you draw. */
+export function Preview({ d, frameImg, playTag }: { d: PixelDoc; frameImg(i: number): Img; playTag: string | null }) {
+  const [scale, setScale] = useState(2)
+  const [i, setI] = useState(0)
+  const order = tagFrames(d.tags.find((t) => t.id === playTag) ?? null, d.frames.length)
+  const frame = order[i % order.length] ?? 0
+  useEffect(() => {
+    const t = setTimeout(() => setI((n) => (n + 1) % Math.max(1, order.length)), d.frames[frame]?.duration ?? 100)
+    return () => clearTimeout(t)
+  }, [i, frame, order.length, d.frames])
+  const ref = useRef<HTMLCanvasElement>(null)
+  const img = frameImg(frame)
+  useEffect(() => {
+    const c = ref.current
+    if (!c) return
+    c.width = img.width
+    c.height = img.height
+    c.getContext('2d')!.drawImage(toCanvas(img), 0, 0)
+  })
+  return (
+    <div className="px-panel">
+      <strong className="px-head">
+        Preview
+        <span className="px-row">
+          {[1, 2, 4].map((s) => (
+            <button key={s} className={`btn btn-ghost${s === scale ? ' on' : ''}`} onClick={() => setScale(s)}>
+              {s}×
+            </button>
+          ))}
+        </span>
+      </strong>
+      <canvas ref={ref} className="px-preview" style={{ width: d.width * scale, height: d.height * scale }} />
+    </div>
+  )
 }

@@ -309,3 +309,18 @@
 .px-wrap {
   flex-wrap: wrap;
 }
+.px-preview {
+  max-width: 100%;
+  image-rendering: pixelated;
+  background: repeating-conic-gradient(rgba(127, 127, 127, 0.25) 0 25%, rgba(127, 127, 127, 0.08) 0 50%) 0 0 / 8px 8px;
+}
+.px-panel .btn.on {
+  color: var(--accent);
+}
+.px-sheet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}

@@ -40,6 +40,7 @@ import {
   rgbaToHex,
   setPx,
   shadeStep,
+  sliceSheet,
   startDoc,
   tagFrames,
   tileColumns,
@@ -47,7 +48,7 @@ import {
   type Img,
   type PixelDoc,
 } from './model'
-import { LayersPanel, PalettePanel, Timeline } from './Panels'
+import { LayersPanel, PalettePanel, Preview, Timeline } from './Panels'
 import { bounds, combine, cut, flipImg, imgMask, lassoMask, maskImg, outline, paste, placeMask, rectMask, rotate90, wandMask, wrapShift, type Combine, type Mask } from './selection'
 import './pixel-art.css'
 
@@ -105,7 +106,29 @@ function Start({ onStart }: { onStart(patch: Partial<PixelDoc>): void }) {
   const [across, setAcross] = useState(8)
   const [down, setDown] = useState(8)
   const [error, setError] = useState<string | null>(null)
+  const [sheet, setSheet] = useState<{ img: Img; cw: number; ch: number } | null>(null)
   const clamp = (v: number) => Math.max(1, Math.min(1024, Math.round(v) || 1))
+
+  const openSheet = async () => {
+    const [f] = await pickFiles('Open a sprite sheet', ['png', 'gif'])
+    if (!f) return
+    const img = await decode(f.bytes).catch(() => null)
+    if (!img) return setError('This file could not be read.')
+    // A first guess: one row of square frames.
+    setSheet({ img, cw: Math.min(img.width, img.height), ch: img.height })
+  }
+  const fromSheet = () => {
+    if (!sheet) return
+    const frames = sliceSheet(sheet.img, sheet.cw, sheet.ch)
+    const layer = newPixelLayer('Layer 1')
+    const fs = frames.map(() => newFrame())
+    const cels: Record<string, string> = {}
+    frames.forEach((img, i) => {
+      const url = encode(img)
+      if (url) cels[celKey(layer.id, fs[i].id)] = url
+    })
+    onStart({ ...startDoc('sprite', sheet.cw, sheet.ch), layers: [layer], frames: fs.length ? fs : [newFrame()], cels })
+  }
 
   const openFile = async () => {
     const [f] = await pickFiles('Open pixel art', ['ase', 'aseprite', 'png', 'gif'])
@@ -170,6 +193,23 @@ function Start({ onStart }: { onStart(patch: Partial<PixelDoc>): void }) {
       <button className="btn" onClick={() => void openFile()}>
         <Upload size={14} /> Open a file (.ase, .aseprite, PNG)
       </button>
+      <button className="btn" onClick={() => void openSheet()}>
+        <Upload size={14} /> Open a sprite sheet (cut into frames)
+      </button>
+      {sheet && (
+        <div className="px-sheet">
+          <label className="ld-inline" title="Size of one frame in the sheet">
+            Frame <NumberInput value={sheet.cw} min={1} max={sheet.img.width} onChange={(v) => setSheet({ ...sheet, cw: clamp(v) })} /> ×
+            <NumberInput value={sheet.ch} min={1} max={sheet.img.height} onChange={(v) => setSheet({ ...sheet, ch: clamp(v) })} /> px
+          </label>
+          <span className="muted">
+            {sliceSheet(sheet.img, sheet.cw, sheet.ch).length} frames from a {sheet.img.width} × {sheet.img.height} px sheet
+          </span>
+          <button className="btn btn-primary" onClick={fromSheet}>
+            Make the frames
+          </button>
+        </div>
+      )}
       {error && <p className="settings-error">{error}</p>}
     </div>
   )
@@ -250,6 +290,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const [sym, setSym] = useState({ x: false, y: false })
   const [seamless, setSeamless] = useState(false)
   const [onion, setOnion] = useState(false)
+  const [preview, setPreview] = useState(false)
   const [showGrid, setShowGrid] = useState(true)
   const [zoom, setZoom] = useState(() => Math.max(1, Math.min(32, Math.floor(480 / Math.max(d.width, d.height)))))
   const [layerId, setLayerId] = useState(d.layers[d.layers.length - 1].id)
@@ -909,6 +950,11 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                 <input type="checkbox" checked={onion} onChange={(e) => setOnion(e.target.checked)} /> Onion skin
               </label>
             )}
+            {d.kind === 'sprite' && (
+              <label className="px-row" title="Preview window: the animation loops next to the palette while you draw">
+                <input type="checkbox" checked={preview} onChange={(e) => setPreview(e.target.checked)} /> Preview
+              </label>
+            )}
           </>
         )}
         <button className={`icon-btn${showGrid ? ' on' : ''}`} title="Grid" onClick={() => setShowGrid(!showGrid)}>
@@ -978,6 +1024,9 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
               onImport={() => void importPalette()}
               onExport={() => void saveBinaryFile({ title: 'Save palette', defaultName: `${base}.gpl`, bytes: new TextEncoder().encode(paletteToGpl(title, d.palette)), filter: { name: 'GIMP palette', extensions: ['gpl'] } })}
             />
+          )}
+          {preview && d.kind === 'sprite' && !inMap && (
+            <Preview d={d} frameImg={frameImg} playTag={playTag} />
           )}
         </aside>
         <div className="px-stage">

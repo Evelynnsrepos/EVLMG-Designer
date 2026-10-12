@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { godotSpriteFrames, sheetJson } from './exports'
+import { sliceSheet } from './model'
 import { blank, brushOffsets, cleanPath, composite, ellipsePoints, floodPoints, getPx, line, parsePalette, ramp, rectPoints, setPx, shadeStep, tagFrames } from './model'
 
 describe('pixel art drawing', () => {
@@ -72,5 +73,16 @@ describe('pixel art exports', () => {
     expect(t).toContain('"name": &"walk"')
     expect(t).toContain('"duration": 0.250')
     expect(t.match(/AtlasTexture_1"\)/g)).toHaveLength(2)
+  })
+})
+
+describe('sprite sheet import', () => {
+  it('cuts a sheet into frames and skips empty cells', () => {
+    const img = blank(6, 2)
+    setPx(img, 0, 0, [1, 2, 3, 255])
+    setPx(img, 5, 1, [4, 5, 6, 255])
+    const frames = sliceSheet(img, 2, 2)
+    expect(frames).toHaveLength(2)
+    expect(getPx(frames[1], 1, 1)).toEqual([4, 5, 6, 255])
   })
 })
