@@ -1,4 +1,4 @@
-import { tagFrames, type PixelDoc } from './model'
+import { tagFrames, type PixelDoc } from '@/shared/pixel/model'
 
 /** Sprite sheet layout: frames left to right in rows of `columns`. */
 export const sheetCell = (i: number, columns: number, w: number, h: number) => ({ x: (i % columns) * w, y: Math.floor(i / columns) * h })

@@ -1,8 +1,8 @@
 import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, Lock, Pause, Play, Plus, Tag, Trash2, Unlock, Wand2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { newId } from '@/core/model'
-import { toCanvas } from './codec'
-import { ramp, tagFrames, type Img, type LoopMode, type PixelDoc, type PixelTag } from './model'
+import { toCanvas } from '@/shared/pixel/codec'
+import { ramp, tagFrames, type Img, type LoopMode, type PixelDoc, type PixelTag } from '@/shared/pixel/model'
 
 type Update = (fn: (d: PixelDoc) => PixelDoc) => void
 

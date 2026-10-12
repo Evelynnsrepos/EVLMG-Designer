@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type Mou
 import { categoryAppliesTo, type Category, type EntityBase, type EntityOf, type EntityType, type Id, type StatBlock } from '@/core/model'
 import { useProjectStore } from '@/core/state'
 import { AssetImage } from '@/shared/AssetImage'
+import { PixelSprite } from '@/shared/pixel/PixelSprite'
 import {
   CategoryManager,
   CategoryValueInput,
@@ -537,7 +538,7 @@ function Grid<T extends EntityType>({ type, text, entities, selected, focusId, o
               onClick={(e) => e.stopPropagation()}
               onChange={() => onToggle(entity.id)}
             />
-            <AssetImage path={entity.image} alt={entity.name} size={72} />
+            {entity.sprite ? <PixelSprite sprite={entity.sprite} size={72} /> : <AssetImage path={entity.image} alt={entity.name} size={72} />}
             <div className="elist-card-name" title={entity.name} style={look ? { color: look.style.color } : undefined}>
               {entity.name || untitled(text)}
             </div>
@@ -641,7 +642,7 @@ function Table<T extends EntityType>({
                   />
                 </td>
                 <td className="elist-col-image">
-                  <AssetImage path={entity.image} alt={entity.name} size={26} />
+                  {entity.sprite ? <PixelSprite sprite={entity.sprite} size={26} animate={false} /> : <AssetImage path={entity.image} alt={entity.name} size={26} />}
                 </td>
                 <td className="elist-col-name">
                   <TableName categories={categories} type={type} entity={entity} label={entity.name || untitled(text)} onClick={(e) => onSelect(entity.id, e)} />

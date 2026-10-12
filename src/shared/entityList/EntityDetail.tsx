@@ -4,6 +4,7 @@ import { dragHasFiles, importAssetsFromDataTransfer, pickAndImportAssets } from 
 import { newId, type Entity, type EntityLink, type EntityOf, type EntityType, type Id, type StatBlock } from '@/core/model'
 import { useProjectStore } from '@/core/state'
 import { AssetImage } from '@/shared/AssetImage'
+import { PixelSprite, SpritePicker } from '@/shared/pixel/PixelSprite'
 import { CategoryFields, NumberInput } from '@/shared/categories'
 import { ReviewButton } from '@/shared/reviews'
 import type { EntityActions } from './actions'
@@ -92,7 +93,8 @@ export function DetailFrame<T extends EntityType>({ type, entity, actions, ctx, 
 
       <div className="elist-detail-head">
         <div className="elist-detail-frame" style={frameStyle(look?.style)}>
-          <ImagePicker path={entity.image} alt={entity.name} onChange={(image) => update({ image })} />
+          {entity.sprite ? <PixelSprite sprite={entity.sprite} size={120} /> : <ImagePicker path={entity.image} alt={entity.name} onChange={(image) => update({ image })} />}
+          <SpritePicker sprite={entity.sprite} onChange={(sprite) => update({ sprite })} />
         </div>
         <div className="elist-detail-name">
           <label className="elist-label" htmlFor={`elist-name-${entity.id}`}>

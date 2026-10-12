@@ -1,4 +1,5 @@
 import { ArrowDownAZ, ArrowUpZA, LayoutGrid, Package, Plus, Redo2, Search, Table2, Tags, Trash2, Undo2, X } from 'lucide-react'
+import { PixelSprite } from '@/shared/pixel/PixelSprite'
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { categoryAppliesTo, type Id, type Item } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
@@ -470,7 +471,7 @@ function ItemGrid({ items, selected, focusId, onSelect, onToggle }: ListProps) {
               onClick={(e) => e.stopPropagation()}
               onChange={() => onToggle(item.id)}
             />
-            <AssetImage path={item.image} alt={item.name} size={72} />
+            {item.sprite ? <PixelSprite sprite={item.sprite} size={72} /> : <AssetImage path={item.image} alt={item.name} size={72} />}
             <div className="item-card-name" title={item.name} style={look ? { color: look.style.color } : undefined}>
               {item.name || 'Untitled item'}
             </div>
@@ -554,7 +555,7 @@ function ItemTable({ items, selected, focusId, onSelect, onToggle, onSetSelected
                   />
                 </td>
                 <td className="item-col-image">
-                  <AssetImage path={item.image} alt={item.name} size={26} />
+                  {item.sprite ? <PixelSprite sprite={item.sprite} size={26} animate={false} /> : <AssetImage path={item.image} alt={item.name} size={26} />}
                 </td>
                 <td className="item-col-name">
                   <ItemName item={item} onClick={(e) => onSelect(item.id, e)} />

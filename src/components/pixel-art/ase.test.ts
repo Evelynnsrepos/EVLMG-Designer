@@ -1,7 +1,7 @@
 import { zlibSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
 import { readAse } from './ase'
-import { getPx } from './model'
+import { getPx } from '@/shared/pixel/model'
 
 /** A tiny file by the published layout: 2 frames of 2×1 RGBA, one layer, a zlib cel, a linked cel and a tag. */
 function sample(): Uint8Array {

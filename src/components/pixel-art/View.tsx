@@ -14,7 +14,7 @@ import { encodeGif } from '@/shared/sketch/files/gif'
 import { createLibrary, LIBRARY_ID, tileRect, type TileLibrary } from '@/shared/tileset'
 import { openComponent } from '@/shell/editor/actions'
 import { readAse } from './ase'
-import { celImg, decode, encode, pngBytes, toCanvas, useDecoded } from './codec'
+import { celImg, decode, encode, pngBytes, toCanvas, useDecoded } from '@/shared/pixel/codec'
 import { godotSpriteFrames, sheetCell, sheetColumns, sheetJson } from './exports'
 import {
   blank,
@@ -47,7 +47,7 @@ import {
   tileRows,
   type Img,
   type PixelDoc,
-} from './model'
+} from '@/shared/pixel/model'
 import { LayersPanel, PalettePanel, Preview, Timeline } from './Panels'
 import { bounds, combine, cut, flipImg, imgMask, lassoMask, maskImg, outline, paste, placeMask, rectMask, rotate90, wandMask, wrapShift, type Combine, type Mask } from './selection'
 import './pixel-art.css'

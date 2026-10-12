@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blank, getPx, setPx } from './model'
+import { blank, getPx, setPx } from '@/shared/pixel/model'
 import { bounds, combine, cut, lassoMask, outline, paste, rectMask, rotate90, wandMask, wrapShift } from './selection'
 
 describe('pixel art selection and transforms', () => {

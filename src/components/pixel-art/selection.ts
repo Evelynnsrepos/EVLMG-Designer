@@ -1,4 +1,4 @@
-import { blank, floodPoints, getPx, line, setPx, type Img, type RGBA } from './model'
+import { blank, floodPoints, getPx, line, setPx, type Img, type RGBA } from '@/shared/pixel/model'
 
 /** A selection: one byte per pixel, 1 = selected. */
 export type Mask = Uint8Array

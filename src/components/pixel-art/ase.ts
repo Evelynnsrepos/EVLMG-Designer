@@ -1,5 +1,5 @@
 import { unzlibSync } from 'fflate'
-import { blank, rgbaToHex, type Img, type LoopMode } from './model'
+import { blank, rgbaToHex, type Img, type LoopMode } from '@/shared/pixel/model'
 
 /**
  * `.ase` / `.aseprite` import, written from the openly published file format description.

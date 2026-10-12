@@ -7,6 +7,7 @@ import { openWikiArticleForEntity } from '@/shared/wiki'
 import { duplicateItem, setCategories, setCategoryValue, updateItem } from './actions'
 import { droppedBy, formatDrop, nextStatName, renameStat } from './query'
 import { ProofTextarea } from '@/shared/spell'
+import { PixelSprite, SpritePicker } from '@/shared/pixel/PixelSprite'
 import { ReviewButton } from '@/shared/reviews'
 
 const T = {
@@ -85,7 +86,8 @@ export function ItemDetail({
 
       <div className="item-detail-head">
         <div className="item-detail-image" style={frameStyle(entityLook(categories, 'item', item)?.style)}>
-          <ImagePicker path={item.image} alt={item.name} onChange={(image) => updateItem(item.id, { image })} />
+          {item.sprite ? <PixelSprite sprite={item.sprite} size={120} /> : <ImagePicker path={item.image} alt={item.name} onChange={(image) => updateItem(item.id, { image })} />}
+          <SpritePicker sprite={item.sprite} onChange={(sprite) => updateItem(item.id, { sprite })} />
         </div>
         <div className="item-detail-name">
           <label className="item-label" htmlFor={`item-name-${item.id}`}>

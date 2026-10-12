@@ -34,6 +34,8 @@ export interface EntityBase {
   categories: Record<Id, CategoryValue>
   /** v0.12: links made by hand on the entry page ("Link to…"), to any entry or tool document. */
   connections?: LinkTarget[]
+  /** v0.16: an animated sprite from a Pixel Art file (and the tag that plays), shown instead of the picture. */
+  sprite?: { doc: Id; tag?: Id } | null
   createdAt: string
   updatedAt: string
 }
