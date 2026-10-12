@@ -306,3 +306,6 @@
 .px select.input {
   width: auto;
 }
+.px-wrap {
+  flex-wrap: wrap;
+}

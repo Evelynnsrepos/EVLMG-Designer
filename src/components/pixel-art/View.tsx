@@ -1,4 +1,4 @@
-import { Brush, Circle, Download, Eraser, FlipHorizontal2, FlipVertical2, Grid3x3, Layers, Map as MapIcon, PaintBucket, Pipette, Slash, Square, SunMoon, Upload } from 'lucide-react'
+import { Brush, Circle, Download, Eraser, FlipHorizontal2, FlipVertical2, Grid3x3, Lasso, Layers, Map as MapIcon, Move, PaintBucket, Pipette, RotateCcw, RotateCw, Slash, Square, SquareDashed, SunMoon, Upload, WandSparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { importAssetFromBlob, resolveAssetPath } from '@/core/assets'
 import { saveBinaryFile, safeFileName } from '@/core/export'
@@ -48,9 +48,10 @@ import {
   type PixelDoc,
 } from './model'
 import { LayersPanel, PalettePanel, Timeline } from './Panels'
+import { bounds, combine, cut, flipImg, imgMask, lassoMask, maskImg, outline, paste, placeMask, rectMask, rotate90, wandMask, wrapShift, type Combine, type Mask } from './selection'
 import './pixel-art.css'
 
-type Tool = 'pencil' | 'eraser' | 'line' | 'rect' | 'ellipse' | 'fill' | 'picker' | 'shade' | 'tile' | 'tileErase' | 'tileFill'
+type Tool = 'pencil' | 'eraser' | 'line' | 'rect' | 'ellipse' | 'fill' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill'
 type Pt = [number, number]
 
 /** Pixel Art (v0.16): sprites, animations, tilesets and tilemaps. */
@@ -213,7 +214,14 @@ const TOOLS: { id: Tool; icon: typeof Brush; label: string; key: string }[] = [
   { id: 'fill', icon: PaintBucket, label: 'Fill', key: 'pixel.fill' },
   { id: 'picker', icon: Pipette, label: 'Eyedropper (or Alt-click)', key: 'pixel.picker' },
   { id: 'shade', icon: SunMoon, label: 'Shade brush: left click one palette step lighter, right click darker', key: 'pixel.shade' },
+  { id: 'select', icon: SquareDashed, label: 'Select a rectangle (Shift adds, Ctrl takes away)', key: 'pixel.select' },
+  { id: 'lasso', icon: Lasso, label: 'Lasso: select by drawing around (Shift adds, Ctrl takes away)', key: 'pixel.lasso' },
+  { id: 'wand', icon: WandSparkles, label: 'Magic wand: select one exact colour (Shift adds, Ctrl takes away)', key: 'pixel.wand' },
+  { id: 'move', icon: Move, label: 'Move the selection, or the whole layer (arrow keys move 1 px)', key: 'pixel.move' },
 ]
+
+/** Copied pixels, shared by every Pixel Art file. */
+let clipboard: { piece: Img; mask: Mask; x: number; y: number } | null = null
 const MAP_TOOLS: { id: Tool; icon: typeof Brush; label: string }[] = [
   { id: 'tile', icon: Layers, label: 'Place tiles (drag over the tile picture to pick several)' },
   { id: 'tileErase', icon: Eraser, label: 'Remove tiles' },
@@ -222,7 +230,7 @@ const MAP_TOOLS: { id: Tool; icon: typeof Brush; label: string }[] = [
   { id: 'picker', icon: Pipette, label: 'Pick a tile from the map' },
 ]
 
-type Live = { key: string; base: Img; img: Img; start: Pt; path: Pt[]; button: number }
+type Live = { key: string; base: Img; img: Img; start: Pt; path: Pt[]; button: number; float?: { piece: Img; mask: Mask; x: number; y: number; rest: Img }; at?: Pt }
 
 function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<PixelDoc> & { data: PixelDoc }; documentId: string; title: string; active: boolean }) {
   const d = doc.data
@@ -255,6 +263,9 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const [menu, setMenu] = useState(false)
   const [scale, setScale] = useState(1)
   const [note, setNote] = useState<string | null>(null)
+  // The selection (not saved with the file) and the one being drawn.
+  const [mask, setMask] = useState<Mask | null>(null)
+  const selecting = useRef<{ start: Pt; path: Pt[]; how: Combine; preview: Mask | null } | null>(null)
   const [, tick] = useState(0)
   const live = useRef<Live | null>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
@@ -354,6 +365,32 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       g.strokeStyle = 'rgba(77,171,247,0.6)'
       lines(g, ts)
     }
+    const shown = selecting.current?.preview ?? mask
+    if (shown && !inMap) {
+      // The selection's edge, dashed so it shows on light and dark pixels.
+      const off = seamless ? [d.width, d.height] : [0, 0]
+      g.beginPath()
+      for (let y = 0; y < d.height; y++)
+        for (let x = 0; x < d.width; x++) {
+          if (!shown[y * d.width + x]) continue
+          const X = (x + off[0]) * s
+          const Y = (y + off[1]) * s
+          const out = (dx: number, dy: number) => x + dx < 0 || y + dy < 0 || x + dx >= d.width || y + dy >= d.height || !shown[(y + dy) * d.width + x + dx]
+          if (out(0, -1)) edge(g, X, Y, X + s, Y)
+          if (out(0, 1)) edge(g, X, Y + s, X + s, Y + s)
+          if (out(-1, 0)) edge(g, X, Y, X, Y + s)
+          if (out(1, 0)) edge(g, X + s, Y, X + s, Y + s)
+        }
+      g.lineWidth = 1.5
+      g.strokeStyle = '#000'
+      g.setLineDash([])
+      g.stroke()
+      g.strokeStyle = '#fff'
+      g.setLineDash([4, 4])
+      g.stroke()
+      g.setLineDash([])
+      g.lineWidth = 1
+    }
     if (seamless && !inMap) {
       g.strokeStyle = 'rgba(255,255,255,0.6)'
       g.strokeRect(d.width * s + 0.5, d.height * s + 0.5, d.width * s, d.height * s)
@@ -409,12 +446,25 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     if (isShortcut(e, 'pixel.next')) return act(() => setFrame((f) => (f + 1) % d.frames.length))
     if (isShortcut(e, 'pixel.play') && d.kind === 'sprite') return act(() => setPlaying((p) => !p))
     if (isShortcut(e, 'pixel.mode') && d.kind === 'tileset') return act(() => setMapMode((m) => !m))
+    if (inMap) return
+    const mod = e.ctrlKey || e.metaKey
+    const k = e.key.toLowerCase()
+    if (mod && k === 'a') return act(() => setMask(all()))
+    if (mod && k === 'd') return act(() => setMask(null))
+    if (mod && k === 'c') return act(() => copySel(false))
+    if (mod && k === 'x') return act(() => copySel(true))
+    if (mod && k === 'v') return act(pasteSel)
+    if (e.key === 'Escape' && mask) return act(() => setMask(null))
+    if ((e.key === 'Delete' || e.key === 'Backspace') && mask) return act(clearSel)
+    const arrow = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as Record<string, number[]>)[e.key]
+    if (arrow && tool === 'move' && !mod) return act(() => nudge(arrow[0] * (e.shiftKey ? ts : 1), arrow[1] * (e.shiftKey ? ts : 1)))
   }
   useEffect(() => {
     if (!active) return
     const on = (e: KeyboardEvent) => keys.current(e)
-    window.addEventListener('keydown', on)
-    return () => window.removeEventListener('keydown', on)
+    // Capture, so Esc with a selection lets go of it before Layout Mode sees the key.
+    window.addEventListener('keydown', on, true)
+    return () => window.removeEventListener('keydown', on, true)
   }, [active])
 
   // ---- Keep the Level Layout tileset up to date (tilesets linked to the library) ----
@@ -492,7 +542,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       const p = inMap ? mapToSet(p0) : wrap(p0)
       if (!p || p[0] < 0 || p[1] < 0 || p[0] >= d.width || p[1] >= d.height) continue
       const k = p[1] * d.width + p[0]
-      if (seen.has(k)) continue
+      if (seen.has(k) || (mask && !inMap && !mask[k])) continue
       seen.add(k)
       if (tool !== 'eraser' && tool !== 'shade' && !ditherOn(p[0], p[1], dither)) continue
       if (tool === 'eraser') setPx(img, p[0], p[1], [0, 0, 0, 0])
@@ -544,6 +594,17 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       setMapDraft(placeTiles(cells, p, e.button === 2))
       return
     }
+    if (tool === 'select' || tool === 'lasso' || tool === 'wand') {
+      const how: Combine = e.shiftKey ? 'add' : e.ctrlKey || e.metaKey ? 'subtract' : 'replace'
+      const q = wrap(p)
+      if (tool === 'wand') {
+        if (q[0] < 0 || q[1] < 0 || q[0] >= d.width || q[1] >= d.height) return
+        return setMask(combine(mask, wandMask(celImg(d.cels[celKey(layer.id, d.frames[fi].id)], d.width, d.height), q[0], q[1], contiguous), how))
+      }
+      e.currentTarget.setPointerCapture(e.pointerId)
+      selecting.current = { start: q, path: [q], how, preview: null }
+      return
+    }
     if (layer.locked || !layer.visible) return setNote(layer.locked ? 'This layer is locked.' : 'This layer is hidden.')
     const frameId = inMap ? d.frames[0].id : d.frames[fi].id
     const key = celKey(layer.id, frameId)
@@ -553,13 +614,29 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       if (q[0] < 0 || q[1] < 0 || q[0] >= d.width || q[1] >= d.height) return
       const img = cloneImg(base)
       const c = hexToRgba(e.button === 2 ? colors[1] : colors[0])
-      for (const [x, y] of floodPoints(base, q[0], q[1], contiguous)) if (ditherOn(x, y, dither)) setPx(img, x, y, c)
+      for (const [x, y] of floodPoints(base, q[0], q[1], contiguous)) if (ditherOn(x, y, dither) && (!mask || mask[y * d.width + x])) setPx(img, x, y, c)
       return commit(key, img)
     }
     e.currentTarget.setPointerCapture(e.pointerId)
+    if (tool === 'move') {
+      // Lift the selected pixels (or the whole layer) off, to drop them where the pointer lets go.
+      const rest = cloneImg(base)
+      const c = cut(rest, mask ?? rectMask(d.width, d.height, 0, 0, d.width - 1, d.height - 1))
+      if (!c) return
+      live.current = { key, base, img: base, start: p, path: [p], button: e.button, float: { ...c, rest }, at: p }
+      return
+    }
     live.current = { key, base, img: base, start: p, path: [p], button: e.button }
     render(live.current, p)
     draw()
+  }
+
+  /** Where the lifted pixels would land, moved by dx,dy. */
+  const dropFloat = (l: Live, dx: number, dy: number) => {
+    const f = l.float!
+    const img = cloneImg(f.rest)
+    paste(img, f.piece, f.x + dx, f.y + dy, f.mask)
+    l.img = img
   }
 
   const placeTiles = (cells: Record<string, number>, p: Pt, erase: boolean) => {
@@ -585,8 +662,20 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       setMapDraft(placeTiles(mapDraft, p, (e.buttons & 2) === 2))
       return
     }
+    const sel = selecting.current
+    if (sel) {
+      const q = wrap(p)
+      sel.path.push(q)
+      sel.preview = combine(mask, tool === 'lasso' ? lassoMask(d.width, d.height, sel.path) : rectMask(d.width, d.height, sel.start[0], sel.start[1], q[0], q[1]), sel.how)
+      return drawOverlay()
+    }
     const l = live.current
     if (!l) return drawOverlay()
+    if (l.float) {
+      l.at = p
+      dropFloat(l, p[0] - l.start[0], p[1] - l.start[1])
+      return draw()
+    }
     if (tool === 'pencil' || tool === 'eraser' || tool === 'shade') {
       const last = l.path[l.path.length - 1]
       if (last[0] === p[0] && last[1] === p[1]) return
@@ -600,9 +689,17 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       commitMap(mapDraft)
       setMapDraft(null)
     }
+    const sel = selecting.current
+    if (sel) {
+      selecting.current = null
+      // A click without dragging clears the selection.
+      setMask(sel.path.length < 2 && sel.how === 'replace' ? null : sel.preview)
+      return
+    }
     const l = live.current
     if (!l) return
     live.current = null
+    if (l.float && mask && l.at) setMask(placeMask(d.width, d.height, l.float.mask, l.float.piece.width, l.float.x + l.at[0] - l.start[0], l.float.y + l.at[1] - l.start[1]))
     commit(l.key, l.img)
   }
 
@@ -631,12 +728,55 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       return { ...x, cels, palette: x.palette.map((c) => (c === from ? to : c)) }
     })
 
-  const flip = (axis: 'x' | 'y') => {
-    const key = celKey(layer.id, d.frames[fi].id)
-    const src = celImg(d.cels[key], d.width, d.height)
-    const img = blank(d.width, d.height)
-    for (let y = 0; y < d.height; y++) for (let x = 0; x < d.width; x++) setPx(img, axis === 'x' ? d.width - 1 - x : x, axis === 'y' ? d.height - 1 - y : y, getPx(src, x, y))
+  const curKey = () => celKey(layer.id, d.frames[inMap ? 0 : fi].id)
+  const all = () => rectMask(d.width, d.height, 0, 0, d.width - 1, d.height - 1)
+  /** Change the selected pixels (or the whole layer) with `fn`, kept centred where they were. */
+  const transform = (fn: (img: Img) => Img) => {
+    if (layer.locked) return setNote('This layer is locked.')
+    const key = curKey()
+    const img = cloneImg(celImg(d.cels[key], d.width, d.height))
+    const c = cut(img, mask ?? all())
+    if (!c) return
+    const piece = fn(c.piece)
+    const pm = imgMask(fn(maskImg(c.mask, c.piece.width, c.piece.height)))
+    const x = c.x + Math.floor((c.piece.width - piece.width) / 2)
+    const y = c.y + Math.floor((c.piece.height - piece.height) / 2)
+    paste(img, piece, x, y, pm)
     commit(key, img)
+    if (mask) setMask(placeMask(d.width, d.height, pm, piece.width, x, y))
+  }
+  const outlineSel = () => commit(curKey(), outline(celImg(d.cels[curKey()], d.width, d.height), hexToRgba(colors[0]), mask))
+  const clearSel = () => {
+    if (!mask) return
+    const img = cloneImg(celImg(d.cels[curKey()], d.width, d.height))
+    cut(img, mask)
+    commit(curKey(), img)
+  }
+  const copySel = (andCut: boolean) => {
+    const img = cloneImg(celImg(d.cels[curKey()], d.width, d.height))
+    const c = cut(img, mask ?? all())
+    if (!c) return
+    clipboard = c
+    if (andCut) commit(curKey(), img)
+  }
+  const pasteSel = () => {
+    if (!clipboard) return
+    const img = cloneImg(celImg(d.cels[curKey()], d.width, d.height))
+    // Same place when it fits, else the top left corner; Move is picked to drag it.
+    const x = clipboard.x + clipboard.piece.width <= d.width ? clipboard.x : 0
+    const y = clipboard.y + clipboard.piece.height <= d.height ? clipboard.y : 0
+    paste(img, clipboard.piece, x, y, clipboard.mask)
+    commit(curKey(), img)
+    setMask(placeMask(d.width, d.height, clipboard.mask, clipboard.piece.width, x, y))
+    setTool('move')
+  }
+  const nudge = (dx: number, dy: number) => {
+    const rest = cloneImg(celImg(d.cels[curKey()], d.width, d.height))
+    const c = cut(rest, mask ?? all())
+    if (!c) return
+    paste(rest, c.piece, c.x + dx, c.y + dy, c.mask)
+    commit(curKey(), rest)
+    if (mask) setMask(placeMask(d.width, d.height, c.mask, c.piece.width, c.x + dx, c.y + dy))
   }
 
   // ---- Files ----
@@ -861,13 +1001,29 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
           ) : (
             <>
               <LayersPanel d={d} layerId={layer.id} setLayerId={setLayerId} update={update} />
-              <div className="px-row">
-                <button className="btn btn-ghost" title="Flip this layer left to right" onClick={() => flip('x')}>
-                  <FlipHorizontal2 size={13} /> Flip
-                </button>
-                <button className="btn btn-ghost" title="Flip this layer upside down" onClick={() => flip('y')}>
-                  <FlipVertical2 size={13} /> Flip
-                </button>
+              <div className="px-panel">
+                <strong>{mask ? 'Selection' : 'Whole layer'}</strong>
+                <div className="px-row px-wrap">
+                  <button className="icon-btn" title="Flip left to right" onClick={() => transform((i) => flipImg(i, 'x'))}>
+                    <FlipHorizontal2 size={14} />
+                  </button>
+                  <button className="icon-btn" title="Flip upside down" onClick={() => transform((i) => flipImg(i, 'y'))}>
+                    <FlipVertical2 size={14} />
+                  </button>
+                  <button className="icon-btn" title="Turn a quarter clockwise" onClick={() => transform((i) => rotate90(i, true))}>
+                    <RotateCw size={14} />
+                  </button>
+                  <button className="icon-btn" title="Turn a quarter anticlockwise" onClick={() => transform((i) => rotate90(i, false))}>
+                    <RotateCcw size={14} />
+                  </button>
+                  <button className="btn btn-ghost" title="A one-pixel line in the main colour around the drawing" onClick={outlineSel}>
+                    Outline
+                  </button>
+                  <button className="btn btn-ghost" title="Shift by half with wrap-around, to check that a tile repeats without seams" onClick={() => commit(curKey(), wrapShift(celImg(d.cels[curKey()], d.width, d.height), Math.floor(d.width / 2), Math.floor(d.height / 2)))}>
+                    Wrap shift
+                  </button>
+                </div>
+                {mask && <SelectionInfo mask={mask} width={d.width} />}
               </div>
             </>
           )}
@@ -989,4 +1145,14 @@ function MapPanel({ d, mapLayerId, setMapLayerId, update }: { d: PixelDoc; mapLa
       <p className="muted px-small">Draw pixels on the map with the pencil: the tile changes everywhere it is used. Files → Send the map to Level Layout turns it into a level with Godot export.</p>
     </div>
   )
+}
+
+function SelectionInfo({ mask, width }: { mask: Mask; width: number }) {
+  const b = bounds(mask, width)
+  return b ? <p className="muted px-small">{`${b.w} × ${b.h} px at ${b.x}, ${b.y}. Ctrl+C copies, Ctrl+X cuts, Ctrl+V pastes, Delete clears, Esc lets go.`}</p> : null
+}
+
+function edge(g: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) {
+  g.moveTo(x0, y0)
+  g.lineTo(x1, y1)
 }
