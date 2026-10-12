@@ -1,75 +1,140 @@
-import { Ban, Brush, Download, Eraser, ImagePlus, PaintBucket, Square, StickyNote, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Ban, Brush, Download, Eraser, Eye, EyeOff, PaintBucket, Plus, Square, StickyNote, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PanelProps } from '@/core/registry'
-import { useDocument, useProjectStore, useUndoRedoKeys } from '@/core/state'
+import { useDocument, useProjectStore, useSettings, useUndoRedoKeys } from '@/core/state'
 import { saveBinaryFile, safeFileName } from '@/core/export'
-import { assetUrl, pickAndImportAssets, resolveAssetPath, useAssetUrls } from '@/core/assets'
+import { assetUrl, pickAndImportAssets, resolveAssetPath } from '@/core/assets'
 import { getFs } from '@/core/fs'
 import { newId } from '@/core/model'
+import { formatCombo, isShortcut, keysOf } from '@/core/shortcuts'
 import { NumberInput, PresetHeader } from '@/shared/calculators'
-import { artKey, bucket, cellKey, counts, createLevelDoc, godotScene, isBlocked, MARKERS, newNote, parseArt, room, tileColor, TILES, type LevelDoc, type TileId, type Tileset } from './model'
+import { confirmDialog } from '@/shared/dialogs'
+import { useTilesetImages } from './images'
+import { ImportDialog, type ImportValues } from './ImportDialog'
+import {
+  bucket,
+  cellKey,
+  counts,
+  createLevelDoc,
+  createLibrary,
+  godotScene,
+  grid,
+  isBlocked,
+  LIBRARY_ID,
+  MARKERS,
+  migrateLevel,
+  newLayer,
+  newNote,
+  parseArt,
+  room,
+  stampCells,
+  stampTileAt,
+  tileColor,
+  tileRect,
+  TILES,
+  usedTilesets,
+  type ArtLayer,
+  type LevelDoc,
+  type Stamp,
+  type TileId,
+  type TileLibrary,
+  type Tileset,
+} from './model'
+import { TilesetDock } from './TilesetDock'
 import './level-layout.css'
 
 type Tool = 'paint' | 'erase' | 'room' | 'fill' | 'note' | 'block'
 const CELL = 22
+/** Canvases bigger than this fail in some browsers; the level is drawn smaller and scaled up instead. */
+const MAX_CANVAS = 12000
+
+type Draft = { tiles: Record<string, TileId>; layers: ArtLayer[]; blocked: Record<string, true>; unblock?: boolean }
 
 /** Level / dungeon layout editor (v0.10). */
 export default function View({ documentId, active }: PanelProps) {
   const doc = useDocument<LevelDoc>('level-layout', documentId!, createLevelDoc)
+  // v0.15: the tilesets are shared by every level in the project.
+  const lib = useDocument<TileLibrary>('level-layout', LIBRARY_ID, createLibrary)
   useUndoRedoKeys(doc, active)
   const title = useProjectStore((s) => s.meta?.documents.find((x) => x.id === documentId)?.title ?? 'Level')
+  const root = useProjectStore((s) => s.root)
+  const sharp = useSettings((s) => s.sharpPixels)
   const [tool, setTool] = useState<Tool>('paint')
   const [tile, setTile] = useState<TileId>('wall')
-  // v0.13: a picture tile from a tileset ("set:column:row"); null = paint plan tiles.
-  const [art, setArt] = useState<string | null>(null)
-  const root = useProjectStore((s) => s.root)
+  // A picture tile, or a block of them (v0.15 stamp); null = paint plan tiles.
+  const [stamp, setStamp] = useState<Stamp | null>(null)
+  const [layerId, setLayerId] = useState<string | null>(null)
   const [exported, setExported] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
-  const [drag, setDrag] = useState<{ x: number; y: number; tiles: Record<string, TileId>; art: Record<string, string>; blocked: Record<string, true>; unblock?: boolean } | null>(null)
+  const [drag, setDrag] = useState<(Draft & { x: number; y: number }) | null>(null)
   // v0.14: where nothing can walk, shown as a red overlay.
   const [showBlocked, setShowBlocked] = useState(true)
+  // v0.15: paint on blocked cells anyway (blocking is only for Godot), and the hint when a cell was skipped.
+  const [override, setOverride] = useState(false)
+  const [blockHint, setBlockHint] = useState(false)
+  const hintTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const [importing, setImporting] = useState<{ url: string; image: string; title: string; set?: Tileset; initial: Partial<ImportValues> & { name: string } } | null>(null)
   const last = useRef<{ x: number; y: number } | null>(null)
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
   const [noteId, setNoteId] = useState<string | null>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const d = doc.data
-  const shown = useMemo(() => (drag && d ? { ...d, tiles: drag.tiles, art: drag.art, blocked: drag.blocked } : d), [drag, d])
-  const sets = useMemo(() => d?.tilesets ?? [], [d?.tilesets])
-  const urlOf = useAssetUrls(sets.map((t) => t.image))
-  const [images, setImages] = useState<Record<string, HTMLImageElement>>({})
+  const sets = useMemo(() => lib.data?.tilesets ?? [], [lib.data?.tilesets])
+  const images = useTilesetImages(sets)
+
+  const updateLib = lib.update
+  const updateDoc = doc.update
+  // Levels from before v0.15 had their own tilesets and one picture layer: move them over once.
   useEffect(() => {
-    for (const t of sets) {
-      const url = urlOf(t.image)
-      if (!url || images[url]) continue
-      const img = new Image()
-      img.onload = () => setImages((m) => ({ ...m, [url]: img }))
-      img.src = url
-    }
-  }, [sets, urlOf, images])
+    if (!d || !lib.data) return
+    const m = migrateLevel(d, lib.data)
+    if (!m) return
+    updateLib(() => m.library, { undoable: false })
+    updateDoc(() => m.level, { undoable: false })
+  }, [d, lib.data, updateLib, updateDoc])
+
+  const layers = useMemo(() => d?.layers ?? [], [d?.layers])
+  const layer = layers.find((l) => l.id === layerId) ?? layers[0]
+  const shown = useMemo(() => (drag && d ? { ...d, tiles: drag.tiles, layers: drag.layers, blocked: drag.blocked } : d), [drag, d])
+
+  // One level cell in device pixels. Sharp pixel art: a whole number of screen pixels per tile pixel.
+  const dpr = window.devicePixelRatio || 1
+  const base = usedTilesets(d ?? createLevelDoc(), sets)[0]?.tileSize ?? sets[0]?.tileSize ?? 16
+  let cellPx = Math.round(CELL * zoom * dpr)
+  if (sharp) cellPx = base * Math.max(1, Math.round(cellPx / base))
+  if (d) cellPx = Math.max(4, Math.min(cellPx, Math.floor(MAX_CANVAS / Math.max(d.width, d.height))))
 
   useEffect(() => {
     const c = canvas.current
     if (!c || !shown) return
     const ctx = c.getContext('2d')!
-    const s = CELL
+    const s = cellPx
     c.width = shown.width * s
     c.height = shown.height * s
     ctx.fillStyle = '#1b1b20'
     ctx.fillRect(0, 0, c.width, c.height)
-    ctx.imageSmoothingEnabled = false
-    const artAt = shown.art ?? {}
-    for (const [k, v] of Object.entries(artAt)) {
-      const [x, y] = k.split(',').map(Number)
-      const a = parseArt(v)
-      const t = sets[a.set]
-      const img = t && images[urlOf(t.image)]
-      if (img) ctx.drawImage(img, a.col * t.tileSize, a.row * t.tileSize, t.tileSize, t.tileSize, x * s, y * s, s, s)
+    ctx.imageSmoothingEnabled = !sharp
+    ctx.imageSmoothingQuality = 'high'
+    const byId = new Map(sets.map((t) => [t.id, t]))
+    const painted = new Set<string>()
+    for (const l of shown.layers ?? []) {
+      if (l.hidden) continue
+      for (const [k, v] of Object.entries(l.art)) {
+        const [x, y] = k.split(',').map(Number)
+        const a = parseArt(v)
+        const t = byId.get(a.set)
+        const img = images[a.set]
+        if (!t || !img) continue
+        const r = tileRect(t, a.col, a.row)
+        ctx.drawImage(img, r.x, r.y, r.size, r.size, x * s, y * s, s, s)
+        painted.add(k)
+      }
     }
     for (const [k, t] of Object.entries(shown.tiles)) {
       const [x, y] = k.split(',').map(Number)
       const mark = MARKERS[t]
       // A symbol (start, enemy…) sits on its picture tile, or on floor when there is none.
-      if (!mark || !artAt[k]) {
+      if (!mark || !painted.has(k)) {
         ctx.fillStyle = mark ? tileColor('floor') : tileColor(t)
         ctx.fillRect(x * s, y * s, s, s)
       }
@@ -87,31 +152,31 @@ export default function View({ documentId, active }: PanelProps) {
     }
     ctx.strokeStyle = 'rgba(255,255,255,0.08)'
     ctx.lineWidth = 1
+    ctx.beginPath()
     for (let x = 0; x <= shown.width; x++) {
-      ctx.beginPath()
       ctx.moveTo(x * s + 0.5, 0)
       ctx.lineTo(x * s + 0.5, c.height)
-      ctx.stroke()
     }
     for (let y = 0; y <= shown.height; y++) {
-      ctx.beginPath()
       ctx.moveTo(0, y * s + 0.5)
       ctx.lineTo(c.width, y * s + 0.5)
-      ctx.stroke()
     }
-    if (showBlocked) {
-      ctx.fillStyle = 'rgba(224, 49, 49, 0.35)'
+    ctx.stroke()
+    if (showBlocked || blockHint) {
+      // While the hint shows, the blocked cells light up so it is clear where painting stops.
+      ctx.fillStyle = blockHint ? 'rgba(224, 49, 49, 0.6)' : 'rgba(224, 49, 49, 0.35)'
       ctx.strokeStyle = 'rgba(224, 49, 49, 0.9)'
-      ctx.lineWidth = 1.5
+      ctx.lineWidth = Math.max(1.5, s / 14)
+      const pad = s / 5
       for (let y = 0; y < shown.height; y++)
         for (let x = 0; x < shown.width; x++) {
-          if (!isBlocked(shown, x, y)) continue
+          if (!isBlocked(shown, sets, x, y)) continue
           ctx.fillRect(x * s, y * s, s, s)
           ctx.beginPath()
-          ctx.moveTo(x * s + 4, y * s + 4)
-          ctx.lineTo(x * s + s - 4, y * s + s - 4)
-          ctx.moveTo(x * s + s - 4, y * s + 4)
-          ctx.lineTo(x * s + 4, y * s + s - 4)
+          ctx.moveTo(x * s + pad, y * s + pad)
+          ctx.lineTo(x * s + s - pad, y * s + s - pad)
+          ctx.moveTo(x * s + s - pad, y * s + pad)
+          ctx.lineTo(x * s + pad, y * s + s - pad)
           ctx.stroke()
         }
     }
@@ -124,7 +189,22 @@ export default function View({ documentId, active }: PanelProps) {
       ctx.textBaseline = 'middle'
       ctx.fillText(String(i + 1), n.x * s + s / 2, n.y * s + s / 2 + 1)
     })
-  }, [shown, sets, images, urlOf, showBlocked])
+  }, [shown, sets, images, showBlocked, blockHint, cellPx, sharp])
+
+  // v0.15: tool shortcuts, changeable in Settings.
+  useEffect(() => {
+    if (!active) return
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (e.defaultPrevented || (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)))) return
+      const hit = (['paint', 'room', 'fill', 'erase', 'note', 'block'] as const).find((id) => isShortcut(e, `level.${id}`))
+      if (!hit) return
+      e.preventDefault()
+      setTool(hit)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [active])
 
   if (!d) return null
   const cellAt = (e: React.MouseEvent) => {
@@ -132,33 +212,66 @@ export default function View({ documentId, active }: PanelProps) {
     return { x: Math.floor(((e.clientX - r.left) / r.width) * d.width), y: Math.floor(((e.clientY - r.top) / r.height) * d.height) }
   }
   const inside = (p: { x: number; y: number }) => p.x >= 0 && p.y >= 0 && p.x < d.width && p.y < d.height
-  const apply = (tiles: Record<string, TileId>, artMap = d.art ?? {}, blocked = d.blocked ?? {}) => doc.update((x) => ({ ...x, tiles, art: artMap, blocked }))
-  /** One cell painted (or erased: the picture tile first, then the plan tile). */
-  const paintAt = (cur: { tiles: Record<string, TileId>; art: Record<string, string>; blocked: Record<string, true>; unblock?: boolean }, p: { x: number; y: number }) => {
+  const apply = (draft: Draft) => doc.update((x) => ({ ...x, tiles: draft.tiles, layers: draft.layers, blocked: draft.blocked }))
+  /** Painting skips blocked cells unless "Paint over blocked" is on; say so once per stroke. */
+  const guarded = (x: number, y: number) => !override && isBlocked(d, sets, x, y)
+  const hintBlocked = () => {
+    setBlockHint(true)
+    clearTimeout(hintTimer.current)
+    hintTimer.current = setTimeout(() => setBlockHint(false), 2600)
+  }
+  const withLayer = (draft: Draft, fn: (art: Record<string, string>) => Record<string, string>): ArtLayer[] => draft.layers.map((l) => (l.id === layer?.id ? { ...l, art: fn(l.art) } : l))
+
+  /** One cell painted (or erased: the picture tile of this layer first, then the plan tile). */
+  const paintAt = (cur: Draft, p: { x: number; y: number }): Draft => {
     const k = cellKey(p.x, p.y)
-    const tiles = { ...cur.tiles }
-    const artMap = { ...cur.art }
-    const blocked = { ...cur.blocked }
     if (tool === 'block') {
+      const blocked = { ...cur.blocked }
       // Starting on a blocked cell unblocks for the whole drag, otherwise it blocks.
       if (cur.unblock) delete blocked[k]
       else blocked[k] = true
-      return { tiles, art: artMap, blocked, unblock: cur.unblock }
+      return { ...cur, blocked }
     }
     if (tool === 'erase') {
-      if (artMap[k]) delete artMap[k]
-      else delete tiles[k]
-    } else if (art) artMap[k] = art
-    else tiles[k] = tile
-    return { tiles, art: artMap, blocked }
+      if (cur.layers.find((l) => l.id === layer?.id)?.art[k])
+        return {
+          ...cur,
+          layers: withLayer(cur, (art) => {
+            const next = { ...art }
+            delete next[k]
+            return next
+          }),
+        }
+      const tiles = { ...cur.tiles }
+      delete tiles[k]
+      return { ...cur, tiles }
+    }
+    if (stamp) {
+      const all = stampCells(stamp, p.x, p.y, d)
+      const cells = all.filter(([key]) => {
+        const [x, y] = key.split(',').map(Number)
+        return !guarded(x, y)
+      })
+      if (cells.length < all.length) hintBlocked()
+      return { ...cur, layers: withLayer(cur, (art) => ({ ...art, ...Object.fromEntries(cells) })) }
+    }
+    if (guarded(p.x, p.y)) return hintBlocked(), cur
+    return { ...cur, tiles: { ...cur.tiles, [k]: tile } }
   }
 
   const onDown = (e: React.MouseEvent) => {
     const p = cellAt(e)
     if (!inside(p)) return
+    const start: Draft = { tiles: d.tiles, layers, blocked: d.blocked ?? {} }
     if (tool === 'fill') {
-      if (art) return apply(d.tiles, bucket({ ...d, tiles: d.art ?? {} }, p.x, p.y, e.button === 2 ? null : art))
-      return apply(bucket(d, p.x, p.y, e.button === 2 ? null : tile))
+      const erase = e.button === 2
+      if (guarded(p.x, p.y) && !erase) return hintBlocked()
+      const skip = erase ? undefined : (x: number, y: number) => guarded(x, y)
+      if (stamp) {
+        const fill = stamp.w * stamp.h > 1 ? (x: number, y: number) => stampTileAt(stamp, p.x, p.y, x, y) : stampTileAt(stamp, 0, 0, 0, 0)
+        return apply({ ...start, layers: withLayer(start, (art) => bucket({ ...d, tiles: art }, p.x, p.y, erase ? null : fill, skip)) })
+      }
+      return apply({ ...start, tiles: bucket(d, p.x, p.y, erase ? null : tile, skip) })
     }
     if (tool === 'note') {
       const hit = d.notes.find((n) => n.x === p.x && n.y === p.y)
@@ -167,9 +280,9 @@ export default function View({ documentId, active }: PanelProps) {
       doc.update((x) => ({ ...x, notes: [...x.notes, n] }))
       return setNoteId(n.id)
     }
-    const start = { tiles: d.tiles, art: d.art ?? {}, blocked: d.blocked ?? {}, unblock: tool === 'block' && (!!d.blocked?.[cellKey(p.x, p.y)] || e.button === 2) }
+    const first = { ...start, unblock: tool === 'block' && (!!d.blocked?.[cellKey(p.x, p.y)] || e.button === 2) }
     last.current = p
-    setDrag({ x: p.x, y: p.y, ...(tool === 'room' ? start : paintAt(start, p)) })
+    setDrag({ x: p.x, y: p.y, ...(tool === 'room' ? first : paintAt(first, p)) })
   }
   const onMove = (e: React.MouseEvent) => {
     const p = cellAt(e)
@@ -185,40 +298,63 @@ export default function View({ documentId, active }: PanelProps) {
     if (n) setDrag(next)
   }
   const onUp = () => {
-    if (drag) apply(drag.tiles, drag.art, drag.blocked)
+    if (drag) apply(drag)
     setDrag(null)
   }
 
-  /** Add a tileset image (a drawing from Draw works too); it is cut into tiles of `tileSize`. */
-  const addTileset = async () => {
+  // ---- Tilesets (shared library) ----
+  const changeSet = (id: string, patch: Partial<Tileset>) => lib.update((x) => ({ ...x, tilesets: x.tilesets.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))
+  /** Pick a picture (a drawing from Draw works too) and open the import window for it. */
+  const pickPicture = async (set?: Tileset) => {
     if (!root) return
-    const [asset] = await pickAndImportAssets(root, 'image', 'Tileset image')
-    if (!asset) return
-    const url = await assetUrl(root, asset.path)
-    const size = await new Promise<{ w: number; h: number }>((res) => {
-      const img = new Image()
-      img.onload = () => res({ w: img.naturalWidth, h: img.naturalHeight })
-      img.onerror = () => res({ w: 0, h: 0 })
-      img.src = url ?? ''
-    })
-    const tileSize = size.w % 16 === 0 && size.h % 16 === 0 ? 16 : 32
-    const t: Tileset = { id: newId(), name: asset.name.replace(/\.[^.]+$/, ''), image: asset.path, tileSize, width: size.w, height: size.h, columns: Math.max(1, Math.floor(size.w / tileSize)), rows: Math.max(1, Math.floor(size.h / tileSize)) }
-    doc.update((x) => ({ ...x, tilesets: [...(x.tilesets ?? []), t] }))
+    const [asset] = await pickAndImportAssets(root, 'image', set ? `New picture for ${set.name}` : 'Tileset image')
+    const url = asset && (await assetUrl(root, asset.path))
+    if (!asset || !url) return
+    const initial = set ? { name: set.name, tileSize: set.tileSize, margin: set.margin ?? 0, spacing: set.spacing ?? 0, blackTransparent: !!set.blackTransparent } : { name: asset.name.replace(/\.[^.]+$/, '') }
+    setImporting({ url, image: asset.path, set, title: set ? `Replace ${set.name}` : 'Add a tileset', initial })
   }
-  const setTileSize = (i: number, tileSize: number) =>
-    doc.update((x) => ({ ...x, tilesets: (x.tilesets ?? []).map((t, j) => (j === i ? { ...t, tileSize, columns: Math.max(1, Math.floor(t.width / tileSize)), rows: Math.max(1, Math.floor(t.height / tileSize)) } : t)) }))
-  const removeTileset = (i: number) =>
-    doc.update((x) => ({
-      ...x,
-      tilesets: (x.tilesets ?? []).filter((_, j) => j !== i),
-      // Picture tiles of later tilesets move down one number; those of the removed one go.
-      art: Object.fromEntries(
-        Object.entries(x.art ?? {})
-          .map(([k, v]) => [k, parseArt(v)] as const)
-          .filter(([, a]) => a.set !== i)
-          .map(([k, a]) => [k, artKey(a.set > i ? a.set - 1 : a.set, a.col, a.row)]),
-      ),
-    }))
+  const editGrid = async (set: Tileset) => {
+    const url = root && (await assetUrl(root, set.image))
+    if (url) setImporting({ url, image: set.image, set, title: `Grid of ${set.name}`, initial: { name: set.name, tileSize: set.tileSize, margin: set.margin ?? 0, spacing: set.spacing ?? 0, blackTransparent: !!set.blackTransparent } })
+  }
+  const finishImport = (v: ImportValues & { width: number; height: number }) => {
+    if (!importing) return
+    const g = grid(v)
+    const fields = { name: v.name, image: importing.image, tileSize: v.tileSize, margin: v.margin || undefined, spacing: v.spacing || undefined, blackTransparent: v.blackTransparent || undefined, width: v.width, height: v.height, columns: g.columns, rows: g.rows }
+    if (importing.set) changeSet(importing.set.id, fields)
+    else {
+      const t: Tileset = { id: newId(), added: Date.now(), ...fields }
+      lib.update((x) => ({ ...x, tilesets: [...x.tilesets, t] }))
+      setStamp({ set: t.id, col: 0, row: 0, w: 1, h: 1 })
+    }
+    setImporting(null)
+  }
+  const removeSet = async (t: Tileset) => {
+    if (!(await confirmDialog({ title: `Remove ${t.name}?`, message: 'Every level in this project loses the tiles painted with it.', confirmLabel: 'Remove', danger: true }))) return
+    lib.update((x) => ({ ...x, tilesets: x.tilesets.filter((s) => s.id !== t.id) }))
+    if (stamp?.set === t.id) setStamp(null)
+  }
+
+  // ---- Layers ----
+  const setLayers = (fn: (l: ArtLayer[]) => ArtLayer[]) => doc.update((x) => ({ ...x, layers: fn(x.layers ?? []) }))
+  const addLayer = () => {
+    const l = newLayer(`Layer ${layers.length + 1}`)
+    setLayers((ls) => [...ls, l])
+    setLayerId(l.id)
+  }
+  const moveLayer = (id: string, by: number) =>
+    setLayers((ls) => {
+      const i = ls.findIndex((l) => l.id === id)
+      const j = i + by
+      if (j < 0 || j >= ls.length) return ls
+      const next = [...ls]
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+  const removeLayer = async (l: ArtLayer) => {
+    if (Object.keys(l.art).length && !(await confirmDialog({ title: `Delete ${l.name}?`, message: 'The tiles painted on this layer go too.', confirmLabel: 'Delete', danger: true }))) return
+    setLayers((ls) => ls.filter((x) => x.id !== l.id))
+  }
 
   /** v0.13: the level as a Godot 4 TileMap scene, with its tileset pictures, into the game project. */
   const exportGodot = async () => {
@@ -228,8 +364,17 @@ export default function View({ documentId, active }: PanelProps) {
     const base = safeFileName(title).replace(/\s+/g, '_').toLowerCase() || 'level'
     const dir = await fs.join(folder, 'egd', 'levels')
     await fs.mkdir(dir)
-    for (const [i, t] of sets.entries()) await fs.writeBinaryAtomic(await fs.join(dir, `${base}_tiles_${i}.png`), await fs.readBinary(await resolveAssetPath(root, t.image)))
-    const scene = godotScene(d, title, (i) => `res://egd/levels/${base}_tiles_${i}.png`)
+    const used = usedTilesets(d, sets)
+    for (const [i, t] of used.entries()) {
+      const img = images[t.id]
+      // A picture with black made see-through is saved as it is shown.
+      const bytes =
+        t.blackTransparent && img instanceof HTMLCanvasElement
+          ? new Uint8Array(await (await new Promise<Blob | null>((res) => img.toBlob(res, 'image/png')))!.arrayBuffer())
+          : await fs.readBinary(await resolveAssetPath(root, t.image))
+      await fs.writeBinaryAtomic(await fs.join(dir, `${base}_tiles_${i}.png`), bytes)
+    }
+    const scene = godotScene(d, used, title, (i) => `res://egd/levels/${base}_tiles_${i}.png`)
     await fs.writeBinaryAtomic(await fs.join(dir, `${base}.tscn`), new TextEncoder().encode(scene))
     setExported(`Saved egd/levels/${base}.tscn in your Godot project.`)
   }
@@ -240,14 +385,19 @@ export default function View({ documentId, active }: PanelProps) {
 
   const note = d.notes.find((n) => n.id === noteId)
   const tally = counts(d)
+  const key = (id: Tool) => {
+    const k = keysOf(`level.${id}`)[0]
+    return k ? ` (${formatCombo(k)})` : ''
+  }
   const tools: { id: Tool; icon: typeof Brush; label: string }[] = [
     { id: 'paint', icon: Brush, label: 'Paint' },
     { id: 'room', icon: Square, label: 'Room (drag)' },
-    { id: 'fill', icon: PaintBucket, label: 'Fill' },
+    { id: 'fill', icon: PaintBucket, label: 'Fill (right-click empties)' },
     { id: 'erase', icon: Eraser, label: 'Erase' },
     { id: 'note', icon: StickyNote, label: 'Note' },
     { id: 'block', icon: Ban, label: 'Blocked: mark where nothing can walk (click a blocked cell or right-click to clear)' },
   ]
+  const css = cellPx / dpr
 
   return (
     <div className="lv">
@@ -256,7 +406,7 @@ export default function View({ documentId, active }: PanelProps) {
       </div>
       <div className="lv-toolbar">
         {tools.map((t) => (
-          <button key={t.id} className={`icon-btn${tool === t.id ? ' on' : ''}`} title={t.label} aria-label={t.label} onClick={() => setTool(t.id)}>
+          <button key={t.id} className={`icon-btn${tool === t.id ? ' on' : ''}`} title={t.label + key(t.id)} aria-label={t.label} onClick={() => setTool(t.id)}>
             <t.icon size={16} />
           </button>
         ))}
@@ -268,85 +418,43 @@ export default function View({ documentId, active }: PanelProps) {
         </label>
         <label className="ld-inline">
           Zoom
-          <input type="range" min={0.5} max={2.5} step={0.25} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} />
+          <input type="range" min={0.5} max={4} step={0.25} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} />
         </label>
         <button className="btn btn-ghost lv-btn" onClick={() => void exportPng()}>
           <Download size={14} /> PNG
         </button>
-        <button className="btn btn-ghost lv-btn" disabled={!sets.length} title={sets.length ? 'Export the picture tiles as a Godot 4 TileMap scene' : 'Add a tileset and paint with it first'} onClick={() => void exportGodot()}>
+        <button className="btn btn-ghost lv-btn" disabled={!usedTilesets(d, sets).length} title={sets.length ? 'Export the picture tiles as a Godot 4 TileMap scene' : 'Add a tileset and paint with it first'} onClick={() => void exportGodot()}>
           <Download size={14} /> Godot scene
         </button>
         {exported && <span className="muted">{exported}</span>}
         <label className="ld-inline" title="Show where nothing can walk">
           <input type="checkbox" checked={showBlocked} onChange={(e) => setShowBlocked(e.target.checked)} /> Blocked
         </label>
+        <label className="ld-inline" title="Blocked cells only tell Godot where players cannot walk. Tick this to paint over them anyway.">
+          <input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} /> Paint over blocked
+        </label>
         <span className="lv-hover">{hover ? `${hover.x}, ${hover.y}` : ''}</span>
       </div>
+      {blockHint && (
+        <div className="lv-hint" role="status">
+          That cell is blocked (red), so it was left alone. Blocking only tells Godot where players cannot walk: tick <strong>Paint over blocked</strong> to paint there anyway, or use Erase.
+        </div>
+      )}
       <div className="lv-body">
         <div className="lv-palette">
           {TILES.map((t) => (
-            <button key={t.id} className={`lv-tile${!art && tile === t.id ? ' on' : ''}`} onClick={() => (setTile(t.id), setArt(null), tool === 'erase' || tool === 'note' ? setTool('paint') : null)}>
+            <button key={t.id} className={`lv-tile${!stamp && tile === t.id ? ' on' : ''}`} onClick={() => (setTile(t.id), setStamp(null), tool === 'erase' || tool === 'note' ? setTool('paint') : null)}>
               <span style={{ background: t.color }}>{MARKERS[t.id]}</span>
               {t.label}
               {tally[t.id] ? <em>{tally[t.id]}</em> : null}
             </button>
           ))}
-          <strong className="lv-sets-title">Tilesets</strong>
-          {sets.map((t, i) => (
-            <div key={t.id} className="lv-set">
-              <div className="lv-set-head">
-                <span title={t.name}>{t.name}</span>
-                <label className="ld-inline" title="Size of one tile in the picture, in pixels">
-                  <NumberInput value={t.tileSize} min={4} max={512} onChange={(v) => setTileSize(i, Math.max(4, Math.round(v)))} />
-                  px
-                </label>
-                <button className="icon-btn" aria-label={`Remove ${t.name}`} title="Remove tileset" onClick={() => removeTileset(i)}>
-                  <Trash2 size={13} />
-                </button>
-              </div>
-              <div className="lv-atlas" style={{ gridTemplateColumns: `repeat(${t.columns}, 1fr)` }}>
-                {Array.from({ length: t.columns * t.rows }, (_, n) => {
-                  const col = n % t.columns
-                  const row = Math.floor(n / t.columns)
-                  const key = artKey(i, col, row)
-                  return (
-                    <button
-                      key={key}
-                      className={`lv-atlas-tile${art === key ? ' on' : ''}${t.solid?.includes(`${col}:${row}`) ? ' solid' : ''}`}
-                      aria-label={`Tile ${col}, ${row}`}
-                      style={{ backgroundImage: `url("${urlOf(t.image)}")`, backgroundSize: `${t.columns * 100}% ${t.rows * 100}%`, backgroundPosition: `${t.columns > 1 ? (col / (t.columns - 1)) * 100 : 0}% ${t.rows > 1 ? (row / (t.rows - 1)) * 100 : 0}%` }}
-                      onClick={() => (setArt(key), tool === 'erase' || tool === 'note' || tool === 'room' ? setTool('paint') : null)}
-                    />
-                  )
-                })}
-              </div>
-            </div>
-          ))}
-          {art && sets[parseArt(art).set] && (
-            <label className="sketch-check lv-solid">
-              <input
-                type="checkbox"
-                checked={!!sets[parseArt(art).set].solid?.includes(`${parseArt(art).col}:${parseArt(art).row}`)}
-                onChange={(e) => {
-                  const a = parseArt(art)
-                  const id = `${a.col}:${a.row}`
-                  doc.update((x) => ({
-                    ...x,
-                    tilesets: (x.tilesets ?? []).map((t, j) => (j === a.set ? { ...t, solid: e.target.checked ? [...(t.solid ?? []), id] : (t.solid ?? []).filter((v) => v !== id) } : t)),
-                  }))
-                }}
-              />
-              This tile blocks movement (fences, walls, houses)
-            </label>
-          )}
-          <button className="btn btn-ghost" onClick={() => void addTileset()}>
-            <ImagePlus size={14} /> Add a tileset image
-          </button>
         </div>
         <div className="lv-canvas">
           <canvas
             ref={canvas}
-            style={{ width: d.width * CELL * zoom, height: d.height * CELL * zoom }}
+            className={sharp ? 'sharp' : ''}
+            style={{ width: d.width * css, height: d.height * css }}
             onMouseDown={onDown}
             onMouseMove={onMove}
             onMouseUp={onUp}
@@ -355,6 +463,32 @@ export default function View({ documentId, active }: PanelProps) {
           />
         </div>
         <aside className="lv-notes">
+          <div className="lv-layers">
+            <strong>
+              Layers
+              <button className="icon-btn" title="New layer on top" aria-label="New layer" onClick={addLayer}>
+                <Plus size={14} />
+              </button>
+            </strong>
+            {[...layers].reverse().map((l) => (
+              <div key={l.id} className={`lv-layer${l.id === layer?.id ? ' on' : ''}`} onClick={() => setLayerId(l.id)}>
+                <button className="icon-btn" title={l.hidden ? 'Show' : 'Hide'} onClick={(e) => (e.stopPropagation(), setLayers((ls) => ls.map((x) => (x.id === l.id ? { ...x, hidden: !x.hidden || undefined } : x))))}>
+                  {l.hidden ? <EyeOff size={13} /> : <Eye size={13} />}
+                </button>
+                <input className="lv-layer-name" value={l.name} aria-label="Layer name" onChange={(e) => setLayers((ls) => ls.map((x) => (x.id === l.id ? { ...x, name: e.target.value } : x)))} />
+                <button className="icon-btn" title="Move up" onClick={(e) => (e.stopPropagation(), moveLayer(l.id, 1))}>
+                  <ArrowUp size={12} />
+                </button>
+                <button className="icon-btn" title="Move down" onClick={(e) => (e.stopPropagation(), moveLayer(l.id, -1))}>
+                  <ArrowDown size={12} />
+                </button>
+                <button className="icon-btn" title="Delete layer" disabled={layers.length < 2} onClick={(e) => (e.stopPropagation(), void removeLayer(l))}>
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+            <p className="muted lv-layers-hint">Picture tiles go on the picked layer. Put fences, fountains and other see-through things on a layer above the ground.</p>
+          </div>
           <strong>Notes</strong>
           {d.notes.length === 0 && <p className="muted">Use the Note tool to pin numbered notes on the map: a puzzle, a secret, an ambush.</p>}
           {d.notes.map((n, i) => (
@@ -379,6 +513,18 @@ export default function View({ documentId, active }: PanelProps) {
           {note && <span className="muted">Note at {note.x}, {note.y}</span>}
         </aside>
       </div>
+      <TilesetDock
+        sets={sets}
+        images={images}
+        stamp={stamp}
+        onStamp={(s) => (setStamp(s), tool === 'erase' || tool === 'note' || tool === 'room' || tool === 'block' ? setTool('paint') : null)}
+        change={changeSet}
+        onAdd={() => void pickPicture()}
+        onReplace={(t) => void pickPicture(t)}
+        onGrid={(t) => void editGrid(t)}
+        onRemove={(t) => void removeSet(t)}
+      />
+      {importing && <ImportDialog url={importing.url} title={importing.title} initial={importing.initial} onDone={finishImport} onClose={() => setImporting(null)} />}
     </div>
   )
 }

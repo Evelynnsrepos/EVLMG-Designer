@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAppStore } from '@/core/state'
+import { isShortcut } from '@/core/shortcuts'
 import { maybeStartTour } from '../help/help'
 import { Workspace } from '../workspace/Workspace'
 import { openInitialLayout } from './actions'
@@ -27,13 +28,14 @@ export function EditorScreen() {
     // Components that use Esc must call event.preventDefault() in their own handler.
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') dismissEscHint()
-      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.defaultPrevented) {
+      const back = isShortcut(e, 'app.back')
+      if ((back || isShortcut(e, 'app.forward')) && !e.defaultPrevented) {
         e.preventDefault()
-        if (e.key === 'ArrowLeft') jumpBack()
+        if (back) jumpBack()
         else jumpForward()
         return
       }
-      if (e.key !== 'Escape' || e.defaultPrevented) return
+      if (!isShortcut(e, 'app.layout') || e.defaultPrevented) return
       const app = useAppStore.getState()
       app.setLayoutMode(!app.layoutMode)
     }

@@ -1,3 +1,4 @@
+import { isShortcut } from '@/core/shortcuts'
 import { Search } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { allManifests, getManifest } from '@/core/registry'
@@ -25,7 +26,7 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+      if (isShortcut(e, 'app.search')) {
         e.preventDefault()
         setOpen((o) => !o)
       }

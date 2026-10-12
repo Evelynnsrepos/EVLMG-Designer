@@ -25,9 +25,13 @@ export interface AppSettings {
   penSmoothing: number
   /** 0.1..1 */
   penOpacity: number
+  /** v0.15: draw small pictures (pixel art tiles) with hard square pixels instead of smoothing them. */
+  sharpPixels: boolean
+  /** v0.15: changed shortcut keys by action id (see core/shortcuts.ts); anything missing uses the default. */
+  shortcuts: Record<string, string[]>
 }
 
-const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1 })
+const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {} })
 
 async function settingsPath() {
   const fs = getFs()
@@ -56,8 +60,8 @@ export const useSettings = create<SettingsState>()((set, get) => ({
     // Sliders call this many times a second; write once they settle.
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
-      const { spellCheck, spellLanguages, personalWords, aiHelper, aiModel, askProject, penSize, penSmoothing, penOpacity } = get()
-      void settingsPath().then((p) => writeVersioned(p, { spellCheck, spellLanguages, personalWords, aiHelper, aiModel, askProject, penSize, penSmoothing, penOpacity }))
+      const { spellCheck, spellLanguages, personalWords, aiHelper, aiModel, askProject, penSize, penSmoothing, penOpacity, sharpPixels, shortcuts } = get()
+      void settingsPath().then((p) => writeVersioned(p, { spellCheck, spellLanguages, personalWords, aiHelper, aiModel, askProject, penSize, penSmoothing, penOpacity, sharpPixels, shortcuts }))
     }, 400)
   },
   addWord(word) {

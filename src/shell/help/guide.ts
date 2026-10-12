@@ -20,6 +20,13 @@ export const BASICS: Record<string, GuideTopic> = {
     ],
     tips: ['Questions or ideas? Join the Evelopment Games Discord, linked at the bottom of this list.', 'Press F1 anywhere to open this guide.', 'Use the Projects button at the top of the sidebar to go back to the start screen.'],
   },
+  shortcuts: {
+    title: 'Keyboard shortcuts',
+    body: [
+      'Every shortcut in the app, with its default key and your own when you changed it. Change them in Settings, under Keyboard shortcuts (the button below takes you there).',
+      'Single-letter keys only work in the tool you clicked last, so typing in one tool never triggers another. Inside a text field, keys type as usual.',
+    ],
+  },
   workspace: {
     title: 'Workspace and Layout Mode',
     body: [

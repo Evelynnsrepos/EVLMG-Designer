@@ -7,7 +7,7 @@ import './ui.css'
 export function Modal({ children, onClose }: { children: ReactNode; onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !(e.target as Element | null)?.closest?.('[data-key-capture]')) {
         e.preventDefault() // keep Esc from toggling Layout Mode (ED-7)
         onClose()
       }

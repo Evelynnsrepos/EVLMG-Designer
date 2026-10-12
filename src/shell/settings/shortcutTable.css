@@ -1,0 +1,51 @@
+/* v0.15: shortcut list in Settings and the user guide */
+.shortcut-table section + section {
+  margin-top: 10px;
+}
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 4px 12px;
+  align-items: center;
+  font-size: 13px;
+}
+.shortcut-table.editable .shortcut-grid {
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+}
+.shortcut-line {
+  display: contents;
+}
+.shortcut-keys {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.shortcut-table kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font: 12px ui-monospace, monospace;
+}
+.shortcut-mine kbd {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.shortcut-clash {
+  color: #ff8787;
+  font-size: 11px;
+}
+.shortcut-record {
+  width: 120px;
+  font-size: 12px;
+  outline: 2px solid var(--accent);
+}
+.shortcut-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.shortcut-actions .btn {
+  padding: 2px 6px;
+  font-size: 12px;
+}

@@ -4,6 +4,10 @@
  * module only names them and matches keys.
  */
 
+import { comboOf, formatCombo } from '@/core/shortcuts'
+
+export { comboOf, formatCombo }
+
 export const ACTIONS = [
   { id: 'tool.brush', label: 'Brush', keys: ['b'] },
   { id: 'tool.eraser', label: 'Eraser', keys: ['e'] },
@@ -61,29 +65,11 @@ export function keysFor(id: ActionId, custom: ShortcutMap): readonly string[] {
   return custom[id] ?? ACTIONS.find((a) => a.id === id)?.keys ?? []
 }
 
-const NAMES: Record<string, string> = { ' ': 'space', escape: 'esc', arrowleft: 'left', arrowright: 'right', arrowup: 'up', arrowdown: 'down' }
-
-/** "ctrl+shift+z" for a key event; null for a bare modifier key. Cmd counts as Ctrl. */
-export function comboOf(e: { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }): string | null {
-  const k = e.key.toLowerCase()
-  if (['control', 'meta', 'alt', 'shift', 'altgraph', 'os'].includes(k)) return null
-  const mods = [e.ctrlKey || e.metaKey ? 'ctrl' : '', e.altKey ? 'alt' : '', e.shiftKey ? 'shift' : ''].filter(Boolean)
-  return [...mods, NAMES[k] ?? k].join('+')
-}
-
 /** The action a key event runs, if any. */
 export function matchShortcut(e: Parameters<typeof comboOf>[0], custom: ShortcutMap): ActionId | null {
   const combo = comboOf(e)
   if (!combo) return null
   return ACTIONS.find((a) => keysFor(a.id, custom).includes(combo))?.id ?? null
-}
-
-/** Readable key name, e.g. "Ctrl+Shift+Z". */
-export function formatCombo(combo: string): string {
-  return combo
-    .split('+')
-    .map((p) => (p.length === 1 ? p.toUpperCase() : p[0].toUpperCase() + p.slice(1)))
-    .join('+')
 }
 
 /** Other actions already using `combo`, to warn before assigning it twice. */

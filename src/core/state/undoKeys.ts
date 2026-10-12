@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { isShortcut } from '../shortcuts'
 
 export type UndoRedoAction = 'undo' | 'redo'
 
@@ -22,12 +23,12 @@ function isTextField(target: EventTarget | null): boolean {
   return !['checkbox', 'radio', 'button', 'submit', 'range', 'color', 'file'].includes(el.type ?? 'text')
 }
 
-/** Ctrl+Z = undo; Ctrl+Y or Ctrl+Shift+Z = redo (Cmd on macOS). Null for other keys or inside text fields. */
+/** Ctrl+Z = undo; Ctrl+Y or Ctrl+Shift+Z = redo (Cmd on macOS), or the user's own keys. Null for other keys or inside text fields. */
 export function undoRedoAction(e: KeyLike): UndoRedoAction | null {
-  if (e.defaultPrevented || e.altKey || !(e.ctrlKey || e.metaKey) || isTextField(e.target)) return null
-  const key = e.key.toLowerCase()
-  if (key === 'z') return e.shiftKey ? 'redo' : 'undo'
-  if (key === 'y' && !e.shiftKey) return 'redo'
+  if (e.defaultPrevented || isTextField(e.target)) return null
+  // v0.15: the keys can be changed in Settings.
+  if (isShortcut(e, 'app.undo')) return 'undo'
+  if (isShortcut(e, 'app.redo')) return 'redo'
   return null
 }
 

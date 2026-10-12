@@ -1,3 +1,4 @@
+import { boardShortcut, formatCombo } from '@/core/shortcuts'
 import { Redo2, Scan, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useSettings } from '@/core/state'
@@ -39,7 +40,8 @@ export function CanvasToolbar(p: CanvasToolbarProps) {
     <div className="canvas-toolbar" role="toolbar" aria-label={TOOLBAR_LABELS.toolbar} onPointerDown={(e) => e.stopPropagation()}>
       {p.tools.map((t) => {
         const Icon = t.icon
-        const title = t.shortcut ? `${t.label} (${t.shortcut.toUpperCase()})` : t.label
+        const key = boardShortcut(t.id, t.shortcut)
+        const title = key ? `${t.label} (${formatCombo(key)})` : t.label
         return (
           <button
             key={t.id}

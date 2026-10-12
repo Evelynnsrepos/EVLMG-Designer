@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { SPELL_LANGUAGES, useSettings } from '@/core/state'
 import { confirmDialog } from '@/shared/dialogs'
 import { AI_MODELS, spellAvailable, useAiHelper } from '@/shared/spell'
@@ -8,6 +8,7 @@ import { PluginsSection } from '../plugins/PluginsSection'
 import './settings.css'
 
 import { useSettingsDialog } from './open'
+import { ShortcutTable } from './ShortcutTable'
 
 const UI = {
   title: 'Settings',
@@ -29,6 +30,11 @@ const UI = {
   aiProgram: 'Downloading program',
   aiModel: 'Downloading model',
   close: 'Close',
+  pixels: 'Pictures',
+  sharp: 'Sharp pixel art',
+  sharpHint: 'Small pictures, like pixel art tiles in Level Layout, are shown with hard square pixels instead of being smoothed. Turn it off for painted or photo tilesets.',
+  keys: 'Keyboard shortcuts',
+  keysHint: 'Click Change and press the new key. Single-letter keys only work in the tool you clicked last. The user guide (F1) has the same list as a cheatsheet.',
 }
 
 const mb = (n: number) => `${Math.round(n / 1024 / 1024)} MB`
@@ -41,6 +47,11 @@ export function SettingsHost() {
 
 function SettingsDialog({ onClose }: { onClose: () => void }) {
   const s = useSettings()
+  const section = useSettingsDialog((x) => x.section)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (section) box.current?.querySelector(`[data-section="${section}"]`)?.scrollIntoView({ block: 'start' })
+  }, [section])
   const ai = useAiHelper()
   const desktop = spellAvailable()
 
@@ -57,7 +68,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal onClose={onClose}>
-      <div className="settings">
+      <div className="settings" ref={box}>
         <header className="settings-header">
           <h2>{UI.title}</h2>
           <button className="icon-btn" title={UI.close} onClick={onClose}>
@@ -152,6 +163,20 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
             {ai.error && <p className="settings-error">{ai.error}</p>}
           </section>
         )}
+        <section data-section="pixels">
+          <h3>{UI.pixels}</h3>
+          <label className="settings-check">
+            <input type="checkbox" checked={s.sharpPixels} onChange={(e) => s.update({ sharpPixels: e.target.checked })} />
+            {UI.sharp}
+          </label>
+          <p className="muted settings-hint">{UI.sharpHint}</p>
+        </section>
+
+        <section data-section="shortcuts">
+          <h3>{UI.keys}</h3>
+          <p className="muted settings-hint">{UI.keysHint}</p>
+          <ShortcutTable editable />
+        </section>
         {desktop && <PluginsSection />}
       </div>
     </Modal>

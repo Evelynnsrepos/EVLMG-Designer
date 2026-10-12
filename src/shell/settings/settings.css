@@ -1,5 +1,5 @@
 .modal:has(.settings) {
-  width: min(600px, calc(100vw - 32px));
+  width: min(720px, calc(100vw - 32px));
 }
 .settings {
   max-height: 80vh;

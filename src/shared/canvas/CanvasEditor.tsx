@@ -15,6 +15,7 @@ import { Group, Layer as KonvaLayer, Rect, Stage, Transformer } from 'react-konv
 import { isPresenceActive, setPresence } from '@/core/collab'
 import type { Id } from '@/core/model'
 import { panelKey, usePanelContext } from '@/core/state'
+import { boardShortcut, comboOf, isShortcut } from '@/core/shortcuts'
 import { RemoteCursors } from './RemoteCursors'
 import { CanvasToolbar } from './CanvasToolbar'
 import { fitRect, screenToWorld, transformBounds, unionRects, zoomAt } from './geometry'
@@ -553,11 +554,11 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
       if (!spaceDown) setSpaceDown(true)
       return handled()
     }
+    if (isShortcut(e, 'app.undo')) return handled(), props.onUndo?.()
+    if (isShortcut(e, 'app.redo')) return handled(), props.onRedo?.()
     if (mod) {
       const k = key.toLowerCase()
-      if (k === 'z') (e.shiftKey ? props.onRedo : props.onUndo)?.()
-      else if (k === 'y') props.onRedo?.()
-      else if (k === 'a') api.select(selectableNodes(props.scene).map((n) => n.id))
+      if (k === 'a') api.select(selectableNodes(props.scene).map((n) => n.id))
       else if (k === 'd') {
         let ids: Id[] = []
         props.onChange((s) => {
@@ -588,7 +589,7 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
     if (key === '0') return handled(), zoomReset()
     if (key === '!' || (key === '1' && e.shiftKey)) return handled(), api.fitToContent()
     if (key.length === 1) {
-      const t = tools.find((x) => x.shortcut?.toLowerCase() === key.toLowerCase())
+      const t = tools.find((x) => boardShortcut(x.id, x.shortcut) === comboOf(e))
       if (!t) return
       api.setTool(t.id === toolId && t.toggle ? tools[0].id : t.id)
       handled()

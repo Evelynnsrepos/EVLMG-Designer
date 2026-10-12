@@ -1,9 +1,12 @@
-import { BookOpen, Bug, CircleHelp, Compass, ExternalLink, FolderGit2, LayoutPanelLeft, Link2, Palette, Puzzle, Rocket, Save, Search, ShieldCheck, SpellCheck, Users, Wrench, X, type LucideIcon } from 'lucide-react'
+import { BookOpen, Bug, CircleHelp, Compass, ExternalLink, FolderGit2, Keyboard, LayoutPanelLeft, Link2, Palette, Puzzle, Rocket, Save, Search, ShieldCheck, SpellCheck, Users, Wrench, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { allManifests } from '@/core/registry'
+import { isShortcut } from '@/core/shortcuts'
 import { useAppStore } from '@/core/state'
 import { openExternalUrl } from '@/shared/links/openUrl'
 import { Modal } from '@/shared/ui'
+import { openSettings } from '../settings/open'
+import { ShortcutTable } from '../settings/ShortcutTable'
 import { BASICS, COMMUNITY_LINKS, TOOL_GUIDE, type GuideTopic } from './guide'
 import { placeCard, TOURS, useHelp } from './help'
 import './help.css'
@@ -11,6 +14,7 @@ import './help.css'
 // A topic without an icon here falls back to the book, so a new guide topic can never crash the guide.
 const BASIC_ICONS: Record<string, LucideIcon> = {
   start: Rocket,
+  shortcuts: Keyboard,
   workspace: LayoutPanelLeft,
   tools: Wrench,
   saving: Save,
@@ -32,7 +36,7 @@ export function HelpHost() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'F1') return
+      if (!isShortcut(e, 'app.help')) return
       e.preventDefault()
       useHelp.getState().openGuide()
     }
@@ -148,6 +152,14 @@ function GuideDialog({ topic }: { topic: string }) {
                 {current.body.map((p) => (
                   <p key={p}>{p}</p>
                 ))}
+                {topic === 'shortcuts' && (
+                  <>
+                    <button className="btn btn-primary" onClick={() => (help.closeGuide(), openSettings('shortcuts'))}>
+                      <Keyboard size={15} /> Change shortcuts in Settings
+                    </button>
+                    <ShortcutTable />
+                  </>
+                )}
                 {current.tips && (
                   <ul className="help-guide-tips">
                     {current.tips.map((t) => (

@@ -5,3 +5,5 @@ export { SketchEditor, type SketchEditorHandle, type SketchEditorProps } from '.
 export { ReferencePicker, useProjectImageList } from './ReferencePicker'
 export * from './brushes'
 export { useBrushLibrary } from './library'
+export { ACTIONS as DRAW_ACTIONS } from './actions'
+export { useInputSettings } from './inputSettings'
