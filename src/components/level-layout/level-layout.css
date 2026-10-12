@@ -384,3 +384,14 @@
   margin: 0;
   font-size: 12px;
 }
+.lv-dock-head select.input {
+  width: auto;
+}
+.lv-layer-name {
+  width: 0;
+}
+.lv-layer .icon-btn {
+  flex: none;
+  width: 22px;
+  height: 22px;
+}

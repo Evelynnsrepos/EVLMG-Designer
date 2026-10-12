@@ -4,13 +4,13 @@
 }
 .shortcut-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) 150px 110px;
   gap: 4px 12px;
   align-items: center;
   font-size: 13px;
 }
 .shortcut-table.editable .shortcut-grid {
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) 150px 110px auto;
 }
 .shortcut-line {
   display: contents;

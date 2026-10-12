@@ -121,7 +121,7 @@ export const tileRect = (t: Tileset, col: number, row: number) => {
 
 /** A good first guess at the tile size: the biggest common size that divides the image evenly. */
 export function guessTileSize(width: number, height: number): number {
-  return [32, 16, 48, 64, 24, 8].find((s) => width % s === 0 && height % s === 0 && width / s >= 2) ?? 16
+  return [16, 32, 48, 64, 24, 8].find((s) => width % s === 0 && height % s === 0 && width / s >= 2) ?? 16
 }
 
 /**

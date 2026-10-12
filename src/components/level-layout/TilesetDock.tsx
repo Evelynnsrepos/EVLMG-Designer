@@ -130,7 +130,7 @@ export function TilesetDock(p: Props) {
               </button>
             </div>
             {p.stamp?.set === current.id && <SolidCheck set={current} stamp={p.stamp} change={p.change} />}
-            <Atlas set={current} image={p.images[current.id]} stamp={p.stamp?.set === current.id ? p.stamp : null} onStamp={p.onStamp} />
+            <Atlas key={current.id} set={current} image={p.images[current.id]} stamp={p.stamp?.set === current.id ? p.stamp : null} onStamp={p.onStamp} />
           </div>
         )}
       </div>
