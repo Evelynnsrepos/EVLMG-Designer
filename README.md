@@ -98,6 +98,7 @@ The whole app in five minutes.
   The optional grammar helper comes in Small (1.1 GB), Better (2.5 GB) and Best (4.7 GB).
 - **Export a project as a zip** and import it again, for backups or to send to someone.
 - **Plugins** add new tools: install one from a GitHub link or a zip in Settings.
+- **Your own shortcuts**: change any key in Settings; the user guide (`F1`) has a cheatsheet with the default and your key.
 
 </details>
 
@@ -203,7 +204,7 @@ xattr -dr com.apple.quarantine "/Applications/Evelopment Games Designer.app"
 
 | Tool | What it does |
 |---|---|
-| **Level Layout** | Paint levels and dungeons on a tile grid: rooms, doors, enemies, loot, spawns and numbered notes, your own tileset images, tiles that block movement (walls, fences, houses), and export as a Godot 4 TileMap scene with collision. |
+| **Level Layout** | Paint levels and dungeons on a tile grid: rooms, doors, enemies, loot, spawns and numbered notes. Tilesets shared by every level in a panel like Godot's (search, folders, colours, pop-out), multi-tile stamps, layers for see-through things, an import window with the grid, sharp pixel art, tiles that block movement (walls, fences, houses), and export as a Godot 4 TileMap scene with collision. |
 | **Gameplay Loop** | The loop players repeat as a circular timeline: flesh out each step, size steps by time, and branch notes off them. |
 | **Skill Tree** | Skill and talent trees with ranks, costs and requirements, plus a build planner. |
 | **Abilities & Spells** | Abilities and spells with costs, cooldowns and numbers from Damage Calculator formulas. |
