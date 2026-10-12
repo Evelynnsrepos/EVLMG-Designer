@@ -14,7 +14,7 @@ interface KeyLike {
 }
 
 /** Text fields keep their own native undo, so app-level undo skips them. */
-function isTextField(target: EventTarget | null): boolean {
+export function isTextField(target: EventTarget | null): boolean {
   const el = target as (Partial<HTMLElement> & { tagName?: string; type?: string }) | null
   if (!el || typeof el.tagName !== 'string') return false
   if (el.isContentEditable) return true

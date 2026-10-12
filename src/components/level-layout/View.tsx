@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, Ban, Brush, Download, Eraser, Eye, EyeOff, PaintBucket, Plus, Square, StickyNote, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PanelProps } from '@/core/registry'
-import { useDocument, useProjectStore, useSettings, useUndoRedoKeys } from '@/core/state'
+import { useDocument, useProjectStore, useSettings, isTextField, useUndoRedoKeys } from '@/core/state'
 import { saveBinaryFile, safeFileName } from '@/core/export'
 import { pickAndImportAssets, resolveAssetPath } from '@/core/assets'
 import { getFs } from '@/core/fs'
@@ -195,8 +195,7 @@ export default function View({ documentId, active }: PanelProps) {
   useEffect(() => {
     if (!active) return
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null
-      if (e.defaultPrevented || (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)))) return
+      if (e.defaultPrevented || isTextField(e.target) || (e.target as HTMLElement | null)?.tagName === 'SELECT') return
       const hit = (['paint', 'room', 'fill', 'erase', 'note', 'block'] as const).find((id) => isShortcut(e, `level.${id}`))
       if (!hit) return
       e.preventDefault()

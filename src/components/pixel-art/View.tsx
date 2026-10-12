@@ -6,7 +6,7 @@ import { getFs } from '@/core/fs'
 import { newId } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
 import { isShortcut } from '@/core/shortcuts'
-import { loadDocumentNow, updateDocument, useDocument, useIntentHandler, useProjectStore, useUndoRedoKeys, type UseDocumentResult } from '@/core/state'
+import { loadDocumentNow, updateDocument, useDocument, useIntentHandler, useProjectStore, isTextField, useUndoRedoKeys, type UseDocumentResult } from '@/core/state'
 import { NumberInput, PresetHeader } from '@/shared/calculators'
 import { confirmDialog } from '@/shared/dialogs'
 import { pickFiles } from '@/shared/sketch/files/io'
@@ -372,6 +372,12 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   }
   useEffect(draw)
 
+  // Map and tiles have their own tools.
+  useEffect(() => {
+    if (inMap && !MAP_TOOLS.some((t) => t.id === tool)) setTool('tile')
+    if (!inMap && tool.startsWith('tile')) setTool('pencil')
+  }, [inMap, tool])
+
   // ---- Playback ----
   useEffect(() => {
     if (!playing) return
@@ -392,8 +398,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   // ---- Keys ----
   const keys = useRef<(e: KeyboardEvent) => void>(() => {})
   keys.current = (e) => {
-    const t = e.target as HTMLElement | null
-    if (e.defaultPrevented || (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)))) return
+    if (e.defaultPrevented || isTextField(e.target) || (e.target as HTMLElement | null)?.tagName === 'SELECT') return
     const hit = TOOLS.find((x) => isShortcut(e, x.key))
     const act = (fn: () => void) => (e.preventDefault(), fn())
     if (hit) return act(() => setTool(hit.id))

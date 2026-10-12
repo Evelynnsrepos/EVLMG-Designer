@@ -152,7 +152,7 @@ xattr -dr com.apple.quarantine "/Applications/Evelopment Games Designer.app"
 
 ## 🧰 All the tools
 
-50 tools, and you only add the ones your game needs.
+51 tools, and you only add the ones your game needs.
 
 <details>
 <summary><b>Click to see every tool</b></summary>
@@ -193,6 +193,7 @@ xattr -dr com.apple.quarantine "/Applications/Evelopment Games Designer.app"
 | Tool | What it does |
 |---|---|
 | **Draw** | A full painting app: pen pressure and tilt, about 120 editable brushes (plus .abr, .brush and .brushset import), 26 blend modes, groups, masks and adjustment layers, selections and transform, adjustments, liquify, guides and symmetry, text layers, animation, time-lapse, 250 undo steps, canvases up to 8K, and PSD import and export. |
+| **Pixel Art** | Sprites, animations, tilesets and tilemaps on exact pixels: clean lines, dithering, a shade brush, mirror and seamless drawing, palettes with a ramp maker, layers, frames with onion skin and tags, tile maps that send straight to Level Layout, and export as PNG, GIF, sprite sheet + JSON or Godot SpriteFrames. Opens .ase and .aseprite files. |
 | **Texture Paint** (experimental) | Paint 3D models (GLB, OBJ, FBX) on the model and on its texture side by side, with every Draw brush, and export PNG or GLB. |
 | **Moodboard** | Images, cutouts (shapes or freehand lasso), text, shapes, an eraser and a layers panel, with an always-on-top layer for drawings. |
 | **Design Language** | The look of your game on one board. Works like the Moodboard: images, cutouts, and your drawings from Draw as stickers. |

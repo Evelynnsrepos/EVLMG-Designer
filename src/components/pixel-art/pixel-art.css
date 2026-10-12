@@ -303,3 +303,6 @@
 .px-tagname {
   width: 110px;
 }
+.px select.input {
+  width: auto;
+}
