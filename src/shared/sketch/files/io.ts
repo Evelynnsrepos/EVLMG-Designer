@@ -71,6 +71,7 @@ export async function pickFiles(title: string, extensions: string[]): Promise<{ 
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = extensions.map((e) => `.${e}`).join(',')
+    input.multiple = true
     input.onchange = async () => resolve(await Promise.all([...(input.files ?? [])].map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) }))))
     input.click()
   })

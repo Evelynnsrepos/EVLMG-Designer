@@ -14,8 +14,8 @@ import { encodeGif } from '@/shared/sketch/files/gif'
 import { createLibrary, drawTile, FLIP_H, FLIP_V, LIBRARY_ID, tilePixel, tileRect, TRANSPOSE, turnFlags, type TileLibrary } from '@/shared/tileset'
 import { IMAGE_TARGETS, openComponent, sendImageTo } from '@/shell/editor/actions'
 import { readAse } from './ase'
-import { celImg, decode, encode, pngBytes, toCanvas, useDecoded } from '@/shared/pixel/codec'
-import { godotSpriteFrames, sheetCell, sheetColumns, sheetJson } from './exports'
+import { celImg, decode, decodeFrames, encode, pngBytes, toCanvas, useDecoded } from '@/shared/pixel/codec'
+import { DEFAULT_SHEET, godotSpriteFrames, sheetJson, sheetLayout, type SheetOptions } from './exports'
 import {
   blank,
   brushOffsets,
@@ -176,16 +176,26 @@ function Start({ onStart }: { onStart(patch: Partial<PixelDoc>): void }) {
   }
 
   const openFile = async () => {
-    const [f] = await pickFiles('Open pixel art', ['ase', 'aseprite', 'png', 'gif'])
+    const files = await pickFiles('Open pixel art (pick several pictures to make them frames)', ['ase', 'aseprite', 'png', 'gif'])
+    const [f] = files
     if (!f) return
     try {
       if (/\.(ase|aseprite)$/i.test(f.name)) return onStart(fromAse(readAse(f.bytes)))
-      const img = await decode(f.bytes)
+      // Several pictures: frames in name order (frame_1, frame_2, … frame_10).
+      const pics = files.length > 1 ? [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })) : null
+      const anim = pics ? { frames: await Promise.all(pics.map((p) => decode(p.bytes))), durations: pics.map(() => 100) } : await decodeFrames(f.bytes, /\.gif$/i.test(f.name) ? 'image/gif' : 'image/png')
+      const w = Math.max(...anim.frames.map((i) => i.width))
+      const h = Math.max(...anim.frames.map((i) => i.height))
       const layer = newPixelLayer('Layer 1')
-      const frame = newFrame()
-      const url = encode(img)
-      const patch: Partial<PixelDoc> = { ...startDoc(kind, img.width, img.height, tile), layers: [layer], frames: [frame], cels: url ? { [celKey(layer.id, frame.id)]: url } : {} }
-      onStart(patch)
+      const frames = anim.frames.map((_, i) => newFrame(anim.durations[i]))
+      const cels: Record<string, string> = {}
+      anim.frames.forEach((img, i) => {
+        const full = blank(w, h)
+        for (let y = 0; y < img.height; y++) full.data.set(img.data.subarray(y * img.width * 4, (y + 1) * img.width * 4), y * w * 4)
+        const url = encode(full)
+        if (url) cels[celKey(layer.id, frames[i].id)] = url
+      })
+      onStart({ ...startDoc(frames.length > 1 ? 'sprite' : kind, w, h, tile), layers: [layer], frames, cels })
     } catch {
       setError('This file could not be read.')
     }
@@ -236,7 +246,7 @@ function Start({ onStart }: { onStart(patch: Partial<PixelDoc>): void }) {
         Start
       </button>
       <button className="btn" onClick={() => void openFile()}>
-        <Upload size={14} /> Open a file (.ase, .aseprite, PNG)
+        <Upload size={14} /> Open a file (.ase, .aseprite, PNG, GIF, or several pictures as frames)
       </button>
       <button className="btn" title="A finished map picture: cut into tiles (identical ones kept once) and rebuilt as a tileset with its map" onClick={() => void openMap()}>
         <Upload size={14} /> Open a map picture (rebuild its tiles at {tile} px)
@@ -382,6 +392,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const [playTag, setPlayTag] = useState<string | null>(null)
   const [menu, setMenu] = useState(false)
   const [scale, setScale] = useState(1)
+  const [sheetOpts, setSheetOpts] = useState<SheetOptions>(DEFAULT_SHEET)
   const [note, setNote] = useState<string | null>(null)
   // The selection (not saved with the file) and the one being drawn.
   const [mask, setMask] = useState<Mask | null>(null)
@@ -1200,11 +1211,11 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const savePng = (img: Img, name: string) =>
     void pngBytes(img, scale).then((bytes) => saveBinaryFile({ title: 'Export PNG', defaultName: name, bytes, filter: { name: 'PNG image', extensions: ['png'] } }))
   const sheet = () => {
-    const columns = sheetColumns(d.frames.length)
-    const img = blank(columns * d.width, Math.ceil(d.frames.length / columns) * d.height)
+    const l = sheetLayout(d, sheetOpts)
+    const img = blank(l.width, l.height)
     d.frames.forEach((_, i) => {
       const f = frameImg(i)
-      const c = sheetCell(i, columns, d.width, d.height)
+      const c = l.at[i]
       for (let y = 0; y < d.height; y++) img.data.set(f.data.subarray(y * d.width * 4, (y + 1) * d.width * 4), ((c.y + y) * img.width + c.x) * 4)
     })
     return img
@@ -1227,11 +1238,11 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     return dir
   }
   const exportSheet = async () => {
-    const json = JSON.stringify(sheetJson(d, `${base}.png`), null, 2)
+    const json = JSON.stringify(sheetJson(d, `${base}.png`, sheetOpts), null, 2)
     if (await writeTo('Choose a folder for the sprite sheet', [], [[`${base}.png`, await pngBytes(sheet())], [`${base}.json`, new TextEncoder().encode(json)]])) setNote(`Saved ${base}.png and ${base}.json.`)
   }
   const exportGodot = async () => {
-    const tres = godotSpriteFrames(d, `res://egd/sprites/${base}.png`)
+    const tres = godotSpriteFrames(d, `res://egd/sprites/${base}.png`, sheetOpts)
     if (await writeTo('Choose your Godot project folder', ['egd', 'sprites'], [[`${base}.png`, await pngBytes(sheet())], [`${base}.tres`, new TextEncoder().encode(tres)]])) setNote(`Saved egd/sprites/${base}.tres in your Godot project: use it in an AnimatedSprite2D.`)
   }
   const mapImg = () => {
@@ -1452,6 +1463,16 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                 <>
                   <button onClick={() => savePng(frameImg(fi), `${base}.png`)}>PNG of this frame</button>
                   <button onClick={() => void exportGif()}>GIF animation{playTag ? ' (the picked tag)' : ''}</button>
+                  <label className="px-row" onClick={(e) => e.stopPropagation()} title="How frames sit on the sprite sheet (also for Godot)">
+                    Sheet
+                    <select className="input" value={sheetOpts.layout} onChange={(e) => setSheetOpts({ ...sheetOpts, layout: e.target.value as SheetOptions['layout'] })}>
+                      <option value="grid">Grid</option>
+                      <option value="row">One row</option>
+                      <option value="tags">A row per tag</option>
+                    </select>
+                    gap
+                    <input className="input px-ms" type="number" min={0} max={16} value={sheetOpts.padding} onChange={(e) => setSheetOpts({ ...sheetOpts, padding: Math.max(0, Math.min(16, Number(e.target.value) || 0)) })} /> px
+                  </label>
                   <button onClick={() => void exportSheet()}>Sprite sheet + JSON</button>
                   <button onClick={() => void exportGodot()}>Godot SpriteFrames</button>
                   <button title="Every frame (or the picked tag) as Storyboard frames, with their timing" onClick={() => void toStoryboard()}>

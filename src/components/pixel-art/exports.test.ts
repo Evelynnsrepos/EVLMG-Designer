@@ -17,3 +17,12 @@ describe('pixel art exports', () => {
     expect(t.match(/AtlasTexture_1"\)/g)).toHaveLength(2)
   })
 })
+
+describe('sprite sheet options', () => {
+  const d = { width: 4, height: 4, frames: [{ id: 'a', duration: 100 }, { id: 'b', duration: 100 }, { id: 'c', duration: 100 }], tags: [{ id: 't', name: 'jump', from: 2, to: 2, color: '#fff', loop: 'forward' as const }] }
+  it('lays frames in one row with padding, or starts a row at every tag', async () => {
+    const { sheetLayout } = await import('./exports')
+    expect(sheetLayout(d, { layout: 'row', padding: 1 })).toEqual({ at: [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 10, y: 0 }], width: 14, height: 4 })
+    expect(sheetLayout(d, { layout: 'tags', padding: 0 }).at[2]).toEqual({ x: 0, y: 4 })
+  })
+})

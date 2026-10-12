@@ -63,3 +63,32 @@ export function useDecoded(urls: string[]): number {
 
 /** A cel's pixels, or an empty image of the canvas size. */
 export const celImg = (url: string | undefined, w: number, h: number) => cached(url) ?? blank(w, h)
+
+/**
+ * Every frame of an animated GIF or APNG, with durations (ms). Uses the webview's ImageDecoder;
+ * where it has none (some Linux webviews), only the first frame comes back.
+ */
+export async function decodeFrames(bytes: Uint8Array, type: 'image/gif' | 'image/png'): Promise<{ frames: Img[]; durations: number[] }> {
+  const Decoder = (globalThis as { ImageDecoder?: new (init: { data: Uint8Array; type: string }) => ImageDecoderLike }).ImageDecoder
+  if (!Decoder) return { frames: [await decode(bytes)], durations: [100] }
+  const dec = new Decoder({ data: bytes, type })
+  await dec.tracks.ready
+  const count = dec.tracks.selectedTrack?.frameCount ?? 1
+  const frames: Img[] = []
+  const durations: number[] = []
+  for (let i = 0; i < count; i++) {
+    const { image } = await dec.decode({ frameIndex: i })
+    const c = new OffscreenCanvas(image.displayWidth, image.displayHeight)
+    const g = c.getContext('2d')!
+    g.drawImage(image as unknown as CanvasImageSource, 0, 0)
+    const d = g.getImageData(0, 0, c.width, c.height)
+    frames.push({ width: d.width, height: d.height, data: d.data })
+    durations.push(Math.max(10, Math.round((image.duration ?? 100000) / 1000)))
+    image.close()
+  }
+  return { frames, durations }
+}
+interface ImageDecoderLike {
+  tracks: { ready: Promise<void>; selectedTrack?: { frameCount: number } }
+  decode(o: { frameIndex: number }): Promise<{ image: { displayWidth: number; displayHeight: number; duration?: number; close(): void } }>
+}
