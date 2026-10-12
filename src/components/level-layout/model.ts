@@ -54,6 +54,8 @@ export interface LevelDoc {
   layers?: ArtLayer[]
   /** v0.14: cells blocked by hand ("x,y"), on top of tiles that block movement by themselves. */
   blocked?: Record<string, true>
+  /** v0.16: an isometric level: diamond cells twice as wide as high (32 × 16 tiles). */
+  iso?: boolean
   /** v0.13–0.14: the level's own tilesets; v0.15 moves them into the shared library (see migrateLevel). */
   tilesets?: Tileset[]
   /** v0.13–0.14: one layer of picture tiles, "x,y" → "set index:column:row"; becomes layers[0]. */
@@ -119,19 +121,70 @@ export function stampTileAt(s: Stamp, ox: number, oy: number, x: number, y: numb
   return artKey(s.set, s.col + mod(x - ox, s.w), s.row + mod(y - oy, s.h))
 }
 
-/** A room: floor inside, walls around it; existing doors in the wall line stay. */
-export function room(d: LevelDoc, x1: number, y1: number, x2: number, y2: number): Record<string, TileId> {
-  const [ax, bx] = [Math.min(x1, x2), Math.max(x1, x2)]
-  const [ay, by] = [Math.min(y1, y2), Math.max(y1, y2)]
-  const tiles = { ...d.tiles }
-  for (let y = ay; y <= by; y++)
-    for (let x = ax; x <= bx; x++) {
-      const edge = x === ax || x === bx || y === ay || y === by
-      const k = cellKey(x, y)
-      if (edge) tiles[k] = tiles[k] === 'door' ? 'door' : 'wall'
-      else tiles[k] = 'floor'
+/**
+ * Where cells sit on the canvas (v0.16): a square grid, or isometric diamonds (twice as wide as high,
+ * x going down-right and y down-left, like Godot's isometric "diamond down" layout). `s` is a cell's width in px.
+ */
+export function geometry(iso: boolean | undefined, w: number, h: number, s: number) {
+  if (!iso)
+    return {
+      width: w * s,
+      height: h * s,
+      cellH: s,
+      /** Top left corner of the cell's box. */
+      box: (x: number, y: number): [number, number] => [x * s, y * s],
+      at: (px: number, py: number) => ({ x: Math.floor(px / s), y: Math.floor(py / s) }),
     }
-  return tiles
+  const hw = s / 2
+  const hh = s / 4
+  const ox = h * hw
+  return {
+    width: (w + h) * hw,
+    height: (w + h) * hh,
+    cellH: s / 2,
+    box: (x: number, y: number): [number, number] => [ox + (x - y) * hw - hw, (x + y) * hh],
+    at: (px: number, py: number) => {
+      const mx = (px - ox) / hw
+      const my = py / hh
+      return { x: Math.floor((mx + my) / 2), y: Math.floor((my - mx) / 2) }
+    },
+  }
+}
+
+/** A rectangle of cells, corners included. */
+export interface CellRect {
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+}
+export const inRect = (r: CellRect, x: number, y: number) => x >= Math.min(r.x0, r.x1) && x <= Math.max(r.x0, r.x1) && y >= Math.min(r.y0, r.y1) && y <= Math.max(r.y0, r.y1)
+
+/** Everything in the rectangle (plan tiles, picture tiles on every layer, blocked cells, notes) moved by dx,dy; what lands outside the level is dropped. */
+export function moveRegion(d: LevelDoc, r: CellRect, dx: number, dy: number): Pick<LevelDoc, 'tiles' | 'layers' | 'blocked' | 'notes'> {
+  const move = <T,>(map: Record<string, T>): Record<string, T> => {
+    const out: Record<string, T> = {}
+    const moved: [string, T][] = []
+    for (const [k, v] of Object.entries(map)) {
+      const [x, y] = k.split(',').map(Number)
+      if (!inRect(r, x, y)) out[k] = v
+      else if (x + dx >= 0 && y + dy >= 0 && x + dx < d.width && y + dy < d.height) moved.push([cellKey(x + dx, y + dy), v])
+    }
+    for (const [k, v] of moved) out[k] = v
+    return out
+  }
+  return {
+    tiles: move(d.tiles),
+    layers: (d.layers ?? []).map((l) => ({ ...l, art: move(l.art) })),
+    blocked: move(d.blocked ?? {}),
+    notes: d.notes.map((n) => (inRect(r, n.x, n.y) ? { ...n, x: n.x + dx, y: n.y + dy } : n)).filter((n) => n.x >= 0 && n.y >= 0 && n.x < d.width && n.y < d.height),
+  }
+}
+
+/** Every cell in the rectangle emptied (all layers, plan tiles, blocked cells and notes). */
+export function clearRegion(d: LevelDoc, r: CellRect): Pick<LevelDoc, 'tiles' | 'layers' | 'blocked' | 'notes'> {
+  const keep = <T,>(map: Record<string, T>) => Object.fromEntries(Object.entries(map).filter(([k]) => !inRect(r, ...(k.split(',').map(Number) as [number, number]))))
+  return { tiles: keep(d.tiles), layers: (d.layers ?? []).map((l) => ({ ...l, art: keep(l.art) })), blocked: keep(d.blocked ?? {}), notes: d.notes.filter((n) => !inRect(r, n.x, n.y)) }
 }
 
 /**
@@ -206,20 +259,26 @@ export function godotScene(d: LevelDoc, sets: Tileset[], name: string, imagePath
     lines.push(`[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_${i}"]`, `texture = ExtResource("${i + 1}")`)
     if (t.margin) lines.push(`margins = Vector2i(${t.margin}, ${t.margin})`)
     if (t.spacing) lines.push(`separation = Vector2i(${t.spacing}, ${t.spacing})`)
-    lines.push(`texture_region_size = Vector2i(${t.tileSize}, ${t.tileSize})`)
+    lines.push(`texture_region_size = Vector2i(${t.tileSize}, ${t.tileHeight ?? t.tileSize})`)
     const h = t.tileSize / 2
+    // Isometric tiles collide as a diamond, square ones as a square.
+    const shape = d.iso ? `PackedVector2Array(${-h}, 0, 0, ${-(t.tileHeight ?? t.tileSize) / 2}, ${h}, 0, 0, ${(t.tileHeight ?? t.tileSize) / 2})` : `PackedVector2Array(${-h}, ${-h}, ${h}, ${-h}, ${h}, ${h}, ${-h}, ${h})`
     for (let row = 0; row < t.rows; row++)
       for (let col = 0; col < t.columns; col++) {
         lines.push(`${col}:${row}/0 = 0`)
         // v0.14: tiles that block movement get a full-tile collision shape.
-        if (t.solid?.includes(`${col}:${row}`)) lines.push(`${col}:${row}/0/physics_layer_0/polygon_0/points = PackedVector2Array(${-h}, ${-h}, ${h}, ${-h}, ${h}, ${h}, ${-h}, ${h})`)
+        if (t.solid?.includes(`${col}:${row}`)) lines.push(`${col}:${row}/0/physics_layer_0/polygon_0/points = ${shape}`)
       }
     lines.push('')
   })
   const size = sets[0]?.tileSize ?? 16
+  const sizeH = d.iso ? (sets[0]?.tileHeight ?? size / 2) : size
   const handBlocked = Object.keys(d.blocked ?? {}).map((k) => k.split(',').map(Number))
-  if (handBlocked.length) lines.push('[sub_resource type="RectangleShape2D" id="Blocked_1"]', `size = Vector2(${size}, ${size})`, '')
-  lines.push('[sub_resource type="TileSet" id="TileSet_1"]', `tile_size = Vector2i(${size}, ${size})`)
+  if (handBlocked.length) lines.push('[sub_resource type="RectangleShape2D" id="Blocked_1"]', `size = Vector2(${size}, ${sizeH})`, '')
+  lines.push('[sub_resource type="TileSet" id="TileSet_1"]')
+  // v0.16: isometric levels use Godot's isometric shape with the "diamond down" layout (x down-right, y down-left).
+  if (d.iso) lines.push('tile_shape = 1', 'tile_layout = 5')
+  lines.push(`tile_size = Vector2i(${size}, ${sizeH})`)
   if (sets.some((t) => t.solid?.length)) lines.push('physics_layer_0/collision_layer = 1')
   sets.forEach((_, i) => lines.push(`sources/${i} = SubResource("TileSetAtlasSource_${i}")`))
   const source = new Map(sets.map((t, i) => [t.id, i]))
@@ -242,7 +301,9 @@ export function godotScene(d: LevelDoc, sets: Tileset[], name: string, imagePath
   // Cells blocked by hand: one static body with a square for each.
   if (handBlocked.length) {
     lines.push('[node name="Blocked" type="StaticBody2D" parent="."]', '')
-    handBlocked.forEach(([x, y], i) => lines.push(`[node name="Cell${i}" type="CollisionShape2D" parent="Blocked"]`, `position = Vector2(${x * size + size / 2}, ${y * size + size / 2})`, 'shape = SubResource("Blocked_1")', ''))
+    handBlocked.forEach(([x, y], i) =>
+      lines.push(`[node name="Cell${i}" type="CollisionShape2D" parent="Blocked"]`, d.iso ? `position = Vector2(${((x - y) * size) / 2}, ${((x + y) * sizeH) / 2})` : `position = Vector2(${x * size + size / 2}, ${y * size + size / 2})`, 'shape = SubResource("Blocked_1")', ''),
+    )
   }
   return lines.join('\n')
 }

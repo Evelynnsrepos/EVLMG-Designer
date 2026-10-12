@@ -36,7 +36,7 @@ export const SHORTCUT_GROUPS = [
     name: 'Level Layout',
     items: [
       { id: 'level.paint', label: 'Paint', keys: ['b'] },
-      { id: 'level.room', label: 'Room', keys: ['r'] },
+      { id: 'level.select', label: 'Select and move', keys: ['m'] },
       { id: 'level.fill', label: 'Fill', keys: ['g'] },
       { id: 'level.erase', label: 'Erase', keys: ['e'] },
       { id: 'level.note', label: 'Note', keys: ['n'] },

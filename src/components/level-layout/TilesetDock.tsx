@@ -179,10 +179,10 @@ function Atlas({ set, image, stamp, onStamp }: { set: Tileset; image?: TileImage
       for (let col = 0; col < set.columns; col++) {
         const r = tileRect(set, col, row)
         g.strokeStyle = 'rgba(255, 255, 255, 0.18)'
-        g.strokeRect(r.x, r.y, r.size, r.size)
+        g.strokeRect(r.x, r.y, r.size, r.h)
         if (set.solid?.includes(`${col}:${row}`)) {
           g.fillStyle = 'rgba(224, 49, 49, 0.25)'
-          g.fillRect(r.x, r.y, r.size, r.size)
+          g.fillRect(r.x, r.y, r.size, r.h)
         }
       }
     if (stamp) {
@@ -190,7 +190,7 @@ function Atlas({ set, image, stamp, onStamp }: { set: Tileset; image?: TileImage
       const b = tileRect(set, stamp.col + stamp.w - 1, stamp.row + stamp.h - 1)
       g.lineWidth = 2 / zoom
       g.strokeStyle = '#4dabf7'
-      g.strokeRect(a.x, a.y, b.x + b.size - a.x, b.y + b.size - a.y)
+      g.strokeRect(a.x, a.y, b.x + b.size - a.x, b.y + b.h - a.y)
     }
   }, [set, image, zoom, stamp])
 
@@ -198,8 +198,8 @@ function Atlas({ set, image, stamp, onStamp }: { set: Tileset; image?: TileImage
     const r = canvas.current!.getBoundingClientRect()
     const px = ((e.clientX - r.left) / r.width) * set.width - (set.margin ?? 0)
     const py = ((e.clientY - r.top) / r.height) * set.height - (set.margin ?? 0)
-    const step = set.tileSize + (set.spacing ?? 0)
-    return { col: Math.max(0, Math.min(set.columns - 1, Math.floor(px / step))), row: Math.max(0, Math.min(set.rows - 1, Math.floor(py / step))) }
+    const sp = set.spacing ?? 0
+    return { col: Math.max(0, Math.min(set.columns - 1, Math.floor(px / (set.tileSize + sp)))), row: Math.max(0, Math.min(set.rows - 1, Math.floor(py / ((set.tileHeight ?? set.tileSize) + sp)))) }
   }
   const pick = (a: { col: number; row: number }, b: { col: number; row: number }) =>
     onStamp({ set: set.id, col: Math.min(a.col, b.col), row: Math.min(a.row, b.row), w: Math.abs(a.col - b.col) + 1, h: Math.abs(a.row - b.row) + 1 })

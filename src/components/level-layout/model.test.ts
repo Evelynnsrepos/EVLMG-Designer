@@ -1,19 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { bucket, counts, createLevelDoc, createLibrary, godotScene, grid, isBlocked, migrateLevel, room, stampCells, stampTileAt, usedTilesets, type LevelDoc } from './model'
+import { bucket, clearRegion, counts, createLevelDoc, createLibrary, geometry, godotScene, grid, isBlocked, migrateLevel, moveRegion, stampCells, stampTileAt, usedTilesets, type LevelDoc } from './model'
 
 describe('level layout', () => {
-  it('builds rooms with walls and keeps doors', () => {
-    const d = { ...createLevelDoc(), tiles: { '0,1': 'door' as const } }
-    const tiles = room(d, 0, 0, 3, 3)
-    expect(tiles['0,0']).toBe('wall')
-    expect(tiles['1,1']).toBe('floor')
-    expect(tiles['0,1']).toBe('door')
-    expect(counts({ ...d, tiles })).toEqual({ wall: 11, door: 1, floor: 4 })
-  })
-
   it('fills connected areas only', () => {
     const d = { ...createLevelDoc(), width: 5, height: 5 }
-    const walled = { ...d, tiles: room(d, 0, 0, 4, 4) }
+    const tiles: Record<string, 'wall'> = {}
+    for (let i = 0; i < 5; i++) tiles[`${i},0`] = tiles[`${i},4`] = tiles[`0,${i}`] = tiles[`4,${i}`] = 'wall'
+    const walled = { ...d, tiles }
     const filled = bucket(walled, 2, 2, 'water')
     expect(counts({ ...walled, tiles: filled }).water).toBe(9)
     expect(filled['0,0']).toBe('wall')
@@ -86,5 +79,29 @@ describe('v0.15 tilesets, layers and stamps', () => {
     expect(scene).toContain('layer_0/name = "Ground"')
     expect(scene).toContain('layer_1/enabled = false')
     expect(scene).toContain('layer_1/tile_data = PackedInt32Array()')
+  })
+})
+
+describe('v0.16 select and move, isometric levels', () => {
+  it('moves and clears everything inside a rectangle', () => {
+    const d: LevelDoc = { ...createLevelDoc(), width: 4, height: 4, tiles: { '0,0': 'wall', '3,3': 'door' }, layers: [{ id: 'g', name: 'G', art: { '1,0': 't:0:0' } }], blocked: { '0,1': true }, notes: [{ id: 'n', x: 1, y: 1, text: '' }] }
+    const m = moveRegion(d, { x0: 0, y0: 0, x1: 1, y1: 1 }, 2, 2)
+    expect(m.tiles).toEqual({ '2,2': 'wall', '3,3': 'door' })
+    expect(m.layers![0].art).toEqual({ '3,2': 't:0:0' })
+    expect(m.blocked).toEqual({ '2,3': true })
+    expect(m.notes[0]).toMatchObject({ x: 3, y: 3 })
+    expect(Object.keys(clearRegion(d, { x0: 0, y0: 0, x1: 3, y1: 3 }).tiles)).toHaveLength(0)
+  })
+
+  it('finds isometric cells under the pointer and exports an isometric TileSet', () => {
+    const g = geometry(true, 10, 10, 32)
+    const [bx, by] = g.box(3, 5)
+    expect(g.at(bx + 16, by + 8)).toEqual({ x: 3, y: 5 })
+    const sets = [{ id: 't', name: 'Iso', image: 'a.png', tileSize: 32, tileHeight: 16, columns: 1, rows: 1, width: 32, height: 16 }]
+    const scene = godotScene({ ...createLevelDoc(), iso: true, layers: [{ id: 'g', name: 'G', art: { '0,0': 't:0:0' } }] }, sets, 'Iso', () => 'res://a.png')
+    expect(scene).toContain('tile_shape = 1')
+    expect(scene).toContain('tile_layout = 5')
+    expect(scene).toContain('tile_size = Vector2i(32, 16)')
+    expect(scene).toContain('texture_region_size = Vector2i(32, 16)')
   })
 })

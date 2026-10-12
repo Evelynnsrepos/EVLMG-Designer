@@ -395,3 +395,6 @@
   width: 22px;
   height: 22px;
 }
+.lv-zoom input[type='range'] {
+  width: 220px;
+}

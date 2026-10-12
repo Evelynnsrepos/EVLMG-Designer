@@ -205,7 +205,7 @@ xattr -dr com.apple.quarantine "/Applications/Evelopment Games Designer.app"
 
 | Tool | What it does |
 |---|---|
-| **Level Layout** | Paint levels and dungeons on a tile grid: rooms, doors, enemies, loot, spawns and numbered notes. Tilesets shared by every level in a panel like Godot's (search, folders, colours, pop-out), multi-tile stamps, layers for see-through things, an import window with the grid, sharp pixel art, tiles that block movement (walls, fences, houses), and export as a Godot 4 TileMap scene with collision. |
+| **Level Layout** | Paint levels and dungeons on a square or isometric grid: doors, enemies, loot, spawns and numbered notes, select and move, brush sizes and zoom from 10 to 800 %. Tilesets shared by every level in a panel like Godot's (search, folders, colours, pop-out), multi-tile stamps, layers for see-through things, an import window with the grid, sharp pixel art, tiles that block movement (walls, fences, houses), and export as a Godot 4 TileMap scene with collision. |
 | **Gameplay Loop** | The loop players repeat as a circular timeline: flesh out each step, size steps by time, and branch notes off them. |
 | **Skill Tree** | Skill and talent trees with ranks, costs and requirements, plus a build planner. |
 | **Abilities & Spells** | Abilities and spells with costs, cooldowns and numbers from Damage Calculator formulas. |

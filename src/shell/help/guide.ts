@@ -402,9 +402,10 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     title: 'Level Layout',
     body: [
       'Sketch levels and dungeons on a grid. Pick a tile on the left (floor, wall, door, water, lava, stairs, start, exit, enemy, boss, chest, key, trap, NPC) and paint with the brush.',
-      'Room draws a whole room as you drag: floor inside, walls around, and doors you already placed stay. Fill floods an area, Erase clears tiles, and right-click with Fill empties an area.',
+      'Select and move (the dashed square) drags a rectangle over the level; drag inside it to move everything in it, on every layer, with its blocked cells and notes. Delete empties it and Esc lets go. Fill floods an area, Erase clears tiles, and right-click with Fill empties an area. Brush sets how many cells Paint, Erase and Blocked cover at once.',
+      'Zoom goes from 10 % to 800 %. Isometric turns the level into diamond cells twice as wide as high, for 32 × 16 tiles; the Godot scene then uses Godot\'s isometric tiles.',
       'Note pins a numbered note on the map for puzzles, secrets or ambushes; the notes are listed on the right. The palette counts how many enemies, chests and so on the level has. Export saves the level as a PNG.',
-      'Tilesets live in the panel at the bottom, like in Godot, and every level in the project can use them. Add opens a window that shows the picture cut into tiles: pick a common tile size or type your own, and set margin and spacing for pictures with gaps; red shows pixels no tile covers. Black is see-through makes pure black pixels transparent, for tilesets drawn on black. Grid opens the window again, and Replace swaps in a new version of the picture while names, folders, blocking tiles and painted levels stay.',
+      'Tilesets live in the panel at the bottom, like in Godot, and every level in the project can use them. Add opens a window that shows the picture cut into tiles: pick a common tile size (or 32 × 16 for isometric tiles) or type your own width and height, and set margin and spacing for pictures with gaps; red shows pixels no tile covers, which are left out. Whole picture is one tile keeps a single object (a tree, a house) at its own size. Pick several pictures at once to add one tileset from each with the same settings. Black is see-through makes pure black pixels transparent, for tilesets drawn on black. Grid opens the window again, and Replace swaps in a new version of the picture while names, folders, blocking tiles and painted levels stay.',
       'Click a tile to paint with it, or drag over several tiles to paint them as one stamp. Fill repeats a stamp across the area. Search the tilesets, sort them, and give them a folder and a colour to keep big collections tidy. The button at the top right of the panel pops it out so it floats over the level; drag it by its title and resize it from the corner.',
       'Layers (on the right) stack picture tiles: put fences, fountains and other see-through things on a layer above the ground. Picture tiles go on the picked layer; hide a layer with the eye, and Erase clears the picked layer before plan tiles. Plan tiles like enemies and chests show on top of everything.',
       'Godot scene saves the picture tiles as a Godot 4 TileMap scene with its TileSet into your Godot project (egd/levels/), one TileMap layer per layer, ready to open.',
@@ -412,7 +413,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Painting on a blocked cell leaves it alone and lights up the blocked cells with a hint. Blocking only tells Godot where players cannot walk, so tick Paint over blocked to paint there anyway; Erase always works.',
       'Pixel art tiles stay sharp, with whole screen pixels per tile pixel. For painted or photo tilesets, turn off Sharp pixel art in Settings to smooth them instead.',
     ],
-    tips: ['Shortcuts: B paint, R room, G fill, E erase, N note, X blocked. Change them in Settings.'],
+    tips: ['Shortcuts: B paint, M select and move, G fill, E erase, N note, X blocked. Change them in Settings.'],
   },
   'pixel-art': {
     title: 'Pixel Art',
