@@ -32,3 +32,17 @@ describe('pixel art selection and transforms', () => {
     expect(getPx(wrapShift(dot, 2, 0), 0, 1)).toEqual([1, 1, 1, 255])
   })
 })
+
+describe('pixel rotate and scale', () => {
+  it('turns without new colours and scales with hard pixels', async () => {
+    const { rotateAny, scaleImg } = await import('./selection')
+    const img = blank(4, 4)
+    for (let i = 0; i < 4; i++) setPx(img, i, 1, [200, 50, 50, 255])
+    const r = rotateAny(img, 90)
+    const colours = new Set<string>()
+    for (let i = 0; i < r.data.length; i += 4) if (r.data[i + 3]) colours.add(String(r.data.slice(i, i + 3)))
+    expect([...colours]).toEqual(['200,50,50'])
+    const s = scaleImg(img, 8, 8)
+    expect(getPx(s, 7, 2)).toEqual([200, 50, 50, 255])
+  })
+})

@@ -145,3 +145,53 @@ export function wrapShift(img: Img, dx: number, dy: number): Img {
   for (let y = 0; y < img.height; y++) for (let x = 0; x < img.width; x++) setPx(out, mod(x + dx, img.width), mod(y + dy, img.height), getPx(img, x, y))
   return out
 }
+
+/** Scale2x: twice the size, keeping hard pixel edges and smoothing diagonal steps. */
+export function scale2x(img: Img): Img {
+  const out = blank(img.width * 2, img.height * 2)
+  const at = (x: number, y: number) => getPx(img, Math.max(0, Math.min(img.width - 1, x)), Math.max(0, Math.min(img.height - 1, y)))
+  const same = (a: RGBA, b: RGBA) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3]
+  for (let y = 0; y < img.height; y++)
+    for (let x = 0; x < img.width; x++) {
+      const p = at(x, y)
+      const a = at(x, y - 1)
+      const b = at(x + 1, y)
+      const c = at(x - 1, y)
+      const d = at(x, y + 1)
+      setPx(out, 2 * x, 2 * y, same(c, a) && !same(c, d) && !same(a, b) ? a : p)
+      setPx(out, 2 * x + 1, 2 * y, same(a, b) && !same(a, c) && !same(b, d) ? b : p)
+      setPx(out, 2 * x, 2 * y + 1, same(d, c) && !same(d, b) && !same(c, a) ? c : p)
+      setPx(out, 2 * x + 1, 2 * y + 1, same(b, d) && !same(b, a) && !same(d, c) ? d : p)
+    }
+  return out
+}
+
+/**
+ * Pixel rotate by any angle without blur: scaled up 8× with Scale2x, turned with nearest-neighbour
+ * sampling, and read back at the middle of every 8 × 8 block (the published RotSprite idea).
+ */
+export function rotateAny(img: Img, degrees: number): Img {
+  const big = scale2x(scale2x(scale2x(img)))
+  const r = (degrees * Math.PI) / 180
+  const [cos, sin] = [Math.cos(r), Math.sin(r)]
+  const w = Math.ceil(Math.abs(img.width * cos) + Math.abs(img.height * sin))
+  const h = Math.ceil(Math.abs(img.width * sin) + Math.abs(img.height * cos))
+  const out = blank(w, h)
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      // The middle of this pixel, turned back into the source, in 8× source pixels.
+      const dx = x + 0.5 - w / 2
+      const dy = y + 0.5 - h / 2
+      const sx = Math.floor((dx * cos + dy * sin + img.width / 2) * 8)
+      const sy = Math.floor((-dx * sin + dy * cos + img.height / 2) * 8)
+      if (sx >= 0 && sy >= 0 && sx < big.width && sy < big.height) setPx(out, x, y, getPx(big, sx, sy))
+    }
+  return out
+}
+
+/** Nearest-neighbour scale to w × h: every pixel stays a hard square. */
+export function scaleImg(img: Img, w: number, h: number): Img {
+  const out = blank(Math.max(1, w), Math.max(1, h))
+  for (let y = 0; y < out.height; y++) for (let x = 0; x < out.width; x++) setPx(out, x, y, getPx(img, Math.floor((x * img.width) / out.width), Math.floor((y * img.height) / out.height)))
+  return out
+}

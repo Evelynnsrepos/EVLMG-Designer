@@ -58,7 +58,7 @@ import {
 } from '@/shared/pixel/model'
 import { ColorsPanel, LayersPanel, PalettePanel, Preview, Timeline } from './Panels'
 import { grayHex, grayscale, nearest, paletteOf, reduce, swapColors } from '@/shared/pixel/color'
-import { bounds, combine, cut, flipImg, imgMask, lassoMask, maskImg, outline, paste, placeMask, rectMask, rotate90, wandMask, wrapShift, type Combine, type Mask } from './selection'
+import { bounds, combine, cut, flipImg, imgMask, lassoMask, maskImg, outline, paste, placeMask, rectMask, rotate90, rotateAny, scaleImg, wandMask, wrapShift, type Combine, type Mask } from './selection'
 import './pixel-art.css'
 
 type Tool = 'pencil' | 'eraser' | 'line' | 'curve' | 'rect' | 'ellipse' | 'fill' | 'lassofill' | 'gradient' | 'spray' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill' | 'tileRandom' | 'auto'
@@ -333,6 +333,10 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const [seamless, setSeamless] = useState(false)
   const [onion, setOnion] = useState(false)
   const [preview, setPreview] = useState(false)
+  // Transforms change every frame of the layer, not only this one.
+  const [allFrames, setAllFrames] = useState(false)
+  const [angle, setAngle] = useState(15)
+  const [scalePct, setScalePct] = useState(200)
   // A palette variant shown instead of the palette (preview only).
   const [variant, setVariant] = useState<string | null>(null)
   const [showGrid, setShowGrid] = useState(true)
@@ -1085,17 +1089,31 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   /** Change the selected pixels (or the whole layer) with `fn`, kept centred where they were. */
   const transform = (fn: (img: Img) => Img) => {
     if (layer.locked) return setNote('This layer is locked.')
-    const key = curKey()
-    const img = cloneImg(celImg(d.cels[key], d.width, d.height))
-    const c = cut(img, mask ?? all())
-    if (!c) return
-    const piece = fn(c.piece)
-    const pm = imgMask(fn(maskImg(c.mask, c.piece.width, c.piece.height)))
-    const x = c.x + Math.floor((c.piece.width - piece.width) / 2)
-    const y = c.y + Math.floor((c.piece.height - piece.height) / 2)
-    paste(img, piece, x, y, pm)
-    commit(key, img)
-    if (mask) setMask(placeMask(d.width, d.height, pm, piece.width, x, y))
+    // This frame, or every frame of the layer (each linked cel once).
+    const keys = allFrames ? [...new Set(d.frames.map((f) => resolveKey(d.cels, celKey(layer.id, f.id))))] : [curKey()]
+    const out: Record<string, string | null> = {}
+    let newMask: Mask | null = null
+    for (const key of keys) {
+      const img = cloneImg(celImg(d.cels[key], d.width, d.height))
+      const c = cut(img, mask ?? all())
+      if (!c) continue
+      const piece = fn(c.piece)
+      const pm = imgMask(fn(maskImg(c.mask, c.piece.width, c.piece.height)))
+      const x = c.x + Math.floor((c.piece.width - piece.width) / 2)
+      const y = c.y + Math.floor((c.piece.height - piece.height) / 2)
+      paste(img, piece, x, y, pm)
+      out[key] = encode(img)
+      if (key === curKey()) newMask = placeMask(d.width, d.height, pm, piece.width, x, y)
+    }
+    update((x) => {
+      const cels = { ...x.cels }
+      for (const [k, v] of Object.entries(out)) {
+        if (v) cels[k] = v
+        else delete cels[k]
+      }
+      return { ...x, cels }
+    })
+    if (mask && newMask) setMask(newMask)
   }
   const outlineSel = () => commit(curKey(), outline(celImg(d.cels[curKey()], d.width, d.height), hexToRgba(paintHex(colors[0])), mask))
   /** In palette-only mode every painted colour snaps to the palette; in gray mode it turns gray. */
@@ -1489,6 +1507,23 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                   <button className="icon-btn" title="Turn a quarter anticlockwise" onClick={() => transform((i) => rotate90(i, false))}>
                     <RotateCcw size={14} />
                   </button>
+                  <label className="px-row" title="Pixel rotate by any angle, without blur or new colours">
+                    <input className="input px-ms" type="number" min={-359} max={359} value={angle} onChange={(e) => setAngle(Number(e.target.value) || 0)} />°
+                    <button className="btn btn-ghost" onClick={() => transform((i) => rotateAny(i, angle))}>
+                      Rotate
+                    </button>
+                  </label>
+                  <label className="px-row" title="Scale with hard pixels">
+                    <input className="input px-ms" type="number" min={10} max={1000} value={scalePct} onChange={(e) => setScalePct(Number(e.target.value) || 100)} />%
+                    <button className="btn btn-ghost" onClick={() => transform((i) => scaleImg(i, Math.round((i.width * scalePct) / 100), Math.round((i.height * scalePct) / 100)))}>
+                      Scale
+                    </button>
+                  </label>
+                  {d.kind === 'sprite' && d.frames.length > 1 && (
+                    <label className="px-row" title="Flip, turn, rotate and scale every frame of this layer at once">
+                      <input type="checkbox" checked={allFrames} onChange={(e) => setAllFrames(e.target.checked)} /> All frames
+                    </label>
+                  )}
                   <button className="btn btn-ghost" title="A one-pixel line in the main colour around the drawing" onClick={outlineSel}>
                     Outline
                   </button>
