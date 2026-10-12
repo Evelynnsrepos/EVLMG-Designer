@@ -1,4 +1,4 @@
-import { Brush, Circle, Download, Eraser, FlipHorizontal2, FlipVertical2, Grid3x3, Lasso, Layers, Map as MapIcon, Move, PaintBucket, Pipette, RotateCcw, RotateCw, Slash, Square, SquareDashed, SunMoon, Upload, WandSparkles } from 'lucide-react'
+import { Blend, Brush, Circle, Dices, Download, LassoSelect, Spline, SprayCan, Stamp, Eraser, FlipHorizontal2, FlipVertical2, Grid3x3, Lasso, Layers, Map as MapIcon, Move, PaintBucket, Pipette, RotateCcw, RotateCw, Slash, Square, SquareDashed, SunMoon, Upload, WandSparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { importAssetFromBlob, resolveAssetPath } from '@/core/assets'
 import { saveBinaryFile, safeFileName } from '@/core/export'
@@ -49,13 +49,14 @@ import {
   tileRows,
   type Img,
   type PixelDoc,
+  type RGBA,
 } from '@/shared/pixel/model'
 import { ColorsPanel, LayersPanel, PalettePanel, Preview, Timeline } from './Panels'
 import { grayHex, grayscale, nearest, paletteOf, reduce, swapColors } from '@/shared/pixel/color'
 import { bounds, combine, cut, flipImg, imgMask, lassoMask, maskImg, outline, paste, placeMask, rectMask, rotate90, wandMask, wrapShift, type Combine, type Mask } from './selection'
 import './pixel-art.css'
 
-type Tool = 'pencil' | 'eraser' | 'line' | 'rect' | 'ellipse' | 'fill' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill'
+type Tool = 'pencil' | 'eraser' | 'line' | 'curve' | 'rect' | 'ellipse' | 'fill' | 'lassofill' | 'gradient' | 'spray' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill' | 'tileRandom'
 type Pt = [number, number]
 
 /** Pixel Art (v0.16): sprites, animations, tilesets and tilemaps. */
@@ -252,9 +253,13 @@ const TOOLS: { id: Tool; icon: typeof Brush; label: string; key: string }[] = [
   { id: 'pencil', icon: Brush, label: 'Pencil', key: 'pixel.pencil' },
   { id: 'eraser', icon: Eraser, label: 'Eraser', key: 'pixel.eraser' },
   { id: 'line', icon: Slash, label: 'Line (Shift keeps clean angles)', key: 'pixel.line' },
+  { id: 'curve', icon: Spline, label: 'Curve: drag a line, then drag again to bend it', key: 'pixel.curve' },
   { id: 'rect', icon: Square, label: 'Rectangle', key: 'pixel.rect' },
   { id: 'ellipse', icon: Circle, label: 'Ellipse', key: 'pixel.ellipse' },
   { id: 'fill', icon: PaintBucket, label: 'Fill', key: 'pixel.fill' },
+  { id: 'lassofill', icon: LassoSelect, label: 'Lasso fill: draw around an area to fill it', key: 'pixel.lassofill' },
+  { id: 'gradient', icon: Blend, label: 'Dithered gradient from the main to the second colour (drag its direction)', key: 'pixel.gradient' },
+  { id: 'spray', icon: SprayCan, label: 'Spray (size sets how wide)', key: 'pixel.spray' },
   { id: 'picker', icon: Pipette, label: 'Eyedropper (or Alt-click)', key: 'pixel.picker' },
   { id: 'shade', icon: SunMoon, label: 'Shade brush: left click one palette step lighter, right click darker', key: 'pixel.shade' },
   { id: 'select', icon: SquareDashed, label: 'Select a rectangle (Shift adds, Ctrl takes away)', key: 'pixel.select' },
@@ -273,7 +278,7 @@ const MAP_TOOLS: { id: Tool; icon: typeof Brush; label: string }[] = [
   { id: 'picker', icon: Pipette, label: 'Pick a tile from the map' },
 ]
 
-type Live = { key: string; base: Img; img: Img; start: Pt; path: Pt[]; button: number; float?: { piece: Img; mask: Mask; x: number; y: number; rest: Img }; at?: Pt }
+type Live = { key: string; base: Img; img: Img; start: Pt; path: Pt[]; button: number; press?: number[]; ctrl?: Pt; from?: string; float?: { piece: Img; mask: Mask; x: number; y: number; rest: Img }; at?: Pt }
 
 function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<PixelDoc> & { data: PixelDoc }; documentId: string; title: string; active: boolean }) {
   const d = doc.data
@@ -286,6 +291,12 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const [colors, setColors] = useState<[string, string]>([d.palette[1] ?? '#ffffff', d.palette[0] ?? '#000000'])
   const [size, setSize] = useState(1)
   const [round, setRound] = useState(false)
+  // v0.16: how strokes put colour down, pen pressure, and a brush made from a selection.
+  const [ink, setInk] = useState<'normal' | 'lockAlpha' | 'replace' | 'colorOnly'>('normal')
+  const [pressure, setPressure] = useState(false)
+  const [brushImg, setBrushImg] = useState<{ piece: Img; mask: Mask; tint: boolean } | null>(null)
+  // A curve waits for its second drag after the first one.
+  const curve = useRef<{ key: string; base: Img; a: Pt; b: Pt } | null>(null)
   const [clean, setClean] = useState(true)
   const [filled, setFilled] = useState(false)
   const [contiguous, setContiguous] = useState(true)
@@ -338,7 +349,9 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const imgOf = (layerId: string, frameId: string) => {
     const key = celKey(layerId, frameId)
     const real = resolveKey(d.cels, key)
-    return live.current?.key === real ? live.current.img : celImg(d.cels[real], d.width, d.height)
+    if (live.current?.key === real) return live.current.img
+    if (curve.current?.key === real) return curvePreview(curve.current)
+    return celImg(d.cels[real], d.width, d.height)
   }
   /** The frame as it is exported: reference layers left out. */
   const frameImg = (i: number) => composite(d.layers.filter((l) => !l.reference).map((l) => ({ visible: l.visible, opacity: l.opacity, blend: l.blend, img: imgOf(l.id, d.frames[i].id) })), d.width, d.height)
@@ -595,21 +608,73 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   /** Paint the whole stroke again from the layer's pixels before it started. */
   const render = (l: Live, end: Pt) => {
     const img = cloneImg(l.base)
-    const color = hexToRgba(paintHex(l.button === 2 ? colors[1] : colors[0]))
+    const main = hexToRgba(paintHex(l.button === 2 ? colors[1] : colors[0]))
+    const other = hexToRgba(paintHex(l.button === 2 ? colors[0] : colors[1]))
+    /** The ink decides whether, and how, a pixel takes the colour. */
+    const put = (x: number, y: number, c: RGBA) => {
+      if (ink === 'normal') return setPx(img, x, y, c)
+      const b = getPx(l.base, x, y)
+      if (ink === 'lockAlpha' && !b[3]) return
+      if (ink === 'replace' && (!b[3] || rgbaToHex(b[0], b[1], b[2]) !== l.from)) return
+      if (ink === 'colorOnly') return b[3] ? setPx(img, x, y, [c[0], c[1], c[2], b[3]]) : undefined
+      setPx(img, x, y, c)
+    }
+    const ok = (x: number, y: number) => x >= 0 && y >= 0 && x < d.width && y < d.height && (!mask || inMap || !!mask[y * d.width + x])
+    if (tool === 'gradient') {
+      // Main colour at the start, second colour at the end, mixed by an even dither pattern in between.
+      const [dx, dy] = [end[0] - l.start[0], end[1] - l.start[1]]
+      const len = dx * dx + dy * dy || 1
+      for (let y = 0; y < d.height; y++)
+        for (let x = 0; x < d.width; x++) {
+          if (!ok(x, y)) continue
+          const t = Math.max(0, Math.min(1, ((x - l.start[0]) * dx + (y - l.start[1]) * dy) / len))
+          put(x, y, ditherOn(x, y, Math.round(t * 16)) ? other : main)
+        }
+      l.img = img
+      return
+    }
     let pts: Pt[] = []
-    if (tool === 'pencil' || tool === 'eraser' || tool === 'shade') pts = clean && size === 1 ? cleanPath(l.path) : l.path
+    const freehand = tool === 'pencil' || tool === 'eraser' || tool === 'shade'
+    if (freehand) pts = clean && size === 1 && !pressure && !brushImg ? cleanPath(l.path) : l.path
+    else if (tool === 'spray') pts = l.path
     else if (tool === 'line') pts = line(l.start[0], l.start[1], end[0], end[1])
+    else if (tool === 'curve') pts = cleanPath(bezier(l.start, l.ctrl ?? l.start, end))
     else if (tool === 'rect') pts = rectPoints(l.start[0], l.start[1], end[0], end[1], filled)
     else if (tool === 'ellipse') pts = ellipsePoints(l.start[0], l.start[1], end[0], end[1], filled)
-    const brush = brushOffsets(size, round)
-    pts = pts.flatMap(([x, y]) => brush.map(([bx, by]): Pt => [x + bx, y + by]))
+    else if (tool === 'lassofill') {
+      const m = lassoMask(d.width, d.height, l.path.map(wrap))
+      for (let i = 0; i < m.length; i++) if (m[i]) pts.push([i % d.width, Math.floor(i / d.width)])
+    }
+    // A brush made from a selection stamps its pixels at every point of the stroke.
+    if (brushImg && tool === 'pencil') {
+      const { piece, tint } = brushImg
+      const [ox, oy] = [Math.floor(piece.width / 2), Math.floor(piece.height / 2)]
+      for (const [x0, y0] of pts)
+        for (let y = 0; y < piece.height; y++)
+          for (let x = 0; x < piece.width; x++) {
+            if (!brushImg.mask[y * piece.width + x]) continue
+            const p = wrap([x0 + x - ox, y0 + y - oy])
+            if (ok(p[0], p[1])) put(p[0], p[1], tint ? main : getPx(piece, x, y))
+          }
+      l.img = img
+      return
+    }
+    if (tool !== 'spray' && tool !== 'lassofill') {
+      if (freehand && pressure && l.press) {
+        // Pen pressure sets the size of each point, up to the size slider.
+        pts = l.path.flatMap(([x, y], i) => brushOffsets(Math.max(1, Math.round(size * (l.press![i] ?? 1))), round).map(([bx, by]): Pt => [x + bx, y + by]))
+      } else {
+        const brush = brushOffsets(size, round)
+        pts = pts.flatMap(([x, y]) => brush.map(([bx, by]): Pt => [x + bx, y + by]))
+      }
+    }
     if (!inMap) pts = mirror(pts, d.width, d.height, sym)
     const seen = new Set<number>()
     for (const p0 of pts) {
       const p = inMap ? mapToSet(p0) : wrap(p0)
-      if (!p || p[0] < 0 || p[1] < 0 || p[0] >= d.width || p[1] >= d.height) continue
+      if (!p || !ok(p[0], p[1])) continue
       const k = p[1] * d.width + p[0]
-      if (seen.has(k) || (mask && !inMap && !mask[k])) continue
+      if (seen.has(k)) continue
       seen.add(k)
       if (tool !== 'eraser' && tool !== 'shade' && !ditherOn(p[0], p[1], dither)) continue
       if (tool === 'eraser') setPx(img, p[0], p[1], [0, 0, 0, 0])
@@ -617,9 +682,26 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
         const [r, g, b, a] = getPx(l.base, p[0], p[1])
         const next = a ? shadeStep(d.palette, rgbaToHex(r, g, b), l.button === 2 ? -1 : 1) : null
         if (next) setPx(img, p[0], p[1], hexToRgba(next))
-      } else setPx(img, p[0], p[1], color)
+      } else put(p[0], p[1], main)
     }
     l.img = img
+  }
+
+  /** The waiting curve, drawn as its straight line. */
+  const curvePreview = (c: NonNullable<typeof curve.current>) => {
+    const l: Live = { key: c.key, base: c.base, img: c.base, start: c.a, path: [c.b], button: 0, ctrl: c.a }
+    render(l, c.b)
+    return l.img
+  }
+
+  /** Spray: a few random pixels around p, inside a circle as wide as the size. */
+  const spray = (l: Live, p: Pt) => {
+    const r = size + 1
+    for (let i = 0; i < Math.max(2, size); i++) {
+      const a = Math.random() * Math.PI * 2
+      const dist = Math.sqrt(Math.random()) * r
+      l.path.push([Math.round(p[0] + Math.cos(a) * dist), Math.round(p[1] + Math.sin(a) * dist)])
+    }
   }
 
   const pick = (p: Pt, button: number) => {
@@ -697,8 +779,14 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       live.current = { key, base, img: base, start: p, path: [p], button: e.button, float: { ...c, rest }, at: p }
       return
     }
-    live.current = { key, base, img: base, start: p, path: [p], button: e.button }
-    render(live.current, p)
+    const q = wrap(p)
+    const under = q[0] >= 0 && q[1] >= 0 && q[0] < d.width && q[1] < d.height ? getPx(base, q[0], q[1]) : null
+    const from = under ? rgbaToHex(under[0], under[1], under[2]) : undefined
+    const c = curve.current
+    // The second drag of a curve bends the line drawn by the first.
+    live.current = c && tool === 'curve' ? { key: c.key, base: c.base, img: c.base, start: c.a, path: [c.b], button: e.button, ctrl: p } : { key, base, img: base, start: p, path: [p], button: e.button, from, press: [penPressure(e)] }
+    if (tool === 'spray') spray(live.current, p)
+    render(live.current, c && tool === 'curve' ? c.b : p)
     draw()
   }
 
@@ -756,12 +844,20 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       dropFloat(l, p[0] - l.start[0], p[1] - l.start[1])
       return draw()
     }
-    if (tool === 'pencil' || tool === 'eraser' || tool === 'shade') {
+    if (tool === 'pencil' || tool === 'eraser' || tool === 'shade' || tool === 'lassofill') {
       const last = l.path[l.path.length - 1]
       if (last[0] === p[0] && last[1] === p[1]) return
-      l.path.push(...line(last[0], last[1], p[0], p[1]).slice(1))
+      const added = line(last[0], last[1], p[0], p[1]).slice(1)
+      l.path.push(...added)
+      l.press?.push(...added.map(() => penPressure(e)))
     }
-    render(l, !e.shiftKey ? p : tool === 'line' ? constrain(l.start, p) : tool === 'rect' || tool === 'ellipse' ? square(l.start, p) : p)
+    if (tool === 'spray') spray(l, p)
+    if (tool === 'curve' && l.ctrl) {
+      l.ctrl = p
+      render(l, l.path[0])
+      return draw()
+    }
+    render(l, !e.shiftKey ? p : tool === 'line' || tool === 'curve' ? constrain(l.start, p) : tool === 'rect' || tool === 'ellipse' ? square(l.start, p) : p)
     draw()
   }
   const onUp = () => {
@@ -779,6 +875,12 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     const l = live.current
     if (!l) return
     live.current = null
+    if (tool === 'curve' && !l.ctrl) {
+      // Keep the line on screen and wait for the drag that bends it.
+      curve.current = { key: l.key, base: l.base, a: l.start, b: hover.current ?? l.start }
+      return
+    }
+    curve.current = null
     if (l.float && mask && l.at) setMask(placeMask(d.width, d.height, l.float.mask, l.float.piece.width, l.float.x + l.at[0] - l.start[0], l.float.y + l.at[1] - l.start[1]))
     commit(l.key, l.img)
   }
@@ -1003,6 +1105,29 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
             <label className="px-row" title="Pencil size">
               Size <input type="range" min={1} max={16} value={size} onChange={(e) => setSize(Number(e.target.value))} /> {size}
             </label>
+            {brushImg && (
+              <span className="px-row px-chip" title="The pencil stamps the brush made from a selection">
+                Custom brush
+                <label className="px-row" title="Stamp it in the main colour instead of its own colours">
+                  <input type="checkbox" checked={brushImg.tint} onChange={(e) => setBrushImg({ ...brushImg, tint: e.target.checked })} /> one colour
+                </label>
+                <button className="icon-btn" title="Back to the normal pencil" onClick={() => setBrushImg(null)}>
+                  ×
+                </button>
+              </span>
+            )}
+            <label className="px-row" title="Pen pressure sets the pencil size, up to the size slider">
+              <input type="checkbox" checked={pressure} onChange={(e) => setPressure(e.target.checked)} /> Pressure
+            </label>
+            <label className="px-row" title="Ink: how the colour goes down. Lock alpha paints only on pixels that are already there; Replace only on the colour you started on; Colour only keeps each pixel's see-through amount.">
+              Ink
+              <select className="input" value={ink} onChange={(e) => setInk(e.target.value as typeof ink)}>
+                <option value="normal">Normal</option>
+                <option value="lockAlpha">Lock alpha</option>
+                <option value="replace">Replace colour</option>
+                <option value="colorOnly">Colour only</option>
+              </select>
+            </label>
             <label className="px-row" title="Round pencil">
               <input type="checkbox" checked={round} onChange={(e) => setRound(e.target.checked)} /> Round
             </label>
@@ -1184,6 +1309,19 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                     Wrap shift
                   </button>
                 </div>
+                {mask && (
+                  <button
+                    className="btn btn-ghost"
+                    title="Paint with these pixels: the pencil stamps them along the stroke"
+                    onClick={() => {
+                      const c = cut(cloneImg(celImg(d.cels[curKey()], d.width, d.height)), mask, true)
+                      if (c) setBrushImg({ piece: c.piece, mask: c.mask, tint: false })
+                      setTool('pencil')
+                    }}
+                  >
+                    <Stamp size={13} /> Use as brush
+                  </button>
+                )}
                 {mask && <SelectionInfo mask={mask} width={d.width} />}
               </div>
             </>
@@ -1320,3 +1458,21 @@ function edge(g: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y
 
 /** A map cell: the tile number and its mirror/turn bits (stored above bit 16). */
 const tileOf = (v: number) => ({ n: v & 0xffff, flags: v >> 16 })
+
+/** Pen pressure, or full for a mouse. */
+const penPressure = (e: React.PointerEvent) => (e.pointerType === 'pen' ? Math.max(0.05, e.pressure) : 1)
+
+/** The pixels along a curve from a to b, bent towards c. */
+function bezier(a: Pt, c: Pt, b: Pt): Pt[] {
+  const n = Math.max(2, Math.ceil(Math.hypot(c[0] - a[0], c[1] - a[1]) + Math.hypot(b[0] - c[0], b[1] - c[1])))
+  const out: Pt[] = []
+  let prev: Pt | null = null
+  for (let i = 0; i <= n; i++) {
+    const t = i / n
+    const p: Pt = [Math.round((1 - t) ** 2 * a[0] + 2 * (1 - t) * t * c[0] + t * t * b[0]), Math.round((1 - t) ** 2 * a[1] + 2 * (1 - t) * t * c[1] + t * t * b[1])]
+    if (prev) out.push(...line(prev[0], prev[1], p[0], p[1]).slice(1))
+    else out.push(p)
+    prev = p
+  }
+  return out
+}
