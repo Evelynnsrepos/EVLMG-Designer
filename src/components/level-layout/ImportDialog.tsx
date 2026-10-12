@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NumberInput } from '@/shared/calculators'
 import { Modal } from '@/shared/ui'
-import { blackToTransparent, loadImage } from './images'
+import { useProjectStore } from '@/core/state'
+import { blackToTransparent, loadAssetImage } from './images'
 import { grid, guessTileSize } from './model'
 
 export interface ImportValues {
@@ -18,18 +19,20 @@ const PRESETS = [8, 16, 24, 32, 48, 64, 128]
  * v0.15: the tileset import window. Shows the picture with the grid it will be cut into, so a wrong
  * tile size is plain to see, with common sizes and the user's own size, margin and spacing.
  */
-export function ImportDialog({ url, title, initial, onDone, onClose }: { url: string; title: string; initial: Partial<ImportValues> & { name: string }; onDone(v: ImportValues & { width: number; height: number }): void; onClose(): void }) {
+export function ImportDialog({ image, title, initial, onDone, onClose }: { image: string; title: string; initial: Partial<ImportValues> & { name: string }; onDone(v: ImportValues & { width: number; height: number }): void; onClose(): void }) {
   const [img, setImg] = useState<HTMLImageElement | null>(null)
   const [v, setV] = useState<ImportValues>({ tileSize: 16, margin: 0, spacing: 0, blackTransparent: false, ...initial })
   const canvas = useRef<HTMLCanvasElement>(null)
 
+  const root = useProjectStore((s) => s.root)
   useEffect(() => {
-    void loadImage(url).then((i) => {
+    if (!root) return
+    void loadAssetImage(root, image).then((i) => {
       setImg(i)
       if (i && !initial.tileSize) setV((x) => ({ ...x, tileSize: guessTileSize(i.naturalWidth, i.naturalHeight) }))
     })
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- once per picture
-  }, [url])
+  }, [root, image])
 
   const size = useMemo(() => (img ? { width: img.naturalWidth, height: img.naturalHeight } : null), [img])
   const g = useMemo(() => (size ? grid({ ...size, ...v }) : null), [size, v])

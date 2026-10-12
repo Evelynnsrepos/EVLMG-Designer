@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PanelProps } from '@/core/registry'
 import { useDocument, useProjectStore, useSettings, useUndoRedoKeys } from '@/core/state'
 import { saveBinaryFile, safeFileName } from '@/core/export'
-import { assetUrl, pickAndImportAssets, resolveAssetPath } from '@/core/assets'
+import { pickAndImportAssets, resolveAssetPath } from '@/core/assets'
 import { getFs } from '@/core/fs'
 import { newId } from '@/core/model'
 import { formatCombo, isShortcut, keysOf } from '@/core/shortcuts'
@@ -73,7 +73,7 @@ export default function View({ documentId, active }: PanelProps) {
   const [override, setOverride] = useState(false)
   const [blockHint, setBlockHint] = useState(false)
   const hintTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const [importing, setImporting] = useState<{ url: string; image: string; title: string; set?: Tileset; initial: Partial<ImportValues> & { name: string } } | null>(null)
+  const [importing, setImporting] = useState<{ image: string; title: string; set?: Tileset; initial: Partial<ImportValues> & { name: string } } | null>(null)
   const last = useRef<{ x: number; y: number } | null>(null)
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
   const [noteId, setNoteId] = useState<string | null>(null)
@@ -308,14 +308,12 @@ export default function View({ documentId, active }: PanelProps) {
   const pickPicture = async (set?: Tileset) => {
     if (!root) return
     const [asset] = await pickAndImportAssets(root, 'image', set ? `New picture for ${set.name}` : 'Tileset image')
-    const url = asset && (await assetUrl(root, asset.path))
-    if (!asset || !url) return
+    if (!asset) return
     const initial = set ? { name: set.name, tileSize: set.tileSize, margin: set.margin ?? 0, spacing: set.spacing ?? 0, blackTransparent: !!set.blackTransparent } : { name: asset.name.replace(/\.[^.]+$/, '') }
-    setImporting({ url, image: asset.path, set, title: set ? `Replace ${set.name}` : 'Add a tileset', initial })
+    setImporting({ image: asset.path, set, title: set ? `Replace ${set.name}` : 'Add a tileset', initial })
   }
-  const editGrid = async (set: Tileset) => {
-    const url = root && (await assetUrl(root, set.image))
-    if (url) setImporting({ url, image: set.image, set, title: `Grid of ${set.name}`, initial: { name: set.name, tileSize: set.tileSize, margin: set.margin ?? 0, spacing: set.spacing ?? 0, blackTransparent: !!set.blackTransparent } })
+  const editGrid = (set: Tileset) => {
+    setImporting({ image: set.image, set, title: `Grid of ${set.name}`, initial: { name: set.name, tileSize: set.tileSize, margin: set.margin ?? 0, spacing: set.spacing ?? 0, blackTransparent: !!set.blackTransparent } })
   }
   const finishImport = (v: ImportValues & { width: number; height: number }) => {
     if (!importing) return
@@ -521,10 +519,10 @@ export default function View({ documentId, active }: PanelProps) {
         change={changeSet}
         onAdd={() => void pickPicture()}
         onReplace={(t) => void pickPicture(t)}
-        onGrid={(t) => void editGrid(t)}
+        onGrid={editGrid}
         onRemove={(t) => void removeSet(t)}
       />
-      {importing && <ImportDialog url={importing.url} title={importing.title} initial={importing.initial} onDone={finishImport} onClose={() => setImporting(null)} />}
+      {importing && <ImportDialog image={importing.image} title={importing.title} initial={importing.initial} onDone={finishImport} onClose={() => setImporting(null)} />}
     </div>
   )
 }

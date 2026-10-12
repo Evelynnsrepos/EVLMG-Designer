@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
-import { useAssetUrls } from '@/core/assets'
+import { useEffect, useRef, useState } from 'react'
+import { resolveAssetPath } from '@/core/assets'
+import { getFs } from '@/core/fs'
+import { useProjectStore } from '@/core/state'
 import type { Tileset } from './model'
 
 export type TileImage = HTMLImageElement | HTMLCanvasElement
@@ -12,6 +14,22 @@ export function loadImage(url: string): Promise<HTMLImageElement | null> {
     img.onerror = () => res(null)
     img.src = url
   })
+}
+
+/**
+ * A project picture read from disk into a same-origin image, so its pixels can be read
+ * (black made see-through) and saved again; the desktop asset URL would taint the canvas.
+ */
+export async function loadAssetImage(root: string, path: string): Promise<HTMLImageElement | null> {
+  try {
+    const bytes = await getFs().readBinary(await resolveAssetPath(root, path))
+    const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>]))
+    const img = await loadImage(url)
+    URL.revokeObjectURL(url)
+    return img
+  } catch {
+    return null
+  }
 }
 
 /** The picture with pure black pixels (and almost black ones, from compression) made see-through (v0.15). */
@@ -30,25 +48,28 @@ export function blackToTransparent(img: HTMLImageElement): HTMLCanvasElement {
 
 /** The tilesets' pictures, ready to draw (black made see-through where asked), by tileset id. */
 export function useTilesetImages(sets: Tileset[]): Record<string, TileImage> {
-  const urlOf = useAssetUrls(sets.map((t) => t.image))
+  const root = useProjectStore((s) => s.root)
   const [raw, setRaw] = useState<Record<string, HTMLImageElement>>({})
+  const asked = useRef(new Set<string>())
   useEffect(() => {
+    if (!root) return
+    // ponytail: a picture still arriving from a teammate is not retried; reopening the level loads it.
     for (const t of sets) {
-      const url = urlOf(t.image)
-      if (!url || raw[url]) continue
-      void loadImage(url).then((img) => img && setRaw((m) => ({ ...m, [url]: img })))
+      if (asked.current.has(t.image)) continue
+      asked.current.add(t.image)
+      void loadAssetImage(root, t.image).then((img) => img && setRaw((m) => ({ ...m, [t.image]: img })))
     }
-  }, [sets, urlOf, raw])
+  }, [root, sets])
   const [out, setOut] = useState<Record<string, TileImage>>({})
   useEffect(() => {
     const next: Record<string, TileImage> = {}
     for (const t of sets) {
-      const img = raw[urlOf(t.image) ?? '']
+      const img = raw[t.image]
       if (img) next[t.id] = t.blackTransparent ? blackToTransparent(img) : img
     }
     setOut(next)
     // Only the picture and the black setting matter, not names or folders.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [raw, urlOf, sets.map((t) => `${t.id}${t.image}${t.blackTransparent}`).join()])
+  }, [raw, sets.map((t) => `${t.id}${t.image}${t.blackTransparent}`).join()])
   return out
 }
