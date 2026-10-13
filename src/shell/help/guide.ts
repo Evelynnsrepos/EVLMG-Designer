@@ -102,6 +102,17 @@ export const BASICS: Record<string, GuideTopic> = {
       'An installed plugin appears in Add tool like any other tool. Remove it in Settings; what you made with it stays in your project.',
     ],
   },
+  jumps: {
+    title: 'Jump points: connect everything',
+    body: [
+      'A jump point takes you from one place in your project to another with one click: from a mood board to a drawing, from the gameplay loop to a writing principle, from a level to a character, and back.',
+      'Every tool has a jump points button in its header, next to Review (the little crossing arrows). Click it, then Add a jump point…, and pick where it goes in the window: any tool, any document (a drawing, a board, a level, a document in the Writer) or any entry (a character, an item, a town, an enemy). Type to search.',
+      'On boards (Moodboard, Design Language, Brainstorm, Map, Story, Timeline, UI Flow) the jump point is also a tool (J): click the board where it should sit and pick its target; a purple chip appears. Double-click the chip, or click it with the jump tool, to go there. Move it like any other note.',
+      'Pointing here: the same button lists every jump point elsewhere that points at this tool or document, so you can always go back. A character, item, town or enemy shows jump points that point at it in its Jump to bar.',
+      'Back and forward (Alt+Left, Alt+Right, or the arrows at the top of the sidebar) retrace your jumps.',
+    ],
+    tips: ['Jump points are made for finding your way; [[links]] in texts and Link to… on entries still work as before.'],
+  },
   links: {
     title: 'Links and categories',
     body: [
@@ -239,6 +250,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'The pen (P) draws freehand; the eraser (E) removes drawn lines you drag over.',
       'The layers panel (button in the bottom toolbar) lets you reorder everything, and an always-on-top layer keeps your drawings above the images.',
       'The brush button opens your drawings from the Draw tool. Click one to place it as a sticker; transparent parts stay see-through. Double-click to edit it in Draw.',
+      'The palette button after the colour swatches picks any colour with the colour wheel, and keeps your recent and saved colours. The jump tool (J) places a jump point on the board (see Jump points)',
     ],
     tips: ['Drop image files straight onto the board.', 'Design Language works exactly the same way, for pinning down the look of your game.'],
   },
@@ -247,6 +259,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     body: [
       'A free board for ideas: drawing, sticky notes, shapes, images, audio clips and voice recordings.',
       'Pin notes and connect pins with string, and group things in named, colored areas.',
+      'The palette button after the colour swatches picks any colour with the colour wheel, and keeps your recent and saved colours. The jump tool (J) places a jump point on the board (see Jump points)',
     ],
     tips: ['Hover a toolbar button to see its shortcut letter.'],
   },
@@ -291,6 +304,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Time-lapse records your drawing as you go and can be replayed or exported as video. Import and export PSD (with layers), PNG, JPEG, TIFF, GIF and WebM, or use Send to… to put the picture on a Moodboard, a Design Language board or into the Asset Pool.',
       'Every drawing stays in the project. Wherever you can add a picture (an entry, the Writer, the Pitch Deck, the Storyboard and more), a window first shows your drawings to pick from; Choose a file… opens the file picker as before.',
       'Send to → Pixel Art puts the drawing into the open Pixel Art file as a tracing layer, scaled to fit, to draw pixel art over it',
+      'Merge down, flattening a group and deleting layers are one undo step each: Ctrl+Z brings the layers and their pixels back',
     ],
     tips: ['Space or the middle mouse button pans, the mouse wheel zooms, 0 fits the canvas into view.', 'Undo goes back 250 steps. Everything saves by itself a moment after you stop drawing.'],
   },
@@ -301,6 +315,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'It works exactly like a Moodboard: add images, cut them out, draw, write notes, and use layers.',
       'The brush button opens your drawings from the Draw tool; click one to place it as a sticker. Pictures sent from Draw land here too.',
       'From Pixel Art, Files → Send the palette to Design Language adds the palette here as colour swatches',
+      'The palette button after the colour swatches picks any colour with the colour wheel, and keeps your recent and saved colours. The jump tool (J) places a jump point on the board (see Jump points)',
     ],
   },
   'asset-pool': {

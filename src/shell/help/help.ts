@@ -25,6 +25,7 @@ export const TOURS: Record<TourId, TourStep[]> = {
     { target: 'workspace', title: 'Side by side', text: 'Shift-click a tool, or drag it from the sidebar onto an open panel, to split the screen.' },
     { target: 'workspace', title: 'Esc: arrange and close', text: 'Press Esc any time for Layout Mode: drag tools to new places, use the arrows to swap them, or the big X to close one. Press Esc again to go back to work.' },
     { target: 'add-component', title: 'More tools', text: 'Add any tool to this project whenever you need it. Right-click a tool to close it again.' },
+    { target: 'workspace', title: 'Jump points', text: 'The crossing-arrows button in every tool\'s header adds jump points: one click from here to any tool, document or entry, and it lists what points back here. On boards, the jump tool (J) places them right on the board.' },
     { target: 'project-look', title: 'Make it yours', text: 'Give this project its own accent color, background and wallpaper.' },
     { target: 'help', title: 'Need help?', text: 'Report a problem here, or press F1 for the user guide. Everything saves automatically, so just start creating.' },
   ],
