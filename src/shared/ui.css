@@ -73,6 +73,9 @@
 }
 .modal {
   width: min(440px, calc(100vw - 32px));
+  /* Never narrower than content with a set width (a list, a table), so nothing spills over the border. */
+  min-width: min-content;
+  max-width: calc(100vw - 32px);
   padding: 20px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
