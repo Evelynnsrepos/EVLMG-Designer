@@ -1,4 +1,5 @@
 import { commentTool } from '@/shared/reviews'
+import { CustomColor } from '@/shared/canvas/CustomColor'
 import { ArrowUpToLine, Brush, Circle, ImagePlus, Lasso, PanelRight, Pentagon, Square, Undo2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { assetUrl, dragHasFiles, importAssetsFromDataTransfer, pickAndImportAssets, useAssetUrls, type ImportedAsset } from '@/core/assets'
@@ -261,6 +262,7 @@ export function MoodboardBoard({ type, documentId, active, label }: PanelProps &
             onClick={() => pickInk(c.color)}
           />
         ))}
+        <CustomColor value={ink} onPick={pickInk} />
       </div>
       <span className="canvas-toolbar-sep" />
       <button className={'canvas-toolbar-btn' + (onTop ? ' is-active' : '')} title={TEXT.onTop} aria-label={TEXT.onTop} aria-pressed={onTop} onClick={toggleOnTop}>

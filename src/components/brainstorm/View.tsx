@@ -1,4 +1,5 @@
 import { ImagePlus, Mic, Square as StopIcon, TextCursorInput } from 'lucide-react'
+import { CustomColor, softColor } from '@/shared/canvas/CustomColor'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { assetUrl, dragHasFiles, importAssetFromBlob, importAssetsFromDataTransfer, pickAndImportAssets, useAssetUrls, type ImportedAsset } from '@/core/assets'
 import { newId, type Id } from '@/core/model'
@@ -219,6 +220,7 @@ export default function View({ documentId, active }: PanelProps) {
             onClick={() => pickColor(c)}
           />
         ))}
+        <CustomColor value={color?.strong ?? null} onPick={(hex) => pickColor({ label: 'Custom', strong: hex, soft: softColor(hex) })} />
       </div>
       <span className="canvas-toolbar-sep" />
       <button className="canvas-toolbar-btn" title={TEXT.addMedia} aria-label={TEXT.addMedia} onClick={addFromPicker}>

@@ -83,9 +83,11 @@ export interface ColorPanelProps {
   setColor(c: string): void
   /** Extra colours from the host tool (shown above the palettes). */
   swatches: string[]
-  drop: ColorDrop
-  colorSpace: 'srgb' | 'display-p3'
-  onColorSpace(cs: 'srgb' | 'display-p3'): void
+  /** Drag the colour onto the canvas (Draw only). */
+  drop?: ColorDrop
+  /** Canvas colour space (Draw only); without it the choice is hidden. */
+  colorSpace?: 'srgb' | 'display-p3'
+  onColorSpace?(cs: 'srgb' | 'display-p3'): void
 }
 
 const p3Supported = (() => {
@@ -125,7 +127,7 @@ export function ColorPanel(p: ColorPanelProps) {
               p.setColor(s)
             }}
           />
-          <button className="cp-primary" style={{ background: p.color }} title={UI.primary} onPointerDown={(e) => p.drop.begin(p.color, e)} />
+          <button className="cp-primary" style={{ background: p.color }} title={UI.primary} onPointerDown={(e) => p.drop?.begin(p.color, e)} />
         </span>
         <span className="cp-name" title={p.color}>
           {colorName(p.color)}
@@ -168,13 +170,15 @@ export function ColorPanel(p: ColorPanelProps) {
         )}
       </div>
       {tab !== 'palettes' && <QuickPalette color={p.color} setColor={p.setColor} extra={p.swatches} />}
+      {p.onColorSpace && (
       <label className="sketch-row cp-space">
         <span>{UI.canvasColors}</span>
-        <select className="input" value={p.colorSpace} disabled={!p3Supported && p.colorSpace === 'srgb'} title={p3Supported ? undefined : UI.p3Missing} onChange={(e) => p.onColorSpace(e.target.value as 'srgb' | 'display-p3')}>
+        <select className="input" value={p.colorSpace} disabled={!p3Supported && p.colorSpace === 'srgb'} title={p3Supported ? undefined : UI.p3Missing} onChange={(e) => p.onColorSpace?.(e.target.value as 'srgb' | 'display-p3')}>
           <option value="srgb">{UI.srgb}</option>
           <option value="display-p3">{UI.p3}</option>
         </select>
       </label>
+      )}
     </>
   )
 
