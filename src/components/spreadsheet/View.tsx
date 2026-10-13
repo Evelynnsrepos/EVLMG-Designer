@@ -39,6 +39,7 @@ import { parseRange } from './range'
 import { saveTextFile, safeFileName } from '@/core/export'
 import { newId } from '@/core/model'
 import './spreadsheet.css'
+import { pointIn } from '@/shared/zoom'
 
 const HEAD_W = 46
 const HEAD_H = 24
@@ -241,9 +242,7 @@ export default function View({ documentId, active }: PanelProps) {
   // ---- pointer -------------------------------------------------------------------
 
   const cellAt = (e: { clientX: number; clientY: number }): Pos => {
-    const r = body.current!.getBoundingClientRect()
-    const x = e.clientX - r.left
-    const y = e.clientY - r.top
+    const { x, y } = pointIn(body.current!, e)
     // The frozen area does not scroll.
     return { col: cols.index(x < frozenW ? x : x + body.current!.scrollLeft), row: rows.index(y < frozenH ? y : y + body.current!.scrollTop) }
   }

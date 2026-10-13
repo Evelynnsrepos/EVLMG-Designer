@@ -4,6 +4,7 @@ import { postIntent } from '@/core/state'
 import { openComponent } from '@/shell/editor/actions'
 import type { TileImage } from './images'
 import { tileRect, type Stamp, type Tileset } from './model'
+import { zoomOf } from '@/shared/zoom'
 
 const COLORS: (string | undefined)[] = [undefined, '#e03131', '#f08c00', '#f5b301', '#2f9e44', '#0c8599', '#1971c2', '#7048e8', '#c2255c']
 
@@ -48,8 +49,9 @@ export function TilesetDock(p: Props) {
   /** Drag the floating window by its header. */
   const move = (e: React.PointerEvent) => {
     if (!floating || (e.target as HTMLElement).closest('button, input, select')) return
-    const start = { x: e.clientX - pos.x, y: e.clientY - pos.y }
-    const onMove = (ev: PointerEvent) => setPos({ x: Math.max(0, ev.clientX - start.x), y: Math.max(0, ev.clientY - start.y) })
+    const z = zoomOf(e.currentTarget)
+    const start = { x: e.clientX / z - pos.x, y: e.clientY / z - pos.y }
+    const onMove = (ev: PointerEvent) => setPos({ x: Math.max(0, ev.clientX / z - start.x), y: Math.max(0, ev.clientY / z - start.y) })
     const onUp = () => (window.removeEventListener('pointermove', onMove), window.removeEventListener('pointerup', onUp))
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)

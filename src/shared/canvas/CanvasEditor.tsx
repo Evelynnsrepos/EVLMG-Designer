@@ -58,6 +58,7 @@ import type {
   Viewport,
 } from './types'
 import './canvas.css'
+import { pointIn } from '@/shared/zoom'
 
 /** View state of one canvas: viewport, selection, tool, active layer. */
 export interface CanvasState {
@@ -387,8 +388,7 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
   // ---- pointer input ----
 
   const localPoint = (ev: { clientX: number; clientY: number }): Point => {
-    const r = rootRef.current!.getBoundingClientRect()
-    return { x: ev.clientX - r.left, y: ev.clientY - r.top }
+    return pointIn(rootRef.current!, ev)
   }
 
   const toolEvent = (ev: PointerEvent | React.PointerEvent, clickCount: number): ToolPointerEvent => {
@@ -485,9 +485,8 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
   const onPointerMove = (e: React.PointerEvent) => {
     if (presenceKey && isPresenceActive() && e.timeStamp - lastCursorAt.current > 50) {
       lastCursorAt.current = e.timeStamp
-      const r = rootRef.current?.getBoundingClientRect()
-      if (r) {
-        const w = screenToWorld({ x: e.clientX - r.left, y: e.clientY - r.top }, live.current.state.viewport)
+      if (rootRef.current) {
+        const w = screenToWorld(pointIn(rootRef.current, e), live.current.state.viewport)
         setPresence('pointer', { key: presenceKey, x: Math.round(w.x), y: Math.round(w.y) })
       }
     }
@@ -528,8 +527,7 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
         setViewport((v) => ({ ...v, x: v.x - d }))
         return
       }
-      const r = el.getBoundingClientRect()
-      const p = { x: ev.clientX - r.left, y: ev.clientY - r.top }
+      const p = pointIn(el, ev)
       const factor = Math.exp(-ev.deltaY * unit * 0.0015)
       setViewport((v) => zoomAt(v, p, factor))
     }

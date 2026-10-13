@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from 'react'
 import type { Id } from '@/core/model'
 import { bounds, layoutGraph, type Point } from './graph'
+import { zoomOf } from '@/shared/zoom'
 
 const UI = {
   empty: 'No articles yet. Create some and link them with [[ to see the map.',
@@ -88,7 +89,7 @@ export function ConnectionMap({ nodes, edges, selectedId, onOpen }: { nodes: Map
     const dy = e.clientY - d.y
     if (!d.moved && Math.hypot(dx, dy) < 3) return
     d.moved = true
-    const k = unitsPerPx()
+    const k = unitsPerPx() / zoomOf(e.currentTarget as Element)
     setView({ ...v, x: v.x - dx * k, y: v.y - dy * k })
     d.x = e.clientX
     d.y = e.clientY

@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { zoomOf } from '@/shared/zoom'
 
 /**
  * A panel that floats over the canvas (Sketch Pro): drag it by its bar, it snaps
@@ -42,11 +43,12 @@ export function FloatingPanel(p: { title: string; at: Spot; onMove(s: Spot): voi
   const drag = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('button')) return
     e.preventDefault()
-    const sx = e.clientX - p.at.x
-    const sy = e.clientY - p.at.y
+    const z = zoomOf(e.currentTarget)
+    const sx = e.clientX / z - p.at.x
+    const sy = e.clientY / z - p.at.y
     const move = (ev: PointerEvent) => {
-      let x = Math.max(0, Math.min(window.innerWidth - 80, ev.clientX - sx))
-      let y = Math.max(0, Math.min(window.innerHeight - 40, ev.clientY - sy))
+      let x = Math.max(0, Math.min(window.innerWidth / z - 80, ev.clientX / z - sx))
+      let y = Math.max(0, Math.min(window.innerHeight / z - 40, ev.clientY / z - sy))
       // Snap to the window edges.
       if (x < SNAP) x = 0
       if (y < SNAP) y = 0

@@ -5,6 +5,7 @@ import type { SketchEngine } from '../engine'
 import { exportLayers } from '../layers'
 import type { SketchDoc } from '../model'
 import { ReferencePicker } from '../ReferencePicker'
+import { zoomOf } from '@/shared/zoom'
 
 const UI = {
   canvas: 'Canvas',
@@ -77,8 +78,9 @@ export function CompanionWindow(p: { doc: SketchDoc; engine: SketchEngine; compa
     const sx = e.clientX
     const sy = e.clientY
     const start = { x: c.x, y: c.y, width: c.width }
+    const z = zoomOf(e.currentTarget)
     const move = (ev: PointerEvent) =>
-      p.onChange(mode === 'move' ? { x: start.x + ev.clientX - sx, y: start.y + ev.clientY - sy } : { width: Math.max(120, start.width + ev.clientX - sx) })
+      p.onChange(mode === 'move' ? { x: start.x + (ev.clientX - sx) / z, y: start.y + (ev.clientY - sy) / z } : { width: Math.max(120, start.width + (ev.clientX - sx) / z) })
     const up = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)

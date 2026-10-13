@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
-import { ENTITY_TYPES, type Category, type Entity, type EntityType } from '@/core/model'
+import { ENTITY_TYPES, type Category, type ComponentType, type Entity, type EntityType } from '@/core/model'
 import { allEntities, useProjectStore } from '@/core/state'
-import { openEntity } from '@/shared/entityList/navigation'
+import { getManifest } from '@/core/registry'
+import { jumpTo, openEntity } from '@/shared/entityList/navigation'
 import type { RefItem, RefProvider, RefTarget } from './types'
 import { entityLook } from '../categories/styles'
 
@@ -61,21 +62,40 @@ const toItem = (e: Entity, categories: Category[] = []): RefItem => ({
   color: entityLook(categories, e.type, e)?.style.color,
 })
 
-/** Links to items, characters, towns and enemies of the open project. Clicking one opens its list. */
-export function useEntityRefProvider(options?: { open?: (target: RefTarget) => void }): RefProvider {
+/** `[[` links to a whole tool (`tool`, id = its type) or one of its documents (`doc`, id = the document): jump points in text (v0.18). */
+export const TOOL_KIND = 'tool'
+export const DOC_KIND = 'doc'
+
+/**
+ * Links to items, characters, towns and enemies of the open project (clicking one opens its list),
+ * and, unless `places` is false, to every tool and document (clicking one jumps there).
+ */
+export function useEntityRefProvider(options?: { open?: (target: RefTarget) => void; places?: boolean }): RefProvider {
   const entities = useProjectStore((s) => s.entities)
   const categories = useProjectStore((s) => s.categories)
+  const meta = useProjectStore((s) => s.meta)
   const open = options?.open
+  const withPlaces = options?.places !== false
   return useMemo<RefProvider>(() => {
-    const all = allEntities(entities)
+    const all = allEntities(entities).map((e) => toItem(e, categories))
+    const tools: RefItem[] = (meta?.enabledComponents ?? []).map((t) => ({ kind: TOOL_KIND, id: t, label: getManifest(t)?.name ?? t, hint: 'Tool' }))
+    const docs: RefItem[] = (meta?.documents ?? []).map((d) => ({ kind: DOC_KIND, id: d.id, label: d.title, hint: getManifest(d.type)?.name ?? d.type }))
+    const places = withPlaces ? [...tools, ...docs] : []
     return {
-      search: (query) => rankRefItems(all.map((e) => toItem(e, categories)), query),
+      search: (query) => rankRefItems([...all, ...places], query),
       resolve: (target) => {
+        if (target.kind === TOOL_KIND || target.kind === DOC_KIND) return places.find((p) => p.kind === target.kind && p.id === target.id)
         if (!isEntityType(target.kind)) return undefined
         const hit = (entities[target.kind] as Entity[]).find((e) => e.id === target.id)
         return hit && toItem(hit, categories)
       },
-      open: open ?? ((target) => isEntityType(target.kind) && openEntity(target.kind, target.id)),
+      open: (target) => {
+        if (target.kind === TOOL_KIND) return jumpTo({ kind: 'document', type: target.id as ComponentType, documentId: null })
+        const doc = target.kind === DOC_KIND && meta?.documents.find((d) => d.id === target.id)
+        if (doc) return jumpTo({ kind: 'document', type: doc.type, documentId: doc.id })
+        if (open) open(target)
+        else if (isEntityType(target.kind)) openEntity(target.kind, target.id)
+      },
     }
-  }, [entities, categories, open])
+  }, [entities, categories, meta, open, withPlaces])
 }

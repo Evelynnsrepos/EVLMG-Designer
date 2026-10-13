@@ -11,6 +11,60 @@ export interface GuideTopic {
 }
 
 export const BASICS: Record<string, GuideTopic> = {
+  basics: {
+    title: 'The basics: Esc and Shift-click',
+    body: [
+      'Two moves do most of the work in Evelopment Games Designer: Shift-click and Esc.',
+      '## Shift-click: open side by side',
+      'Click a tool in the sidebar to show only that tool. Shift-click a tool, or a document under it, to open it next to the tools that are already open. To pick the side yourself, drag a tool or document from the sidebar onto an open panel. Drag the dividers between panels to resize them.',
+      'Shift works the same way in other places: Shift+Enter in the Ctrl+K search opens the result next to the open tools, Shift-click picks several layers in Draw, and Shift-click on Draw\'s flip buttons flips only the active layer.',
+      '## Esc: Layout Mode',
+      'Press Esc to turn Layout Mode on. Every panel shows big buttons: the X closes it (everything is saved), the arrows swap it with its neighbour, and you can drag a panel onto another one to move it there. Press Esc again to keep working.',
+      'When a menu, a window or the tour is open, Esc closes that first and leaves Layout Mode alone.',
+      '## The buttons in every tool\'s header',
+      'From left to right: the keyboard shows this tool\'s shortcuts and how to link things; the size button makes the whole tool bigger or smaller (handy with a pen or a graphics tablet); the T picks the font the tool uses; the crossing arrows are jump points; Review collects feedback; the X closes the tool.',
+      '## Keys only work where you are',
+      'Single-letter shortcuts only work in the tool you clicked last, so typing in one tool never triggers another. Inside a text field, keys just type.',
+    ],
+    tips: ['Press F1 anywhere to open this guide, and the keyboard button in a tool\'s header for its shortcuts.'],
+  },
+  shortcuts: {
+    title: 'Shortcuts cheat sheet',
+    body: [
+      'Every shortcut in the app, with its default key and your own when you changed it. Change them in Settings, under Keyboard shortcuts (the button below takes you there).',
+      'Single-letter keys only work in the tool you clicked last, so typing in one tool never triggers another. Inside a text field, keys type as usual.',
+    ],
+  },
+  course: {
+    title: 'Crash course: the whole program',
+    body: [
+      'Everything you need to find your way, in ten minutes. Each part has its own page under Topics for the details.',
+      '## 1. Projects',
+      'Every game you design is a project: New Project on the start screen, a name, and the tools you want (you can add more later). A project is a normal folder of readable files in Documents/Evelopment Games Designer.',
+      'There is no Save button: everything saves about a second after you change it. Ctrl+Z and Ctrl+Y undo and redo in every tool, and the last 10 saves are kept as backups (project card menu …, Restore a backup).',
+      '## 2. The sidebar: keep your tools organised',
+      'The sidebar lists your tools. Tools that hold several documents (boards, drawings, levels, maps…) list them underneath: + New makes another one, right-click renames or deletes it.',
+      'Search tools and documents, at the top, filters the list as you type. The star next to a tool keeps it at the top. Drag tools up and down to put them in your order.',
+      'Right-click a tool to give it a colour or put it into a folder. Drag tools onto a folder to add them, click a folder to fold it, right-click it to rename, recolour or remove it. Show less hides the tools further down when the list gets long.',
+      'Add tool at the bottom adds any tool. Right-click a tool to Hide it (its contents are kept) or to delete its contents.',
+      '## 3. Several tools at once',
+      'Shift-click a tool to open it next to the others, drag tools onto panels to split the screen, and press Esc for Layout Mode to move and close panels (see The basics).',
+      '## 4. Link things with text',
+      'Type [[ in any text: the Writer, the Wiki, the Story Branch Writer, the Timeline, Tasks and every other rich text field. A list opens with your wiki articles, items, characters, towns, enemies, tools and documents. Keep typing to search, then click one or press Enter.',
+      'The link shows the current name, so it keeps working when you rename the target. Click it to go there. The link button in the text toolbar starts a link too, and typing the whole name, like [[Ironhold]], links it when that name exists.',
+      '## 5. Jump points',
+      'The crossing-arrows button in every tool\'s header links that tool to any other tool, document or entry: Add a jump point…, then pick where it goes. The same list shows what points back here. On boards, the jump tool (J) places a jump point right on the board; double-click it to go there. Alt+Left and Alt+Right take you back and forward.',
+      '## 6. Items, characters, towns and enemies',
+      'The four lists share categories (like Element or Faction) and rarities. Every entry page shows Jump to (the things it points at) and Used in (every place that mentions it). Link to… links it to anything. Before you delete something, the app shows where it is used.',
+      '## 7. Find anything',
+      'Ctrl+K searches tools, documents, entries, wiki articles and commands. Enter opens the result, Shift+Enter opens it next to the open tools.',
+      '## 8. Make it yours',
+      'Project look (bottom of the sidebar) changes the accent, the background and a wallpaper. In each tool\'s header, the T picks its font and the size button makes it bigger for a pen or graphics tablet. Settings changes every shortcut.',
+      '## 9. Share and ship',
+      'Design Book turns the project into one game design document (web page or PDF). Engine export writes your data into Godot, Unity or Unreal. Work together lets several people edit one project at the same time.',
+    ],
+    tips: ['Every tool has its own page under Tools in detail, with its shortcuts. Search for a tool or a word there.'],
+  },
   start: {
     title: 'Getting started',
     body: [
@@ -19,13 +73,6 @@ export const BASICS: Record<string, GuideTopic> = {
       'Inside a project, the sidebar on the left lists your tools. Click one to show only that tool; Shift-click to open it next to the ones already open. Tools that hold several documents (boards, maps, timelines…) list them underneath; right-click one to rename it. The search field above the list finds tools and documents; the star next to a tool keeps it at the top, and you can drag tools up and down to order them. Right-click a tool to give it a colour or put it in a folder; drag tools onto a folder to add them, click a folder to fold it, and right-click it to rename, colour or remove it.',
     ],
     tips: ['Questions or ideas? Join the Evelopment Games Discord, linked at the bottom of this list.', 'Press F1 anywhere to open this guide.', 'Use the Projects button at the top of the sidebar to go back to the start screen.'],
-  },
-  shortcuts: {
-    title: 'Keyboard shortcuts',
-    body: [
-      'Every shortcut in the app, with its default key and your own when you changed it. Change them in Settings, under Keyboard shortcuts (the button below takes you there).',
-      'Single-letter keys only work in the tool you clicked last, so typing in one tool never triggers another. Inside a text field, keys type as usual.',
-    ],
   },
   pixel: {
     title: 'Pixel art crash course',
@@ -111,12 +158,12 @@ export const BASICS: Record<string, GuideTopic> = {
       'Pointing here: the same button lists every jump point elsewhere that points at this tool or document, so you can always go back. A character, item, town or enemy shows jump points that point at it in its Jump to bar.',
       'Back and forward (Alt+Left, Alt+Right, or the arrows at the top of the sidebar) retrace your jumps.',
     ],
-    tips: ['Jump points are made for finding your way; [[links]] in texts and Link to… on entries still work as before.'],
+    tips: ['In any text, [[ links to a tool or document too: a jump point right in your writing (see Links and categories).'],
   },
   links: {
     title: 'Links and categories',
     body: [
-      'Type [[ in the Wiki, Writer, Story Branch Writer or Timeline to link to an article, item, character, town or enemy. Links follow renames.',
+      'Type [[ in the Wiki, Writer, Story Branch Writer, Timeline, Tasks or any other text to link to an article, item, character, town, enemy, tool or document. Links follow renames; click one to go there.',
       'Custom categories such as Element or Faction are created once and shared by the Item, Character, Town and Enemy lists.',
       'Rarities: click Rarities at the bottom of the sidebar. Rarity comes ready from Common to Legendary; change names, colors, borders (or switch them off), icons or your own pictures, and a rating as 1 to 5 stars or a number.',
       'Add more systems next to Rarity, like Tier or Quality, each on the lists you choose, and give a system your own fields (drop rate, sell price…) to fill in per rarity. Rarities show on cards, in tables, on pages, in the wiki and in [[links]].',

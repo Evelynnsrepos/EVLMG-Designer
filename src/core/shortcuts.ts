@@ -30,6 +30,7 @@ export const SHORTCUT_GROUPS = [
       { id: 'board.arrow', label: 'Arrow', keys: ['a'] },
       { id: 'board.note', label: 'Sticky note', keys: ['n'] },
       { id: 'board.text', label: 'Text', keys: ['t'] },
+      { id: 'board.jump', label: 'Jump point', keys: ['j'] },
     ],
   },
   {

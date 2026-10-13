@@ -64,7 +64,7 @@ export interface RichTextEditorProps {
 }
 
 const UI = {
-  placeholder: 'Start writing… Type [[ to link an article or entity.',
+  placeholder: 'Start writing… Type [[ to link an article, entry, tool or document.',
   imagePrompt: 'Image path or URL',
   bold: 'Bold (Ctrl+B)',
   italic: 'Italic (Ctrl+I)',
@@ -77,7 +77,7 @@ const UI = {
   ordered: 'Numbered list',
   quote: 'Quote',
   image: 'Insert image',
-  link: 'Link an article or entity ([[)',
+  link: 'Link an article, entry, tool or document ([[): a jump point in your text',
   undo: 'Undo (Ctrl+Z)',
   redo: 'Redo (Ctrl+Y)',
   font: 'Font',

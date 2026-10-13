@@ -2,6 +2,7 @@ import { Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { Chart, ChartType } from './model'
 import { CHART_COLORS as COLORS, type ChartData } from './chartData'
+import { zoomOf } from '@/shared/zoom'
 
 function ChartSvg({ data, type, w, h }: { data: ChartData; type: ChartType; w: number; h: number }) {
   const pad = { l: 40, r: 10, t: 10, b: 34 }
@@ -112,8 +113,9 @@ export function ChartBox({ chart, data, onChange, onRemove, onRename }: { chart:
   useEffect(() => {
     if (!drag) return
     const move = (e: MouseEvent) => {
-      const dx = e.clientX - drag.x
-      const dy = e.clientY - drag.y
+      const z = zoomOf(document.elementFromPoint(drag.x, drag.y))
+      const dx = (e.clientX - drag.x) / z
+      const dy = (e.clientY - drag.y) / z
       setLive(drag.kind === 'move' ? { x: Math.max(0, drag.start.x + dx), y: Math.max(0, drag.start.y + dy) } : { w: Math.max(200, drag.start.w + dx), h: Math.max(140, drag.start.h + dy) })
     }
     const up = () => {

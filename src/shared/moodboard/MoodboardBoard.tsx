@@ -37,6 +37,7 @@ import { createMoodboardDoc, isImage, type CutoutKind, type MoodImageNode, type 
 import { MOOD_NODE_TYPES } from './nodeTypes'
 import { CUTOUT_LABELS, cutoutTool } from './tools'
 import './moodboard.css'
+import { pointIn } from '@/shared/zoom'
 
 const TEXT = {
   board: 'Moodboard',
@@ -196,8 +197,7 @@ export function MoodboardBoard({ type, documentId, active, label }: PanelProps &
     setDropping(false)
     if (!root || !dragHasFiles(e.dataTransfer)) return
     e.preventDefault()
-    const r = boxRef.current!.getBoundingClientRect()
-    const at = apiRef.current?.screenToWorld({ x: e.clientX - r.left, y: e.clientY - r.top }) ?? viewCenter()
+    const at = apiRef.current?.screenToWorld(pointIn(boxRef.current!, e)) ?? viewCenter()
     await placeImages(await importAssetsFromDataTransfer(root, e.dataTransfer, 'image'), at)
   }
 

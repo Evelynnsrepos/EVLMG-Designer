@@ -81,7 +81,7 @@ export const useHelp = create<HelpState>()((set, get) => ({
   report: false,
   openReport: () => set({ report: true }),
   closeReport: () => set({ report: false }),
-  openGuide: (topic = 'start') => set({ guide: topic, report: false }),
+  openGuide: (topic = 'basics') => set({ guide: topic, report: false }),
   closeGuide: () => set({ guide: null }),
   startTour: (tour) => set({ tour, step: 0, guide: null }),
   setStep: (step) => set({ step }),

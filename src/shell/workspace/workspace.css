@@ -276,6 +276,72 @@
   background: var(--bg-hover);
   color: var(--text);
 }
+.panel-font.on {
+  color: var(--accent);
+}
+/* v0.18: shortcuts window and tool size */
+.modal:has(.tool-keys-dialog) {
+  width: min(600px, calc(100vw - 32px));
+}
+.tool-keys-dialog {
+  /* It sits in the panel header, which does not wrap. */
+  white-space: normal;
+  max-height: 75vh;
+  overflow-y: auto;
+}
+.tool-keys-dialog h4 {
+  margin: 14px 0 4px;
+}
+.tool-keys-dialog p {
+  margin: 6px 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.tool-keys {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.tool-keys td {
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.tool-keys td:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+.tool-keys kbd {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev, transparent);
+  font: 12px var(--font-mono, monospace);
+}
+.tool-scale {
+  z-index: 500;
+  width: 240px;
+  padding: 6px 8px 8px;
+}
+.tool-scale-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 8px;
+}
+.tool-scale-row button {
+  width: auto;
+  flex: none;
+}
+.tool-scale-row input {
+  flex: 1;
+  min-width: 0;
+}
+.tool-scale-row span {
+  width: 38px;
+  text-align: right;
+  font-size: 12px;
+}
 .tool-font-preview {
   margin: 12px 0 0;
   padding: 10px 12px;

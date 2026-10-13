@@ -1,4 +1,4 @@
-import { BookOpen, Bug, Waypoints, Grid2x2, Map as MapIcon, Sparkles, CircleHelp, Compass, ExternalLink, FolderGit2, Keyboard, LayoutPanelLeft, Link2, Palette, Puzzle, Rocket, Save, Search, ShieldCheck, SpellCheck, Users, Wrench, X, type LucideIcon } from 'lucide-react'
+import { BookOpen, Bug, GraduationCap, MousePointerClick, Waypoints, Grid2x2, Map as MapIcon, Sparkles, CircleHelp, Compass, ExternalLink, FolderGit2, Keyboard, LayoutPanelLeft, Link2, Palette, Puzzle, Rocket, Save, Search, ShieldCheck, SpellCheck, Users, Wrench, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { allManifests } from '@/core/registry'
 import { isShortcut } from '@/core/shortcuts'
@@ -7,12 +7,16 @@ import { openExternalUrl } from '@/shared/links/openUrl'
 import { Modal } from '@/shared/ui'
 import { openSettings } from '../settings/open'
 import { ShortcutTable } from '../settings/ShortcutTable'
+import { KeyList, toolShortcuts } from '../workspace/ToolHelp'
 import { BASICS, COMMUNITY_LINKS, TOOL_GUIDE, type GuideTopic } from './guide'
+import type { ComponentType } from '@/core/model'
 import { placeCard, TOURS, useHelp } from './help'
 import './help.css'
 
 // A topic without an icon here falls back to the book, so a new guide topic can never crash the guide.
 const BASIC_ICONS: Record<string, LucideIcon> = {
+  basics: MousePointerClick,
+  course: GraduationCap,
   start: Rocket,
   shortcuts: Keyboard,
   jumps: Waypoints,
@@ -29,6 +33,9 @@ const BASIC_ICONS: Record<string, LucideIcon> = {
   search: Search,
   look: Palette,
 }
+
+/** The first pages, in this order: Esc and Shift-click, the cheat sheet, the crash course. */
+const START = ['basics', 'shortcuts', 'course']
 
 export const REPO_URL = 'https://github.com/Evelynnsrepos/Evelopment-Games-Designer'
 
@@ -106,6 +113,22 @@ function GuideDialog({ topic }: { topic: string }) {
   const screen = useAppStore((s) => s.screen)
   const tour = screen === 'editor' ? 'editor' : 'launcher'
   const bodyRef = useRef<HTMLDivElement>(null)
+  const [q, setQ] = useState('')
+  const query = q.trim().toLowerCase()
+  // v0.18: search the tool pages by name and by what they say.
+  const tools = allManifests().filter((m) => {
+    const t = TOOL_GUIDE[m.type]
+    return !query || `${m.name} ${t?.title ?? ''} ${t?.body.join(' ') ?? ''} ${t?.tips?.join(' ') ?? ''}`.toLowerCase().includes(query)
+  })
+  const toolKeys = topic in TOOL_GUIDE ? toolShortcuts(topic as ComponentType).filter((g) => g.name !== 'Everywhere') : []
+  const nav = (key: string) => {
+    const Icon = BASIC_ICONS[key] ?? BookOpen
+    return (
+      <button key={key} className={key === topic ? 'active' : ''} onClick={() => help.openGuide(key)}>
+        <Icon size={14} /> {BASICS[key].title}
+      </button>
+    )
+  }
   useEffect(() => {
     bodyRef.current?.scrollTo(0, 0)
   }, [topic])
@@ -126,17 +149,16 @@ function GuideDialog({ topic }: { topic: string }) {
         </header>
         <div className="help-guide-main">
           <nav className="help-guide-nav">
-            <div className="help-guide-group">Basics</div>
-            {Object.entries(BASICS).map(([key, t]) => {
-              const Icon = BASIC_ICONS[key] ?? BookOpen
-              return (
-                <button key={key} className={key === topic ? 'active' : ''} onClick={() => help.openGuide(key)}>
-                  <Icon size={14} /> {t.title}
-                </button>
-              )
-            })}
-            <div className="help-guide-group">Tools</div>
-            {allManifests().map((m) => (
+            <div className="help-guide-group">Start here</div>
+            {START.map(nav)}
+            <div className="help-guide-group">Topics</div>
+            {Object.keys(BASICS)
+              .filter((k) => !START.includes(k))
+              .map(nav)}
+            <div className="help-guide-group">Tools in detail</div>
+            <input className="input help-guide-search" placeholder="Search tools…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search the tool pages" />
+            {!tools.length && <div className="muted help-guide-none">Nothing matches.</div>}
+            {tools.map((m) => (
               <button key={m.type} className={m.type === topic ? 'active' : ''} onClick={() => help.openGuide(m.type)}>
                 <m.icon size={14} /> {m.name}
               </button>
@@ -153,8 +175,12 @@ function GuideDialog({ topic }: { topic: string }) {
             {current && (
               <>
                 <h2>{current.title}</h2>
-                {current.body.map((p) => (
-                  <p key={p}>{p}</p>
+                {current.body.map((p) => (p.startsWith('## ') ? <h3 key={p}>{p.slice(3)}</h3> : <p key={p}>{p}</p>))}
+                {toolKeys.map((g) => (
+                  <section key={g.name} className="help-guide-keys">
+                    <h3>Shortcuts</h3>
+                    <KeyList rows={g.rows} />
+                  </section>
                 ))}
                 {topic === 'shortcuts' && (
                   <>

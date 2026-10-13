@@ -39,7 +39,7 @@ export function CommandPalette() {
 
 function Palette({ onClose }: { onClose(): void }) {
   const meta = useProjectStore((s) => s.meta)
-  const entityRefs = useEntityRefProvider()
+  const entityRefs = useEntityRefProvider({ places: false })
   const articleRefs = useArticleRefProvider()
   const refs = useMemo(() => combineRefProviders(entityRefs, articleRefs), [entityRefs, articleRefs])
   const [query, setQuery] = useState('')

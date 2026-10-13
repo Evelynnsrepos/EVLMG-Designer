@@ -80,6 +80,7 @@ import { AssistBar, AssistButtons } from './AssistBar'
 import { useAssist } from './assistView'
 // Sketch Pro: Adjustments, Liquify and Clone.
 import { AdjustMenu, AdjustStudio, type AdjustMode } from './adjust/AdjustStudio'
+import { pointIn, zoomOf } from '@/shared/zoom'
 
 const UI_PRO = {
   rotateLeft: 'Turn view left (,)',
@@ -491,7 +492,8 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   })
 
   const toDoc = (e: { clientX: number; clientY: number }, r = viewCanvas.current!.getBoundingClientRect()) => {
-    return toDocPoint(viewRef.current!, { x: e.clientX - r.left, y: e.clientY - r.top })
+    const z = zoomOf(viewCanvas.current)
+    return toDocPoint(viewRef.current!, { x: (e.clientX - r.left) / z, y: (e.clientY - r.top) / z })
   }
 
   // ---- Pointer input ------------------------------------------------------
@@ -590,15 +592,15 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
     if (!view) return
     const p = toDoc(e)
     setCursor(p)
-    const box = viewCanvas.current!.getBoundingClientRect()
-    lastPointer.current = { x: e.clientX - box.left, y: e.clientY - box.top }
+    lastPointer.current = pointIn(viewCanvas.current!, e)
     if (isEraserEnd(e) !== hoverEraser) setHoverEraser(!hoverEraser)
     if (e.pointerType === 'touch' && touchMove(e)) return
     if (textTool.move(p)) return
     const g = gesture.current
     if (!g) return
     if (g.kind === 'pan') {
-      setView({ ...view, x: g.vx + e.clientX - g.sx, y: g.vy + e.clientY - g.sy })
+      const z = zoomOf(viewCanvas.current)
+      setView({ ...view, x: g.vx + (e.clientX - g.sx) / z, y: g.vy + (e.clientY - g.sy) / z })
     } else if (g.kind === 'paint') {
       if (g.snapped) {
         g.snapped.at = g.snapped.at ?? p
@@ -685,8 +687,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
 
   const onWheel = (e: React.WheelEvent) => {
     if (!view) return
-    const r = viewCanvas.current!.getBoundingClientRect()
-    setView(zoomAbout(view, Math.exp(-e.deltaY * 0.0015), { x: e.clientX - r.left, y: e.clientY - r.top }))
+    setView(zoomAbout(view, Math.exp(-e.deltaY * 0.0015), pointIn(viewCanvas.current!, e)))
   }
 
   // ---- Commands ------------------------------------------------------------
@@ -852,15 +853,13 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   const runAction = (id: ActionId, at?: { clientX: number; clientY: number }) => {
     finishShapeEdit()
     if (id === 'quickMenu' && at && viewCanvas.current) {
-      const r = viewCanvas.current.getBoundingClientRect()
-      return setQuickMenu({ x: at.clientX - r.left, y: at.clientY - r.top })
+      return setQuickMenu(pointIn(viewCanvas.current, at))
     }
     sketchActions[id]()
   }
 
   const stagePoint = (e: { clientX: number; clientY: number }) => {
-    const r = viewCanvas.current!.getBoundingClientRect()
-    return { x: e.clientX - r.left, y: e.clientY - r.top }
+    return pointIn(viewCanvas.current!, e)
   }
   /** A finger touched: true when it belongs to a gesture rather than a stroke. */
   const touchDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -1287,8 +1286,9 @@ function ReferenceWindow(p: { image: string; x: number; y: number; width: number
     const sx = e.clientX
     const sy = e.clientY
     const start = { x: p.x, y: p.y, width: p.width }
+    const z = zoomOf(e.currentTarget)
     const move = (ev: PointerEvent) =>
-      p.onChange(mode === 'move' ? { x: start.x + ev.clientX - sx, y: start.y + ev.clientY - sy } : { width: Math.max(80, start.width + ev.clientX - sx) })
+      p.onChange(mode === 'move' ? { x: start.x + (ev.clientX - sx) / z, y: start.y + (ev.clientY - sy) / z } : { width: Math.max(80, start.width + (ev.clientX - sx) / z) })
     const up = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)

@@ -36,6 +36,7 @@ import { AUDIO_PLAYER_BOX, BOARD_NODE_TYPES, audioTitle } from './nodeTypes'
 import { formatSeconds, useVoiceRecorder } from './recorder'
 import { areaTool, boardSelectTool, pinTool, stringTool } from './tools'
 import './brainstorm.css'
+import { pointIn } from '@/shared/zoom'
 
 const TEXT = {
   board: 'Brainstorm board',
@@ -177,8 +178,7 @@ export default function View({ documentId, active }: PanelProps) {
     setDropping(false)
     if (!root || !dragHasFiles(e.dataTransfer)) return
     e.preventDefault()
-    const r = boxRef.current!.getBoundingClientRect()
-    const at = apiRef.current?.screenToWorld({ x: e.clientX - r.left, y: e.clientY - r.top }) ?? viewCenter()
+    const at = apiRef.current?.screenToWorld(pointIn(boxRef.current!, e)) ?? viewCenter()
     const assets = await importAssetsFromDataTransfer(root, e.dataTransfer, 'any')
     if (assets.length === 0) setMessage(TEXT.importFailed)
     await placeAssets(assets, at)

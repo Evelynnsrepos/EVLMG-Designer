@@ -153,3 +153,20 @@
   color: var(--text-muted);
   font-size: 12px;
 }
+
+/* v0.18: guide headings, tool search and per-tool keys */
+.help-guide-body h3 {
+  margin: 18px 0 6px;
+  font-size: 15px;
+}
+.help-guide-search {
+  width: calc(100% - 8px);
+  margin: 2px 4px 6px;
+}
+.help-guide-none {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.help-guide-keys {
+  max-width: 520px;
+}

@@ -24,6 +24,7 @@ import {
 } from './model'
 import { SimPanel } from './SimPanel'
 import './gameplay-loop.css'
+import { zoomOf } from '@/shared/zoom'
 
 const R = 190
 const RING = 26
@@ -157,7 +158,7 @@ export default function View({ documentId, active }: PanelProps) {
           onMouseMove={(e) => {
             const p = pan.current
             if (!p) return
-            const scale = Math.max(box.w / e.currentTarget.clientWidth, box.h / e.currentTarget.clientHeight) / view.k
+            const scale = Math.max(box.w / e.currentTarget.clientWidth, box.h / e.currentTarget.clientHeight) / view.k / zoomOf(e.currentTarget)
             setView((v) => ({ ...v, x: p.vx + (e.clientX - p.x) * scale, y: p.vy + (e.clientY - p.y) * scale }))
           }}
           onMouseUp={() => (pan.current = null)}
