@@ -9,6 +9,7 @@ export const SHORTCUT_GROUPS = [
     name: 'Everywhere',
     items: [
       { id: 'app.search', label: 'Search and commands', keys: ['ctrl+k'] },
+      { id: 'app.hotwheel', label: 'Hotwheel (hold, or tap to keep it open)', keys: ['q'] },
       { id: 'app.help', label: 'User guide', keys: ['f1'] },
       { id: 'app.layout', label: 'Layout Mode on / off', keys: ['esc'] },
       { id: 'app.back', label: 'Back to the last entry', keys: ['alt+left'] },
@@ -61,7 +62,7 @@ export const SHORTCUT_GROUPS = [
       { id: 'pixel.picker', label: 'Eyedropper', keys: ['i'] },
       { id: 'pixel.shade', label: 'Shade brush', keys: ['s'] },
       { id: 'pixel.select', label: 'Select a rectangle', keys: ['m'] },
-      { id: 'pixel.lasso', label: 'Lasso', keys: ['q'] },
+      { id: 'pixel.lasso', label: 'Lasso', keys: ['k'] },
       { id: 'pixel.wand', label: 'Magic wand', keys: ['w'] },
       { id: 'pixel.move', label: 'Move', keys: ['v'] },
       { id: 'pixel.swap', label: 'Swap the two colours', keys: ['x'] },

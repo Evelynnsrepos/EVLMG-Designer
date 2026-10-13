@@ -53,7 +53,7 @@ export function PanelFrame({ panel }: { panel: Panel }) {
       <header className="panel-header">
         {manifest && <manifest.icon size={13} />}
         <span className="panel-title">{title}</span>
-        {manifest && <ToolKeysButton type={panel.type} />}
+        {manifest && <ToolKeysButton panel={panel} />}
         {manifest && <ToolScaleButton type={panel.type} />}
         {manifest && <ToolFontButton type={panel.type} />}
         {manifest && <PanelJumps type={panel.type} documentId={panel.documentId} />}

@@ -58,7 +58,7 @@ import { useTransformer } from './transformer'
 import { ColorDropBar, ColorDropView, ColorPanel } from './ColorPanel'
 import { useColorDrop } from './colordrop'
 // Sketch Pro: pen input, view turning, guides, QuickMenu.
-import { matchShortcut, toolOf, type ActionId } from './actions'
+import { actionLabel, matchShortcut, PAIRS, toolOf, type ActionId } from './actions'
 import { TouchGestures } from './gestures'
 import { activeGuide, assistFor, normalizeGuide, symmetryMirror, type DrawingGuide } from './guides'
 import { BrushCursor, GuideOverlay, ShapeNodes } from './GuideOverlay'
@@ -66,7 +66,6 @@ import { GuidePanel } from './GuidePanel'
 import { InputSettingsDialog } from './InputSettingsDialog'
 import { useInputSettings } from './inputSettings'
 import { isEraserEnd, penButton, penData, PenPipeline, type PenPoint } from './pen'
-import { QuickMenu } from './QuickMenu'
 import { flipAbout, pinch, rotateAbout, toDocPoint, viewMatrix, zoomAbout, type View } from './view'
 // Sketch Pro: canvas, time-lapse and files.
 import { useSketchFiles } from './files/SketchFiles'
@@ -81,6 +80,7 @@ import { useAssist } from './assistView'
 // Sketch Pro: Adjustments, Liquify and Clone.
 import { AdjustMenu, AdjustStudio, type AdjustMode } from './adjust/AdjustStudio'
 import { pointIn, zoomOf } from '@/shared/zoom'
+import { openHotwheel, useHotwheel, type HotAction } from '@/shared/hotwheel'
 
 const UI_PRO = {
   rotateLeft: 'Turn view left (,)',
@@ -284,7 +284,6 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   const setGuide = (g: DrawingGuide) => update((d) => ({ ...d, guide: g }))
   const [editingGuide, setEditingGuide] = useState(false)
   const [inputOpen, setInputOpen] = useState(false)
-  const [quickMenu, setQuickMenu] = useState<{ x: number; y: number; holdKey?: string } | null>(null)
   const [shapeOffer, setShapeOffer] = useState<ShapeOffer | null>(null)
   const [hoverEraser, setHoverEraser] = useState(false)
   const [touch] = useState(() => new TouchGestures())
@@ -838,7 +837,15 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
     rotateLeft: () => turnView(-Math.PI / 12),
     rotateRight: () => turnView(Math.PI / 12),
     flipView: () => view && setView(flipAbout(view, stageCenter())),
-    quickMenu: () => setQuickMenu((q) => (q ? null : (lastPointer.current ?? stageCenter()))),
+    quickMenu: () => openHotwheel(),
+    nextMenu: () => {
+      const s = useInputSettings.getState()
+      const i = s.quickMenus.findIndex((q) => q.id === s.quickMenuId)
+      s.update({ quickMenuId: s.quickMenus[(i + 1) % s.quickMenus.length].id })
+    },
+    'pair.size': () => resizeBrush(1.2),
+    'pair.turn': () => turnView(Math.PI / 12),
+    'pair.undo': () => undo(),
     guides: () => setGuide({ ...guide, visible: !guide.visible }),
     assist: () =>
       activeLayer && setGuide({ ...guide, assist: guide.assist.includes(activeLayer.id) ? guide.assist.filter((x) => x !== activeLayer.id) : [...guide.assist, activeLayer.id] }),
@@ -852,9 +859,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   /** Run an action; from a pen button the QuickMenu opens where the pen is. */
   const runAction = (id: ActionId, at?: { clientX: number; clientY: number }) => {
     finishShapeEdit()
-    if (id === 'quickMenu' && at && viewCanvas.current) {
-      return setQuickMenu(pointIn(viewCanvas.current, at))
-    }
+    if (id === 'quickMenu' && at) return openHotwheel({ x: at.clientX, y: at.clientY })
     sketchActions[id]()
   }
 
@@ -922,6 +927,18 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   const drawShapeRef = useRef(drawShape)
   const cursorRef = useRef<{ x: number; y: number } | null>(null)
   const actionsRef = useRef(runAction)
+  useHotwheel(() => {
+    const s = useInputSettings.getState()
+    const profile = s.quickMenus.find((q) => q.id === s.quickMenuId) ?? s.quickMenus[0]
+    const one = (id: ActionId): HotAction => {
+      const pair = PAIRS[id]
+      const label = actionLabel(id)
+      return pair
+        ? { id, label, halves: [{ label: actionLabel(pair[0]), run: () => actionsRef.current(pair[0]) }, { label: actionLabel(pair[1]), run: () => actionsRef.current(pair[1]) }] }
+        : { id, label, on: toolOf(id) === tool, run: () => actionsRef.current(id) }
+    }
+    return profile.slots.filter((id): id is ActionId => !!id).map(one)
+  }, true)
   useEffect(() => {
     drawShapeRef.current = drawShape
     cursorRef.current = cursor
@@ -945,10 +962,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
         // Every other key goes through the shortcut list (Pen and keys settings).
         const id = matchShortcut(e, useInputSettings.getState().shortcuts)
         if (!id) return
-        // Holding the QuickMenu key must not open and close it over and over.
-        if (id === 'quickMenu') {
-          if (!e.repeat) setQuickMenu((q) => (q ? null : { ...(lastPointer.current ?? { x: 200, y: 200 }), holdKey: k }))
-        } else actionsRef.current(id)
+        if (!e.repeat || id !== 'quickMenu') actionsRef.current(id)
       }
       e.preventDefault()
     }
@@ -1126,15 +1140,6 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
                 </button>
               )}
             </div>
-          )}
-          {quickMenu && (
-            <QuickMenu
-              at={quickMenu}
-              holdKey={quickMenu.holdKey}
-              profile={input.quickMenus.find((q) => q.id === input.quickMenuId) ?? input.quickMenus[0]}
-              onPick={(id) => runAction(id)}
-              onClose={() => setQuickMenu(null)}
-            />
           )}
           {files.stage}
           {/* oxlint-disable-next-line react/refs -- the assist cache is only read while drawing */}

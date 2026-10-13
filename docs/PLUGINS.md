@@ -94,8 +94,39 @@ and mark `react` as external.
 | `promptDialog(title, initial)` | Text prompt, resolves to a string or null. |
 | `RichTextEditor` | The app's rich text editor with spell check and `[[` links: `h(egd.RichTextEditor, { value, onChange })`. |
 | `newId()` | A new unique id. |
+| `useHotwheel(() => actions)` | (0.18) Put your tool's actions on the Hotwheel's outer ring (hold Q). Call it in your `View`; see below. |
+| `addHotwheelAction(action)` | (0.18) Add a program-wide action that people can put on the inner ring (Settings → Hotwheel). Returns a function that removes it. |
+| `openHotwheel({ x, y }?)` | (0.18) Open the Hotwheel, e.g. from your own button. |
 
 Only additions are made to API version 1; nothing is renamed or removed.
+
+### Hotwheel actions (0.18)
+
+The Hotwheel is the round menu that opens when people hold Q. Its outer ring belongs to the tool in focus.
+Give it your tool's actions; the function is called each time the wheel opens, so the actions can use current state:
+
+```js
+function View({ documentId }) {
+  const doc = egd.useDocument('plugin.dice-roller', documentId, () => ({ rolls: [] }))
+  egd.useHotwheel(() => [
+    { id: 'roll', label: 'Roll', run: () => roll() },
+    { id: 'size', label: 'Dice', halves: [{ label: 'Fewer', run: () => fewer() }, { label: 'More', run: () => more() }] },
+    { id: 'sound', label: 'Sound', on: soundOn, run: () => toggleSound() },
+  ])
+  // ...
+}
+```
+
+An action is `{ id, label, run(shift), icon?, halves?, on? }`:
+
+- `id`: stable; people's own ring layouts store it.
+- `run(shift)`: what it does. `shift` is true when Shift was held.
+- `halves`: two actions in one slice (left and right half), like Undo | Redo or smaller | bigger. Use it instead of `run`.
+- `on`: shows the slice as switched on (a toggle or the current tool).
+- `icon`: a lucide-style React component, or an SVG string.
+
+The first ten actions are the default ring; people can choose others in your tool's keyboard button (Hotwheel).
+A tool that doesn't call `useHotwheel` gets its visible buttons on the ring instead.
 
 ## Rules for a good plugin
 

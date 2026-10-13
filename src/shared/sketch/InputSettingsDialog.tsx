@@ -7,7 +7,7 @@ import { useInputSettings } from './inputSettings'
 import { applyCurve, LINEAR, PEN_BITS, tiltToAngles, type CurvePoint } from './pen'
 import './input.css'
 
-const SECTIONS = ['Pressure', 'Smoothing', 'Test your pen', 'Shortcuts', 'Pen buttons', 'QuickMenu', 'Touch'] as const
+const SECTIONS = ['Pressure', 'Smoothing', 'Test your pen', 'Shortcuts', 'Pen buttons', 'Hotwheel', 'Touch'] as const
 type Section = (typeof SECTIONS)[number]
 
 const UI = {
@@ -47,7 +47,7 @@ const UI = {
   upper: 'Upper button',
   nothing: 'Nothing',
   eraserNote: 'Turning the pen around to the eraser end always erases.',
-  quickIntro: 'A round menu with six actions, opened with Q or a pen button. Click a slot to run it.',
+  quickIntro: 'Draw\'s outer ring of the Hotwheel (hold Q, or a pen button): up to ten actions, clockwise from the top. Make several profiles, like Sketching and Inking, and switch with the Next Hotwheel profile action.',
   menu: 'Menu',
   newMenu: 'New menu',
   renameMenu: 'Name',
@@ -125,7 +125,7 @@ export function InputSettingsDialog({ onClose, initial = 'Pressure' }: { onClose
                 <p className="input-help">{UI.eraserNote}</p>
               </>
             )}
-            {section === 'QuickMenu' && <QuickMenuEditor />}
+            {section === 'Hotwheel' && <QuickMenuEditor />}
             {section === 'Touch' && (
               <>
                 <p className="input-help">{UI.touchIntro}</p>

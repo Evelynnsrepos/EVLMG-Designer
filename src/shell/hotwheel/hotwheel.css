@@ -1,0 +1,78 @@
+/* v0.18: the Hotwheel */
+.hotwheel {
+  position: fixed;
+  z-index: 900;
+  pointer-events: none;
+  transform-origin: center;
+  animation: hotwheel-in 0.09s ease-out;
+}
+@keyframes hotwheel-in {
+  from {
+    opacity: 0;
+  }
+}
+.hotwheel > svg {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 6px 18px rgb(0 0 0 / 0.35));
+}
+.hotwheel-slice > path {
+  fill: var(--bg-elevated);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.hotwheel-slice.on > path {
+  fill: color-mix(in srgb, var(--accent) 22%, var(--bg-elevated));
+}
+.hotwheel-slice.lit > path:not(.half),
+.hotwheel-slice > path.half.lit {
+  fill: var(--accent);
+}
+.hotwheel-slice.empty > path {
+  fill: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+}
+.hotwheel-hole {
+  fill: var(--bg);
+  stroke: var(--border);
+}
+.hotwheel-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 100%;
+  color: var(--text);
+  font-size: 9px;
+  line-height: 1.1;
+  text-align: center;
+}
+.hotwheel-label span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.hotwheel-slice.lit .hotwheel-label {
+  color: var(--accent-text, #fff);
+}
+.hotwheel-svg {
+  display: grid;
+  place-items: center;
+}
+.hotwheel-svg svg {
+  width: 100%;
+  height: 100%;
+}
+.hotwheel-name {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  max-width: 54px;
+  transform: translate(-50%, -50%);
+  color: var(--text);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-align: center;
+}

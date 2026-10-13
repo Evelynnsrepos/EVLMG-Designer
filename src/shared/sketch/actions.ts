@@ -33,7 +33,12 @@ export const ACTIONS = [
   { id: 'rotateLeft', label: 'Turn view left', keys: [','] },
   { id: 'rotateRight', label: 'Turn view right', keys: ['.'] },
   { id: 'flipView', label: 'Mirror view', keys: ['shift+h'] },
-  { id: 'quickMenu', label: 'QuickMenu', keys: ['q'] },
+  // v0.18: the Hotwheel replaces the QuickMenu; Q opens it everywhere (app shortcut), so Draw has no key of its own.
+  { id: 'quickMenu', label: 'Hotwheel', keys: [] },
+  { id: 'nextMenu', label: 'Next Hotwheel profile', keys: [] },
+  { id: 'pair.size', label: 'Brush size (smaller | bigger)', keys: [] },
+  { id: 'pair.turn', label: 'Turn view (left | right)', keys: [] },
+  { id: 'pair.undo', label: 'Undo | Redo', keys: [] },
   { id: 'shortcuts', label: 'Keyboard shortcuts', keys: ['shift+?', 'ctrl+/'] },
   { id: 'guides', label: 'Show / hide drawing guide', keys: ['g'] },
   { id: 'assist', label: 'Drawing Assist on / off', keys: ['shift+g'] },
@@ -79,7 +84,10 @@ export function conflicts(combo: string, except: ActionId, custom: ShortcutMap):
 
 // ---- QuickMenu ---------------------------------------------------------------
 
-export const QUICK_SLOTS = 6
+export const QUICK_SLOTS = 10
+
+/** Slots that hold two actions, one per half (Hotwheel). */
+export const PAIRS: Partial<Record<ActionId, [ActionId, ActionId]>> = { 'pair.size': ['sizeDown', 'sizeUp'], 'pair.turn': ['rotateLeft', 'rotateRight'], 'pair.undo': ['undo', 'redo'] }
 
 export interface QuickMenuProfile {
   id: string
@@ -91,12 +99,15 @@ export interface QuickMenuProfile {
 export const DEFAULT_QUICK_MENU: QuickMenuProfile = {
   id: 'default',
   name: 'Basic',
-  slots: ['undo', 'redo', 'swapEraser', 'newLayer', 'flipView', 'fit'],
+  slots: ['pair.size', 'pair.undo', 'pair.turn', 'tool.brush', 'tool.eraser', 'tool.smudge', 'tool.lasso', 'tool.move', 'tool.eyedropper', 'newLayer'],
 }
+/** The six-slot QuickMenu default before v0.18; a profile still on it gets the new default. */
+const OLD_DEFAULT = ['undo', 'redo', 'swapEraser', 'newLayer', 'flipView', 'fit']
 
 /** Clean up a saved profile: right number of slots, unknown actions removed. */
 export function normalizeProfile(p: Partial<QuickMenuProfile> & { id: string }): QuickMenuProfile {
   const valid = new Set<string>(ACTIONS.map((a) => a.id))
+  if (p.id === DEFAULT_QUICK_MENU.id && OLD_DEFAULT.every((id, i) => p.slots?.[i] === id) && !p.slots?.slice(6).some(Boolean)) p = { ...p, slots: DEFAULT_QUICK_MENU.slots }
   const slots = Array.from({ length: QUICK_SLOTS }, (_, i) => {
     const s = p.slots?.[i]
     return s && valid.has(s) ? s : null

@@ -1,15 +1,17 @@
 import { BookOpen, Keyboard, Minus, Plus, Scaling } from 'lucide-react'
 import { useState } from 'react'
-import type { ComponentType } from '@/core/model'
+import type { ComponentType, Panel } from '@/core/model'
 import { getManifest } from '@/core/registry'
 import { formatCombo, keysOf, SHORTCUT_GROUPS } from '@/core/shortcuts'
 import { useSettings } from '@/core/state/settingsStore'
 import { DRAW_ACTIONS, useInputSettings } from '@/shared/sketch'
 import { Modal } from '@/shared/ui'
 import { useHelp } from '../help/help'
+import { hotwheelKey } from '../hotwheel/Hotwheel'
+import { ToolRingEditor } from '../hotwheel/HotwheelSettings'
 
 /** Tools drawn on a board (CanvasEditor): they share the board keys. */
-const BOARD_TOOLS = new Set<ComponentType>(['moodboard', 'design-language', 'brainstorm', 'map', 'story-writer', 'timeline', 'ui-flow'])
+export const BOARD_TOOLS = new Set<ComponentType>(['moodboard', 'design-language', 'brainstorm', 'map', 'story-writer', 'timeline', 'ui-flow'])
 const OWN_GROUP: Partial<Record<ComponentType, string>> = { 'level-layout': 'Level Layout', 'pixel-art': 'Pixel Art' }
 
 export interface KeyRow {
@@ -61,7 +63,8 @@ export function KeyList({ rows }: { rows: KeyRow[] }) {
 }
 
 /** The keyboard button in every tool's header. */
-export function ToolKeysButton({ type }: { type: ComponentType }) {
+export function ToolKeysButton({ panel }: { panel: Panel }) {
+  const type = panel.type
   const [open, setOpen] = useState(false)
   const name = getManifest(type)?.name ?? type
   return (
@@ -81,6 +84,8 @@ export function ToolKeysButton({ type }: { type: ComponentType }) {
                 <KeyList rows={g.rows} />
               </section>
             ))}
+            <h4>Hotwheel: outer ring (hold {hotwheelKey()})</h4>
+            <ToolRingEditor panel={panel} />
             <h4>Linking things</h4>
             {LINK_HELP.map((p) => (
               <p key={p}>{p}</p>
@@ -108,7 +113,7 @@ const MAX = 200
 /** This tool's size in percent (Settings, this computer). */
 export const useToolScale = (type: ComponentType) => useSettings((s) => s.toolScale[type] ?? 100)
 
-function setScale(type: ComponentType, pct: number) {
+export function setScale(type: ComponentType, pct: number) {
   const toolScale = { ...useSettings.getState().toolScale }
   if (pct === 100) delete toolScale[type]
   else toolScale[type] = Math.min(MAX, Math.max(MIN, pct))

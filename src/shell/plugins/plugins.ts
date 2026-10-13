@@ -10,6 +10,7 @@ import { registerPluginManifest, unregisterPluginManifest, type PanelProps } fro
 import { useDocument, useProjectStore } from '@/core/state'
 import { confirmDialog, promptDialog } from '@/shared/dialogs'
 import { RichTextEditor } from '@/shared/richtext'
+import { addHotwheelAction, openHotwheel, useHotwheel } from '@/shared/hotwheel'
 import { openComponent } from '../editor/actions'
 
 /**
@@ -49,6 +50,10 @@ export const pluginApi = {
   promptDialog,
   RichTextEditor,
   newId,
+  // v0.18 Hotwheel (additions to API 1)
+  useHotwheel,
+  addHotwheelAction,
+  openHotwheel,
 }
 
 export type PluginApi = typeof pluginApi

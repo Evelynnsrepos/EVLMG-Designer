@@ -57,6 +57,12 @@ export function syncBoardJumps(type: ComponentType, documentId: Id | null, nodes
   if (key(next) !== key(all)) s.updateMeta({ jumps: next })
 }
 
+/** Ask where to, then add a jump point from this tool or document (header button, Hotwheel). */
+export async function addJumpHere(type: ComponentType, documentId: Id | null) {
+  const to = await pickJumpTarget()
+  if (to) addJump(placeOf(type, documentId), to)
+}
+
 // ---- Picking a target ------------------------------------------------------------
 
 const usePick = create<{ open: { title: string; resolve(t: LinkTarget | null): void } | null }>()(() => ({ open: null }))
@@ -147,10 +153,9 @@ export function PanelJumps({ type, documentId }: { type: ComponentType; document
   const out = (jumps ?? []).filter((j) => same(j.from, here))
   const into = (jumps ?? []).filter((j) => same(j.to, here) || (here.kind === 'document' && j.to.kind === 'document' && j.to.type === type && j.to.documentId === null))
   const count = out.length + into.length
-  const add = async () => {
+  const add = () => {
     setOpen(null)
-    const to = await pickJumpTarget()
-    if (to) addJump(here, to)
+    void addJumpHere(type, documentId)
   }
   const go = (t: LinkTarget) => {
     setOpen(null)
@@ -178,7 +183,7 @@ export function PanelJumps({ type, documentId }: { type: ComponentType; document
                 </button>
               </div>
             ))}
-            <button className="jump-menu-add" onClick={() => void add()}>
+            <button className="jump-menu-add" onClick={add}>
               <Plus size={13} /> Add a jump point…
             </button>
             {into.length > 0 && (

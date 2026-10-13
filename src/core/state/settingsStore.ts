@@ -31,9 +31,28 @@ export interface AppSettings {
   shortcuts: Record<string, string[]>
   /** v0.18: size of each tool in percent (by tool type), e.g. bigger for a graphics tablet; missing = 100. */
   toolScale: Record<string, number>
+  /** v0.18: the Hotwheel (hold Q). */
+  hotwheel: HotwheelSettings
 }
 
-const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {} })
+export interface HotwheelSettings {
+  /** The 6 inner slices (program actions), clockwise from the top; '' = empty. */
+  inner: string[]
+  /** Outer ring per tool type: up to 10 action ids. Missing = the tool's defaults. */
+  outer: Record<string, string[]>
+  size: 'S' | 'M' | 'L'
+  /** Open with the pen's side button (it arrives as a right-click). */
+  penButton: boolean
+  /** Open by holding the right mouse button; a short right-click stays a right-click. */
+  rightHold: boolean
+  /** Open with the middle mouse button (it also pans in canvas tools). */
+  middle: boolean
+}
+
+export const DEFAULT_INNER = ['close', 'scale', 'jump', 'layout', 'undo', 'search']
+const hotwheelDefaults = (): HotwheelSettings => ({ inner: DEFAULT_INNER, outer: {}, size: 'M', penButton: false, rightHold: false, middle: false })
+
+const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults() })
 
 async function settingsPath() {
   const fs = getFs()
@@ -55,15 +74,15 @@ export const useSettings = create<SettingsState>()((set, get) => ({
   async load() {
     if (get().loaded) return
     const saved = await readVersioned<Partial<AppSettings>>(await settingsPath(), defaults).catch(defaults)
-    set({ ...defaults(), ...saved, loaded: true })
+    set({ ...defaults(), ...saved, hotwheel: { ...hotwheelDefaults(), ...saved.hotwheel }, loaded: true })
   },
   update(patch) {
     set(patch)
     // Sliders call this many times a second; write once they settle.
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
-      const { spellCheck, spellLanguages, personalWords, aiHelper, aiModel, askProject, penSize, penSmoothing, penOpacity, sharpPixels, shortcuts, toolScale } = get()
-      void settingsPath().then((p) => writeVersioned(p, { spellCheck, spellLanguages, personalWords, aiHelper, aiModel, askProject, penSize, penSmoothing, penOpacity, sharpPixels, shortcuts, toolScale }))
+      const { spellCheck, spellLanguages, personalWords, aiHelper, aiModel, askProject, penSize, penSmoothing, penOpacity, sharpPixels, shortcuts, toolScale, hotwheel } = get()
+      void settingsPath().then((p) => writeVersioned(p, { spellCheck, spellLanguages, personalWords, aiHelper, aiModel, askProject, penSize, penSmoothing, penOpacity, sharpPixels, shortcuts, toolScale, hotwheel }))
     }, 400)
   },
   addWord(word) {

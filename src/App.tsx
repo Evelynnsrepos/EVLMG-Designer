@@ -12,6 +12,7 @@ import { JumpPickerHost } from '@/shared/jumps/Jumps'
 import { DrawingShelfHost } from '@/shared/drawingShelf'
 import { installRangeFill } from '@/shared/rangeFill'
 import { HelpHost } from '@/shell/help/HelpHost'
+import { HotwheelHost } from '@/shell/hotwheel/Hotwheel'
 import { SettingsHost } from '@/shell/settings/SettingsDialog'
 import { loadAllPlugins } from '@/shell/plugins/plugins'
 import { ServerPluginOffer } from '@/shell/plugins/ServerPluginOffer'
@@ -49,6 +50,7 @@ export default function App() {
       <JumpPickerHost />
       <DrawingShelfHost />
       <HelpHost />
+      <HotwheelHost />
       <SharingEndedHost />
       <ServerPluginOffer />
       <RaritiesHost />

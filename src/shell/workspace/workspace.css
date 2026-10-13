@@ -368,3 +368,11 @@
   background: color-mix(in srgb, var(--danger) 25%, transparent);
   color: var(--text);
 }
+
+/* v0.18: a tool's Hotwheel ring in its shortcuts window */
+.tool-ring {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 6px 0;
+}

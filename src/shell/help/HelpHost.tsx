@@ -1,4 +1,4 @@
-import { BookOpen, Bug, GraduationCap, MousePointerClick, Waypoints, Grid2x2, Map as MapIcon, Sparkles, CircleHelp, Compass, ExternalLink, FolderGit2, Keyboard, LayoutPanelLeft, Link2, Palette, Puzzle, Rocket, Save, Search, ShieldCheck, SpellCheck, Users, Wrench, X, type LucideIcon } from 'lucide-react'
+import { BookOpen, Bug, CircleDot, GraduationCap, MousePointerClick, Waypoints, Grid2x2, Map as MapIcon, Sparkles, CircleHelp, Compass, ExternalLink, FolderGit2, Keyboard, LayoutPanelLeft, Link2, Palette, Puzzle, Rocket, Save, Search, ShieldCheck, SpellCheck, Users, Wrench, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { allManifests } from '@/core/registry'
 import { isShortcut } from '@/core/shortcuts'
@@ -17,6 +17,7 @@ import './help.css'
 const BASIC_ICONS: Record<string, LucideIcon> = {
   basics: MousePointerClick,
   course: GraduationCap,
+  hotwheel: CircleDot,
   start: Rocket,
   shortcuts: Keyboard,
   jumps: Waypoints,
@@ -35,7 +36,7 @@ const BASIC_ICONS: Record<string, LucideIcon> = {
 }
 
 /** The first pages, in this order: Esc and Shift-click, the cheat sheet, the crash course. */
-const START = ['basics', 'shortcuts', 'course']
+const START = ['basics', 'shortcuts', 'course', 'hotwheel']
 
 export const REPO_URL = 'https://github.com/Evelynnsrepos/Evelopment-Games-Designer'
 

@@ -9,6 +9,7 @@ import './settings.css'
 
 import { useSettingsDialog } from './open'
 import { ShortcutTable } from './ShortcutTable'
+import { HotwheelSection } from '../hotwheel/HotwheelSettings'
 
 const UI = {
   title: 'Settings',
@@ -172,6 +173,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
           <p className="muted settings-hint">{UI.sharpHint}</p>
         </section>
 
+        <HotwheelSection />
         <section data-section="shortcuts">
           <h3>{UI.keys}</h3>
           <p className="muted settings-hint">{UI.keysHint}</p>
