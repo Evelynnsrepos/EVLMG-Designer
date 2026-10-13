@@ -165,7 +165,7 @@ export function PanelJumps({ type, documentId }: { type: ComponentType; document
       {open && (
         <>
           <div className="menu-backdrop" onClick={() => setOpen(null)} />
-          <div className="menu jump-menu" style={{ position: 'fixed', top: open.bottom + 4, left: Math.max(8, Math.min(open.right - 280, window.innerWidth - 290)) }}>
+          <div className="menu jump-menu" style={{ position: 'fixed', top: open.bottom + 4, left: Math.max(8, Math.min(open.right - 360, window.innerWidth - 370)) }}>
             <div className="jump-menu-head">Jump to</div>
             {out.length === 0 && <div className="muted jump-menu-empty">No jump points here yet.</div>}
             {out.map((j) => (

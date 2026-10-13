@@ -177,7 +177,7 @@
 }
 .custom-color-pop {
   position: fixed;
-  z-index: 60;
+  z-index: 500;
   width: 290px;
   max-height: 70vh;
   overflow-y: auto;
