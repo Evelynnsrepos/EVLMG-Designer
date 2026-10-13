@@ -519,7 +519,24 @@ export class SketchEngine {
     })
   }
 
+  /** The layer-list change of the step undone or redone last (v0.17), for the editor to apply. */
+  lastMeta: { meta: unknown; which: 'before' | 'after' } | null = null
+
+  get pushes() {
+    return this.history.pushes
+  }
+
+  /**
+   * Tie a layer-list change (merge, flatten, delete) to undo: onto the pixel step the change made,
+   * or a step of its own when no pixels changed. `pushesBefore` is `pushes` from before the change.
+   */
+  structure(layerId: Id, meta: unknown, pushesBefore: number) {
+    if (this.history.pushes > pushesBefore) this.history.tagLast(meta)
+    else this.history.pushMeta(layerId, meta)
+  }
+
   private replay(step: ReturnType<TileHistory['undo']>, which: 'before' | 'after'): Id | null {
+    this.lastMeta = step?.meta ? { meta: step.meta, which } : null
     if (!step) return null
     const { ctx } = this.ensure(step.layerId)
     for (const t of step.tiles) ctx.putImageData(t[which], t.rect.x, t.rect.y)

@@ -58,6 +58,8 @@ export interface UndoStep {
   layerId: string
   tiles: TilePatch[]
   bytes: number
+  /** v0.17: a change to the layer list that goes with this step (merge, delete), so undo brings layers back. */
+  meta?: unknown
 }
 
 function same(a: ImageData, b: ImageData) {
@@ -81,17 +83,36 @@ export class TileHistory {
   }
 
   /** Keep the tiles that differ; nothing is recorded when the edit changed nothing. */
+  /** How many steps were ever recorded (to tell whether an edit made one). */
+  pushes = 0
+
   push(layerId: string, rects: Rect[], before: ImageData[], after: ImageData[]): boolean {
     const tiles: TilePatch[] = []
     for (let i = 0; i < rects.length; i++) if (!same(before[i], after[i])) tiles.push({ rect: rects[i], before: before[i], after: after[i] })
     if (!tiles.length) return false
     const bytes = tiles.reduce((n, t) => n + t.before.data.byteLength * 2, 0)
+    this.pushes++
     this.undoStack.push({ layerId, tiles, bytes })
     this.bytes += bytes
     for (const s of this.redoStack) this.bytes -= s.bytes
     this.redoStack = []
     while (this.undoStack.length > 1 && (this.undoStack.length > this.maxSteps || this.bytes > this.budget)) this.bytes -= this.undoStack.shift()!.bytes
     return true
+  }
+
+  /** Attach a layer-list change to the newest step. */
+  tagLast(meta: unknown) {
+    const s = this.undoStack.at(-1)
+    if (s) s.meta = meta
+  }
+
+  /** A step that only changes the layer list (no pixels changed). */
+  pushMeta(layerId: string, meta: unknown) {
+    this.pushes++
+    this.undoStack.push({ layerId, tiles: [], bytes: 0, meta })
+    for (const s of this.redoStack) this.bytes -= s.bytes
+    this.redoStack = []
+    if (this.undoStack.length > this.maxSteps) this.bytes -= this.undoStack.shift()!.bytes
   }
 
   undo(): UndoStep | undefined {

@@ -691,8 +691,23 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
 
   // ---- Commands ------------------------------------------------------------
 
-  const undo = () => markDirty(engine.undo())
-  const redo = () => markDirty(engine.redo())
+  /** Undo and redo also bring back (or take away again) layers a merge or delete changed (v0.17). */
+  const applyMeta = () => {
+    const m = engine.lastMeta
+    if (!m) return
+    const { before, after } = m.meta as { before: SketchLayer[]; after: SketchLayer[] }
+    const layers = m.which === 'before' ? before : after
+    update((d) => ({ ...d, layers }))
+    if (activeLayer && !layers.some((l) => l.id === activeLayer.id)) setActiveLayerId(layers.filter((l) => l.kind !== 'group').at(-1)?.id ?? layers[0].id)
+  }
+  const undo = () => {
+    markDirty(engine.undo())
+    applyMeta()
+  }
+  const redo = () => {
+    markDirty(engine.redo())
+    applyMeta()
+  }
 
   const layerLimit = maxLayers(doc.width, doc.height)
   const layerHost: LayerHost = {
@@ -703,11 +718,12 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
     setActive: setActiveLayerId,
     markDirty,
     adopt: (id) => loaded.current.set(id, null),
-    discard: (gone) => {
-      for (const l of gone) {
-        dirty.current.delete(l.id)
-        if (l.image && root) void resolveAssetPath(root, l.image).then((abs) => getFs().remove(abs).catch(() => {}))
-      }
+    // v0.17: files of removed layers stay, so undo can bring the layers back.
+    // ponytail: removed layers leave their PNG in assets; clean up unused assets if folders grow.
+    discard: () => {},
+    restructure: (layers, layerId, pushesBefore) => {
+      engine.structure(layerId, { before: doc.layers, after: layers }, pushesBefore)
+      update((d) => ({ ...d, layers }))
     },
     limit: layerLimit,
     title,

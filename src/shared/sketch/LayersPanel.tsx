@@ -88,8 +88,10 @@ export interface LayerHost {
   markDirty(id: Id | null): void
   /** A layer made in memory (not loaded from a file). */
   adopt(id: Id): void
-  /** Layers removed from the document: stop saving them and delete their files. */
+  /** Layers removed from the document. */
   discard(layers: SketchLayer[]): void
+  /** v0.17: change the layer list as one undo step together with the pixel edit just made on `layerId`. */
+  restructure(layers: SketchLayer[], layerId: Id, pushesBefore: number): void
   limit: number
   title: string
   color: string
@@ -152,7 +154,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
     // Always keep one layer to paint on.
     if (!layers.some((l) => !isGroup(l))) return
     host.discard(doc.layers.filter((l) => !layers.includes(l)))
-    update((d) => ({ ...d, layers }))
+    host.restructure(layers, ids[0], engine.pushes)
     host.setActive(layers.filter((l) => !isGroup(l) && l.kind !== 'mask').at(-1)?.id ?? layers[0].id)
     setPicked(new Set())
   }
@@ -174,11 +176,13 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
   /** Merge `ids` (bottom to top, groups included) into the lowest pixel layer among them. */
   const mergeInto = (target: SketchLayer, ids: Id[]) => {
     const stack = [{ ...target, opacity: 1, blend: 'source-over' as BlendMode, clip: false, visible: true, parent: null }, ...ids.flatMap((id) => subtreeStack(doc.layers, id))]
+    const pushes = engine.pushes
     host.markDirty(engine.mergeInto(stack, target.id))
     let layers = doc.layers
     for (const id of ids) layers = removeTree(layers, id)
     host.discard(doc.layers.filter((l) => !layers.includes(l)))
-    update((d) => ({ ...d, layers }))
+    // One undo step brings back the merged layers and the old pixels together.
+    host.restructure(layers, target.id, pushes)
     host.setActive(target.id)
     setPicked(new Set())
   }
@@ -201,10 +205,11 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
     const layer = { ...newLayer(g.name), parent: g.parent ?? null }
     host.adopt(layer.id)
     engine.setLayerImage(layer.id, null)
+    const pushes = engine.pushes
     host.markDirty(engine.mergeInto(subtreeStack(doc.layers, g.id).map((l) => (l.id === g.id ? { ...l, opacity: 1, blend: 'source-over' as BlendMode } : l)), layer.id))
     const layers = removeTree(insertAbove(doc.layers, layer, g.id), g.id)
     host.discard(doc.layers.filter((l) => !layers.includes(l)))
-    update((d) => ({ ...d, layers }))
+    host.restructure(layers, layer.id, pushes)
     host.setActive(layer.id)
   }
 
