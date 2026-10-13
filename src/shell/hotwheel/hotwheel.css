@@ -4,11 +4,29 @@
   z-index: 900;
   pointer-events: none;
   transform-origin: center;
-  animation: hotwheel-in 0.09s ease-out;
+  transform: translate(-50%, -50%) scale(var(--s));
+  /* Springs open with a little turn, and shrinks away when it closes. */
+  animation: hotwheel-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.25);
+}
+.hotwheel.closing {
+  animation: hotwheel-out 0.13s ease-in forwards;
 }
 @keyframes hotwheel-in {
   from {
     opacity: 0;
+    transform: translate(-50%, -50%) scale(calc(var(--s) * 0.55)) rotate(-25deg);
+  }
+}
+@keyframes hotwheel-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(calc(var(--s) * 0.75)) rotate(10deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hotwheel,
+  .hotwheel.closing {
+    animation-duration: 0.01s;
   }
 }
 .hotwheel > svg {

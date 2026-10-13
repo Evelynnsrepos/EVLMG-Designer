@@ -119,8 +119,17 @@ interface Open {
   /** Held key or mouse button: letting go runs the slice under the pointer. */
   hold?: { key?: string; button?: number }
   at: number
+  /** Playing its closing animation; it takes no more input. */
+  closing?: boolean
 }
 const useWheel = create<{ open: Open | null }>()(() => ({ open: null }))
+
+/** Play the closing animation, then take the wheel away (unless it was opened again meanwhile). */
+function closeWheel(open: Open) {
+  useWheel.setState({ open: { ...open, closing: true } })
+  setTimeout(() => useWheel.getState().open?.at === open.at && useWheel.setState({ open: null }), 130)
+}
+const isOpen = () => !!useWheel.getState().open && !useWheel.getState().open!.closing
 
 const SIZES = { S: 0.8, M: 1, L: 1.25 }
 const HOLE = 40
@@ -231,12 +240,14 @@ function Wheel({ open }: { open: Open }) {
   const cy = Math.min(window.innerHeight - r, Math.max(r, open.y))
 
   useEffect(() => {
-    const close = () => useWheel.setState({ open: null })
+    if (open.closing) return
+    const close = () => closeWheel(open)
     const pick = (alt: boolean, keep = false) => {
       const h = hitRef.current
+      if (!h) return false
       if (!keep) close()
-      if (h) run(h.ring === 'in' ? open.inner[h.i] : open.outer[h.i], h.half, alt)
-      return !!h
+      run(h.ring === 'in' ? open.inner[h.i] : open.outer[h.i], h.half, alt)
+      return true
     }
     const letGo = (shift: boolean) => {
       setHeld(false)
@@ -295,7 +306,7 @@ function Wheel({ open }: { open: Open }) {
   const name = current ? (current.halves ? current.halves[hit.half].label : current.label) : open.panel ? (getManifest(open.panel.type)?.name ?? '') : ''
   const w = OUT * 2 + 12
   return (
-    <div className="hotwheel" style={{ left: cx, top: cy, transform: `translate(-50%, -50%) scale(${scale})` }} role="menu" aria-label="Hotwheel">
+    <div className={`hotwheel${open.closing ? ' closing' : ''}`} style={{ left: cx, top: cy, '--s': scale } as React.CSSProperties} role="menu" aria-label="Hotwheel">
       <svg width={w} height={w} viewBox={`${-w / 2} ${-w / 2} ${w} ${w}`}>
         <Ring items={open.inner} r0={HOLE + 2} r1={MID - 2} hit={hit} ring="in" />
         {open.outer.length > 0 && <Ring items={open.outer} r0={MID + 2} r1={OUT} hit={hit} ring="out" />}
@@ -317,7 +328,7 @@ function activePanel(): Panel | null {
 const pointer = { x: 400, y: 300 }
 
 function openAt(at?: { x: number; y: number }, hold?: Open['hold']) {
-  if (useWheel.getState().open || !useProjectStore.getState().meta) return
+  if (isOpen() || !useProjectStore.getState().meta) return
   const panel = activePanel()
   const all = innerActions(panel)
   const inner = useSettings.getState().hotwheel.inner.map((id) => all.find((a) => a.id === id) ?? null)
@@ -337,13 +348,13 @@ export function HotwheelHost() {
       pointer.y = e.clientY
     }
     const key = (e: KeyboardEvent) => {
-      if (e.repeat || useWheel.getState().open || isTextField(e.target) || !isShortcut(e, 'app.hotwheel')) return
+      if (e.repeat || isOpen() || isTextField(e.target) || !isShortcut(e, 'app.hotwheel')) return
       e.preventDefault()
       e.stopImmediatePropagation()
       openAt(undefined, { key: e.key.toLowerCase() })
     }
     const down = (e: PointerEvent) => {
-      if (useWheel.getState().open || !(e.target as Element).closest?.('.panel-body')) return
+      if (isOpen() || !(e.target as Element).closest?.('.panel-body')) return
       const s = useSettings.getState().hotwheel
       const at = { x: e.clientX, y: e.clientY }
       const now = (e.pointerType === 'pen' && e.button === 2 && s.penButton) || (e.button === 1 && s.middle && e.pointerType !== 'pen')
@@ -377,7 +388,7 @@ export function HotwheelHost() {
       window.removeEventListener('contextmenu', menu, true)
     }
   }, [])
-  return open ? <Wheel open={open} /> : null
+  return open ? <Wheel key={open.at} open={open} /> : null
 }
 
 /** The open key for labels, e.g. "Q". */
