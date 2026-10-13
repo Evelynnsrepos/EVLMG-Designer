@@ -67,16 +67,18 @@ The whole app in five minutes.
 3. **Organize the sidebar.** Search it, star favorites so they stay on top, drag tools into your own order, and
    right-click a tool for colors, folders and closing it.
 4. **Rearrange with `Esc`.** Layout Mode shows big, easy targets to close, swap or move tool windows.
-5. **Jump points.** The crossing-arrows button in every tool's header links it to any other tool, document or entry,
+5. **Hold `Q` for the Hotwheel.** A round menu under your pointer or pen: program actions inside, the current tool's
+   actions outside. Point and let go. Every tool's header also has its shortcuts and a size button for tablets.
+6. **Jump points.** The crossing-arrows button in every tool's header links it to any other tool, document or entry,
    and lists what points back. On boards, the jump tool (`J`) places a jump point right on the board.
-6. **Link everything.** Write `[[` in the Wiki, Writer, Story or Timeline to link any article or entry. Every entry
+7. **Link everything.** Write `[[` in any text to link an article, entry, tool or document. Every entry
    shows what it points at and where it is used, one click away. Jump around and come back with `Alt+Left` and
    `Alt+Right`.
-7. **Find anything with `Ctrl+K`.** Tools, documents, items, characters, towns, enemies, wiki articles and commands.
-8. **Don't worry about saving.** The app saves about a second after every edit, every tool has undo and redo, and the
+8. **Find anything with `Ctrl+K`.** Tools, documents, items, characters, towns, enemies, wiki articles and commands.
+9. **Don't worry about saving.** The app saves about a second after every edit, every tool has undo and redo, and the
    last 10 saves are kept as backups.
-9. **Stuck?** Press `F1` for the built-in guide to every tool. The tour on first launch walks you through the basics.
-10. **Ship it.** Turn the project into one game design document (**Design Book**, web page or PDF), or send items,
+10. **Stuck?** Press `F1` for the built-in guide to every tool. The tour on first launch walks you through the basics.
+11. **Ship it.** Turn the project into one game design document (**Design Book**, web page or PDF), or send items,
    characters, towns, enemies, quests, dialogue and translations to **Godot 4, Unity or Unreal**, or as JSON.
 
 <details>
