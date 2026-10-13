@@ -1,4 +1,5 @@
 import { shrinkBrushImages } from './brushImages'
+import { dragFromRowOnly } from '@/shared/dragGuard'
 import {
   Blend,
   BookOpen,
@@ -269,6 +270,7 @@ export function BrushLibrary({ mode, color, at, onClose }: { mode: 'brush' | 'er
                 <button
                   className={`brushlib-set${setId === s.id && !q ? ' is-active' : ''}${dropSet === s.id ? ' is-drop' : ''}`}
                   draggable
+                  onPointerDownCapture={dragFromRowOnly}
                   onDragStart={(e) => e.dataTransfer.setData(DRAG_SET, s.id)}
                   onClick={() => openSet(s.id)}
                   onDoubleClick={async () => {
@@ -475,6 +477,7 @@ function BrushRow(p: {
     <div
       className={`brushlib-brush${p.active ? ' is-active' : ''}`}
       draggable
+      onPointerDownCapture={dragFromRowOnly}
       onDragStart={(e) => e.dataTransfer.setData(DRAG, p.brush.id)}
       onDragOver={(e) => e.dataTransfer.types.includes(DRAG) && e.preventDefault()}
       onDrop={(e) => {

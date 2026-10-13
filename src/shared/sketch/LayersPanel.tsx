@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronRight, Ellipsis, Eye, EyeOff, Folder, FolderPlus, ListChecks, Lock, Merge, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { dragFromRowOnly } from '@/shared/dragGuard'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Id } from '@/core/model'
 import { saveBinaryFile, safeFileName } from '@/core/export'
@@ -399,6 +400,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
               className={`sketch-layer${isActive ? ' is-active' : ''}${picked.has(l.id) ? ' is-picked' : ''}${l.clip ? ' is-clip' : ''}${dropClass}`}
               style={{ paddingLeft: 4 + depth * 14 }}
               draggable
+              onPointerDownCapture={dragFromRowOnly}
               onDragStart={(e) => {
                 e.dataTransfer.setData('application/x-sketch-layer', l.id)
                 e.dataTransfer.effectAllowed = 'move'
