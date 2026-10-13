@@ -37,6 +37,7 @@ import { formatSeconds, useVoiceRecorder } from './recorder'
 import { areaTool, boardSelectTool, pinTool, stringTool } from './tools'
 import './brainstorm.css'
 import { pointIn } from '@/shared/zoom'
+import { trimmedAsset } from '@/shared/trimImage'
 
 const TEXT = {
   board: 'Brainstorm board',
@@ -113,7 +114,9 @@ export default function View({ documentId, active }: PanelProps) {
       // Several files go side by side, starting at the drop point.
       const nodes: BoardNode[] = []
       let x = at.x
-      for (const a of assets) {
+      for (const picked of assets) {
+        // v0.18: cut away an empty transparent border (a copy; the original file stays).
+        const a = await trimmedAsset(root, picked)
         if (a.kind === 'image') {
           const size = await loadImageSize(await assetUrl(root, a.path).catch(() => null))
           nodes.push({ id: newId(), kind: 'image', layerId: api.activeLayerId, src: a.path, x, y: at.y - size.height / 2, ...size })

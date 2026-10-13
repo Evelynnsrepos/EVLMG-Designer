@@ -38,6 +38,7 @@ import { MOOD_NODE_TYPES } from './nodeTypes'
 import { CUTOUT_LABELS, cutoutTool } from './tools'
 import './moodboard.css'
 import { pointIn } from '@/shared/zoom'
+import { trimmedAsset } from '@/shared/trimImage'
 
 const TEXT = {
   board: 'Moodboard',
@@ -147,7 +148,9 @@ export function MoodboardBoard({ type, documentId, active, label }: PanelProps &
       if (images.length === 0) return setMessage(TEXT.importFailed)
       const nodes: MoodImageNode[] = []
       let x = at.x
-      for (const a of images) {
+      for (const picked of images) {
+        // v0.18: cut away an empty transparent border (a copy; the original file stays).
+        const a = await trimmedAsset(root, picked)
         const size = await loadImageSize(await assetUrl(root, a.path).catch(() => null))
         nodes.push({ id: newId(), kind: 'image', layerId: imageLayerId, src: a.path, name: nameOnly(a.name), x, y: at.y - size.height / 2, ...size })
         x += size.width + 24

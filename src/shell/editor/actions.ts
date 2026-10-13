@@ -3,6 +3,7 @@ import { getManifest } from '@/core/registry'
 import { importAssetFromBlob } from '@/core/assets'
 import { clearDocumentCache, flushAll, postIntent, useAppStore, useProjectStore } from '@/core/state'
 import { autoPlacement, findOpen, insertPanel, leaves, neighbor, removePanel, swapPanels, type Direction, type DropSide } from '../workspace/layoutTree'
+import { trimTransparent } from '@/shared/trimImage'
 
 /**
  * Editor commands shared by the sidebar, workspace and keyboard handling.
@@ -126,7 +127,9 @@ export const IMAGE_TARGETS: { type: ComponentType; label: string }[] = [
 export async function sendImageTo(type: ComponentType, blob: Blob, name: string) {
   const root = useProjectStore.getState().root
   if (!root) return
-  const asset = await importAssetFromBlob(root, blob, 'image', `${name}.png`)
+  // v0.18: trimmed to what is drawn, except as a tracing layer in Pixel Art, where its place on the canvas matters.
+  const trimmed = type === 'pixel-art' ? null : await trimTransparent(blob).catch(() => null)
+  const asset = await importAssetFromBlob(root, trimmed ?? blob, 'image', `${name}.png`)
   if (!asset) return
   postIntent(type, { action: 'add-image', path: asset.path, name })
   openComponent(type)
