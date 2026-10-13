@@ -46,9 +46,12 @@
 
 .canvas-toolbar {
   position: absolute;
-  left: 50%;
+  /* Centred with room on both sides, so it only wraps when the panel is really narrow. */
+  left: 12px;
+  right: 12px;
   bottom: 12px;
-  transform: translateX(-50%);
+  width: fit-content;
+  margin: 0 auto;
   display: flex;
   align-items: center;
   gap: 2px;

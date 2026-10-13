@@ -1,5 +1,5 @@
 import { CornerDownRight, Plus, Waypoints, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
 import { ENTITY_TYPES, newId, type ComponentType, type Entity, type Id, type LinkTarget } from '@/core/model'
 import { getManifest } from '@/core/registry'
@@ -131,6 +131,17 @@ export function PanelJumps({ type, documentId }: { type: ComponentType; document
   const jumps = useProjectStore((s) => s.meta?.jumps)
   const name = useTargetName()
   const [open, setOpen] = useState<DOMRect | null>(null)
+  // Esc closes the list (and does not toggle Layout Mode).
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      setOpen(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [open])
   const here = placeOf(type, documentId)
   // A board's own jump points belong to its document; a tool without documents is just the tool.
   const out = (jumps ?? []).filter((j) => same(j.from, here))
