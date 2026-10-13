@@ -123,9 +123,11 @@ interface Open {
 const useWheel = create<{ open: Open | null }>()(() => ({ open: null }))
 
 const SIZES = { S: 0.8, M: 1, L: 1.25 }
-const HOLE = 30
-const MID = 96
-const OUT = 156
+const HOLE = 40
+const MID = 104
+const OUT = 166
+/** Space between slices; the round corners come from a thick stroke in the slice's own colour (hotwheel.css). */
+const INSET = 7
 
 type Hit = { ring: 'in' | 'out'; i: number; half: 0 | 1 } | null
 
@@ -173,29 +175,38 @@ function Ring({ items, r0, r1, hit, ring }: { items: (HotAction | null)[]; r0: n
   return (
     <>
       {items.map((a, i) => {
-        const a0 = i * step - step / 2 + 0.012
-        const a1 = a0 + step - 0.024
+        const gap = INSET / r0
+        const a0 = i * step - step / 2 + gap
+        const a1 = i * step + step / 2 - gap
+        const am = (a0 + a1) / 2
         const lit = hit?.ring === ring && hit.i === i
         const mid = (r0 + r1) / 2
-        const [x, y] = polar(mid, i * step)
+        const label = (text: string, at: number, key?: number, icon?: HotAction['icon']) => {
+          const [lx, ly] = polar(mid, at)
+          // As wide as the slice (or half) is, so neighbours never overlap.
+          const w = Math.min(64, mid * (a1 - a0) * (key === undefined ? 1 : 0.5) + 10)
+          return (
+            <foreignObject key={key} x={lx - w / 2} y={ly - 24} width={w} height={48}>
+              <div className={key === undefined ? 'hotwheel-label' : 'hotwheel-label half'}>
+                <Icon icon={icon} size={ring === 'in' ? 18 : 16} />
+                <span>{text}</span>
+              </div>
+            </foreignObject>
+          )
+        }
         return (
           <g key={i} className={`hotwheel-slice${lit ? ' lit' : ''}${a?.on ? ' on' : ''}${a ? '' : ' empty'}`}>
-            {a?.halves && lit ? (
+            {a?.halves ? (
               <>
-                <path d={slicePath(r0, r1, a0, a0 + (a1 - a0) / 2)} className={hit.half === 0 ? 'half lit' : 'half'} />
-                <path d={slicePath(r0, r1, a0 + (a1 - a0) / 2, a1)} className={hit.half === 1 ? 'half lit' : 'half'} />
+                <path d={slicePath(r0 + INSET, r1 - INSET, a0, am - gap / 2)} className={lit && hit.half === 0 ? 'half lit' : 'half'} />
+                <path d={slicePath(r0 + INSET, r1 - INSET, am + gap / 2, a1)} className={lit && hit.half === 1 ? 'half lit' : 'half'} />
+                {label(a.halves[0].label, (a0 + am) / 2, 0)}
+                {label(a.halves[1].label, (am + a1) / 2, 1)}
               </>
             ) : (
-              <path d={slicePath(r0, r1, a0, a1)} />
+              <path d={slicePath(r0 + INSET, r1 - INSET, a0, a1)} />
             )}
-            {a && (
-              <foreignObject x={x - 26} y={y - 22} width={52} height={44}>
-                <div className="hotwheel-label">
-                  <Icon icon={a.icon} size={ring === 'in' ? 18 : 16} />
-                  <span>{a.label}</span>
-                </div>
-              </foreignObject>
-            )}
+            {a && !a.halves && label(a.label, i * step, undefined, a.icon)}
           </g>
         )
       })}

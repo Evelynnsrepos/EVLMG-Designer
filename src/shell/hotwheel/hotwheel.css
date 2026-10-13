@@ -17,23 +17,30 @@
   filter: drop-shadow(0 6px 18px rgb(0 0 0 / 0.35));
 }
 .hotwheel-slice > path {
-  fill: var(--bg-elevated);
-  stroke: var(--border);
-  stroke-width: 1;
+  --f: var(--bg-elevated);
+  fill: var(--f);
+  /* A thick stroke in the same colour rounds the corners. */
+  stroke: var(--f);
+  stroke-width: 10;
+  stroke-linejoin: round;
 }
 .hotwheel-slice.on > path {
-  fill: color-mix(in srgb, var(--accent) 22%, var(--bg-elevated));
+  --f: color-mix(in srgb, var(--accent) 28%, var(--bg-elevated));
 }
 .hotwheel-slice.lit > path:not(.half),
 .hotwheel-slice > path.half.lit {
-  fill: var(--accent);
+  --f: var(--accent);
+}
+.hotwheel-slice > path.half:not(.lit) {
+  --f: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
 }
 .hotwheel-slice.empty > path {
-  fill: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+  --f: color-mix(in srgb, var(--bg-elevated) 60%, transparent);
 }
 .hotwheel-hole {
   fill: var(--bg);
-  stroke: var(--border);
+  stroke: var(--accent);
+  stroke-width: 2;
 }
 .hotwheel-label {
   display: flex;
@@ -43,9 +50,19 @@
   gap: 2px;
   height: 100%;
   color: var(--text);
-  font-size: 9px;
-  line-height: 1.1;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.15;
   text-align: center;
+  /* An outline so the words stay readable on any slice colour. */
+  text-shadow:
+    0 0 2px var(--bg),
+    0 0 2px var(--bg),
+    0 0 3px var(--bg);
+}
+.hotwheel-label.half {
+  font-size: 9.5px;
+  letter-spacing: -0.2px;
 }
 .hotwheel-label span {
   display: -webkit-box;
@@ -54,7 +71,11 @@
   -webkit-box-orient: vertical;
 }
 .hotwheel-slice.lit .hotwheel-label {
-  color: var(--accent-text, #fff);
+  color: #fff;
+  text-shadow:
+    0 0 2px #000,
+    0 0 2px #000,
+    0 0 3px #000;
 }
 .hotwheel-svg {
   display: grid;
@@ -68,11 +89,15 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  max-width: 54px;
+  width: 76px;
   transform: translate(-50%, -50%);
   color: var(--text);
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 1.1;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.15;
   text-align: center;
+  overflow-wrap: anywhere;
+  text-shadow:
+    0 0 2px var(--bg),
+    0 0 3px var(--bg);
 }

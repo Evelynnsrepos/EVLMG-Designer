@@ -933,8 +933,10 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
     const one = (id: ActionId): HotAction => {
       const pair = PAIRS[id]
       const label = actionLabel(id)
+      // Short names fit a half slice: "Smaller", "Turn left".
+      const short = (a: ActionId) => actionLabel(a).replace(/ brush$/, '').replace('Turn view ', 'Turn ')
       return pair
-        ? { id, label, halves: [{ label: actionLabel(pair[0]), run: () => actionsRef.current(pair[0]) }, { label: actionLabel(pair[1]), run: () => actionsRef.current(pair[1]) }] }
+        ? { id, label, halves: [{ label: short(pair[0]), run: () => actionsRef.current(pair[0]) }, { label: short(pair[1]), run: () => actionsRef.current(pair[1]) }] }
         : { id, label, on: toolOf(id) === tool, run: () => actionsRef.current(id) }
     }
     return profile.slots.filter((id): id is ActionId => !!id).map(one)
