@@ -1,5 +1,5 @@
 import type { ComponentType } from './components'
-import type { AssetPath } from './entities'
+import type { AssetPath, LinkTarget } from './entities'
 import type { Id } from './ids'
 
 /** Bump when a stored file shape changes, and add a migration in core/project/migrate.ts. */
@@ -55,6 +55,8 @@ export interface ProjectMeta {
   folders?: SidebarFolder[]
   /** v0.13: an optional picture for the project, shown on its card on the start screen. */
   image?: AssetPath | null
+  /** v0.17: jump points, from a tool or a spot on a board to any tool, document or entry. */
+  jumps?: { id: Id; from: LinkTarget; to: LinkTarget; node?: boolean }[]
   createdAt: string
   updatedAt: string
 }

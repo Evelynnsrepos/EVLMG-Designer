@@ -95,6 +95,7 @@ export function LinkPicker({ exclude = [], onPick, label = 'Link to…' }: { exc
 export function JumpBar({ type, entity, onConnect }: { type: EntityType; entity: Entity; onConnect?(connections: JumpTarget[]): void }) {
   const entities = useProjectStore((s) => s.entities)
   const documents = useProjectStore((s) => s.meta?.documents)
+  const jumps = useProjectStore((s) => s.meta?.jumps)
   const nameOf = useTargetName()
   const own = useMemo(() => entity.connections ?? [], [entity.connections])
   const chips = useMemo(() => {
@@ -111,9 +112,11 @@ export function JumpBar({ type, entity, onConnect }: { type: EntityType; entity:
       if (hit) out.push({ key: id, label: hit.e.name || `Untitled ${TYPE_LABEL[hit.type].toLowerCase()}`, kind: why || TYPE_LABEL[hit.type], target: { kind: 'entity', type: hit.type, id: hit.e.id } })
       else if (doc) out.push({ key: id, label: doc.title, kind: why || (getManifest(doc.type)?.name ?? doc.type), target: { kind: 'document', type: doc.type, documentId: doc.id } })
     }
+    // v0.17: jump points elsewhere that point at this entry.
+    for (const j of jumps ?? []) if (j.to.kind === 'entity' && j.to.id === entity.id) out.push({ key: `j${j.id}`, label: nameOf(j.from), kind: 'a jump point there points here', target: j.from })
     return out.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }))
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- nameOf reads the same entities and documents
-  }, [entity, entities, documents, own])
+  }, [entity, entities, documents, own, jumps])
 
   if (chips.length === 0 && !onConnect) return null
   return (

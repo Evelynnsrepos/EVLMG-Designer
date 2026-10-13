@@ -4,6 +4,7 @@ import type { Panel } from '@/core/model'
 import { getManifest } from '@/core/registry'
 import { PanelContext, useAppStore, useProjectStore } from '@/core/state'
 import { ReviewButton } from '@/shared/reviews'
+import { PanelJumps } from '@/shared/jumps/Jumps'
 import { closePanel, DRAG_MIME, movePanel, openComponent, type DragPayload } from '../editor/actions'
 import { neighbor, sideFromPoint, type Direction, type DropSide } from './layoutTree'
 import { startLayoutDrag, useLayoutDrag } from './layoutDrag'
@@ -51,6 +52,7 @@ export function PanelFrame({ panel }: { panel: Panel }) {
         {manifest && <manifest.icon size={13} />}
         <span className="panel-title">{title}</span>
         {manifest && <ToolFontButton type={panel.type} />}
+        {manifest && <PanelJumps type={panel.type} documentId={panel.documentId} />}
         {manifest && panel.type !== 'reviews' && <ReviewButton target={{ kind: 'doc', type: panel.type, id: panel.documentId }} title={title} />}
         {/* v0.14: close this tool without Layout Mode. */}
         <button className="panel-close" title="Close this tool (everything is saved)" aria-label={`Close ${title}`} onClick={() => void closePanel(panel.id)}>

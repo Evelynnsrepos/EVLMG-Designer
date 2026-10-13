@@ -120,6 +120,14 @@ export interface ConnectorNode extends NodeBase {
   label?: string
 }
 
+/** v0.17: a jump point on a board; double-click (or click with the jump tool) goes to its target. */
+export interface JumpNode extends NodeBase {
+  kind: 'jump'
+  target: import('@/core/model').LinkTarget
+  /** The target's name when it was placed (shown on the board). */
+  label: string
+}
+
 /** Review comment pin (v0.7); its thread lives in the Reviews data. */
 export interface CommentPinNode extends NodeBase {
   kind: 'comment-pin'

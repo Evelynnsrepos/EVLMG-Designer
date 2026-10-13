@@ -1,4 +1,8 @@
 import { Circle, Eraser, Hand, MousePointer2, MoveUpRight, Pencil, Slash, Square, StickyNote, Type } from 'lucide-react'
+import { Waypoints } from 'lucide-react'
+import { jumpTo } from '@/shared/entityList/navigation'
+import { pickJumpTarget, targetLabel } from '@/shared/jumps/Jumps'
+import type { JumpNode } from './types'
 import { newId, type Id } from '@/core/model'
 import { rectFromPoints, rectsIntersect, simplifyPoints, snapAngle } from './geometry'
 import { addNodes, deleteNodes, selectableNodes, translateNodes } from './scene'
@@ -361,6 +365,31 @@ export const textTool = (options: ToolOptions<TextNode> = {}): CanvasTool<any> =
     api.editText(node.id, node)
   },
 })
+
+/**
+ * Jump point (J, v0.17): click the board to place a link to any tool, document or entry (a window asks
+ * where it goes); click a jump point with this tool, or double-click it with any tool, to go there.
+ */
+export const jumpTool: CanvasTool<any> = {
+  id: 'jump',
+  label: 'Jump point: click to link this spot to any tool, document or entry',
+  icon: Waypoints,
+  shortcut: 'J',
+  cursor: 'copy',
+  pointerDown(e, api) {
+    if (e.button !== 0) return
+    const hit = e.targetId ? api.scene.nodes.find((n) => n.id === e.targetId) : undefined
+    if (hit?.kind === 'jump') return void jumpTo((hit as JumpNode).target)
+    const at = e.world
+    void pickJumpTarget().then((target) => {
+      if (!target) return
+      const node: JumpNode = { id: newId(), kind: 'jump', layerId: api.activeLayerId, x: at.x, y: at.y - 17, target, label: targetLabel(target) }
+      api.update((s) => ({ ...s, nodes: [...s.nodes, node] }))
+      api.select([node.id])
+      api.setTool('select')
+    })
+  },
+}
 
 /** Every built-in tool, in toolbar order. Components pick the ones they need. */
 export function defaultTools(): CanvasTool<any>[] {

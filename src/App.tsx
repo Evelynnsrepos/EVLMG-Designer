@@ -8,6 +8,7 @@ import { NewProjectWizard } from '@/shell/launcher/NewProjectWizard'
 import { useAiHelper } from '@/shared/spell'
 import { RaritiesHost } from '@/shared/categories'
 import { DialogHost } from '@/shared/ui'
+import { JumpPickerHost } from '@/shared/jumps/Jumps'
 import { DrawingShelfHost } from '@/shared/drawingShelf'
 import { installRangeFill } from '@/shared/rangeFill'
 import { HelpHost } from '@/shell/help/HelpHost'
@@ -45,6 +46,7 @@ export default function App() {
       {screen === 'new-project' && <NewProjectWizard />}
       {screen === 'editor' && <EditorScreen />}
       <DialogHost />
+      <JumpPickerHost />
       <DrawingShelfHost />
       <HelpHost />
       <SharingEndedHost />

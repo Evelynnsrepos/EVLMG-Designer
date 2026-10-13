@@ -7,6 +7,7 @@ import type {
   ConnectorNode,
   EllipseNode,
   ImageNode,
+  JumpNode,
   LineNode,
   NodeType,
   NodeTypes,
@@ -293,7 +294,23 @@ const commentPinType: NodeType<CommentPinNode> = {
   transformable: false,
 }
 
+const JUMP_H = 34
+const jumpWidth = (n: JumpNode) => Math.min(320, 46 + n.label.length * 7.5)
+/** v0.17: a jump point: a rounded chip with an arrow and where it goes. */
+const jumpType: NodeType<JumpNode> = {
+  label: 'Jump point',
+  render: (n, ctx) => (
+    <Group>
+      <Rect width={jumpWidth(n)} height={JUMP_H} cornerRadius={JUMP_H / 2} fill="#5b3fd1" shadowColor="#000" shadowOpacity={0.25} shadowBlur={6} shadowOffsetY={2} />
+      <Text x={14} y={9} width={jumpWidth(n) - 24} height={JUMP_H - 12} text={`➜ ${n.label}`} fontSize={14} fontFamily={ctx.theme.font} fill="#ffffff" wrap="none" ellipsis />
+    </Group>
+  ),
+  bounds: (n) => ({ x: 0, y: 0, width: jumpWidth(n), height: JUMP_H }),
+  transformable: false,
+}
+
 export const BUILTIN_NODE_TYPES: NodeTypes = {
+  jump: jumpType,
   'comment-pin': commentPinType,
   rect: rectType,
   ellipse: ellipseType,

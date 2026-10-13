@@ -1,4 +1,8 @@
 import Konva from 'konva'
+import { jumpTo } from '@/shared/entityList/navigation'
+import { syncBoardJumps } from '@/shared/jumps/Jumps'
+import { jumpTool } from './tools'
+import type { JumpNode } from './types'
 import {
   memo,
   useCallback,
@@ -176,8 +180,20 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
   const state = props.canvas ?? own
   const { viewport, selection, toolId } = state
   const theme = useCanvasTheme()
-  const tools = props.tools ?? (DEFAULT_TOOLS as CanvasTool<N>[])
+  // v0.17: every board gets the jump point tool.
+  const tools = useMemo(() => {
+    const list = props.tools ?? (DEFAULT_TOOLS as CanvasTool<N>[])
+    return list.some((t) => t.id === 'jump') ? list : [...list, jumpTool as CanvasTool<N>]
+  }, [props.tools])
   const tool = tools.find((t) => t.id === toolId) ?? tools[0]
+  // v0.17: jump points on this board are listed in the project, so their targets can show "Pointing here".
+  const panel = usePanelContext()
+  const jumpNodes = props.scene.nodes.filter((n) => n.kind === 'jump') as unknown as JumpNode[]
+  const jumpKey = jumpNodes.map((n) => `${n.id}>${n.target.kind === 'entity' ? n.target.id : `${n.target.type}/${n.target.documentId}`}`).join()
+  useEffect(() => {
+    if (panel) syncBoardJumps(panel.type, panel.documentId, jumpNodes)
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- only when the board's jump points change
+  }, [jumpKey, panel?.type, panel?.documentId])
   const nodeTypes = useMemo<NodeTypes>(() => ({ ...BUILTIN_NODE_TYPES, ...props.nodeTypes }), [props.nodeTypes])
   const resolveImageSrc = props.resolveImageSrc ?? identity
 
@@ -282,6 +298,8 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
       setMarquee: (r) => setMarquee(r),
       activateNode(id) {
         const { props: p, nodeMap: m, typeOf: t } = L()
+        const jump = m.get(id)
+        if (jump?.kind === 'jump') return jumpTo((jump as unknown as JumpNode).target)
         if (p.onNodeDoubleClick) return p.onNodeDoubleClick(id, a)
         const node = m.get(id)
         if (node && t(node).textEdit) setEditing({ id })
