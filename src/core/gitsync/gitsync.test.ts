@@ -4,10 +4,13 @@ import { execFile, execFileSync } from 'node:child_process'
 import * as nodeFs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import * as path from 'node:path'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { getFs, setFs, type FileSystem } from '../fs'
 import { listBackups } from '../backups'
 import { cloneProject, commitAll, pullLatest, pushLatest, readMode, setGitRunner, useGitSync, type ConflictChoice } from './gitsync'
+
+// Starting git is slow on Windows runners; a few runs per test easily pass the 5 s default.
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 })
 
 /** Real disk and a real git, so the tests check what git actually does. No network: the "server" is a local bare repo. */
 let hasGit = true
@@ -79,7 +82,8 @@ describe.skipIf(!hasGit)('git sync with a local repository', () => {
     sh(a, 'remote', 'add', 'origin', remote)
     sh(a, 'config', 'egd.sync', 'full')
   })
-  afterAll(() => nodeFs.rm(home, { recursive: true, force: true }))
+  // Windows may still hold a just-closed git folder for a moment.
+  afterAll(() => nodeFs.rm(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }).catch(() => {}))
 
   it('pushes the project but never backups or collaboration secrets', async () => {
     expect(await readMode(a)).toBe('full')
