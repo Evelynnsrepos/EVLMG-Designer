@@ -76,11 +76,11 @@ export const Tag = Mark.create<SyntaxOptions>({
     const type = this.type
     return gated(this.options.enabled, [
       new InputRule({
-        // The space after the tag is typed but not in the text yet.
+        // Runs once the space after the tag is typed; the space stays plain text.
         find: /(?:^|\s)(#[\p{L}\p{N}_/-]*\p{L}[\p{L}\p{N}_/-]*)\s$/u,
         handler: ({ state, range, match }) => {
-          const end = range.to
-          state.tr.addMark(end - match[1].length, end, type.create()).insertText(' ', end).removeStoredMark(type)
+          const end = range.to - 1
+          state.tr.addMark(end - match[1].length, end, type.create()).removeStoredMark(type)
         },
       }),
     ])
