@@ -1,4 +1,5 @@
 // @vitest-environment node
+/// <reference types="node" />
 import { execFile, execFileSync } from 'node:child_process'
 import * as nodeFs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -68,6 +69,7 @@ describe.skipIf(!hasGit)('git sync with a local repository', () => {
     )
     remote = path.join(home, 'remote.git')
     execFileSync('git', ['init', '-q', '--bare', remote])
+    sh(remote, 'symbolic-ref', 'HEAD', 'refs/heads/main')
     a = path.join(home, 'A')
     await write(a, 'project.json', '{"name":"one"}')
     await write(a, 'collab/share.json', 'secret')
@@ -121,11 +123,12 @@ describe.skipIf(!hasGit)('git sync with a local repository', () => {
   })
 
   it('leaves both sides alone on cancel', async () => {
-    await write(a, 'project.json', '{"name":"a"}')
-    await write(b, 'project.json', '{"name":"b"}')
-    await pullLatest(b) // b first takes the "keep me" version from before
+    // b's "lose me" was overwritten above, so b first takes the repository's version.
+    answer('git')
+    await pullLatest(b)
     await write(b, 'project.json', '{"name":"b"}')
     await pushLatest(b)
+    await write(a, 'project.json', '{"name":"a"}')
     answer('cancel')
     expect(await pullLatest(a)).toBe('cancelled')
     expect(await read(a, 'project.json')).toBe('{"name":"a"}')

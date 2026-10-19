@@ -1,7 +1,8 @@
-import { CircleHelp, FileArchive, FolderOpen, Image, MoreHorizontal, Moon, Plus, Settings, Sun, Type, Users } from 'lucide-react'
+import { CircleHelp, FileArchive, FolderOpen, GitBranch, Image, MoreHorizontal, Moon, Plus, Settings, Sun, Type, Users } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { saveBinaryFile, safeFileName } from '@/core/export'
-import { getFs } from '@/core/fs'
+import { getFs, isTauri } from '@/core/fs'
+import { cloneProject } from '@/core/gitsync'
 import { assetUrl, pickAndImportAssets } from '@/core/assets'
 import type { RecentProject } from '@/core/model'
 import { deleteProject, importProjectZip, isProjectFolder, loadProject, readRecents, removeRecent, saveMeta, upsertRecent, zipProject } from '@/core/project'
@@ -20,6 +21,7 @@ export function Launcher() {
   const [missing, setMissing] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [joinOpen, setJoinOpen] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
   const theme = useTheme()
 
   const refresh = useCallback(async () => {
@@ -57,6 +59,20 @@ export function Launcher() {
     await open(path)
   }
 
+  const openFromGit = async () => {
+    const url = (await promptDialog('Open from Git: repository address', ''))?.trim()
+    if (!url) return
+    try {
+      setError(null)
+      setBusy('Downloading the project from Git…')
+      await open(await cloneProject(url))
+    } catch (e) {
+      setError(`Could not open from Git: ${(e as Error).message}`)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const importZip = async () => {
     const [file] = await getFs().pickFiles('Import a project zip', ['zip'])
     if (!file) return
@@ -91,6 +107,11 @@ export function Launcher() {
           <button className="btn" data-tour="open-folder" onClick={() => void openExisting()}>
             <FolderOpen size={16} /> Open existing folder
           </button>
+          {isTauri() && (
+            <button className="btn" title="Download a project from a Git repository and keep it synced (one person only)" onClick={() => void openFromGit()}>
+              <GitBranch size={16} /> Open from Git
+            </button>
+          )}
           <button className="btn" onClick={() => void importZip()}>
             <FileArchive size={16} /> Import zip
           </button>
@@ -101,6 +122,7 @@ export function Launcher() {
       </header>
 
       {error && <div className="launcher-error">{error}</div>}
+      {busy && <div className="muted launcher-busy">{busy}</div>}
       {joinOpen && (
         <JoinDialog
           onClose={() => setJoinOpen(false)}

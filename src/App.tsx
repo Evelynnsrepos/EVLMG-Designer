@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { installAutoBackup, waitForBackups } from '@/core/backups'
 import { installCollaboration } from '@/core/collab'
+import { installGitSync } from '@/core/gitsync'
 import { installCloseGuard, useAppStore, useSettings } from '@/core/state'
 import { EditorScreen } from '@/shell/editor/EditorScreen'
 import { Launcher } from '@/shell/launcher/Launcher'
@@ -17,10 +18,13 @@ import { SettingsHost } from '@/shell/settings/SettingsDialog'
 import { loadAllPlugins } from '@/shell/plugins/plugins'
 import { ServerPluginOffer } from '@/shell/plugins/ServerPluginOffer'
 import { SharingEndedHost } from '@/shell/collab/CollabDialogs'
+import { GitSyncHost } from '@/shell/gitsync/GitSync'
 import { useJoinRequests } from '@/shell/collab/joinRequests'
 
 // Shared projects go online when opened (core/collab).
 installCollaboration()
+// Git sync pulls on open and pushes on close (desktop only).
+installGitSync()
 // Every slider shows its fill (v0.14).
 installRangeFill()
 
@@ -55,6 +59,7 @@ export default function App() {
       <ServerPluginOffer />
       <RaritiesHost />
       <SettingsHost />
+      <GitSyncHost />
     </>
   )
 }

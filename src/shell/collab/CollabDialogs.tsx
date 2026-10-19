@@ -42,6 +42,7 @@ const T = {
   newCode: 'New invite code',
   newCodeHelp: 'Codes you already sent stop working.',
   people: 'People in this project',
+  gitBackup: (name: string) => `Git backup by ${name}`,
   you: '(you)',
   online: 'Online',
   offline: 'Offline',
@@ -112,6 +113,7 @@ function ProfileFields() {
 /** Sidebar dialog: start sharing, invite code, people. */
 export function ShareDialog({ onClose }: { onClose: () => void }) {
   const { shared, online, peers, members, selfId, error, profile, isHost, hostId, server } = useCollab()
+  const gitBackup = useProjectStore((s) => s.meta?.gitBackup)
   const [leaving, setLeaving] = useState(false)
   const [code, setCode] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -240,6 +242,7 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
                 )
               })}
             </ul>
+            {gitBackup && <span className="muted collab-small">{T.gitBackup(gitBackup.name)}</span>}
           </div>
 
           <div className="modal-actions collab-actions">

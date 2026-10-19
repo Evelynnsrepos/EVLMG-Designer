@@ -85,7 +85,11 @@ export function explainGit(r: GitResult): string {
   return text.split('\n').filter(Boolean).pop() ?? `Git failed (code ${r.code}).`
 }
 
-const git = (root: string, args: string[], timeout = QUICK_MS) => runner(root, args, timeout)
+function git(root: string, args: string[], timeout = QUICK_MS) {
+  // An empty folder would make git run wherever the app was started, in someone else's repository.
+  if (!root.trim()) throw new GitError('No project folder for Git.')
+  return runner(root, args, timeout)
+}
 async function must(root: string, args: string[], timeout = QUICK_MS) {
   const r = await git(root, args, timeout)
   if (r.code !== 0) throw new GitError(explainGit(r))
