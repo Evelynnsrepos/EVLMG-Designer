@@ -16,6 +16,7 @@ import { jumpBack, jumpForward, useJumpHistory } from '@/shared/entityList/navig
 import { usePlugins } from '../plugins/plugins'
 import { ProjectThemeDialog } from './projectTheme'
 import { PresenceDots, ShareDialog, TeammateDots } from '../collab/CollabDialogs'
+import { GitSyncRow } from '../gitsync/GitSync'
 import { CloseToolDialog, RestoreToolDialog, type CloseChoice, type RestoreChoice } from './ToolDialogs'
 import { BACKGROUND_TOOLS, deleteToolContent, hideTool, toolHasContent } from './toolContent'
 
@@ -417,6 +418,7 @@ export function Sidebar() {
           {!collapsed && <PresenceDots />}
         </button>
         {shareOpen && <ShareDialog onClose={() => setShareOpen(false)} />}
+        <GitSyncRow collapsed={collapsed} />
         {closing && <CloseToolDialog manifest={closing} onDone={(c) => void finishClose(c)} />}
         {restoring && <RestoreToolDialog manifest={restoring} onDone={(c) => void finishRestore(c)} />}
         {moreOpen && (

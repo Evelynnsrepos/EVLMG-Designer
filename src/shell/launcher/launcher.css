@@ -198,3 +198,6 @@
   object-fit: cover;
   border-radius: var(--radius) var(--radius) 0 0;
 }
+.launcher-busy {
+  margin-bottom: 16px;
+}

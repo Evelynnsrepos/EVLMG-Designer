@@ -1,0 +1,73 @@
+/* Git sync (0.19). */
+.gitsync-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(480px, 90vw);
+}
+.gitsync-dialog p {
+  margin: 0;
+}
+.gitsync-warning {
+  padding: 8px 10px;
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+}
+.gitsync-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gitsync-small {
+  font-size: 12px;
+}
+.gitsync-actions {
+  display: flex;
+  gap: 8px;
+}
+.gitsync-choices {
+  display: grid;
+  gap: 4px;
+}
+.gitsync-choices .btn {
+  justify-self: start;
+  margin-top: 6px;
+}
+.gitsync-error {
+  color: var(--danger);
+}
+.gitsync-notice {
+  color: var(--text-muted);
+  font-style: italic;
+}
+.gitsync-dot {
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.gitsync-dot.error {
+  background: var(--danger);
+}
+.gitsync-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, 90vw);
+  padding: 8px 12px;
+  transform: translateX(-50%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+}
+.gitsync-toast.error {
+  border-color: var(--danger);
+}
