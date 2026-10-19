@@ -16,6 +16,8 @@ finish-args:
   - --socket=pulseaudio
   # Projects are normal folders anywhere in your home, and exports go wherever you choose.
   - --filesystem=home
+  # "Show in folder" asks the file manager to show the item.
+  - --talk-name=org.freedesktop.FileManager1
 modules:
   - name: evelopment-games-designer
     buildsystem: simple
