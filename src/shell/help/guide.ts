@@ -1,5 +1,6 @@
 import { Camera, MessageCircle, Play } from 'lucide-react'
 import type { ComponentType } from '@/core/model'
+import { GIT_LEARN_LINKS, GIT_SETUP_STEPS } from '../gitsync/setupSteps'
 
 /** In-app user guide. Ships with the app, no network. Plain strings so they can be translated later. */
 
@@ -213,10 +214,9 @@ export const BASICS: Record<string, GuideTopic> = {
     title: 'Git sync (one person, several computers)',
     body: [
       'Keep a project in your own Git repository. Good for moving it between your own computers, or keeping its history on GitHub.',
-      'You need Git installed on your computer (git-scm.com). Git sync uses your own Git login.',
-      '## Turn it on',
-      'Make an empty, private repository, for example on GitHub. Copy its address.',
-      'Open the project and click Git sync in the sidebar. Paste the address, tick I understand, click Turn on.',
+      'You need two free things: Git on your computer and a place for the repository, like a GitHub account. Never used Git? Follow the steps below once; they take about 10 minutes.',
+      '## Set it up, step by step',
+      ...GIT_SETUP_STEPS.map((step, i) => `${i + 1}. ${step}`),
       '## What happens then',
       'When the project opens, it gets the latest version from Git.',
       'When the project closes, or the app closes, it saves to Git.',
@@ -231,6 +231,13 @@ export const BASICS: Record<string, GuideTopic> = {
       '## Shared projects',
       'Git sync is for one person only. Two people syncing one project through Git can overwrite each other\'s work. To work together, use Work together or a server.',
       'A shared project can still get a Git backup: one person turns it on, and their computer saves everyone\'s merged work to Git when they close the project. It never takes anything from Git. The others see Git backup by that person in Work together.',
+      '## Something went wrong?',
+      'Git needs you to log in: do step 3 again on this computer.',
+      'Install Git to use this: Git is missing or the app can\'t find it. Do step 1, then restart the app.',
+      'The repository has newer changes: click Sync now in the Git sync window.',
+      'Could not reach the repository: check your internet, and that the address is the one from step 5.',
+      '## Learn more',
+      ...GIT_LEARN_LINKS,
     ],
     tips: ['Files over 100 MB stop the sync, because GitHub refuses them. Files over 50 MB get a warning.', 'Your old backups and the sharing settings never go into the repository.'],
   },
