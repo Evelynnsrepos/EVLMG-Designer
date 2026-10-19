@@ -331,7 +331,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     title: 'Writer',
     body: [
       'Rich text documents for design docs, scripts and dialogue, with headings, lists, images and [[links]].',
-      'The word count updates as you type, and you can export a document as Markdown or plain text. Import turns Markdown files into new documents.',
+      'The word count updates as you type, and you can export a document as Markdown or plain text. Import turns Markdown files into new documents; you can also drag .txt and .md files from your file manager into the app.',
       'Turn on Markdown Syntax in the header to format by typing symbols, like ==highlight==, - [ ] checklists or > [!note] callouts. Pasted Markdown turns into formatting too. See Typing shortcuts in the guide for the full list.',
       'The toolbar also has highlight, checklist and callout buttons. Click a callout\'s title to rename it.',
       'Pick a font and a size for selected text (or for what you type next) in the toolbar.',

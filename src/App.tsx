@@ -19,12 +19,15 @@ import { loadAllPlugins } from '@/shell/plugins/plugins'
 import { ServerPluginOffer } from '@/shell/plugins/ServerPluginOffer'
 import { SharingEndedHost } from '@/shell/collab/CollabDialogs'
 import { GitSyncHost } from '@/shell/gitsync/GitSync'
+import { installFileDrop } from '@/shell/fileDrop'
 import { useJoinRequests } from '@/shell/collab/joinRequests'
 
 // Shared projects go online when opened (core/collab).
 installCollaboration()
 // Git sync pulls on open and pushes on close (desktop only).
 installGitSync()
+// Files dropped from outside: Linux crash guard, and .txt/.md become Writer documents.
+installFileDrop()
 // Every slider shows its fill (v0.14).
 installRangeFill()
 
