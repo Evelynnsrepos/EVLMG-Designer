@@ -223,6 +223,7 @@ export const BASICS: Record<string, GuideTopic> = {
       'Sync now in the Git sync window does both right away.',
       '## On another computer',
       'Click Open from Git on the start screen and paste the same address. The project downloads and stays synced.',
+      'One repository can also hold all your projects, each in its own folder. Turning on Git sync in one of them syncs the whole repository, and Open from Git puts every project in it on the start screen.',
       '## Changed in two places?',
       'If you changed the project on two computers without syncing in between, Git sync asks which version to keep. It never mixes them.',
       'Use the Git version: this computer\'s version is saved as a backup first (Restore a backup… in the project\'s menu on the start screen).',
