@@ -10,6 +10,7 @@ const REASON_LABEL: Record<BackupReason, string> = {
   autosave: 'While editing',
   close: 'Closed',
   'before-restore': 'Before a restore',
+  'before-git': 'Before taking the Git version',
 }
 
 /** Pick one of a project's rolling backups and restore it (spec 3.5). */

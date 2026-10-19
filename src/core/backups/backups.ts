@@ -11,7 +11,7 @@ import { projectPaths, readVersioned, writeVersioned } from '../project'
  */
 export const MAX_BACKUPS = 10
 
-export type BackupReason = 'open' | 'autosave' | 'close' | 'before-restore'
+export type BackupReason = 'open' | 'autosave' | 'close' | 'before-restore' | 'before-git'
 
 export interface BackupInfo {
   /** File name inside `.backups/`; pass to restoreBackup. */
