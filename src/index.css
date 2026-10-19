@@ -1,3 +1,11 @@
+/* App font: Lexend Deca, SIL Open Font License 1.1 (public/fonts/OFL.txt). Bundled, so it looks the same everywhere. */
+@font-face {
+  font-family: 'Lexend Deca';
+  src: url('/fonts/LexendDeca.ttf') format('truetype');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 /*
  * Theme tokens (spec 10.5: dark by default, light available).
  * Components use these variables only; never hard-code colors.
@@ -38,7 +46,7 @@
 :root {
   --radius: 8px;
   --radius-sm: 5px;
-  --font: system-ui, 'Segoe UI', Ubuntu, Cantarell, 'Noto Sans', sans-serif;
+  --font: 'Lexend Deca', system-ui, 'Segoe UI', Ubuntu, Cantarell, 'Noto Sans', sans-serif;
   --mono: ui-monospace, 'Cascadia Code', 'DejaVu Sans Mono', monospace;
   /* The classic missing-texture checkerboard (IT-2, spec 10.6). */
   --placeholder: repeating-conic-gradient(#ff00dc 0% 25%, #000 0% 50%) 0 0 / 16px 16px;

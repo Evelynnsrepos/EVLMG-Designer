@@ -358,4 +358,6 @@ you trust. **Git sync** sends the project to the repository you enter and nowher
 Evelopment Games Designer is free and open source. You may use, study, share and change it. If you share a
 changed version, it must also be released under the GPL-3.0 with its source code.
 
+The app font, [Lexend Deca](https://github.com/googlefonts/lexend), is under the [SIL Open Font License 1.1](public/fonts/OFL.txt).
+
 <p align="center">🚧 <i>Still building. Thanks for stopping by!</i> 🚧</p>
