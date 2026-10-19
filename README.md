@@ -12,6 +12,7 @@
   <a href="https://github.com/Evelynnsrepos/Evelopment-Games-Designer/releases/latest"><b>⬇ Download</b></a> ·
   <a href="#-crash-course">Crash course</a> ·
   <a href="#-install">Install</a> ·
+  <a href="#-git-sync">Git sync</a> ·
   <a href="#-all-the-tools">All the tools</a> ·
   <a href="#-for-developers">For developers</a>
 </p>
@@ -157,6 +158,31 @@ If macOS says the app "is damaged and can't be opened", that's the download quar
 ```bash
 xattr -dr com.apple.quarantine "/Applications/Evelopment Games Designer.app"
 ```
+
+## 🔄 Git sync
+
+Use the app on more than one computer, or keep your project's history safe on GitHub. Git sync keeps a project in
+your own Git repository, using the Git installed on your computer and your own login. Nothing goes through us.
+
+- It **gets the latest version** when a project opens and **saves to Git** when it closes. *Sync now* does both.
+- **Open from Git** on the start screen downloads a project onto another computer. One repository can also hold all
+  your projects; they all show up on the start screen.
+- It **never mixes versions**: if you changed a project on two computers without syncing, it asks which one to keep
+  and backs up the other.
+- **For one person only.** To work on a project together, use *Work together* or a server. A shared project can
+  still get a push-only Git backup from one member.
+
+**Setting it up** takes about 10 minutes, once:
+
+1. Install [Git](https://git-scm.com/downloads) (free).
+2. Make a free [GitHub account](https://github.com/signup).
+3. Log Git in to GitHub once. On Windows, Git shows a sign-in window by itself the first time. On Mac and Linux,
+   install [GitHub CLI](https://cli.github.com) and run `gh auth login` in a terminal.
+4. Make an [empty, private repository](https://github.com/new) and copy its HTTPS address (it ends in `.git`).
+5. In the app, open your project, click **Git sync** in the sidebar, paste the address and turn it on.
+
+The Git sync window and the user guide (`F1`) walk you through every step, explain each error message and link to
+beginner guides.
 
 ## 🧰 All the tools
 
