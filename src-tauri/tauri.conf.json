@@ -30,6 +30,11 @@
       }
     }
   },
+  "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    }
+  },
   "bundle": {
     "publisher": "Evelopment Games",
     "copyright": "© 2026 Evelopment Games. GPL-3.0",

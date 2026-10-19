@@ -230,7 +230,9 @@ export function installGitSync() {
   installed = true
   addProjectLifecycleHook({
     async opening(root) {
-      if ((await loadStatus(root)) !== 'full') return
+      // Git sync must never stop a project from opening.
+      const mode = await loadStatus(root).catch((e) => (console.error('Git sync status failed', e), null))
+      if (mode !== 'full') return
       const ok = await step('Getting the latest version from Git…', () => pullLatest(root))
       if (!ok) useGitSync.setState((s) => ({ error: `Couldn't get the latest version from Git. ${s.error}` }))
     },
