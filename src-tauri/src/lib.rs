@@ -2,6 +2,7 @@ use tauri::Manager;
 
 mod collab;
 mod collab_commands;
+mod git;
 mod llm;
 mod plugins;
 mod server_link;
@@ -19,6 +20,8 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       spell::spell_check,
       spell::spell_suggest,
+      git::git_run,
+      git::git_version,
       llm::llm_status,
       llm::llm_install,
       llm::llm_remove,

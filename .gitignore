@@ -33,3 +33,5 @@ release/
 
 # Git worktrees for feature branches
 worktrees/
+.backups/
+collab/
