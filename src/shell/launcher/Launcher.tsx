@@ -65,9 +65,16 @@ export function Launcher() {
     try {
       setError(null)
       setBusy('Downloading the project from Git…')
-      await open(await cloneProject(url))
+      const roots = await cloneProject(url)
+      if (roots.length === 1) return void (await open(roots[0]))
+      // A repository with several projects: put them all on the start screen.
+      for (const path of roots) {
+        const { meta } = await loadProject(path)
+        await upsertRecent({ path, name: meta.name, description: meta.description, image: meta.image ?? null, lastOpened: new Date().toISOString(), stats: { words: 0, images: 0 } })
+      }
+      await refresh()
     } catch (e) {
-      setError(`Could not open from Git: ${(e as Error).message}`)
+      setError(`Could not open from Git: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setBusy(null)
     }

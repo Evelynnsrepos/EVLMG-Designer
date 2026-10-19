@@ -108,17 +108,19 @@ export async function checkGit(): Promise<boolean> {
   return !!useGitSync.getState().version
 }
 
-/** This folder's sync mode, from its own git config. */
+/**
+ * This folder's sync mode, from the git config of the repository it is in. The project can be the
+ * repository itself or a folder inside a bigger one (e.g. a repository holding all your projects).
+ */
 export async function readMode(root: string): Promise<GitSyncMode | null> {
-  const fs = getFs()
-  if (!(await fs.exists(await fs.join(root, '.git')))) return null
-  const value = (await git(root, ['config', '--local', '--get', 'egd.sync'])).stdout.trim()
+  const value = (await git(root, ['config', '--get', 'egd.sync'])).stdout.trim()
   return value === 'full' || value === 'backup' ? value : null
 }
 
+/** Backups and sharing state stay out of the repository, also for projects inside a bigger one. */
 async function ensureGitignore(root: string) {
   const fs = getFs()
-  const path = await fs.join(root, '.gitignore')
+  const path = await fs.join(await must(root, ['rev-parse', '--show-toplevel']), '.gitignore')
   const text = (await fs.exists(path)) ? await fs.readText(path) : ''
   const missing = IGNORED.filter((line) => !text.split(/\r?\n/).includes(line))
   if (missing.length) await fs.writeTextAtomic(path, (text && !text.endsWith('\n') ? text + '\n' : text) + missing.join('\n') + '\n')
@@ -129,6 +131,8 @@ const branch = (root: string) => must(root, ['symbolic-ref', '--short', 'HEAD'])
 /** Commit everything that changed. False when there was nothing to commit. */
 export async function commitAll(root: string): Promise<boolean> {
   await ensureGitignore(root)
+  // Ones already committed earlier (by hand) leave the repository too; the files stay on disk.
+  await must(root, ['rm', '-r', '-q', '--cached', '--ignore-unmatch', '--', ':(top,glob)**/.backups/**', ':(top,glob)**/collab/**'])
   await must(root, ['add', '-A'])
   if ((await git(root, ['diff', '--cached', '--quiet'])).code === 0) return false
   // Commits need a name; people who never set one up in git get the app's.
@@ -276,8 +280,8 @@ export async function turnOnGitSync(url: string): Promise<boolean> {
   }
   const configure = () =>
     step('Setting up Git sync…', async () => {
-      const fs = getFs()
-      if (!(await fs.exists(await fs.join(root, '.git')))) {
+      // A project inside an existing repository (like a folder of all your projects) uses that one.
+      if ((await git(root, ['rev-parse', '--show-toplevel'])).code !== 0) {
         await must(root, ['init', '-q'])
         await must(root, ['symbolic-ref', 'HEAD', 'refs/heads/main'])
       }
@@ -324,8 +328,11 @@ export async function syncNow(): Promise<boolean> {
   return step('Saving to Git…', () => pushLatest(root))
 }
 
-/** "Open from Git": clone a repository into the projects folder and turn on full sync. Returns the folder. */
-export async function cloneProject(url: string): Promise<string> {
+/**
+ * "Open from Git": clone a repository into the projects folder and turn on full sync. Returns the
+ * project folders: the repository itself, or the projects one level inside it.
+ */
+export async function cloneProject(url: string): Promise<string[]> {
   const fs = getFs()
   const parent = await defaultProjectsDir()
   await fs.mkdir(parent)
@@ -335,9 +342,18 @@ export async function cloneProject(url: string): Promise<string> {
   const r = await git(parent, ['clone', '-q', url.trim(), name], 5 * 60_000)
   if (r.code !== 0) throw new GitError(explainGit(r))
   const root = await fs.join(parent, name)
-  if (!(await fs.exists(await fs.join(root, 'project.json')))) {
-    throw new GitError(`This repository has no Evelopment Games Designer project in it. It was downloaded to ${root}.`)
-  }
+  const isProject = async (dir: string) => fs.exists(await fs.join(dir, 'project.json'))
+  const roots = (await isProject(root))
+    ? [root]
+    : (
+        await Promise.all(
+          (await fs.list(root)).filter((e) => e.isDirectory && !e.name.startsWith('.')).map(async (e) => {
+            const dir = await fs.join(root, e.name)
+            return (await isProject(dir)) ? dir : null
+          }),
+        )
+      ).filter((d): d is string => !!d)
+  if (!roots.length) throw new GitError(`This repository has no Evelopment Games Designer project in it. It was downloaded to ${root}.`)
   await must(root, ['config', '--local', 'egd.sync', 'full'])
-  return root
+  return roots
 }
