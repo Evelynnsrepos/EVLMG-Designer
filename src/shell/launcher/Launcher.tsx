@@ -45,7 +45,7 @@ export function Launcher() {
       await useProjectStore.getState().open(path)
       useAppStore.getState().go('editor')
     } catch (e) {
-      setError(`Could not open project: ${(e as Error).message}`)
+      setError(`Could not open project: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
