@@ -1,12 +1,18 @@
+import { useSettings } from '@/core/state'
 import { safeFileName } from '@/core/export'
 import { normalizeRichText, richTextToMarkdown, richTextToPlainText, type LabelResolver, type RichTextDoc } from '@/shared/richtext'
 
 /** A Writer document (spec 8.6), stored at `components/writer/<id>.json`. The title lives in the project's document list. */
 export interface WriterDoc {
   body: RichTextDoc
+  /** 0.19 "Markdown Syntax" switch for this document; missing (older documents) = off. */
+  markdownSyntax?: boolean
 }
 
-export const createWriterDoc = (): WriterDoc => ({ body: { type: 'doc', content: [{ type: 'paragraph' }] } })
+export const createWriterDoc = (): WriterDoc => ({
+  body: { type: 'doc', content: [{ type: 'paragraph' }] },
+  markdownSyntax: useSettings.getState().writerMarkdownSyntax,
+})
 
 export type ExportFormat = 'markdown' | 'text'
 
