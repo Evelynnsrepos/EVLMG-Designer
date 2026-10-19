@@ -217,18 +217,19 @@ export function RichTextEditor({
   // Outside changes (document undo, another panel showing the same doc) replace the content.
   // Live text is kept in sync by the collaboration extension instead.
   useEffect(() => {
-    if (!editor || liveText || value === lastEmitted.current) return
+    // A hidden panel coming back re-runs effects; the editor may be gone by then.
+    if (!editor || editor.isDestroyed || liveText || value === lastEmitted.current) return
     lastEmitted.current = value ?? null
     editor.commands.setContent(normalizeRichText(value), { emitUpdate: false })
   }, [editor, value, liveText])
 
   useEffect(() => {
-    editor?.setEditable(editable, false)
+    if (editor && !editor.isDestroyed) editor.setEditable(editable, false)
   }, [editor, editable])
 
   // Renamed or deleted records: repaint every link with its current name.
   useEffect(() => {
-    editor?.storage.ref.repaint.forEach((paint) => paint())
+    if (editor && !editor.isDestroyed) editor.storage.ref.repaint.forEach((paint) => paint())
   }, [editor, provider])
 
   useEffect(() => {

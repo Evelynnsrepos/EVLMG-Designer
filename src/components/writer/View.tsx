@@ -3,13 +3,11 @@ import { Download, Highlighter, Info, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { saveTextFile } from '@/core/export'
 import type { PanelProps } from '@/core/registry'
-import { collabNames, loadDocumentNow, updateDocument, useDocument, useProjectStore } from '@/core/state'
+import { collabNames, useDocument, useProjectStore } from '@/core/state'
 import { useHotwheel } from '@/shared/hotwheel'
 import {
   combineRefProviders,
-  DOC_KIND,
   findRefByLabel,
-  markdownToRichText,
   countRichTextWords,
   RichTextEditor,
   useEntityRefProvider,
@@ -19,6 +17,7 @@ import {
   type RichTextDoc,
 } from '@/shared/richtext'
 import { useArticleRefProvider } from '@/shared/wiki'
+import { importTextFiles } from './importFiles'
 import { createWriterDoc, EXPORT_FORMATS, exportDocument, type ExportFormat, type WriterDoc } from './document'
 import './writer.css'
 
@@ -115,19 +114,7 @@ export default function View({ documentId }: PanelProps) {
  */
 function ImportButton({ refs }: { refs: RefProvider }) {
   const input = useRef<HTMLInputElement>(null)
-  const importFiles = async (files: FileList) => {
-    const { root, addDocument } = useProjectStore.getState()
-    if (!root) return
-    const list = [...files]
-    const made = list.map((f) => addDocument('writer', f.name.replace(/\.(md|markdown|txt)$/i, '') || 'Untitled'))
-    const byTitle = new Map(made.map((d) => [d.title.toLowerCase(), { kind: DOC_KIND, id: d.id }]))
-    const findRef = (label: string) => findRefByLabel(refs, label) ?? byTitle.get(label.toLowerCase())
-    for (const [i, file] of list.entries()) {
-      const body = markdownToRichText(await file.text(), findRef)
-      await loadDocumentNow(root, 'writer', made[i].id, createWriterDoc)
-      updateDocument<WriterDoc>(root, 'writer', made[i].id, () => ({ body, markdownSyntax: true }), { undoable: false })
-    }
-  }
+  const importFiles = (files: FileList) => importTextFiles([...files], (label) => findRefByLabel(refs, label))
   return (
     <>
       <button className="btn btn-ghost writer-export-btn" title={UI.importTitle} onClick={() => input.current?.click()}>
