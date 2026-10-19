@@ -90,6 +90,10 @@ The whole app in five minutes.
   [Evelopment Games Designer Server](https://github.com/Evelynnsrepos/Evelopment-Games-Designer-Server) so people can
   join and sync even when nobody else is online. Each person gets their own connect code, for editing or view only,
   and the server can offer plugins.
+- **Git sync** (optional, one person): keep a project in your own Git repository with the Git on your computer. It
+  gets the latest version when the project opens and saves when it closes, so you can move between your own
+  computers. Open from Git on the start screen downloads it on a new computer. A shared project can instead get a
+  push-only Git backup by one member.
 - **Your drawings everywhere**: wherever you add a picture, your drawings from Draw are offered first, like stickers.
 - **Review status and comments** on every tool window and entry, from Idea to Final, with a Reviews board.
 - **Custom categories** (like *Element* or *Faction*) are made once and used on items, characters, towns and enemies.
@@ -345,7 +349,7 @@ The app only goes online when you use it to: **working together** connects compu
 end-to-end encrypted), using public relay servers by [n0](https://n0.computer) (iroh) only to find each other or when a
 direct connection is not possible. Relays cannot read your project; people you work with can see your IP address on
 direct connections. **Working through a server** sends the project to that server and nobody else, so only use servers
-you trust. Details in the [privacy policy](PRIVACY.md) ([Datenschutzerklärung](DATENSCHUTZ.md)).
+you trust. **Git sync** sends the project to the repository you enter and nowhere else. Details in the [privacy policy](PRIVACY.md) ([Datenschutzerklärung](DATENSCHUTZ.md)).
 
 ## 📜 License
 
