@@ -30,6 +30,9 @@ export type GitRunner = (cwd: string, args: string[], timeoutMs: number) => Prom
 
 const QUICK_MS = 15_000
 const NETWORK_MS = 60_000
+/** While turning sync on, Git may open a sign-in window (Windows); give the person time to sign in. */
+const SIGN_IN_MS = 5 * 60_000
+let networkMs = NETWORK_MS
 /** Closing must never hang for long, even offline. */
 const CLOSE_PUSH_MS = 30_000
 const WARN_BYTES = 50 * 1024 * 1024
@@ -77,7 +80,7 @@ export function explainGit(r: GitResult): string {
   if (r.code === -1) return 'Git took too long and was stopped. Check your internet connection and try again.'
   const text = (r.stderr || r.stdout).trim()
   if (/terminal prompts disabled|could not read (Username|Password)|Authentication failed|Permission denied \(publickey|Host key verification failed/i.test(text)) {
-    return 'Git needs you to log in. Log in once with Git in a terminal (or GitHub Desktop), then try again.'
+    return 'Git needs you to log in to GitHub. Follow step 3 of the setup (in the Git sync window or the guide), then try again.'
   }
   if (/Could not resolve host|Network is unreachable|Connection (timed out|refused)|Failed to connect/i.test(text)) return 'Could not reach the repository. Check your internet connection.'
   if (/\[rejected\]|non-fast-forward|fetch first/i.test(text)) return 'The repository has newer changes. Use Sync now (or close and open the project) to get them first.'
@@ -153,7 +156,7 @@ async function checkBigFiles(root: string) {
   if (big.length) useGitSync.setState({ notice: `Big files (over 50 MB), GitHub may warn about them: ${big.map((m) => m[2]).join(', ')}` })
 }
 
-async function push(root: string, force: boolean, timeout = NETWORK_MS) {
+async function push(root: string, force: boolean, timeout = networkMs) {
   await checkBigFiles(root)
   const b = await branch(root)
   await must(root, ['push', '-q', ...(force ? ['--force-with-lease'] : []), '-u', 'origin', `HEAD:refs/heads/${b}`], timeout)
@@ -174,7 +177,7 @@ const askConflict = () => new Promise<ConflictChoice>((resolve) => useGitSync.se
  */
 export async function pullLatest(root: string): Promise<'same' | 'pulled' | 'pushed' | 'cancelled'> {
   await commitAll(root)
-  await must(root, ['fetch', '-q', 'origin'], NETWORK_MS)
+  await must(root, ['fetch', '-q', 'origin'], networkMs)
   const remote = `origin/${await branch(root)}`
   if ((await git(root, ['rev-parse', '--verify', '-q', remote])).code !== 0) return 'same'
   const [ahead, behind] = (await must(root, ['rev-list', '--left-right', '--count', `HEAD...${remote}`])).split(/\s+/).map(Number)
@@ -199,7 +202,7 @@ export async function pullLatest(root: string): Promise<'same' | 'pulled' | 'pus
 }
 
 /** Commit and push if anything is new (both modes). */
-export async function pushLatest(root: string, timeout = NETWORK_MS) {
+export async function pushLatest(root: string, timeout = networkMs) {
   if ((await commitAll(root)) || (await hasUnpushed(root))) await push(root, false, timeout)
 }
 
@@ -299,10 +302,15 @@ export async function turnOnGitSync(url: string): Promise<boolean> {
     return syncNow()
   }
   // Full sync: close, set up, and open again, so the repository's version can be pulled in cleanly.
-  await store.close()
-  const ok = await configure()
-  await store.open(root)
-  return ok && (await step('Saving to Git…', () => pushLatest(root)))
+  networkMs = SIGN_IN_MS
+  try {
+    await store.close()
+    const ok = await configure()
+    await store.open(root)
+    return ok && (await step('Saving to Git…', () => pushLatest(root)))
+  } finally {
+    networkMs = NETWORK_MS
+  }
 }
 
 /** Turn Git sync off for the open project. The folder stays a git repository. */

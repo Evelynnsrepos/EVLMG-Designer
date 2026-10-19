@@ -31,7 +31,7 @@ const T = {
   backupOn: (remote: string) => `Backing up to: ${remote}`,
   last: (when: string) => `Last sync ${new Date(when).toLocaleString()}`,
   heldBy: (name: string) => `${name} backs this project up to Git. Only one person can.`,
-  login: 'Git uses your own login. If it asks for one, log in once with Git in a terminal (or GitHub Desktop).',
+  login: 'Git uses your own GitHub login on this computer (step 3 of the setup, also in the guide).',
 }
 
 /** Sidebar row; hidden in the browser build. */
