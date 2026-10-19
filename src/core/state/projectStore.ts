@@ -79,6 +79,8 @@ export function sharedMeta(meta: ProjectMeta): SharedMeta {
  * when the project is shared. `opened` runs before `open()` resolves.
  */
 export interface ProjectLifecycleHook {
+  /** Before the project's files are read, e.g. to get the latest version from Git (0.19). */
+  opening?(root: string): Promise<void>
   opened(root: string): Promise<void>
   closing(root: string): Promise<void>
 }
@@ -124,6 +126,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => {
 
     async open(root) {
       await get().close()
+      for (const hook of lifecycleHooks) await hook.opening?.(root)
       const p = await loadProject(root)
       set({ root: p.root, meta: p.meta, entities: p.entities, categories: p.categories })
       for (const hook of lifecycleHooks) await hook.opened(p.root)

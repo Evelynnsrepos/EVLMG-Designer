@@ -57,6 +57,8 @@ export interface ProjectMeta {
   image?: AssetPath | null
   /** v0.17: jump points, from a tool or a spot on a board to any tool, document or entry. */
   jumps?: { id: Id; from: LinkTarget; to: LinkTarget; node?: boolean }[]
+  /** v0.19: in a shared project, the one member whose computer backs it up to Git (push only). */
+  gitBackup?: { id: string; name: string } | null
   createdAt: string
   updatedAt: string
 }
