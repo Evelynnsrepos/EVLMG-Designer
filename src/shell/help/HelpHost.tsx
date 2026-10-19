@@ -11,6 +11,7 @@ import { KeyList, toolShortcuts } from '../workspace/ToolHelp'
 import { BASICS, COMMUNITY_LINKS, TOOL_GUIDE, type GuideTopic } from './guide'
 import type { ComponentType } from '@/core/model'
 import { placeCard, TOURS, useHelp } from './help'
+import { Linkified } from '@/shared/links'
 import './help.css'
 
 // A topic without an icon here falls back to the book, so a new guide topic can never crash the guide.
@@ -178,7 +179,15 @@ function GuideDialog({ topic }: { topic: string }) {
             {current && (
               <>
                 <h2>{current.title}</h2>
-                {current.body.map((p) => (p.startsWith('## ') ? <h3 key={p}>{p.slice(3)}</h3> : <p key={p}>{p}</p>))}
+                {current.body.map((p) =>
+                  p.startsWith('## ') ? (
+                    <h3 key={p}>{p.slice(3)}</h3>
+                  ) : (
+                    <p key={p}>
+                      <Linkified text={p} />
+                    </p>
+                  ),
+                )}
                 {toolKeys.map((g) => (
                   <section key={g.name} className="help-guide-keys">
                     <h3>Shortcuts</h3>

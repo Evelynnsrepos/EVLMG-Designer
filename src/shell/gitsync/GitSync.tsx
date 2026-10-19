@@ -4,7 +4,9 @@ import { useCollab } from '@/core/collab'
 import { isTauri } from '@/core/fs'
 import { backupHolder, checkGit, syncNow, turnOffGitSync, turnOnGitSync, useGitSync, type ConflictChoice } from '@/core/gitsync'
 import { confirmDialog } from '@/shared/dialogs'
+import { Linkified } from '@/shared/links'
 import { Modal } from '@/shared/ui'
+import { GIT_LEARN_LINKS, GIT_SETUP_STEPS } from './setupSteps'
 import './gitsync.css'
 
 /** Git sync (0.19): the sidebar row, its window, and the "which version?" question. Desktop only. */
@@ -104,12 +106,37 @@ function GitSyncDialog({ onClose }: { onClose: () => void }) {
         <h3>{T.title}</h3>
         <p className="muted">{shared ? T.backupIntro : T.intro}</p>
         {body()}
+        {!mode && <SetupSteps open={version === ''} />}
         {busy && <p className="muted">{busy}</p>}
         {error && <p className="gitsync-error">{error}</p>}
         {notice && <p className="gitsync-notice">{notice}</p>}
         <p className="muted gitsync-small">{T.login}</p>
       </div>
     </Modal>
+  )
+}
+
+/** The whole setup for people who never used Git, with links to learn more. */
+function SetupSteps({ open }: { open: boolean }) {
+  return (
+    <details className="gitsync-steps" open={open}>
+      <summary>New to Git? Set it up step by step (about 10 minutes, once)</summary>
+      <ol>
+        {GIT_SETUP_STEPS.map((step) => (
+          <li key={step}>
+            <Linkified text={step} />
+          </li>
+        ))}
+      </ol>
+      <h4>Learn more</h4>
+      <ul>
+        {GIT_LEARN_LINKS.map((link) => (
+          <li key={link}>
+            <Linkified text={link} />
+          </li>
+        ))}
+      </ul>
+    </details>
   )
 }
 
