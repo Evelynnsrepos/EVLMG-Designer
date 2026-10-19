@@ -1,6 +1,6 @@
 [package]
 name = "evelopment-games-designer"
-version = "0.19.0"
+version = "0.19.1"
 description = "Evelopment Games Designer: a free all-in-one game design tool"
 authors = ["Evelopment Games"]
 license = "GPL-3.0-only"
