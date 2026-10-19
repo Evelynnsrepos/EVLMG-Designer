@@ -1,7 +1,7 @@
-import { InputRule, mergeAttributes, Node } from '@tiptap/core'
+import { InputRule, mergeAttributes, Node, type NodeViewRenderer } from '@tiptap/core'
 import { PluginKey } from '@tiptap/pm/state'
 import Suggestion from '@tiptap/suggestion'
-import { MISSING_REF_LABEL, REF_NODE } from './doc'
+import { MISSING_REF_LABEL, REF_CARD_NODE, REF_NODE } from './doc'
 import type { RefMenuEntry } from './RefMenu'
 import { refMenuRenderer } from './refMenuRenderer'
 import { findRefByLabel } from './refs'
@@ -10,6 +10,8 @@ import type { RefItem, RefProvider, RefTarget } from './types'
 export interface RefOptions {
   /** Read lazily so the editor never has to be recreated when entities change. */
   getProvider: () => RefProvider | null
+  /** Markdown Syntax switch (0.19): `[[Name|shown text]]` and `![[Name]]` while typing. */
+  syntax: () => boolean
 }
 
 export interface RefStorage {
@@ -43,7 +45,7 @@ export const RefExtension = Node.create<RefOptions, RefStorage>({
   selectable: true,
 
   addOptions() {
-    return { getProvider: () => null }
+    return { getProvider: () => null, syntax: () => false }
   },
 
   addStorage() {
@@ -54,6 +56,8 @@ export const RefExtension = Node.create<RefOptions, RefStorage>({
     return {
       kind: { default: null, parseHTML: (el) => el.getAttribute('data-ref-kind'), renderHTML: (a) => ({ 'data-ref-kind': a.kind }) },
       id: { default: null, parseHTML: (el) => el.getAttribute('data-ref-id'), renderHTML: (a) => ({ 'data-ref-id': a.id }) },
+      /** Own shown text from `[[Name|text]]` (0.19); null shows the target's current name. */
+      text: { default: null, parseHTML: (el) => el.getAttribute('data-ref-text'), renderHTML: (a) => (a.text ? { 'data-ref-text': a.text } : {}) },
     }
   },
 
@@ -62,62 +66,46 @@ export const RefExtension = Node.create<RefOptions, RefStorage>({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    const item = this.options.getProvider()?.resolve(node.attrs as RefTarget)
-    return ['span', mergeAttributes({ class: 'richtext-ref' }, HTMLAttributes), item?.label ?? MISSING_REF_LABEL]
+    return ['span', mergeAttributes({ class: 'richtext-ref' }, HTMLAttributes), shownText(node.attrs, this.options.getProvider())]
   },
 
   renderText({ node }) {
-    return this.options.getProvider()?.resolve(node.attrs as RefTarget)?.label ?? MISSING_REF_LABEL
+    return shownText(node.attrs, this.options.getProvider())
   },
 
   addNodeView() {
-    const getProvider = this.options.getProvider
-    const repaints = this.storage.repaint
-    return ({ node: initial }) => {
-      let node = initial
-      const dom = document.createElement('span')
-      dom.className = 'richtext-ref'
-      dom.setAttribute('role', 'link')
-      const target = () => node.attrs as RefTarget
-      const paint = () => {
-        const item = getProvider()?.resolve(target())
-        dom.textContent = item?.label ?? MISSING_REF_LABEL
-        dom.title = item ? `${item.hint ? item.hint + ': ' : ''}${item.label} (click to open)` : 'The linked record was deleted'
-        dom.classList.toggle('richtext-ref-missing', !item)
-        dom.style.color = item?.color ?? ''
-      }
-      dom.addEventListener('click', (e) => {
-        e.preventDefault()
-        if (getProvider()?.resolve(target())) getProvider()?.open?.(target())
-      })
-      paint()
-      repaints.add(paint)
-      return {
-        dom,
-        update(next) {
-          if (next.type !== node.type) return false
-          node = next
-          paint()
-          return true
-        },
-        ignoreMutation: () => true,
-        destroy: () => repaints.delete(paint),
-      }
-    }
+    return refNodeView('span', this.options.getProvider, this.storage.repaint)
   },
 
   addInputRules() {
-    const getProvider = this.options.getProvider
+    const { getProvider, syntax } = this.options
     const type = this.type
-    // Typing `[[Ironhold]]` in full turns into a link when a record with that exact name exists.
     return [
+      // `![[Name]]`: a jump card on its own line, or a picture for an image file name (Markdown Syntax only).
+      new InputRule({
+        find: /!\[\[([^[\]\n]+)\]\]$/,
+        handler: ({ range, match, chain }) => {
+          if (!syntax()) return null
+          const name = match[1].split('|')[0].trim()
+          if (/\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(name)) return void chain().deleteRange(range).setImage({ src: name }).run()
+          const provider = getProvider()
+          const hit = provider && findRefByLabel(provider, name)
+          if (!hit) return null
+          chain()
+            .deleteRange(range)
+            .insertContent({ type: REF_CARD_NODE, attrs: { kind: hit.kind, id: hit.id } })
+            .run()
+        },
+      }),
+      // Typing `[[Ironhold]]` in full turns into a link when a record with that exact name exists.
       new InputRule({
         find: /\[\[([^[\]\n]+)\]\]$/,
         handler: ({ state, range, match }) => {
           const provider = getProvider()
-          const hit = provider && findRefByLabel(provider, match[1])
+          const [name, shown] = syntax() ? match[1].split('|') : [match[1]]
+          const hit = provider && findRefByLabel(provider, name.trim())
           if (!hit) return null
-          state.tr.replaceWith(range.from, range.to, type.create({ kind: hit.kind, id: hit.id }))
+          state.tr.replaceWith(range.from, range.to, type.create({ kind: hit.kind, id: hit.id, text: shown?.trim() || null }))
         },
       }),
     ]
@@ -132,7 +120,7 @@ export const RefExtension = Node.create<RefOptions, RefStorage>({
           if (!selection.empty) return false
           const before = selection.$from.nodeBefore
           if (before?.type.name !== REF_NODE) return false
-          const label = this.options.getProvider()?.resolve(before.attrs as RefTarget)?.label ?? ''
+          const label = shownText(before.attrs, this.options.getProvider(), '')
           tr.insertText(`[[${label}`, selection.from - before.nodeSize, selection.from)
           return true
         }),
@@ -169,5 +157,64 @@ export const RefExtension = Node.create<RefOptions, RefStorage>({
         render: refMenuRenderer,
       }),
     ]
+  },
+})
+
+const shownText = (attrs: Record<string, unknown>, provider: RefProvider | null, missing = MISSING_REF_LABEL) =>
+  (attrs.text as string | null) || (provider?.resolve(attrs as unknown as RefTarget)?.label ?? missing)
+
+/** Shared by inline links and jump cards: shows the current name, opens the target on click. */
+function refNodeView(tag: 'span' | 'div', getProvider: () => RefProvider | null, repaints: Set<() => void>): NodeViewRenderer {
+  return ({ node: initial }) => {
+    let node = initial
+    const dom = document.createElement(tag)
+    dom.className = tag === 'span' ? 'richtext-ref' : 'richtext-refcard'
+    dom.setAttribute('role', 'link')
+    const target = () => node.attrs as RefTarget
+    const paint = () => {
+      const item = getProvider()?.resolve(target())
+      dom.textContent = shownText(node.attrs, getProvider())
+      dom.title = item ? `${item.hint ? item.hint + ': ' : ''}${item.label} (click to open)` : 'The linked record was deleted'
+      dom.classList.toggle('richtext-ref-missing', !item)
+      dom.style.color = item?.color ?? ''
+    }
+    dom.addEventListener('click', (e) => {
+      e.preventDefault()
+      if (getProvider()?.resolve(target())) getProvider()?.open?.(target())
+    })
+    paint()
+    repaints.add(paint)
+    return {
+      dom,
+      update(next) {
+        if (next.type !== node.type) return false
+        node = next
+        paint()
+        return true
+      },
+      ignoreMutation: () => true,
+      destroy: () => void repaints.delete(paint),
+    }
+  }
+}
+
+/** `![[Name]]` (0.19): a jump card to a document, article or entry on its own line; no copy of its text. */
+export const RefCard = Node.create<Pick<RefOptions, 'getProvider'>>({
+  name: REF_CARD_NODE,
+  group: 'block',
+  atom: true,
+  selectable: true,
+  addOptions: () => ({ getProvider: () => null }),
+  addAttributes: () => ({
+    kind: { default: null, parseHTML: (el) => el.getAttribute('data-ref-kind'), renderHTML: (a) => ({ 'data-ref-kind': a.kind }) },
+    id: { default: null, parseHTML: (el) => el.getAttribute('data-ref-id'), renderHTML: (a) => ({ 'data-ref-id': a.id }) },
+  }),
+  parseHTML: () => [{ tag: 'div[data-ref-id]' }],
+  renderHTML({ node, HTMLAttributes }) {
+    return ['div', mergeAttributes({ class: 'richtext-refcard' }, HTMLAttributes), shownText(node.attrs, this.options.getProvider())]
+  },
+  addNodeView() {
+    // Repaints with the inline links when names change.
+    return refNodeView('div', this.options.getProvider, this.editor.storage.ref.repaint)
   },
 })

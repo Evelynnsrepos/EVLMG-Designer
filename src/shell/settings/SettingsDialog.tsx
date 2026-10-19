@@ -31,6 +31,9 @@ const UI = {
   aiProgram: 'Downloading program',
   aiModel: 'Downloading model',
   close: 'Close',
+  writer: 'Writer',
+  writerSyntax: 'New documents start with Markdown Syntax on',
+  writerSyntaxHint: 'Markdown Syntax lets you format by typing symbols, like ==highlight== or > [!note], and turns pasted Markdown into formatting. Each document has its own switch in its header.',
   pixels: 'Pictures',
   sharp: 'Sharp pixel art',
   sharpHint: 'Small pictures, like pixel art tiles in Level Layout, are shown with hard square pixels instead of being smoothed. Turn it off for painted or photo tilesets.',
@@ -164,6 +167,14 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
             {ai.error && <p className="settings-error">{ai.error}</p>}
           </section>
         )}
+        <section data-section="writer">
+          <h3>{UI.writer}</h3>
+          <label className="settings-check">
+            <input type="checkbox" checked={s.writerMarkdownSyntax} onChange={(e) => s.update({ writerMarkdownSyntax: e.target.checked })} />
+            {UI.writerSyntax}
+          </label>
+          <p className="muted settings-hint">{UI.writerSyntaxHint}</p>
+        </section>
         <section data-section="pixels">
           <h3>{UI.pixels}</h3>
           <label className="settings-check">

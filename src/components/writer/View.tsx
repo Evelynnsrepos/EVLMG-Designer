@@ -1,15 +1,21 @@
-import { Download } from 'lucide-react'
+import type { Editor } from '@tiptap/core'
+import { Download, Highlighter, Info, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { saveTextFile } from '@/core/export'
 import type { PanelProps } from '@/core/registry'
-import { collabNames, useDocument, useProjectStore } from '@/core/state'
+import { collabNames, loadDocumentNow, updateDocument, useDocument, useProjectStore } from '@/core/state'
+import { useHotwheel } from '@/shared/hotwheel'
 import {
   combineRefProviders,
+  DOC_KIND,
+  findRefByLabel,
+  markdownToRichText,
   countRichTextWords,
   RichTextEditor,
   useEntityRefProvider,
   useProjectImages,
   type LabelResolver,
+  type RefProvider,
   type RichTextDoc,
 } from '@/shared/richtext'
 import { useArticleRefProvider } from '@/shared/wiki'
@@ -22,6 +28,12 @@ const UI = {
   words: (n: number) => (n === 1 ? '1 word' : `${n.toLocaleString()} words`),
   export: 'Export',
   exportTitle: (f: string) => `Export as ${f}`,
+  syntax: 'Markdown Syntax',
+  syntaxTitle: 'Format by typing symbols (==highlight==, > [!note], - [ ], #tag, ^[footnote]…) and turn pasted Markdown into formatting. Only for this document.',
+  import: 'Import',
+  importTitle: 'Import Markdown files as new documents',
+  callout: 'Insert callout',
+  highlight: 'Highlight',
   missing: 'This document no longer exists.',
   loading: 'Loading…',
 }
@@ -37,6 +49,15 @@ export default function View({ documentId }: PanelProps) {
   // Articles first, so a typed `[[Ironhold]]` prefers the Ironhold article over the town of the same name.
   const refs = useMemo(() => combineRefProviders(articles, entities), [articles, entities])
   const resolve = useMemo<LabelResolver>(() => (t) => refs.resolve(t)?.label, [refs])
+  const [editor, setEditor] = useState<Editor | null>(null)
+  const syntaxOn = !!doc.data?.markdownSyntax
+  const toggleSyntax = () => doc.update((d) => ({ ...d, markdownSyntax: !d.markdownSyntax }))
+
+  useHotwheel(() => [
+    { id: 'writer-callout', label: UI.callout, icon: Info, run: () => editor?.chain().focus().wrapIn('callout').run() },
+    { id: 'writer-highlight', label: UI.highlight, icon: Highlighter, run: () => editor?.chain().focus().toggleMark('highlight').run() },
+    { id: 'writer-syntax', label: UI.syntax, on: syntaxOn, run: toggleSyntax },
+  ])
 
   if (!documentId || !ref) return <div className="writer-empty">{UI.missing}</div>
   if (!doc.data || !images.ready) return <div className="writer-empty">{UI.loading}</div>
@@ -63,6 +84,11 @@ export default function View({ documentId }: PanelProps) {
           onCommit={(title) => useProjectStore.getState().renameDocument(documentId, title.trim() || UI.titlePlaceholder)}
         />
         <WordCount body={body} resolve={resolve} />
+        <label className="writer-syntax" title={UI.syntaxTitle}>
+          <input type="checkbox" checked={syntaxOn} onChange={toggleSyntax} />
+          {UI.syntax}
+        </label>
+        <ImportButton refs={refs} />
         <ExportMenu onExport={runExport} />
       </header>
       <div className="writer-page">
@@ -74,9 +100,48 @@ export default function View({ documentId }: PanelProps) {
           refs={refs}
           pickImage={images.pickImage}
           resolveImageSrc={images.resolveImageSrc}
+          onEditor={setEditor}
+          extraFormats
+          markdownSyntax={syntaxOn}
         />
       </div>
     </div>
+  )
+}
+
+/**
+ * Each Markdown file becomes a new Writer document with Markdown Syntax on. `[[Name]]` links to a
+ * record or document with that name, including the other files of the same import.
+ */
+function ImportButton({ refs }: { refs: RefProvider }) {
+  const input = useRef<HTMLInputElement>(null)
+  const importFiles = async (files: FileList) => {
+    const { root, addDocument } = useProjectStore.getState()
+    if (!root) return
+    const list = [...files]
+    const made = list.map((f) => addDocument('writer', f.name.replace(/\.(md|markdown|txt)$/i, '') || 'Untitled'))
+    const byTitle = new Map(made.map((d) => [d.title.toLowerCase(), { kind: DOC_KIND, id: d.id }]))
+    const findRef = (label: string) => findRefByLabel(refs, label) ?? byTitle.get(label.toLowerCase())
+    for (const [i, file] of list.entries()) {
+      const body = markdownToRichText(await file.text(), findRef)
+      await loadDocumentNow(root, 'writer', made[i].id, createWriterDoc)
+      updateDocument<WriterDoc>(root, 'writer', made[i].id, () => ({ body, markdownSyntax: true }), { undoable: false })
+    }
+  }
+  return (
+    <>
+      <button className="btn btn-ghost writer-export-btn" title={UI.importTitle} onClick={() => input.current?.click()}>
+        <Upload size={14} /> {UI.import}
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept=".md,.markdown,.txt,text/markdown,text/plain"
+        multiple
+        hidden
+        onChange={(e) => e.target.files && void importFiles(e.target.files).finally(() => (e.target.value = ''))}
+      />
+    </>
   )
 }
 

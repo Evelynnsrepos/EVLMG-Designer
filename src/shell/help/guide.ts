@@ -236,6 +236,29 @@ export const BASICS: Record<string, GuideTopic> = {
       'The small T in a tool’s header picks the font that tool shows its text in, for this project. Boards like the Brainstorm Board use it too.',
     ],
   },
+  typing: {
+    title: 'Typing shortcuts (Markdown Syntax)',
+    body: [
+      'Format by typing symbols. Turn on Markdown Syntax in a Writer document\'s header. Each document has its own switch.',
+      'These always work, switch on or off: # Heading (up to ###), **bold**, *italic*, ~~strike~~, `code`, - list, 1. list, > quote.',
+      '## With Markdown Syntax on',
+      '==text== highlights it.',
+      '#### to ###### make smaller headings.',
+      '- [ ] makes a checklist. - [x] makes a ticked one.',
+      '> [!note] makes a callout box. Also tip, info, warning, danger, bug, example, question, quote. Add a minus, > [!tip]-, to make it fold shut.',
+      '%%text%% is a note to yourself. It is greyed out and left out of the word count and exports.',
+      '#tag becomes a tag chip.',
+      '^[text] or [^1] adds a footnote. Click its number to write or change the note.',
+      '[text](https://…) makes a web link. ![name](path) adds a picture.',
+      '[[Name|other text]] links to Name but shows other text.',
+      '![[Name]] adds a jump card to a document, article or entry. ![[picture.png]] adds a picture.',
+      '## Paste and import',
+      'Pasted Markdown text turns into formatting. Ctrl+Shift+V pastes it as plain text.',
+      'Import in the Writer header turns .md files into new documents. [[Links]] between the imported files work right away.',
+      'Export as Markdown writes the same symbols back, so other Markdown note apps can read your documents.',
+    ],
+    tips: ['Not into symbols? The toolbar has buttons for highlight, checklist and callout too.', 'Settings, Writer: start every new document with Markdown Syntax on.'],
+  },
 }
 
 export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
@@ -284,7 +307,9 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     title: 'Writer',
     body: [
       'Rich text documents for design docs, scripts and dialogue, with headings, lists, images and [[links]].',
-      'The word count updates as you type, and you can export a document as Markdown or plain text.',
+      'The word count updates as you type, and you can export a document as Markdown or plain text. Import turns Markdown files into new documents.',
+      'Turn on Markdown Syntax in the header to format by typing symbols, like ==highlight==, - [ ] checklists or > [!note] callouts. Pasted Markdown turns into formatting too. See Typing shortcuts in the guide for the full list.',
+      'The toolbar also has highlight, checklist and callout buttons. Click a callout\'s title to rename it.',
       'Pick a font and a size for selected text (or for what you type next) in the toolbar.',
       'Click an image for its bar: left, center, right, or with the text flowing around it on the left or right, and 25 to 100% of the text width. Drag the blue corner to size it freely.',
     ],

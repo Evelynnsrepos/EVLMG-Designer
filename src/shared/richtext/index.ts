@@ -18,6 +18,7 @@ export {
   richTextToPlainText,
   type LabelResolver,
 } from './doc'
-export { combineRefProviders, findRefByLabel, rankRefItems, useEntityRefProvider } from './refs'
+export { combineRefProviders, DOC_KIND, findRefByLabel, rankRefItems, useEntityRefProvider } from './refs'
 export type { ImagePicker, RefItem, RefProvider, RefTarget, RichTextDoc } from './types'
 export { projectImagePaths, useProjectImages, type ProjectImages } from './projectImages'
+export { markdownToRichText, type FindRef } from './markdown'
