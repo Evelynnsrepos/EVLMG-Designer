@@ -33,7 +33,7 @@ function docParagraphs(doc: PMNode): Paragraph[] {
     block.forEach((node, offset) => {
       const at = start + 1 + offset
       const text = node.isText ? node.text! : ' '
-      const skip = !node.isText || node.marks.some((m) => m.type.name === 'code' || m.type.name === 'link')
+      const skip = !node.isText || node.marks.some((m) => m.type.name === 'code' || m.type.name === 'link' || m.type.name === 'tag')
       for (let i = 0; i < text.length; i++) {
         p.pos.push(at + (node.isText ? i : 0))
         p.skip.push(skip)

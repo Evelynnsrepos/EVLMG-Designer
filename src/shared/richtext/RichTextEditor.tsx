@@ -8,10 +8,13 @@ import {
   Heading1,
   Heading2,
   Heading3,
+  Highlighter,
   ImagePlus,
+  Info,
   Italic,
   Link2,
   List,
+  ListChecks,
   ListOrdered,
   Pilcrow,
   Redo2,
@@ -31,7 +34,8 @@ import { RichImage } from './imageExtension'
 import { FontMark } from './fontExtension'
 import { FONT_SIZES } from './styles'
 import { allLocalFonts, GENERIC_FONTS, systemFonts } from '../fontList'
-import { RefExtension } from './refExtension'
+import { RefCard, RefExtension } from './refExtension'
+import { syntaxExtensions } from './syntaxExtensions'
 import { useEntityRefProvider } from './refs'
 import type { ImagePicker, RefProvider, RichTextDoc } from './types'
 import './richtext.css'
@@ -61,6 +65,10 @@ export interface RichTextEditorProps {
    * editor keeps calling `onChange` so the JSON stays saved as before.
    */
   liveTextName?: string
+  /** Writer (0.19): highlight, checklist and callout buttons. */
+  extraFormats?: boolean
+  /** Writer's "Markdown Syntax" switch (0.19): more typing shortcuts and Markdown paste. */
+  markdownSyntax?: boolean
 }
 
 const UI = {
@@ -76,6 +84,9 @@ const UI = {
   bullet: 'Bulleted list',
   ordered: 'Numbered list',
   quote: 'Quote',
+  highlight: 'Highlight (Ctrl+Shift+H)',
+  checklist: 'Checklist',
+  callout: 'Callout box',
   image: 'Insert image',
   link: 'Link an article, entry, tool or document ([[): a jump point in your text',
   undo: 'Undo (Ctrl+Z)',
@@ -98,6 +109,7 @@ interface LiveProps {
   resolveImageSrc?: (src: string) => string
   onChange?: (next: RichTextDoc) => void
   placeholder: string
+  syntax: boolean
 }
 
 /** After a teammate's edit, save the merged text once things are quiet. */
@@ -106,7 +118,7 @@ const SETTLE_MS = 800
 function buildExtensions(live: RefObject<LiveProps>, onMisspelling: (hit: ProofHit) => void, shared = false) {
   return [
     StarterKit.configure({
-      heading: { levels: [1, 2, 3] },
+      heading: false,
       link: { openOnClick: false, autolink: true },
       // Shared text has its own undo that only takes back your own typing.
       ...(shared ? { undoRedo: false as const } : {}),
@@ -114,7 +126,12 @@ function buildExtensions(live: RefObject<LiveProps>, onMisspelling: (hit: ProofH
     Placeholder.configure({ placeholder: () => live.current.placeholder }),
     RichImage.configure({ getResolveSrc: () => live.current.resolveImageSrc }),
     FontMark,
-    RefExtension.configure({ getProvider: () => live.current.provider }),
+    RefExtension.configure({ getProvider: () => live.current.provider, syntax: () => live.current.syntax }),
+    RefCard.configure({ getProvider: () => live.current.provider }),
+    ...syntaxExtensions(
+      () => live.current.syntax,
+      () => live.current.provider,
+    ),
     SpellCheck.configure({ onMisspelling }),
   ]
 }
@@ -138,15 +155,17 @@ export function RichTextEditor({
   className,
   onEditor,
   liveTextName,
+  extraFormats = false,
+  markdownSyntax = false,
 }: RichTextEditorProps) {
   const entityRefs = useEntityRefProvider()
   const provider = refs ?? entityRefs
 
   // Extensions are built once (rebuilding would reset the content); they read the latest props through `live`.
   const [misspelling, setMisspelling] = useState<ProofHit | null>(null)
-  const live = useRef<LiveProps>({ provider, resolveImageSrc, onChange, placeholder })
+  const live = useRef<LiveProps>({ provider, resolveImageSrc, onChange, placeholder, syntax: markdownSyntax })
   useEffect(() => {
-    live.current = { provider, resolveImageSrc, onChange, placeholder }
+    live.current = { provider, resolveImageSrc, onChange, placeholder, syntax: markdownSyntax }
   })
   const lastEmitted = useRef<RichTextDoc | null>(null)
   // The extensions only read `live` inside editor callbacks, never during render.
@@ -227,7 +246,7 @@ export function RichTextEditor({
 
   return (
     <div className={['richtext', className].filter(Boolean).join(' ')}>
-      {toolbar && editable && <Toolbar editor={editor} onImage={insertImage} />}
+      {toolbar && editable && <Toolbar editor={editor} onImage={insertImage} extraFormats={extraFormats} />}
       <EditorContent editor={editor} className="richtext-content" />
       {misspelling && editor && editable && (
         <ProofCard
@@ -240,7 +259,7 @@ export function RichTextEditor({
   )
 }
 
-function Toolbar({ editor, onImage }: { editor: Editor; onImage: () => void }) {
+function Toolbar({ editor, onImage, extraFormats }: { editor: Editor; onImage: () => void; extraFormats: boolean }) {
   const state = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
@@ -254,6 +273,9 @@ function Toolbar({ editor, onImage }: { editor: Editor; onImage: () => void }) {
       bullet: e.isActive('bulletList'),
       ordered: e.isActive('orderedList'),
       quote: e.isActive('blockquote'),
+      highlight: e.isActive('highlight'),
+      checklist: e.isActive('taskList'),
+      callout: e.isActive('callout'),
       family: (e.getAttributes('font').family as string | null) ?? '',
       size: (e.getAttributes('font').size as number | null) ?? 0,
       canUndo: e.can().undo(),
@@ -290,10 +312,13 @@ function Toolbar({ editor, onImage }: { editor: Editor; onImage: () => void }) {
       {button(Bold, UI.bold, () => chain().toggleBold().run(), state.bold)}
       {button(Italic, UI.italic, () => chain().toggleItalic().run(), state.italic)}
       {button(Underline, UI.underline, () => chain().toggleUnderline().run(), state.underline)}
+      {extraFormats && button(Highlighter, UI.highlight, () => chain().toggleMark('highlight').run(), state.highlight)}
       <span className="richtext-toolbar-sep" />
       {button(List, UI.bullet, () => chain().toggleBulletList().run(), state.bullet)}
       {button(ListOrdered, UI.ordered, () => chain().toggleOrderedList().run(), state.ordered)}
+      {extraFormats && button(ListChecks, UI.checklist, () => chain().toggleTaskList().run(), state.checklist)}
       {button(TextQuote, UI.quote, () => chain().toggleBlockquote().run(), state.quote)}
+      {extraFormats && button(Info, UI.callout, () => (state.callout ? chain().lift('callout') : chain().wrapIn('callout')).run(), state.callout)}
       <span className="richtext-toolbar-sep" />
       {button(ImagePlus, UI.image, onImage)}
       {button(Link2, UI.link, () => chain().insertContent('[[').run())}
