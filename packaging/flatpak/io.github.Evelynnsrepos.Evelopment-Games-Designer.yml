@@ -18,6 +18,8 @@ finish-args:
   - --filesystem=home
   # "Show in folder" asks the file manager to show the item.
   - --talk-name=org.freedesktop.FileManager1
+  # Git sync runs the computer's own git (with the user's own login) through flatpak-spawn --host.
+  - --talk-name=org.freedesktop.Flatpak
 modules:
   - name: evelopment-games-designer
     buildsystem: simple
@@ -31,10 +33,13 @@ modules:
         path: io.github.Evelynnsrepos.Evelopment-Games-Designer.metainfo.xml
       - type: file
         path: io.github.Evelynnsrepos.Evelopment-Games-Designer.desktop
+      - type: file
+        path: git-host.sh
     build-commands:
       - ar -x egd.deb
       - tar -xf data.tar.gz
       - install -Dm755 usr/bin/evelopment-games-designer /app/bin/evelopment-games-designer
+      - install -Dm755 git-host.sh /app/bin/git
       - install -Dm644 usr/share/icons/hicolor/32x32/apps/evelopment-games-designer.png /app/share/icons/hicolor/32x32/apps/io.github.Evelynnsrepos.Evelopment-Games-Designer.png
       - install -Dm644 usr/share/icons/hicolor/128x128/apps/evelopment-games-designer.png /app/share/icons/hicolor/128x128/apps/io.github.Evelynnsrepos.Evelopment-Games-Designer.png
       - install -Dm644 usr/share/icons/hicolor/256x256@2/apps/evelopment-games-designer.png /app/share/icons/hicolor/256x256/apps/io.github.Evelynnsrepos.Evelopment-Games-Designer.png
