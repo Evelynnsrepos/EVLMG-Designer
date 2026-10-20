@@ -12,6 +12,8 @@ export interface GlLayer {
   /** Changes whenever the pixels changed, so unchanged layers are not uploaded again. */
   version: number
   key: string
+  /** Only this part changed since the last version (a stroke being drawn); missing = all of it. */
+  dirty?: { x: number; y: number; w: number; h: number } | null
   opacity: number
   blend: BlendMode
   /** Key of the layer whose alpha clips this one, or null. */
@@ -29,7 +31,7 @@ export interface GlLayer {
 }
 
 /** Pixels the compositor keeps as a texture. */
-export type GlSource = Pick<GlLayer, 'source' | 'version' | 'key'>
+export type GlSource = Pick<GlLayer, 'source' | 'version' | 'key' | 'dirty'>
 
 const VERT = `#version 300 es
 in vec2 pos;
@@ -94,6 +96,14 @@ function compile(gl: WebGL2RenderingContext, vert: string, frag: string) {
 /** Turn off to test the Canvas 2D path (Settings could expose this later). */
 export const glAllowed = { value: true }
 
+/**
+ * Linux (WebKitGTK): copying canvases into WebGL and back runs on the CPU there, so blending in
+ * Canvas 2D is several times faster (measured 0.20: 11 ms instead of 74 ms per pen move at 4000x4000).
+ * The GPU is still used when a layer needs a blend mode Canvas 2D doesn't have.
+ */
+export const prefersCanvas2d = (ua: string) => /Linux/.test(ua) && /AppleWebKit/.test(ua) && !/Chrom|Android/.test(ua)
+export const canvas2dFirst = { value: typeof navigator !== 'undefined' && prefersCanvas2d(navigator.userAgent) }
+
 export class GlCompositor {
   readonly canvas: HTMLCanvasElement
   private gl: WebGL2RenderingContext
@@ -105,6 +115,8 @@ export class GlCompositor {
   private empty: WebGLTexture
   /** Blended results of groups that other layers clip to. */
   private groupTex = new Map<string, { tex: WebGLTexture; fb: WebGLFramebuffer }>()
+  /** Holds the changed part of a layer for a partial upload. */
+  private crop: CanvasRenderingContext2D | null = null
   lost = false
 
   static create(width: number, height: number, colorSpace: PredefinedColorSpace = 'srgb'): GlCompositor | null {
@@ -181,7 +193,17 @@ export class GlCompositor {
       gl.bindTexture(gl.TEXTURE_2D, t.tex)
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true)
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, layer.source)
+      const d = layer.dirty
+      // A partial upload only builds on the version right before it; anything else uploads everything.
+      if (d && t.version === layer.version - 1 && d.w > 0 && d.h > 0) {
+        // Only the changed part: uploading a whole big canvas each pen move is slow where it goes through the CPU (WebKitGTK).
+        const c = (this.crop ??= document.createElement('canvas').getContext('2d', { colorSpace: this.gl.unpackColorSpace ?? 'srgb' })!)
+        c.canvas.width = d.w
+        c.canvas.height = d.h
+        c.drawImage(layer.source, d.x, d.y, d.w, d.h, 0, 0, d.w, d.h)
+        // Textures are stored upside down (FLIP_Y), so the part goes in counted from the bottom.
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, d.x, this.canvas.height - d.y - d.h, gl.RGBA, gl.UNSIGNED_BYTE, c.canvas)
+      } else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, layer.source)
       t.version = layer.version
     }
     return t.tex
