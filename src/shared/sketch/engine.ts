@@ -2,7 +2,7 @@ import type { Id } from '@/core/model'
 import { blendPixel, CANVAS_BLENDS, type BlendMode } from './blend'
 import { brushReach, colorStroke, compositeStroke, isWet, StrokeStamper, type BrushSettings } from './brushes'
 import { WetStamper } from './brushWet'
-import { GlCompositor, parseHex, type GlLayer, type GlSource } from './gl'
+import { canvas2dFirst, GlCompositor, parseHex, type GlLayer, type GlSource } from './gl'
 import { layerTree, type LayerNode } from './layers'
 import { mirrored, type InputPoint, type SketchDoc, type SketchLayer, type SymmetryMode } from './model'
 import { applyRelief } from './relief'
@@ -567,8 +567,14 @@ export class SketchEngine {
 
   // ---- Compositing ----------------------------------------------------------
 
+  /**
+   * The stroke whose preview `scratch` holds; while it is drawn, only the stroke's area is redrawn
+   * (it only grows), and `dirty` says which part changed since the last preview.
+   */
+  private livePreview: { stroke: Canvas2D; dirty: Rect | null } | null = null
+
   /** A layer's pixels as they look right now: with the live stroke or the lifted pixels on top. */
-  private livePixels(layer: SketchLayer): { canvas: HTMLCanvasElement; live: boolean } {
+  private livePixels(layer: SketchLayer): { canvas: HTMLCanvasElement; live: boolean; dirty?: Rect | null } {
     const src = this.ensure(layer.id).canvas
     const stroking = this.stroke && this.strokeOpts?.layer.id === layer.id
     const moving = this.floating?.layerId === layer.id
@@ -576,6 +582,22 @@ export class SketchEngine {
     const s = this.scratch.ctx
     s.globalCompositeOperation = 'source-over'
     s.globalAlpha = 1
+    // Wet brushes and the Smudge tool repaint the whole layer; other strokes only their own area.
+    const area = stroking && !(this.stamper instanceof WetStamper) ? this.strokeArea(this.strokeOpts!) : null
+    const r = area && clipRect(area, this.width, this.height)
+    if (r && this.livePreview?.stroke === this.stroke) {
+      s.save()
+      s.beginPath()
+      s.rect(r.x, r.y, r.w, r.h)
+      s.clip()
+      s.clearRect(r.x, r.y, r.w, r.h)
+      s.drawImage(src, 0, 0)
+      this.applyStroke(s, this.strokeOpts!, true)
+      s.restore()
+      this.livePreview.dirty = r
+      return { canvas: this.scratch.canvas, live: true, dirty: r }
+    }
+    this.livePreview = r ? { stroke: this.stroke!, dirty: null } : null
     s.clearRect(0, 0, this.width, this.height)
     s.drawImage(src, 0, 0)
     if (stroking) this.applyStroke(s, this.strokeOpts!, true)
@@ -584,10 +606,27 @@ export class SketchEngine {
     return { canvas: this.scratch.canvas, live: true }
   }
 
+  /** The last render, reused while nothing changed (the editor redraws its view on every pointer move). */
+  private lastRender: { layers: SketchLayer[]; background: string | null | undefined; withBackground: boolean; version: number; canvas: HTMLCanvasElement } | null = null
+
   /** Flatten the visible layers (with the live stroke) into one canvas at document size. */
   render(doc: LayerStack, withBackground = true): HTMLCanvasElement {
+    const last = this.lastRender
+    if (last && last.layers === doc.layers && last.background === doc.backgroundColor && last.withBackground === withBackground && last.version === this.version) return last.canvas
+    const canvas = this.renderNow(doc, withBackground)
+    this.lastRender = { layers: doc.layers, background: doc.backgroundColor, withBackground, version: this.version, canvas }
+    return canvas
+  }
+
+  /** GPU or Canvas 2D, whichever is faster here for this picture. */
+  private useGpu(doc: LayerStack) {
     // ponytail: adjustment layers run on the CPU, so a picture with one is blended in Canvas 2D; move them to GLSL if big canvases lag.
-    if (this.gpu && !this.gpu.lost && !doc.layers.some((l) => l.kind === 'adjust')) {
+    if (!this.gpu || this.gpu.lost || doc.layers.some((l) => l.kind === 'adjust')) return false
+    return !canvas2dFirst.value || doc.layers.some((l) => l.visible && !CANVAS_BLENDS.has(l.blend))
+  }
+
+  private renderNow(doc: LayerStack, withBackground: boolean): HTMLCanvasElement {
+    if (this.useGpu(doc)) {
       try {
         return this.renderGpu(doc, withBackground)
       } catch {
@@ -608,10 +647,10 @@ export class SketchEngine {
 
   /** A layer's (or mask's) pixels as a GPU source; the live preview has its own texture so the layer's own stays valid. */
   private glSource(layer: SketchLayer, keys: Set<string>): GlSource {
-    const { canvas, live } = this.livePixels(layer)
+    const { canvas, live, dirty } = this.livePixels(layer)
     const key = live ? `${layer.id}:live` : layer.id
     keys.add(key)
-    return { source: canvas, key, version: live ? ++this.previewVersion : (this.layerVersions.get(layer.id) ?? 0) }
+    return { source: canvas, key, version: live ? ++this.previewVersion : (this.layerVersions.get(layer.id) ?? 0), dirty }
   }
 
   private glNodes(nodes: LayerNode[], keys: Set<string>): GlLayer[] {
@@ -799,4 +838,13 @@ function cpuBlend(ctx: CanvasRenderingContext2D, src: HTMLCanvasElement, mode: B
 
 export function toPng(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not encode PNG'))), 'image/png'))
+}
+
+/** The part of `r` inside the canvas, in whole pixels; null when nothing is left. */
+export function clipRect(r: Rect, w: number, h: number): Rect | null {
+  const x0 = Math.max(0, Math.floor(r.x))
+  const y0 = Math.max(0, Math.floor(r.y))
+  const x1 = Math.min(w, Math.ceil(r.x + r.w))
+  const y1 = Math.min(h, Math.ceil(r.y + r.h))
+  return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null
 }
