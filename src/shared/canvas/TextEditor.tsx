@@ -19,6 +19,7 @@ export function TextEditor({ node, type, theme, viewport, getBounds, onDone }: P
   const [value, setValue] = useState(() => spec.get(node))
   const ref = useRef<HTMLTextAreaElement>(null)
   const done = useRef(false)
+  const grows = spec.autoWidth?.(node) ?? false
 
   const finish = (text: string | null) => {
     if (done.current) return
@@ -29,8 +30,13 @@ export function TextEditor({ node, type, theme, viewport, getBounds, onDone }: P
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
+    if (grows) {
+      el.style.width = '0px'
+      el.style.width = `${Math.max(40, el.scrollWidth + 4)}px`
+    }
     el.style.height = '0px'
     el.style.height = `${el.scrollHeight}px`
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- grows is fixed per edit
   }, [value])
 
   useLayoutEffect(() => {
@@ -65,7 +71,8 @@ export function TextEditor({ node, type, theme, viewport, getBounds, onDone }: P
       style={{
         left: node.x * s + viewport.x,
         top: node.y * s + viewport.y,
-        width: Math.max(40, b.width - pad * 2),
+        width: grows ? undefined : Math.max(40, b.width - pad * 2),
+        whiteSpace: grows ? 'pre' : undefined,
         minHeight: fontSize * TEXT_LINE_HEIGHT,
         fontSize,
         lineHeight: TEXT_LINE_HEIGHT,

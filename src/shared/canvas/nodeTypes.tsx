@@ -41,6 +41,18 @@ export function measureTextHeight(text: string, fontSize: number, width: number,
   return h
 }
 
+/** Width of the longest line of unwrapped text in world units. */
+export function measureTextWidth(text: string, fontSize: number, fontFamily: string): number {
+  measurer ??= new Konva.Text({ lineHeight: TEXT_LINE_HEIGHT, wrap: 'word' })
+  measurer.setAttrs({ text: text || ' ', fontSize, width: undefined, wrap: 'none', fontFamily })
+  const w = measurer.width()
+  measurer.setAttrs({ wrap: 'word' })
+  return w
+}
+
+/** Wrap width of a text node: auto-width text never wraps (its stored width follows the text). */
+const wrapWidth = (n: TextNode) => (n.autoWidth ? 100000 : n.width)
+
 // ---- images ----
 
 type Loaded = { status: 'loading' | 'ok' | 'error'; img?: HTMLImageElement }
@@ -169,20 +181,22 @@ const textType: NodeType<TextNode> = {
   render: (n, ctx) => (
     <Text
       text={n.text}
-      width={n.width}
+      width={n.autoWidth ? undefined : n.width}
       fontSize={n.fontSize}
       fontFamily={ctx.theme.font}
       lineHeight={TEXT_LINE_HEIGHT}
       fill={n.textColor ?? ctx.theme.text}
-      wrap="word"
+      wrap={n.autoWidth ? 'none' : 'word'}
     />
   ),
-  bounds: (n, ctx) => ({ x: 0, y: 0, width: n.width, height: measureTextHeight(n.text, n.fontSize, n.width, ctx.theme.font) }),
-  // Only the width changes on resize; the font stays the same size.
-  resize: (n, sx) => ({ ...n, width: Math.max(20, n.width * sx) }),
+  bounds: (n, ctx) => ({ x: 0, y: 0, width: n.width, height: measureTextHeight(n.text, n.fontSize, wrapWidth(n), ctx.theme.font) }),
+  // Only the width changes on resize; the font stays the same size. A resized box wraps at its new width.
+  resize: (n, sx) => ({ ...n, width: Math.max(20, n.width * sx), autoWidth: undefined }),
   textEdit: {
     get: (n) => n.text,
-    set: (n, text) => ({ ...n, text }),
+    // Auto-width text gets a box as wide as its longest line, so grabbing and the outline match the words.
+    set: (n, text, theme) => ({ ...n, text, ...(n.autoWidth && theme ? { width: Math.ceil(measureTextWidth(text, n.fontSize, theme.font)) + 2 } : {}) }),
+    autoWidth: (n) => !!n.autoWidth,
     fontSize: (n) => n.fontSize,
     color: (n, theme) => n.textColor ?? theme.text,
     deleteIfEmpty: true,

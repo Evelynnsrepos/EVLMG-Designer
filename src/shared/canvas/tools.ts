@@ -184,6 +184,8 @@ function boxTool<T extends BoxNode>(
           const node = make(api, r)
           api.update((s) => addNodes(s, [node]))
           api.select([node.id])
+          // Back to Select once the shape is placed (v0.20).
+          api.setTool('select')
           if (kind === 'note') api.editText(node.id)
         },
         cancel() {
@@ -236,6 +238,7 @@ function lineLikeTool(arrow: boolean, options: ToolOptions<LineNode> = {}): Canv
           const node = make(last)
           api.update((s) => addNodes(s, [node]))
           api.select([node.id])
+          api.setTool('select')
         },
         cancel() {
           api.setDraft(null)
@@ -335,7 +338,7 @@ export const penTool = (options: ToolOptions<LineNode> = {}): CanvasTool<any> =>
   },
 })
 
-/** Text (T): click to type; click existing text to edit it. */
+/** Text (T): click to type (the box grows with the text); click existing text to edit it. Switches back to Select. */
 export const textTool = (options: ToolOptions<TextNode> = {}): CanvasTool<any> => ({
   id: 'text',
   label: TOOL_LABELS.text,
@@ -348,6 +351,7 @@ export const textTool = (options: ToolOptions<TextNode> = {}): CanvasTool<any> =
     if (target && api.nodeTypes[target.kind]?.textEdit) {
       api.select([target.id])
       api.editText(target.id)
+      api.setTool('select')
       return
     }
     const fontSize = 20
@@ -360,9 +364,12 @@ export const textTool = (options: ToolOptions<TextNode> = {}): CanvasTool<any> =
       text: '',
       fontSize,
       width: 240,
+      autoWidth: true,
       ...options.defaults?.(),
     }
     api.editText(node.id, node)
+    // Typing happens in the text box, so the board is already back on Select when it closes (v0.20).
+    api.setTool('select')
   },
 })
 
@@ -421,8 +428,9 @@ export const eraserTool = (options: { shortcut?: string } = {}): CanvasTool<any>
     const eraseAt = (p: Point) => {
       const reach = 8 / api.viewport.scale
       let changed = false
-      for (const n of api.scene.nodes as LineNode[]) {
-        if (n.kind !== 'line' || n.locked || gone.has(n.id)) continue
+      // Only what can be selected: hidden and locked lines (or layers) stay.
+      for (const n of selectableNodes(api.scene) as LineNode[]) {
+        if (n.kind !== 'line' || gone.has(n.id)) continue
         const local = worldToLocal(p, n)
         const r = reach / Math.max(0.01, Math.min(Math.abs(n.scaleX ?? 1), Math.abs(n.scaleY ?? 1)))
         const pts = n.points

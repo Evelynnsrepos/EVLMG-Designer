@@ -85,6 +85,8 @@ export interface TextNode extends NodeBase {
   fontSize: number
   width: number
   textColor?: string
+  /** v0.20: the box is as wide as its longest line (no wrapping) until the user resizes it. */
+  autoWidth?: boolean
 }
 
 /** Sticky note: colored square with text. */
@@ -183,13 +185,16 @@ export interface RenderContext {
 
 export interface TextEditSpec<N extends NodeBase> {
   get(node: N): string
-  set(node: N, text: string): N
+  /** `theme` is passed when an edit finishes, so a kind can measure the new text. */
+  set(node: N, text: string, theme?: CanvasTheme): N
   fontSize(node: N): number
   /** Inner padding in world units. */
   padding?: number
   color?(node: N, theme: CanvasTheme): string
   /** Remove the node when the edit leaves it empty (default false). */
   deleteIfEmpty?: boolean
+  /** The editor grows with the typed text instead of wrapping (auto-width text). */
+  autoWidth?(node: N): boolean
 }
 
 /** How a node kind draws and behaves. Register custom kinds through `nodeTypes`. */
