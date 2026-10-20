@@ -201,3 +201,20 @@
 .launcher-busy {
   margin-bottom: 16px;
 }
+
+/* 0.20: Git saving marker on a project card. */
+.project-git {
+  display: inline-flex;
+  vertical-align: -1px;
+  margin-right: 6px;
+}
+.project-git-synced {
+  color: var(--accent);
+}
+.project-git-off {
+  color: var(--text-muted);
+  opacity: 0.45;
+}
+.project-git-error {
+  color: var(--danger);
+}

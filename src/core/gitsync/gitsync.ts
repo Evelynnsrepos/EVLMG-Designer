@@ -86,7 +86,7 @@ export function explainGit(r: GitResult): string {
     return 'Git needs you to log in to GitHub. Follow step 3 of the setup (in the Git sync window or the guide), then try again.'
   }
   if (/Could not resolve host|Network is unreachable|Connection (timed out|refused)|Failed to connect/i.test(text)) return 'Could not reach the repository. Check your internet connection.'
-  if (/\[rejected\]|non-fast-forward|fetch first/i.test(text)) return 'The repository has newer changes. Use Sync now (or close and open the project) to get them first.'
+  if (/\[rejected\]|non-fast-forward|fetch first/i.test(text)) return 'The repository has newer changes. Use Sync from Git to get them first.'
   if (/repository .* not found|does not appear to be a git repository/i.test(text)) return 'Git could not find that repository. Check the address.'
   return text.split('\n').filter(Boolean).pop() ?? `Git failed (code ${r.code}).`
 }
@@ -239,6 +239,14 @@ async function loadStatus(root: string) {
 }
 
 let installed = false
+/** The last Git failure per project folder, for the start screen's markers; cleared by the next success. */
+const failures = new Map<string, string>()
+async function tracked(root: string, done: Promise<boolean>) {
+  const ok = await done
+  if (ok) failures.delete(root)
+  else failures.set(root, useGitSync.getState().error ?? 'Git sync failed.')
+  return ok
+}
 /** The push started when a project was left; opening a project (or quitting) waits for it. */
 let pending: Promise<unknown> = Promise.resolve()
 /** Resolves once nothing is being saved to Git any more. Quitting the app waits for this. */
@@ -254,13 +262,13 @@ export function installGitSync() {
       // Git sync must never stop a project from opening.
       const mode = await loadStatus(root).catch((e) => (console.error('Git sync status failed', e), null))
       if (mode !== 'full') return
-      const ok = await step('Getting the latest version from Git…', () => pullLatest(root))
+      const ok = await tracked(root, step('Getting the latest version from Git…', () => pullLatest(root)))
       if (!ok) useGitSync.setState((s) => ({ error: `Couldn't get the latest version from Git. ${s.error}` }))
     },
     async opened() {},
     async closing(root) {
       // Everything is on disk already; the push runs in the background while you go on working.
-      if (useGitSync.getState().mode) pending = pending.then(() => step('Saving to Git…', () => pushLatest(root, CLOSE_PUSH_MS)))
+      if (useGitSync.getState().mode) pending = pending.then(() => tracked(root, step('Saving to Git…', () => pushLatest(root, CLOSE_PUSH_MS))))
     },
   })
   setCredentialAsker(gitHubToken)
@@ -326,14 +334,56 @@ export async function autoTurnOn(root: string): Promise<boolean> {
   if (mode || !useSettings.getState().githubLogin || useCollab.getState().shared || (await ownRepo(root))) return false
   const meta = useProjectStore.getState().meta
   if (!meta || useProjectStore.getState().root !== root) return false
-  const ok = await step('Making a private GitHub repository for this project…', async () => {
-    const repo = await createProjectRepo(meta.name)
-    await setUpRepo(root, repo.cloneUrl)
-    await pullLatest(root)
-    await pushLatest(root)
-  })
+  const ok = await turnOnFor(root, meta.name)
   if (ok) await loadStatus(root)
   return ok
+}
+
+/** Give a project folder its own private GitHub repository and save it there (open or not). */
+function turnOnFor(root: string, name: string) {
+  return tracked(
+    root,
+    step('Making a private GitHub repository for this project…', async () => {
+      await setUpRepo(root, (await createProjectRepo(name)).cloneUrl)
+      await pullLatest(root)
+      await pushLatest(root)
+    }),
+  )
+}
+
+export type ProjectGitState = { state: 'synced' | 'off' | 'error'; detail: string }
+
+/** For the start screen: is this (closed) project saved to Git, and did the last try work? */
+export async function projectGitState(root: string): Promise<ProjectGitState> {
+  const mode = (await checkGit()) ? await readMode(root).catch(() => null) : null
+  if (!mode) return { state: 'off', detail: 'Not saved to Git' }
+  const failed = failures.get(root)
+  if (failed) return { state: 'error', detail: failed }
+  const remote = (await git(root, ['remote', 'get-url', 'origin'])).stdout.trim()
+  return { state: 'synced', detail: `Saved to Git: ${remote}` }
+}
+
+/**
+ * "Sync to Git" for a project on the start screen: save it to its repository now. A project without
+ * one gets its own private GitHub repository (GitHub is connected first if needed).
+ */
+export async function syncProjectToGit(root: string, name: string): Promise<boolean> {
+  await pending
+  if (await readMode(root).catch(() => null)) return tracked(root, step('Saving to Git…', () => pushLatest(root)))
+  // A shared project must be turned on from inside (it gets the push-only backup there).
+  if (await getFs().exists(await getFs().join(root, 'collab'))) {
+    useGitSync.setState({ error: 'This project is shared. Open it and turn on the Git backup in Git sync instead.' })
+    return false
+  }
+  if (!useSettings.getState().githubLogin && !(await connectGitHub())) return false
+  return turnOnFor(root, name)
+}
+
+/** "Sync from Git" for a project on the start screen: get the repository's latest version now. */
+export async function syncProjectFromGit(root: string): Promise<boolean> {
+  await pending
+  if (!(await readMode(root).catch(() => null))) return false
+  return tracked(root, step('Getting the latest version from Git…', () => pullLatest(root)))
 }
 
 /** Turn Git sync on for the open project. Shared projects get the push-only backup. Without an address, GitHub makes the repository. */
@@ -385,6 +435,14 @@ export async function turnOffGitSync() {
   useGitSync.setState({ mode: null, error: null, notice: null })
 }
 
+/** "Sync to Git" in the open project: save everything to the repository now, without leaving. */
+export async function syncOpenToGit(): Promise<boolean> {
+  const root = useProjectStore.getState().root
+  if (!root || !useGitSync.getState().mode) return false
+  await flushAll(root)
+  return tracked(root, step('Saving to Git…', () => pushLatest(root)))
+}
+
 /** Sync the open project now: full sync closes and opens it again (push, then pull); a backup just pushes. */
 export async function syncNow(): Promise<boolean> {
   const store = useProjectStore.getState()
@@ -434,7 +492,7 @@ export async function inSharedRepo(): Promise<boolean> {
 }
 
 /**
- * "Open from Git": clone a repository into the projects folder and turn on full sync. Returns the
+ * "Import from Git": clone a repository into the projects folder and turn on full sync. Returns the
  * project folders: the repository itself, or the projects one level inside it.
  */
 export async function cloneProject(url: string): Promise<string[]> {

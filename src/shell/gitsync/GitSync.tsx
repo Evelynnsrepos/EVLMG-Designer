@@ -2,7 +2,7 @@ import { GitBranch } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useCollab } from '@/core/collab'
 import { isTauri } from '@/core/fs'
-import { backupHolder, checkGit, connectGitHub, inSharedRepo, splitIntoProjectRepos, syncNow, turnOffGitSync, turnOnGitSync, useGitSync, type ConflictChoice } from '@/core/gitsync'
+import { backupHolder, checkGit, connectGitHub, inSharedRepo, splitIntoProjectRepos, syncNow, syncOpenToGit, turnOffGitSync, turnOnGitSync, useGitSync, type ConflictChoice } from '@/core/gitsync'
 import { useSettings } from '@/core/state'
 import { confirmDialog } from '@/shared/dialogs'
 import { Linkified } from '@/shared/links'
@@ -25,7 +25,8 @@ const T = {
   urlHint: 'Make an empty, private repository (on GitHub or anywhere else) and paste its address. Private is best: projects hold unreleased story and art.',
   turnOn: 'Turn on',
   turnOff: 'Turn off',
-  syncNow: 'Sync now',
+  syncTo: 'Sync to Git',
+  syncFrom: 'Sync from Git',
   noGit: 'Install Git to use this (git-scm.com), then open this window again.',
   checking: 'Checking for Git…',
   on: (remote: string) => `On: ${remote}`,
@@ -79,9 +80,14 @@ function GitSyncDialog({ onClose }: { onClose: () => void }) {
           <p>{mode === 'backup' ? T.backupOn(remote) : T.on(remote)}</p>
           {lastSync && <p className="muted">{T.last(lastSync)}</p>}
           <div className="gitsync-actions">
-            <button className="btn btn-primary" disabled={!!busy} onClick={() => void syncNow()}>
-              {T.syncNow}
+            <button className="btn btn-primary" disabled={!!busy} title="Save this project to the repository now" onClick={() => void syncOpenToGit()}>
+              {T.syncTo}
             </button>
+            {mode === 'full' && (
+              <button className="btn" disabled={!!busy} title="Get the repository's latest version now (saves yours first)" onClick={() => void syncNow()}>
+                {T.syncFrom}
+              </button>
+            )}
             <button className="btn" disabled={!!busy} onClick={() => void turnOffGitSync()}>
               {T.turnOff}
             </button>

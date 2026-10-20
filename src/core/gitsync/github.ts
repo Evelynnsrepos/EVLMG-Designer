@@ -15,14 +15,14 @@ export interface GitHubRepo {
 /** Asks git for the GitHub login (`git credential fill`); '' when there is none. */
 export type CredentialAsker = () => Promise<string>
 
-/** Every project repository's name starts with this, so "Open from GitHub" can list them. */
+/** Every project repository's name starts with this, so "Import from GitHub" can list them. */
 export const REPO_PREFIX = 'egd-'
 
 /** "My Game: Part 2" -> "egd-my-game-part-2". GitHub allows letters, digits, '.', '-' and '_'. */
 export function repoNameFor(projectName: string): string {
   const slug = projectName
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/g, '-')
     .replace(/^[-.]+|-+$/g, '')

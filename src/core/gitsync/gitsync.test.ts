@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { getFs, setFs, type FileSystem } from '../fs'
 import { listBackups } from '../backups'
 import { useProjectStore, useSettings } from '../state'
-import { autoTurnOn, cloneProject, commitAll, pullLatest, pushLatest, readMode, setGitRunner, splitIntoProjectRepos, useGitSync, type ConflictChoice } from './gitsync'
+import { autoTurnOn, cloneProject, commitAll, projectGitState, pullLatest, pushLatest, readMode, setGitRunner, splitIntoProjectRepos, syncProjectFromGit, syncProjectToGit, useGitSync, type ConflictChoice } from './gitsync'
 import { repoNameFor, setCredentialAsker, setGitHubFetch } from './github'
 
 // Starting git is slow on Windows runners; a few runs per test easily pass the 5 s default.
@@ -205,6 +205,35 @@ describe.skipIf(!hasGit)('git sync with a local repository', () => {
     expect(await readMode(path.join(all, 'one'))).toBe('full')
     expect(sh(all, 'rev-parse', 'HEAD')).toBe(before)
     expect(await readMode(all)).toBe(null)
+  })
+
+  it('syncs existing projects to and from Git from the start screen, with a marker', async () => {
+    const p = path.join(home, 'Existing')
+    await write(p, 'project.json', '{"v":1}')
+    expect((await projectGitState(p)).state).toBe('off')
+    expect(await syncProjectToGit(p, 'Existing')).toBe(true)
+    const bare = path.join(home, 'github', 'egd-existing.git')
+    expect(sh(bare, 'show', 'main:project.json')).toBe('{"v":1}')
+    expect(await projectGitState(p)).toEqual({ state: 'synced', detail: `Saved to Git: ${bare}` })
+    // Another computer changes it; "Sync from Git" brings that in.
+    const [other] = await cloneProject(bare)
+    await write(other, 'project.json', '{"v":2}')
+    await pushLatest(other)
+    expect(await syncProjectFromGit(p)).toBe(true)
+    expect(await read(p, 'project.json')).toBe('{"v":2}')
+    // A failed push shows as an error marker until the next success.
+    sh(p, 'remote', 'set-url', 'origin', path.join(home, 'missing.git'))
+    await write(p, 'project.json', '{"v":3}')
+    expect(await syncProjectToGit(p, 'Existing')).toBe(false)
+    expect((await projectGitState(p)).state).toBe('error')
+  })
+
+  it('does not turn on full sync for a shared project from the start screen', async () => {
+    const p = path.join(home, 'Shared')
+    await write(p, 'project.json', '{}')
+    await write(p, 'collab/share.json', '{}')
+    expect(await syncProjectToGit(p, 'Shared')).toBe(false)
+    expect((await projectGitState(p)).state).toBe('off')
   })
 })
 
