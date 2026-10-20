@@ -7,7 +7,9 @@ import * as path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { getFs, setFs, type FileSystem } from '../fs'
 import { listBackups } from '../backups'
-import { cloneProject, commitAll, pullLatest, pushLatest, readMode, setGitRunner, useGitSync, type ConflictChoice } from './gitsync'
+import { useProjectStore, useSettings } from '../state'
+import { autoTurnOn, cloneProject, commitAll, pullLatest, pushLatest, readMode, setGitRunner, splitIntoProjectRepos, useGitSync, type ConflictChoice } from './gitsync'
+import { repoNameFor, setCredentialAsker, setGitHubFetch } from './github'
 
 // Starting git is slow on Windows runners; a few runs per test easily pass the 5 s default.
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 })
@@ -70,6 +72,18 @@ describe.skipIf(!hasGit)('git sync with a local repository', () => {
           ),
         ),
     )
+    // "GitHub": every repository it makes is a local bare repository.
+    setCredentialAsker(async () => 'token')
+    setGitHubFetch((async (url: string, init?: RequestInit) => {
+      const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
+      if (url.endsWith('/user')) return json({ login: 'me' })
+      const { name } = JSON.parse(String(init?.body)) as { name: string }
+      const bare = path.join(home, 'github', `${name}.git`)
+      execFileSync('git', ['init', '-q', '--bare', bare])
+      execFileSync('git', ['symbolic-ref', 'HEAD', 'refs/heads/main'], { cwd: bare })
+      return json({ name, clone_url: bare, updated_at: '' })
+    }) as typeof fetch)
+    useGitSync.setState({ version: 'git version test' })
     remote = path.join(home, 'remote.git')
     execFileSync('git', ['init', '-q', '--bare', remote])
     sh(remote, 'symbolic-ref', 'HEAD', 'refs/heads/main')
@@ -161,5 +175,43 @@ describe.skipIf(!hasGit)('git sync with a local repository', () => {
     const roots = await cloneProject(folderRemote)
     expect(roots.map((r) => path.basename(r)).sort()).toEqual(['one', 'two'])
     expect(await readMode(roots[0])).toBe('full')
+  })
+
+  it('gives a project in a non-syncing folder repository its own GitHub repository when it opens', async () => {
+    const folder = path.join(home, 'Projects folder')
+    await write(folder, 'old/project.json', '{}')
+    sh(home, 'init', '-q', folder)
+    const p = path.join(folder, 'Homeorg')
+    await write(p, 'project.json', '{"data":{"name":"Homeorg"}}')
+    useSettings.setState({ githubLogin: 'me' })
+    useProjectStore.setState({ root: p, meta: { name: 'Homeorg' } as never })
+    useGitSync.setState({ mode: null })
+    expect(await autoTurnOn(p)).toBe(true)
+    expect(useGitSync.getState().mode).toBe('full')
+    expect(sh(path.join(home, 'github', 'egd-homeorg.git'), 'show', 'main:project.json')).toBe('{"data":{"name":"Homeorg"}}')
+    // The folder's own repository is left alone.
+    expect(sh(folder, 'log', '--oneline', '--all')).toBe('')
+  })
+
+  it('splits a repository of several projects into one repository each and leaves the old one as it was', async () => {
+    const all = path.join(home, 'All projects')
+    const before = sh(all, 'rev-parse', 'HEAD')
+    useProjectStore.setState({ root: path.join(all, 'one'), close: async () => {}, open: async () => {} } as never)
+    await write(all, 'one/project.json', '{"data":{"name":"One"}}')
+    await write(all, 'two/project.json', '{"data":{"name":"Two!"}}')
+    expect(await splitIntoProjectRepos()).toBe(true)
+    expect(sh(path.join(home, 'github', 'egd-one.git'), 'show', 'main:project.json')).toBe('{"data":{"name":"One"}}')
+    expect(sh(path.join(home, 'github', 'egd-two.git'), 'show', 'main:project.json')).toBe('{"data":{"name":"Two!"}}')
+    expect(await readMode(path.join(all, 'one'))).toBe('full')
+    expect(sh(all, 'rev-parse', 'HEAD')).toBe(before)
+    expect(await readMode(all)).toBe(null)
+  })
+})
+
+describe('repository names', () => {
+  it('turns project names into GitHub repository names', () => {
+    expect(repoNameFor('My Game: Part 2')).toBe('egd-my-game-part-2')
+    expect(repoNameFor('Schloß Über')).toBe('egd-schlo-uber')
+    expect(repoNameFor('???')).toBe('egd-project')
   })
 })
