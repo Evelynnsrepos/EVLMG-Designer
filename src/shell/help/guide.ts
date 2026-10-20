@@ -90,7 +90,7 @@ export const BASICS: Record<string, GuideTopic> = {
       'A project is a normal folder in Documents/Evelopment Games Designer, full of readable JSON files and an assets folder for images and audio. Back it up like any other folder.',
       'Inside a project, the sidebar on the left lists your tools. Click one to show only that tool; Shift-click to open it next to the ones already open. Tools that hold several documents (boards, maps, timelines…) list them underneath; right-click one to rename it. The search field above the list finds tools and documents; the star next to a tool keeps it at the top, and you can drag tools up and down to order them. Right-click a tool to give it a colour or put it in a folder; drag tools onto a folder to add them, click a folder to fold it, and right-click it to rename, colour or remove it.',
     ],
-    tips: ['Questions or ideas? Join the Evelopment Games Discord, linked at the bottom of this list.', 'Press F1 anywhere to open this guide.', 'Use the Projects button at the top of the sidebar to go back to the start screen.'],
+    tips: ['Lots of projects? The search box on the start screen finds one by its name or description.', 'Questions or ideas? Join the Evelopment Games Discord, linked at the bottom of this list.', 'Press F1 anywhere to open this guide.', 'Use the Projects button at the top of the sidebar to go back to the start screen.'],
   },
   pixel: {
     title: 'Pixel art crash course',
@@ -157,6 +157,19 @@ export const BASICS: Record<string, GuideTopic> = {
       'Names of your items, characters, towns and enemies are always counted as correct, so your made-up names are not flagged.',
       'Settings (bottom of the sidebar, or the gear on the start screen) turns spell check on or off, picks the languages and lists your own words.',
       'The AI helper is optional. Download it in Settings: Small (1.1 GB, fast), Better (2.5 GB, catches more) or Best (4.7 GB, the most careful, needs about 6 GB of free memory). It runs on your computer and checks grammar as you write: wrong words for the sentence, verb forms, missing commas. Its suggestions get a blue underline. Click one for a card with what is wrong and up to 3 fixes, or Dismiss it. Spell check and the AI helper work in the Writer, the Wiki and the description and notes boxes. The AI helper checks the paragraphs around where you are writing first, and looks at the sentences around a mistake for its suggestions.',
+    ],
+  },
+  settings: {
+    title: 'Settings and your own presets',
+    body: [
+      'Settings opens from the gear on the start screen or at the bottom of the sidebar. Its tabs are General, Writing, Keys & Hotwheel, Project presets, Git and Plugins. The search box next to the tabs looks through all of them at once, so you can type "spell" or "pixel" instead of hunting.',
+      '## Your own project presets',
+      'When you make a new project, the last step lists presets like RPG or Worldbuilding. Pick your tools and click Save as preset… to keep them as your own preset. It shows up next to the built-in ones from then on, with a dashed border. The search box on that step finds presets and tools by name.',
+      'In Settings, Project presets you can rename a preset, change its tools, add first tasks for the task board (one per line) or delete it. Projects made with a preset stay as they are.',
+      '## Git: other hosts and your own server',
+      'Git sync works with GitLab, Gitea, Forgejo, Codeberg and your own server too. Settings, Git has a step-by-step list for them, and Check a repository address tells you if Git on this computer can reach a repository and if it is private.',
+      'You can also set the branch for new repositories, the commit message ({date} becomes the date and time) and Extra Git settings: one key=value per line, added to every Git command, like http.sslVerify=false for your own server with a self-made certificate.',
+      'Git sync only uses private repositories, on every host: before it sends anything it checks that the repository can not be read without a login. A project can allow a public repository in its own Git sync window, after a red warning.',
     ],
   },
   plugins: {

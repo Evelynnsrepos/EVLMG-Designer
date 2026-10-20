@@ -1,4 +1,4 @@
-import { BookOpen, Bug, CircleDot, GraduationCap, MousePointerClick, Waypoints, Grid2x2, Map as MapIcon, Sparkles, CircleHelp, Compass, ExternalLink, FolderGit2, GitBranch, Keyboard, LayoutPanelLeft, Link2, Palette, Puzzle, Rocket, Save, Search, ShieldCheck, SpellCheck, Type, Users, Wrench, X, type LucideIcon } from 'lucide-react'
+import { BookOpen, Bug, CircleDot, GraduationCap, MousePointerClick, Waypoints, Grid2x2, Map as MapIcon, Sparkles, CircleHelp, Compass, ExternalLink, FolderGit2, GitBranch, Keyboard, LayoutPanelLeft, Link2, Palette, Puzzle, Rocket, Save, Search, Settings, ShieldCheck, SpellCheck, Type, Users, Wrench, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { allManifests } from '@/core/registry'
 import { isShortcut } from '@/core/shortcuts'
@@ -31,6 +31,7 @@ const BASIC_ICONS: Record<string, LucideIcon> = {
   spelling: SpellCheck,
   typing: Type,
   plugins: Puzzle,
+  settings: Settings,
   links: Link2,
   together: Users,
   gitsync: GitBranch,
