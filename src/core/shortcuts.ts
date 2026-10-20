@@ -112,7 +112,8 @@ export function boardShortcut(toolId: string, builtIn: string | undefined): stri
 /** Readable key name, e.g. "Ctrl+Shift+Z". */
 export function formatCombo(combo: string): string {
   return combo
-    .split('+')
+    // A trailing + is the plus key itself ("+", "ctrl++"), not a separator.
+    .split(/\+(?!$)/)
     .map((p) => (p.length === 1 ? p.toUpperCase() : p[0].toUpperCase() + p.slice(1)))
     .join('+')
 }
