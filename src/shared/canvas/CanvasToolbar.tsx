@@ -2,6 +2,7 @@ import { boardShortcut, formatCombo } from '@/core/shortcuts'
 import { Redo2, Scan, Undo2, ZoomIn, ZoomOut } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useSettings } from '@/core/state'
+import { keyHint } from '@/shared/hotkeyHints'
 import type { CanvasTool } from './types'
 
 export const TOOLBAR_LABELS = {
@@ -49,6 +50,7 @@ export function CanvasToolbar(p: CanvasToolbarProps) {
             title={title}
             aria-label={title}
             aria-pressed={t.id === p.toolId}
+            {...keyHint(key)}
             onClick={() => p.onTool(t.id)}
           >
             {Icon ? <Icon size={17} strokeWidth={1.8} /> : <span className="canvas-toolbar-text">{t.label}</span>}
@@ -70,25 +72,25 @@ export function CanvasToolbar(p: CanvasToolbarProps) {
       {p.onUndo || p.onRedo ? (
         <>
           <span className="canvas-toolbar-sep" />
-          <button className="canvas-toolbar-btn" title={TOOLBAR_LABELS.undo} aria-label={TOOLBAR_LABELS.undo} disabled={p.canUndo === false} onClick={p.onUndo}>
+          <button className="canvas-toolbar-btn" title={TOOLBAR_LABELS.undo} aria-label={TOOLBAR_LABELS.undo} disabled={p.canUndo === false} onClick={p.onUndo} {...keyHint('ctrl+z')}>
             <Undo2 size={17} strokeWidth={1.8} />
           </button>
-          <button className="canvas-toolbar-btn" title={TOOLBAR_LABELS.redo} aria-label={TOOLBAR_LABELS.redo} disabled={p.canRedo === false} onClick={p.onRedo}>
+          <button className="canvas-toolbar-btn" title={TOOLBAR_LABELS.redo} aria-label={TOOLBAR_LABELS.redo} disabled={p.canRedo === false} onClick={p.onRedo} {...keyHint('ctrl+y')}>
             <Redo2 size={17} strokeWidth={1.8} />
           </button>
         </>
       ) : null}
       <span className="canvas-toolbar-sep" />
-      <button className="canvas-toolbar-btn" title={TOOLBAR_LABELS.zoomOut} aria-label={TOOLBAR_LABELS.zoomOut} onClick={p.onZoomOut}>
+      <button className="canvas-toolbar-btn" title={TOOLBAR_LABELS.zoomOut} aria-label={TOOLBAR_LABELS.zoomOut} onClick={p.onZoomOut} {...keyHint('-')}>
         <ZoomOut size={17} strokeWidth={1.8} />
       </button>
       <button className="canvas-toolbar-zoom" title={TOOLBAR_LABELS.zoomReset} aria-label={TOOLBAR_LABELS.zoomReset} onClick={p.onZoomReset}>
         {Math.round(p.scale * 100)}%
       </button>
-      <button className="canvas-toolbar-btn" title={TOOLBAR_LABELS.zoomIn} aria-label={TOOLBAR_LABELS.zoomIn} onClick={p.onZoomIn}>
+      <button className="canvas-toolbar-btn" title={TOOLBAR_LABELS.zoomIn} aria-label={TOOLBAR_LABELS.zoomIn} onClick={p.onZoomIn} {...keyHint('+')}>
         <ZoomIn size={17} strokeWidth={1.8} />
       </button>
-      <button className="canvas-toolbar-btn" title={TOOLBAR_LABELS.fit} aria-label={TOOLBAR_LABELS.fit} onClick={p.onFit}>
+      <button className="canvas-toolbar-btn" title={TOOLBAR_LABELS.fit} aria-label={TOOLBAR_LABELS.fit} onClick={p.onFit} {...keyHint('shift+1')}>
         <Scan size={17} strokeWidth={1.8} />
       </button>
     </div>

@@ -693,7 +693,7 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
     if (ed.draft) {
       const spec = typeOf(ed.draft).textEdit
       if (!spec || text.trim() === '') return
-      const node = spec.set(ed.draft, text) as N
+      const node = spec.set(ed.draft, text, theme) as N
       props.onChange((s) => addNodes(s, [node]))
       api.select([node.id])
       return
@@ -702,7 +702,7 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
     const spec = node && typeOf(node).textEdit
     if (!node || !spec) return
     if (text.trim() === '' && spec.deleteIfEmpty) props.onChange((s) => deleteNodes(s, [ed.id]))
-    else if (spec.get(node) !== text) props.onChange((s) => updateNode(s, ed.id, (n) => spec.set(n, text) as N))
+    else if (spec.get(node) !== text) props.onChange((s) => updateNode(s, ed.id, (n) => spec.set(n, text, theme) as N))
   }
 
   // ---- render ----

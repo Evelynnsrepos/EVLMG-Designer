@@ -7,6 +7,7 @@ import { pickAndImportAssets, resolveAssetPath } from '@/core/assets'
 import { getFs } from '@/core/fs'
 import { newId } from '@/core/model'
 import { formatCombo, isShortcut, keysOf } from '@/core/shortcuts'
+import { keyHint } from '@/shared/hotkeyHints'
 import { NumberInput, PresetHeader } from '@/shared/calculators'
 import { confirmDialog } from '@/shared/dialogs'
 import { drawTile } from '@/shared/tileset'
@@ -513,7 +514,7 @@ export default function View({ documentId, active }: PanelProps) {
       </div>
       <div className="lv-toolbar">
         {tools.map((t) => (
-          <button key={t.id} className={`icon-btn${tool === t.id ? ' on' : ''}`} title={t.label + key(t.id)} aria-label={t.label} onClick={() => setTool(t.id)}>
+          <button key={t.id} className={`icon-btn${tool === t.id ? ' on' : ''}`} title={t.label + key(t.id)} aria-label={t.label} {...keyHint(keysOf(`level.${t.id}`)[0])} onClick={() => setTool(t.id)}>
             <t.icon size={16} />
           </button>
         ))}

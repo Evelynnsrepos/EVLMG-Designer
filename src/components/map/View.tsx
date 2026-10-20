@@ -10,6 +10,7 @@ import {
   addNodes,
   CanvasEditor,
   deleteNodes,
+  eraserTool,
   handTool,
   penTool,
   sceneBinding,
@@ -130,6 +131,7 @@ export default function View({ documentId, active }: PanelProps) {
       zoneTool(host),
       textTool({ defaults: () => ({ textColor: INK, fontSize: 22 }) }),
       penTool({ defaults: () => ({ strokeColor: INK, strokeWidth: 2 }) }),
+      eraserTool(),
       commentTool('map', documentId ?? null),
     ]
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- canvas setters are stable

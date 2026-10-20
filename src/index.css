@@ -146,3 +146,23 @@ input[type='range']:disabled::-webkit-slider-thumb {
 input[type='range']:disabled::-webkit-slider-runnable-track {
   background: linear-gradient(90deg, var(--text-muted) var(--fill), var(--bg-hover) var(--fill));
 }
+
+/* v0.20 Hotkey hint mode: buttons with data-key show their key in the bottom-left corner. */
+:root[data-hotkey-hints] [data-key] {
+  position: relative;
+}
+:root[data-hotkey-hints] [data-key]::after {
+  content: attr(data-key);
+  position: absolute;
+  left: 1px;
+  bottom: 0;
+  padding: 0 2px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 11px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  pointer-events: none;
+  white-space: nowrap;
+}
