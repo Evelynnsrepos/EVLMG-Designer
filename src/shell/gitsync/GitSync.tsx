@@ -2,7 +2,8 @@ import { GitBranch } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useCollab } from '@/core/collab'
 import { isTauri } from '@/core/fs'
-import { backupHolder, checkGit, syncNow, turnOffGitSync, turnOnGitSync, useGitSync, type ConflictChoice } from '@/core/gitsync'
+import { backupHolder, checkGit, connectGitHub, inSharedRepo, splitIntoProjectRepos, syncNow, turnOffGitSync, turnOnGitSync, useGitSync, type ConflictChoice } from '@/core/gitsync'
+import { useSettings } from '@/core/state'
 import { confirmDialog } from '@/shared/dialogs'
 import { Linkified } from '@/shared/links'
 import { Modal } from '@/shared/ui'
@@ -32,6 +33,13 @@ const T = {
   last: (when: string) => `Last sync ${new Date(when).toLocaleString()}`,
   heldBy: (name: string) => `${name} backs this project up to Git. Only one person can.`,
   login: 'Git uses your own GitHub login on this computer (step 3 of the setup, also in the guide).',
+  connect: 'Connect GitHub',
+  connectHint: 'Once per computer. After that, every project gets its own private GitHub repository automatically and is saved to it when you leave the project.',
+  connected: (login: string) => `GitHub: ${login}. New projects get their own private repository (egd-…) automatically.`,
+  turnOnAuto: 'Turn on Git saving',
+  ownAddress: 'Use my own repository address instead',
+  split: 'Give each project its own repository',
+  splitHint: 'This project shares one repository with other projects. Each of them gets its own private GitHub repository; the old one stays as it is, as a backup.',
 }
 
 /** Sidebar row; hidden in the browser build. */
@@ -58,6 +66,9 @@ function GitSyncDialog({ onClose }: { onClose: () => void }) {
   const [agreed, setAgreed] = useState(false)
   useEffect(() => void checkGit(), [])
   const holder = backupHolder()
+  const githubLogin = useSettings((s) => s.githubLogin)
+  const [shareRepo, setShareRepo] = useState(false)
+  useEffect(() => void inSharedRepo().then(setShareRepo), [mode])
 
   const body = () => {
     if (version === null) return <p className="muted">{T.checking}</p>
@@ -75,13 +86,20 @@ function GitSyncDialog({ onClose }: { onClose: () => void }) {
               {T.turnOff}
             </button>
           </div>
+          {shareRepo && (
+            <>
+              <p className="muted gitsync-small">{T.splitHint}</p>
+              <button className="btn" disabled={!!busy} onClick={() => void (githubLogin ? splitIntoProjectRepos() : connectGitHub())}>
+                {githubLogin ? T.split : T.connect}
+              </button>
+            </>
+          )}
         </>
       )
     }
     if (shared && holder) return <p>{T.heldBy(holder.name)}</p>
-    return (
+    const manual = (
       <>
-        <p className="gitsync-warning">{shared ? T.backupWarning : T.warning}</p>
         <label className="gitsync-field">
           <span>{T.url}</span>
           <input className="input" value={url} placeholder="https://github.com/you/my-game.git" onChange={(e) => setUrl(e.target.value)} />
@@ -96,6 +114,38 @@ function GitSyncDialog({ onClose }: { onClose: () => void }) {
             {T.turnOn}
           </button>
         </div>
+      </>
+    )
+    return (
+      <>
+        <p className="gitsync-warning">{shared ? T.backupWarning : T.warning}</p>
+        {githubLogin ? (
+          <>
+            <p className="muted">{T.connected(githubLogin)}</p>
+            <label className="settings-check">
+              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+              {T.agree}
+            </label>
+            <div className="gitsync-actions">
+              <button className="btn btn-primary" disabled={!agreed || !!busy} onClick={() => void turnOnGitSync('')}>
+                {T.turnOnAuto}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="muted gitsync-small">{T.connectHint}</p>
+            <div className="gitsync-actions">
+              <button className="btn btn-primary" disabled={!!busy} onClick={() => void connectGitHub()}>
+                {T.connect}
+              </button>
+            </div>
+          </>
+        )}
+        <details className="gitsync-steps">
+          <summary>{T.ownAddress}</summary>
+          {manual}
+        </details>
       </>
     )
   }

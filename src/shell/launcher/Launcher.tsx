@@ -2,12 +2,13 @@ import { CircleHelp, FileArchive, FolderOpen, GitBranch, Image, MoreHorizontal, 
 import { useCallback, useEffect, useState } from 'react'
 import { saveBinaryFile, safeFileName } from '@/core/export'
 import { getFs, isTauri } from '@/core/fs'
-import { cloneProject } from '@/core/gitsync'
+import { cloneProject, listProjectRepos, type GitHubRepo } from '@/core/gitsync'
 import { assetUrl, pickAndImportAssets } from '@/core/assets'
 import type { RecentProject } from '@/core/model'
 import { deleteProject, importProjectZip, isProjectFolder, loadProject, readRecents, removeRecent, saveMeta, upsertRecent, zipProject } from '@/core/project'
-import { useAppStore, useProjectStore } from '@/core/state'
+import { useAppStore, useProjectStore, useSettings } from '@/core/state'
 import { confirmDialog, promptDialog } from '@/shared/dialogs'
+import { Modal } from '@/shared/ui'
 import { maybeStartTour, useHelp } from '../help/help'
 import { toggleTheme, useTheme } from '../theme'
 import { openSettings } from '../settings/open'
@@ -22,6 +23,8 @@ export function Launcher() {
   const [error, setError] = useState<string | null>(null)
   const [joinOpen, setJoinOpen] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
+  /** "Open from GitHub": the person's project repositories to pick from (0.20). */
+  const [repos, setRepos] = useState<GitHubRepo[] | null>(null)
   const theme = useTheme()
 
   const refresh = useCallback(async () => {
@@ -60,7 +63,20 @@ export function Launcher() {
   }
 
   const openFromGit = async () => {
-    const url = (await promptDialog('Open from Git: repository address', ''))?.trim()
+    if (!useSettings.getState().githubLogin) return cloneFrom((await promptDialog('Open from Git: repository address', ''))?.trim())
+    try {
+      setError(null)
+      setBusy('Looking up your projects on GitHub…')
+      setRepos(await listProjectRepos())
+    } catch (e) {
+      setError(`Could not list your GitHub projects: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const cloneFrom = async (url: string | undefined) => {
+    setRepos(null)
     if (!url) return
     try {
       setError(null)
@@ -130,6 +146,24 @@ export function Launcher() {
 
       {error && <div className="launcher-error">{error}</div>}
       {busy && <div className="muted launcher-busy">{busy}</div>}
+      {repos && (
+        <Modal onClose={() => setRepos(null)}>
+          <div className="gitsync-dialog">
+            <h3>Open from GitHub</h3>
+            {repos.length === 0 && <p className="muted">No project repositories (egd-…) on GitHub yet.</p>}
+            <div className="gitsync-choices">
+              {repos.map((r) => (
+                <button key={r.name} className="btn" onClick={() => void cloneFrom(r.cloneUrl)}>
+                  {r.name} <span className="muted gitsync-small">{new Date(r.updatedAt).toLocaleDateString()}</span>
+                </button>
+              ))}
+              <button className="btn btn-ghost" onClick={() => void promptDialog('Open from Git: repository address', '').then((u) => cloneFrom(u?.trim()))}>
+                Another repository address…
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {joinOpen && (
         <JoinDialog
           onClose={() => setJoinOpen(false)}
