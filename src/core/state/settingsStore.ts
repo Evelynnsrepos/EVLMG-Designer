@@ -37,6 +37,8 @@ export interface AppSettings {
   writerMarkdownSyntax: boolean
   /** 0.20: the GitHub user Git saving makes repositories for; '' = GitHub not connected on this computer. */
   githubLogin: string
+  /** v0.20: Hotkey hint mode, every button with a key shows it in its corner. */
+  hotkeyHints: boolean
 }
 
 export interface HotwheelSettings {
@@ -56,7 +58,7 @@ export interface HotwheelSettings {
 export const DEFAULT_INNER = ['close', 'scale', 'jump', 'layout', 'undo', 'search']
 const hotwheelDefaults = (): HotwheelSettings => ({ inner: DEFAULT_INNER, outer: {}, size: 'M', penButton: false, rightHold: false, middle: false })
 
-const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, githubLogin: '' })
+const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, githubLogin: '', hotkeyHints: false })
 
 async function settingsPath() {
   const fs = getFs()

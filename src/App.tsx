@@ -21,6 +21,7 @@ import { SharingEndedHost } from '@/shell/collab/CollabDialogs'
 import { GitSyncHost } from '@/shell/gitsync/GitSync'
 import { installFileDrop } from '@/shell/fileDrop'
 import { useJoinRequests } from '@/shell/collab/joinRequests'
+import { useHotkeyHintMode } from '@/shared/hotkeyHints'
 
 // Shared projects go online when opened (core/collab).
 installCollaboration()
@@ -34,6 +35,7 @@ installRangeFill()
 export default function App() {
   const screen = useAppStore((s) => s.screen)
   useJoinRequests()
+  useHotkeyHintMode()
 
   useEffect(() => {
     // Spec 3.5: rolling backups, and save everything before the app closes.

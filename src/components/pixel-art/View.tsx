@@ -5,7 +5,8 @@ import { saveBinaryFile, safeFileName } from '@/core/export'
 import { getFs } from '@/core/fs'
 import { newId } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
-import { isShortcut } from '@/core/shortcuts'
+import { isShortcut, keysOf } from '@/core/shortcuts'
+import { keyHint } from '@/shared/hotkeyHints'
 import { loadDocumentNow, postIntent, updateDocument, useDocument, useIntentHandler, useProjectStore, isTextField, useUndoRedoKeys, type UseDocumentResult } from '@/core/state'
 import { NumberInput, PresetHeader } from '@/shared/calculators'
 import { confirmDialog, promptDialog } from '@/shared/dialogs'
@@ -1353,7 +1354,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       </div>
       <div className="px-toolbar" data-tour="px-tools">
         {tools.map((t) => (
-          <button key={t.id} className={`icon-btn${tool === t.id ? ' on' : ''}`} title={t.label} aria-label={t.label} onClick={() => setTool(t.id)}>
+          <button key={t.id} className={`icon-btn${tool === t.id ? ' on' : ''}`} title={t.label} aria-label={t.label} {...keyHint('key' in t && typeof t.key === 'string' ? keysOf(t.key)[0] : undefined)} onClick={() => setTool(t.id)}>
             <t.icon size={16} />
           </button>
         ))}
