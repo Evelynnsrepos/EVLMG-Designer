@@ -37,7 +37,33 @@ export interface AppSettings {
   writerMarkdownSyntax: boolean
   /** v0.20: Hotkey hint mode, every button with a key shows it in its corner. */
   hotkeyHints: boolean
+  /** v0.20: the user's own project presets for the new project wizard. */
+  projectPresets: ProjectPreset[]
+  /** v0.20: Git sync options for other Git hosts (GitLab, Gitea, ...). */
+  git: GitSettings
 }
+
+/** A project preset the user made (v0.20): which tools a new project starts with, plus first tasks. */
+export interface ProjectPreset {
+  id: string
+  name: string
+  description: string
+  components: string[]
+  tasks: string[]
+}
+
+export interface GitSettings {
+  /** Branch a new repository starts on. */
+  branch: string
+  /** Commit message for sync commits; {date} becomes the date and time. */
+  commitMessage: string
+  /** Extra "key=value" Git settings for every Git command, e.g. http.sslVerify=false for a home server. */
+  config: string[]
+  /** Opt-in, with a danger warning: also sync to public repositories. Off = private repositories only. */
+  allowPublic: boolean
+}
+
+export const gitDefaults = (): GitSettings => ({ branch: 'main', commitMessage: 'EGD sync {date}', config: [], allowPublic: false })
 
 export interface HotwheelSettings {
   /** The 6 inner slices (program actions), clockwise from the top; '' = empty. */
@@ -56,7 +82,7 @@ export interface HotwheelSettings {
 export const DEFAULT_INNER = ['close', 'scale', 'jump', 'layout', 'undo', 'search']
 const hotwheelDefaults = (): HotwheelSettings => ({ inner: DEFAULT_INNER, outer: {}, size: 'M', penButton: false, rightHold: false, middle: false })
 
-const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, hotkeyHints: false })
+const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, hotkeyHints: false, projectPresets: [], git: gitDefaults() })
 
 async function settingsPath() {
   const fs = getFs()
@@ -78,15 +104,15 @@ export const useSettings = create<SettingsState>()((set, get) => ({
   async load() {
     if (get().loaded) return
     const saved = await readVersioned<Partial<AppSettings>>(await settingsPath(), defaults).catch(defaults)
-    set({ ...defaults(), ...saved, hotwheel: { ...hotwheelDefaults(), ...saved.hotwheel }, loaded: true })
+    set({ ...defaults(), ...saved, hotwheel: { ...hotwheelDefaults(), ...saved.hotwheel }, git: { ...gitDefaults(), ...saved.git }, loaded: true })
   },
   update(patch) {
     set(patch)
     // Sliders call this many times a second; write once they settle.
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
-      const { spellCheck, spellLanguages, personalWords, aiHelper, aiModel, askProject, penSize, penSmoothing, penOpacity, sharpPixels, shortcuts, toolScale, hotwheel, writerMarkdownSyntax, hotkeyHints } = get()
-      void settingsPath().then((p) => writeVersioned(p, { spellCheck, spellLanguages, personalWords, aiHelper, aiModel, askProject, penSize, penSmoothing, penOpacity, sharpPixels, shortcuts, toolScale, hotwheel, writerMarkdownSyntax, hotkeyHints }))
+      const { spellCheck, spellLanguages, personalWords, aiHelper, aiModel, askProject, penSize, penSmoothing, penOpacity, sharpPixels, shortcuts, toolScale, hotwheel, writerMarkdownSyntax, hotkeyHints, projectPresets, git } = get()
+      void settingsPath().then((p) => writeVersioned(p, { spellCheck, spellLanguages, personalWords, aiHelper, aiModel, askProject, penSize, penSmoothing, penOpacity, sharpPixels, shortcuts, toolScale, hotwheel, writerMarkdownSyntax, hotkeyHints, projectPresets, git }))
     }, 400)
   },
   addWord(word) {
