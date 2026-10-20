@@ -58,7 +58,8 @@ import { useTransformer } from './transformer'
 import { ColorDropBar, ColorDropView, ColorPanel } from './ColorPanel'
 import { useColorDrop } from './colordrop'
 // Sketch Pro: pen input, view turning, guides, QuickMenu.
-import { actionLabel, matchShortcut, PAIRS, toolOf, type ActionId } from './actions'
+import { keyHint } from '@/shared/hotkeyHints'
+import { actionLabel, keysFor, matchShortcut, PAIRS, toolOf, type ActionId } from './actions'
 import { TouchGestures } from './gestures'
 import { activeGuide, assistFor, normalizeGuide, symmetryMirror, type DrawingGuide } from './guides'
 import { BrushCursor, GuideOverlay, ShapeNodes } from './GuideOverlay'
@@ -1001,13 +1002,13 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
     <div className="sketch">
       <div className="sketch-topbar" onPointerDown={(e) => e.stopPropagation()}>
         {TOOLS.map((t) => (
-          <ToolButton key={t.id} icon={t.icon} label={t.label} active={tool === t.id} onClick={() => setTool(t.id)} />
+          <ToolButton key={t.id} icon={t.icon} label={t.label} active={tool === t.id} onClick={() => setTool(t.id)} hint={`tool.${t.id}`} />
         ))}
         <span className="sketch-sep" />
-        <ToolButton icon={Undo2} label={UI.undo} onClick={undo} disabled={!engine.canUndo} />
-        <ToolButton icon={Redo2} label={UI.redo} onClick={redo} disabled={!engine.canRedo} />
+        <ToolButton icon={Undo2} label={UI.undo} onClick={undo} disabled={!engine.canUndo} hint="undo" />
+        <ToolButton icon={Redo2} label={UI.redo} onClick={redo} disabled={!engine.canRedo} hint="redo" />
         <span className="sketch-sep" />
-        <ToolButton icon={PaintBucket} label={UI.fill} onClick={() => activeLayer && markDirty(engine.fill(activeLayer.id, color, activeLayer.alphaLock))} />
+        <ToolButton icon={PaintBucket} label={UI.fill} onClick={() => activeLayer && markDirty(engine.fill(activeLayer.id, color, activeLayer.alphaLock))} hint="fill" />
         <ToolButton icon={Trash2} label={UI.clear} onClick={() => activeLayer && markDirty(engine.clear(activeLayer.id))} />
         {/* v0.12: these flip the whole picture; Shift only the layer. Lucide's FlipVertical2 is the one with the vertical mirror line. */}
         <ToolButton icon={FlipVertical2} label={UI.flipX} onClick={(e) => runAction(e?.shiftKey ? 'flipLayerX' : 'flipCanvasX')} />
@@ -1223,9 +1224,10 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   )
 }
 
-function ToolButton(p: { icon: LucideIcon; label: string; onClick: (e?: React.MouseEvent) => void; active?: boolean; disabled?: boolean }) {
+function ToolButton(p: { icon: LucideIcon; label: string; onClick: (e?: React.MouseEvent) => void; active?: boolean; disabled?: boolean; hint?: ActionId }) {
+  const keys = useInputSettings((s) => s.shortcuts)
   return (
-    <button className={`icon-btn sketch-tool${p.active ? ' is-active' : ''}`} title={p.label} aria-label={p.label} aria-pressed={p.active} disabled={p.disabled} onClick={p.onClick}>
+    <button className={`icon-btn sketch-tool${p.active ? ' is-active' : ''}`} title={p.label} aria-label={p.label} aria-pressed={p.active} disabled={p.disabled} onClick={p.onClick} {...keyHint(p.hint && keysFor(p.hint, keys)[0])}>
       <p.icon size={16} />
     </button>
   )

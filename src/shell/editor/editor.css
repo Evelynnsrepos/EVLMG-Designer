@@ -363,3 +363,34 @@
   font-size: 11px;
   color: var(--text-muted);
 }
+
+/* v0.20 Hotkey hint mode switch at the top of the sidebar. */
+.sidebar-hint-switch .sidebar-switch {
+  margin-left: auto;
+  flex: none;
+  width: 26px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  position: relative;
+}
+.sidebar-hint-switch .sidebar-switch::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.12s ease;
+}
+.sidebar-hint-switch.on .sidebar-switch {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.sidebar-hint-switch.on .sidebar-switch::after {
+  background: var(--accent-text);
+  transform: translateX(12px);
+}
