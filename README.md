@@ -25,9 +25,9 @@
 </p>
 
 <p align="center">
-  <a href="docs/media/egd-0.20.mp4"><img src="docs/images/preview-0.20.webp" width="800" alt="Evelopment Games Designer 0.20 in action: Markdown typing in the Writer, Settings search, your own project presets, hotkey hints and drawing"></a>
+  <a href="docs/media/egd-showcase.mp4"><img src="docs/images/preview-showcase.webp" width="800" alt="Evelopment Games Designer in action: characters, links between tools, branching stories, maps, timelines, skill trees, a red-string board, drawing, Git saving and engine export"></a>
   <br>
-  <a href="docs/media/egd-0.20.mp4">▶ Watch the 0.20 video with sound</a>
+  <a href="docs/media/egd-showcase.mp4">▶ Watch the video with sound</a>
 </p>
 
 <p align="center"><b>One program for designing your whole game.</b></p>
