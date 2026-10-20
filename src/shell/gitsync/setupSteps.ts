@@ -7,10 +7,9 @@ export const GIT_SETUP_STEPS = [
   'Install Git (free). Windows and Mac: download it from https://git-scm.com/downloads and click through the installer, the default choices are fine. Linux: install the package called git from your software store or package manager.',
   'Make a free GitHub account at https://github.com/signup (skip this if you have one).',
   'Log Git in to GitHub, once per computer. On Windows you can skip this step: Git for Windows signs you in by itself, with a GitHub sign-in window the first time you turn on Git sync. On Mac and Linux: install GitHub CLI from https://cli.github.com then open a terminal (Windows: Terminal or PowerShell, Mac: Terminal) and type "gh auth login" and press Enter. Choose GitHub.com, then HTTPS, answer Yes to "Authenticate Git with your GitHub credentials", then Login with a web browser. Your browser opens; type in the code the terminal shows.',
-  'Make an empty, private repository: open https://github.com/new and type a name, for example my-game-save. Choose Private. Leave "Add a README" off. Click Create repository.',
-  'Copy its address: on the new repository\'s page, under Quick setup, click the copy button next to the HTTPS address. It ends in .git',
-  'Back in Evelopment Games Designer: open your project, click Git sync in the sidebar, paste the address, tick I understand and click Turn on. That\'s it.',
-  'On your other computer: do steps 1 and 3 there too, then click Open from Git on the start screen and paste the same address.',
+  'Back in Evelopment Games Designer: open a project, click Git sync in the sidebar and click Connect GitHub. That\'s all, once per computer. From then on every project gets its own private GitHub repository (named egd-<project name>) automatically. It gets the latest version when you open the project and saves to GitHub in the background when you leave it.',
+  'On your other computer: do steps 1 and 3 there too, then click Import from Git on the start screen and pick the project.',
+  'Want to use your own repository, or a host other than GitHub? Make an empty, private repository there, copy its HTTPS address (it ends in .git), and paste it under "Use my own repository address instead" in the Git sync window.',
 ]
 
 export const GIT_LEARN_LINKS = [

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { assetUrl, pickAndImportAssets } from '@/core/assets'
+import { assetUrl, importAssetFromBlob, pickAndImportAssets } from '@/core/assets'
 import { useProjectStore } from '@/core/state'
+import type { ImageImporter } from './imageExtension'
 import type { ImagePicker, RichTextDoc } from './types'
 
 /**
@@ -11,10 +12,12 @@ import type { ImagePicker, RichTextDoc } from './types'
  *
  *   const images = useProjectImages(doc.data?.body)
  *   if (!images.ready) return null
- *   <RichTextEditor pickImage={images.pickImage} resolveImageSrc={images.resolveImageSrc} ... />
+ *   <RichTextEditor pickImage={images.pickImage} importImages={images.importImages} resolveImageSrc={images.resolveImageSrc} ... />
  */
 export interface ProjectImages {
   pickImage: ImagePicker
+  /** Dropped or pasted image files, copied into the project. */
+  importImages: ImageImporter
   resolveImageSrc: (src: string) => string
   /** True once every project image in the given document has a URL (or is known to be missing). */
   ready: boolean
@@ -73,6 +76,16 @@ export function useProjectImages(doc: RichTextDoc | null | undefined): ProjectIm
     return { src: asset.path, alt: asset.name.replace(/\.[^.]+$/, '') }
   }, [root])
 
+  const importImages = useCallback<ImageImporter>(
+    async (files) => {
+      if (!root) return []
+      const assets = (await Promise.all(files.map((f) => importAssetFromBlob(root, f, 'image')))).filter((a) => !!a)
+      await resolveAll(root, assets.map((a) => a.path))
+      return assets.map((a) => ({ src: a.path, alt: a.name.replace(/\.[^.]+$/, '') }))
+    },
+    [root],
+  )
+
   const resolveImageSrc = useCallback((src: string) => (root && urls.get(`${root}|${src}`)) || src, [root])
 
   // Once ready, stay ready: images added later are resolved by the picker before they are inserted.
@@ -80,5 +93,5 @@ export function useProjectImages(doc: RichTextDoc | null | undefined): ProjectIm
   const readyNow = !!root && missing.length === 0
   if (readyNow && !wasReady) setWasReady(true)
 
-  return useMemo(() => ({ pickImage, resolveImageSrc, ready: readyNow || wasReady }), [pickImage, resolveImageSrc, readyNow, wasReady])
+  return useMemo(() => ({ pickImage, importImages, resolveImageSrc, ready: readyNow || wasReady }), [pickImage, importImages, resolveImageSrc, readyNow, wasReady])
 }

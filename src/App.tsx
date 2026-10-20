@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { installAutoBackup, waitForBackups } from '@/core/backups'
 import { installCollaboration } from '@/core/collab'
-import { installGitSync } from '@/core/gitsync'
+import { gitSyncIdle, installGitSync } from '@/core/gitsync'
 import { installCloseGuard, useAppStore, useSettings } from '@/core/state'
 import { EditorScreen } from '@/shell/editor/EditorScreen'
 import { Launcher } from '@/shell/launcher/Launcher'
@@ -43,7 +43,11 @@ export default function App() {
     void useAiHelper.getState().check()
     void loadAllPlugins()
     const stopBackups = installAutoBackup()
-    const stopGuard = installCloseGuard(waitForBackups)
+    // Quitting waits for the background Git push of the project just left.
+    const stopGuard = installCloseGuard(async () => {
+      await waitForBackups()
+      await gitSyncIdle()
+    })
     return () => {
       stopGuard()
       stopBackups()

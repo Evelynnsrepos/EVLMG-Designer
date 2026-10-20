@@ -2,8 +2,9 @@ import { GitBranch } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useCollab } from '@/core/collab'
 import { isTauri } from '@/core/fs'
-import { backupHolder, checkGit, syncNow, turnOffGitSync, turnOnGitSync, useGitSync, type ConflictChoice } from '@/core/gitsync'
-import { confirmDialog } from '@/shared/dialogs'
+import { backupHolder, checkGit, connectGitHub, inSharedRepo, splitIntoProjectRepos, syncNow, syncOpenToGit, turnOffGitSync, turnOnGitSync, useGitSync, type ConflictChoice } from '@/core/gitsync'
+import { useProjectStore, useSettings } from '@/core/state'
+import { confirmDialog, promptDialog } from '@/shared/dialogs'
 import { Linkified } from '@/shared/links'
 import { Modal } from '@/shared/ui'
 import { GIT_LEARN_LINKS, GIT_SETUP_STEPS } from './setupSteps'
@@ -24,7 +25,8 @@ const T = {
   urlHint: 'Make an empty, private repository (on GitHub or anywhere else) and paste its address. Private is best: projects hold unreleased story and art.',
   turnOn: 'Turn on',
   turnOff: 'Turn off',
-  syncNow: 'Sync now',
+  syncTo: 'Sync to Git',
+  syncFrom: 'Sync from Git',
   noGit: 'Install Git to use this (git-scm.com), then open this window again.',
   checking: 'Checking for Git…',
   on: (remote: string) => `On: ${remote}`,
@@ -32,6 +34,21 @@ const T = {
   last: (when: string) => `Last sync ${new Date(when).toLocaleString()}`,
   heldBy: (name: string) => `${name} backs this project up to Git. Only one person can.`,
   login: 'Git uses your own GitHub login on this computer (step 3 of the setup, also in the guide).',
+  connect: 'Connect GitHub',
+  connectHint: 'Once per computer. After that, every project gets its own private GitHub repository automatically and is saved to it when you leave the project.',
+  connected: (login: string) => `GitHub: ${login}. New projects get their own private repository (egd-…) automatically.`,
+  turnOnAuto: 'Turn on Git saving',
+  ownAddress: 'Use my own repository address instead',
+  split: 'Give each project its own repository',
+  advanced: 'Advanced',
+  allowPublic: 'Allow syncing to a public repository',
+  publicOn: 'Public repositories are allowed for this project. Anyone on the internet may be able to see it.',
+  publicTitle: 'Allow a public repository?',
+  publicWarning:
+    'A public repository can be seen by everyone on the internet: all your text, story, notes, pictures and drawings in this project, and every older version of them, forever (copies may be made the moment it is public). New repositories are still made private; this only lets the project use a public repository you choose. Only turn this on for a project you really want to show the world.',
+  publicConfirm: 'I understand',
+  typeName: (name: string) => `Type the project name (${name}) to allow public repositories`,
+  splitHint: 'This project shares one repository with other projects. Each of them gets its own private GitHub repository; the old one stays as it is, as a backup.',
 }
 
 /** Sidebar row; hidden in the browser build. */
@@ -58,6 +75,20 @@ function GitSyncDialog({ onClose }: { onClose: () => void }) {
   const [agreed, setAgreed] = useState(false)
   useEffect(() => void checkGit(), [])
   const holder = backupHolder()
+  const githubLogin = useSettings((s) => s.githubLogin)
+  const [shareRepo, setShareRepo] = useState(false)
+  const meta = useProjectStore((s) => s.meta)
+  const allowPublic = !!meta?.gitAllowPublic
+  /** 0.20: public repositories only after a red warning and typing the project's name. */
+  const setAllowPublic = async (on: boolean) => {
+    if (!meta) return
+    if (on) {
+      if (!(await confirmDialog({ title: T.publicTitle, message: T.publicWarning, confirmLabel: T.publicConfirm, danger: true }))) return
+      if ((await promptDialog(T.typeName(meta.name), ''))?.trim() !== meta.name.trim()) return
+    }
+    useProjectStore.getState().updateMeta({ gitAllowPublic: on })
+  }
+  useEffect(() => void inSharedRepo().then(setShareRepo), [mode])
 
   const body = () => {
     if (version === null) return <p className="muted">{T.checking}</p>
@@ -68,20 +99,32 @@ function GitSyncDialog({ onClose }: { onClose: () => void }) {
           <p>{mode === 'backup' ? T.backupOn(remote) : T.on(remote)}</p>
           {lastSync && <p className="muted">{T.last(lastSync)}</p>}
           <div className="gitsync-actions">
-            <button className="btn btn-primary" disabled={!!busy} onClick={() => void syncNow()}>
-              {T.syncNow}
+            <button className="btn btn-primary" disabled={!!busy} title="Save this project to the repository now" onClick={() => void syncOpenToGit()}>
+              {T.syncTo}
             </button>
+            {mode === 'full' && (
+              <button className="btn" disabled={!!busy} title="Get the repository's latest version now (saves yours first)" onClick={() => void syncNow()}>
+                {T.syncFrom}
+              </button>
+            )}
             <button className="btn" disabled={!!busy} onClick={() => void turnOffGitSync()}>
               {T.turnOff}
             </button>
           </div>
+          {shareRepo && (
+            <>
+              <p className="muted gitsync-small">{T.splitHint}</p>
+              <button className="btn" disabled={!!busy} onClick={() => void (githubLogin ? splitIntoProjectRepos() : connectGitHub())}>
+                {githubLogin ? T.split : T.connect}
+              </button>
+            </>
+          )}
         </>
       )
     }
     if (shared && holder) return <p>{T.heldBy(holder.name)}</p>
-    return (
+    const manual = (
       <>
-        <p className="gitsync-warning">{shared ? T.backupWarning : T.warning}</p>
         <label className="gitsync-field">
           <span>{T.url}</span>
           <input className="input" value={url} placeholder="https://github.com/you/my-game.git" onChange={(e) => setUrl(e.target.value)} />
@@ -98,6 +141,38 @@ function GitSyncDialog({ onClose }: { onClose: () => void }) {
         </div>
       </>
     )
+    return (
+      <>
+        <p className="gitsync-warning">{shared ? T.backupWarning : T.warning}</p>
+        {githubLogin ? (
+          <>
+            <p className="muted">{T.connected(githubLogin)}</p>
+            <label className="settings-check">
+              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+              {T.agree}
+            </label>
+            <div className="gitsync-actions">
+              <button className="btn btn-primary" disabled={!agreed || !!busy} onClick={() => void turnOnGitSync('')}>
+                {T.turnOnAuto}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="muted gitsync-small">{T.connectHint}</p>
+            <div className="gitsync-actions">
+              <button className="btn btn-primary" disabled={!!busy} onClick={() => void connectGitHub()}>
+                {T.connect}
+              </button>
+            </div>
+          </>
+        )}
+        <details className="gitsync-steps">
+          <summary>{T.ownAddress}</summary>
+          {manual}
+        </details>
+      </>
+    )
   }
 
   return (
@@ -107,6 +182,14 @@ function GitSyncDialog({ onClose }: { onClose: () => void }) {
         <p className="muted">{shared ? T.backupIntro : T.intro}</p>
         {body()}
         {!mode && <SetupSteps open={version === ''} />}
+        {allowPublic && <p className="gitsync-error">{T.publicOn}</p>}
+        <details className="gitsync-steps">
+          <summary>{T.advanced}</summary>
+          <label className="settings-check">
+            <input type="checkbox" checked={allowPublic} onChange={(e) => void setAllowPublic(e.target.checked)} />
+            {T.allowPublic}
+          </label>
+        </details>
         {busy && <p className="muted">{busy}</p>}
         {error && <p className="gitsync-error">{error}</p>}
         {notice && <p className="gitsync-notice">{notice}</p>}

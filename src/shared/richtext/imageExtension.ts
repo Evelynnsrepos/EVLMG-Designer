@@ -1,4 +1,8 @@
+import { Extension } from '@tiptap/core'
 import Image, { type ImageOptions } from '@tiptap/extension-image'
+import { Plugin } from '@tiptap/pm/state'
+import type { EditorView } from '@tiptap/pm/view'
+import { filesFromDataTransfer } from '@/core/assets'
 import { imageStyle } from './styles'
 
 export interface RichImageOptions {
@@ -147,5 +151,45 @@ export const RichImage = Image.extend<ImageOptions & RichImageOptions>({
         ignoreMutation: () => true,
       }
     }
+  },
+})
+
+/** Copies dropped or pasted image files into the project; returns what to store. */
+export type ImageImporter = (files: File[]) => Promise<{ src: string; alt?: string }[]>
+
+const IMAGE_FILE = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i
+const isImageFile = (f: File) => f.type.startsWith('image/') || IMAGE_FILE.test(f.name)
+
+/** Images dropped or pasted into the text become project images at that spot (0.20). */
+export const ImageFiles = Extension.create<{ getImporter: () => ImageImporter | undefined }>({
+  name: 'imageFiles',
+  addOptions() {
+    return { getImporter: () => undefined }
+  },
+  addProseMirrorPlugins() {
+    const getImporter = this.options.getImporter
+    const take = (view: EditorView, dt: DataTransfer | null, at: number | undefined) => {
+      const files = filesFromDataTransfer(dt).filter(isImageFile)
+      const importer = getImporter()
+      if (!files.length || !importer || !view.editable) return false
+      void importer(files).then((images) => {
+        const type = view.state.schema.nodes.image
+        if (view.isDestroyed || !type || !images.length) return
+        const nodes = images.map((attrs) => type.create(attrs))
+        const { tr, doc } = view.state
+        // The text may have changed while the files were copied.
+        if (at === undefined) view.dispatch(tr.replaceWith(tr.selection.from, tr.selection.to, nodes).scrollIntoView())
+        else view.dispatch(tr.insert(Math.min(at, doc.content.size), nodes))
+      })
+      return true
+    }
+    return [
+      new Plugin({
+        props: {
+          handleDrop: (view, event) => take(view, event.dataTransfer, view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos),
+          handlePaste: (view, event) => take(view, event.clipboardData, undefined),
+        },
+      }),
+    ]
   },
 })

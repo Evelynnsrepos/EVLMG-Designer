@@ -1,8 +1,31 @@
-import { appDataDir, dirname, documentDir, join } from '@tauri-apps/api/path'
+import { appDataDir, dirname, documentDir, join, pictureDir } from '@tauri-apps/api/path'
 import { open } from '@tauri-apps/plugin-dialog'
 import * as fs from '@tauri-apps/plugin-fs'
 import { revealItemInDir } from '@tauri-apps/plugin-opener'
 import type { DirEntry, FileSystem } from './types'
+
+const LAST_FOLDER_KEY = 'egd.lastPickedFolder'
+
+/**
+ * Where file pickers start. Without it, Linux file pickers reopen the last folder they remember,
+ * even after it was moved or deleted, and then only show an error (e.g. an old project's folder).
+ */
+async function startFolder(fallback: () => Promise<string>): Promise<string | undefined> {
+  try {
+    const last = localStorage.getItem(LAST_FOLDER_KEY)
+    if (last && (await fs.exists(last))) return last
+    return await fallback()
+  } catch {
+    return undefined
+  }
+}
+function rememberFolder(folder: string) {
+  try {
+    localStorage.setItem(LAST_FOLDER_KEY, folder)
+  } catch {
+    // Only a convenience.
+  }
+}
 
 /** Real disk access through Tauri's fs/dialog plugins (desktop build). */
 export class TauriFs implements FileSystem {
@@ -54,15 +77,19 @@ export class TauriFs implements FileSystem {
     return fs.copyFile(from, to)
   }
   async pickFolder(title: string) {
-    const result = await open({ directory: true, multiple: false, title })
-    return typeof result === 'string' ? result : null
+    const result = await open({ directory: true, multiple: false, title, defaultPath: await startFolder(documentDir) })
+    if (typeof result !== 'string') return null
+    rememberFolder(await dirname(result))
+    return result
   }
   revealInFolder(path: string) {
     return revealItemInDir(path)
   }
   async pickFiles(title: string, extensions: string[]) {
-    const result = await open({ multiple: true, title, filters: [{ name: 'Files', extensions }] })
+    const result = await open({ multiple: true, title, filters: [{ name: 'Files', extensions }], defaultPath: await startFolder(pictureDir) })
     if (!result) return []
-    return Array.isArray(result) ? result : [result]
+    const paths = Array.isArray(result) ? result : [result]
+    if (paths[0]) rememberFolder(await dirname(paths[0]))
+    return paths
   }
 }

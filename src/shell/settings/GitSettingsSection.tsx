@@ -1,9 +1,7 @@
-import { ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
 import { isTauri } from '@/core/fs'
 import { parseGitConfig, testRemote, type RepoVisibility } from '@/core/gitsync'
 import { gitDefaults, useSettings, type GitSettings } from '@/core/state'
-import { confirmDialog } from '@/shared/dialogs'
 import { Linkified } from '@/shared/links'
 
 const T = {
@@ -29,11 +27,7 @@ const T = {
   ignored: (lines: string[]) => `Not used (not key=value): ${lines.join(', ')}`,
   reset: 'Reset Git options',
   publicTitle: 'Public repositories',
-  allowPublic: 'Allow syncing to public repositories (dangerous)',
-  publicOn: 'Public repositories are allowed. Everything in a synced project, like story, characters, art and notes, can be read by anyone on the internet and stays in the repository history even after you delete it.',
-  publicAsk:
-    'A public repository can be read by anyone on the internet. Everything in the project goes there: unreleased story, characters, art, notes and names. It stays in the repository history even if you delete it later, and others can copy it.\n\nOnly turn this on for a project you really want to share with everyone.',
-  publicConfirm: 'Allow public repositories',
+  publicHint: 'Git sync only uses private repositories, on every host. If you really want one project in a public repository, allow it in that project\'s Git sync window, after a warning.',
   hostsTitle: 'Using GitLab, Gitea, Forgejo, Codeberg or your own server',
 }
 
@@ -68,11 +62,6 @@ export function GitSettingsSection() {
     } finally {
       setBusy(false)
     }
-  }
-
-  const togglePublic = async (on: boolean) => {
-    if (on && !(await confirmDialog({ title: T.publicTitle, message: T.publicAsk, confirmLabel: T.publicConfirm, danger: true }))) return
-    set({ allowPublic: on })
   }
 
   return (
@@ -110,15 +99,7 @@ export function GitSettingsSection() {
       {ignored.length > 0 && <p className="settings-error">{T.ignored(ignored)}</p>}
 
       <h4>{T.publicTitle}</h4>
-      <label className="settings-check">
-        <input type="checkbox" checked={git.allowPublic} onChange={(e) => void togglePublic(e.target.checked)} />
-        {T.allowPublic}
-      </label>
-      {git.allowPublic && (
-        <p className="settings-danger">
-          <ShieldAlert size={16} /> {T.publicOn}
-        </p>
-      )}
+      <p className="muted settings-hint">{T.publicHint}</p>
 
       <details className="settings-card">
         <summary>{T.hostsTitle}</summary>
@@ -131,7 +112,7 @@ export function GitSettingsSection() {
         </ol>
       </details>
       <div>
-        <button className="btn btn-ghost" onClick={() => set({ ...gitDefaults(), allowPublic: git.allowPublic })}>
+        <button className="btn btn-ghost" onClick={() => set(gitDefaults())}>
           {T.reset}
         </button>
       </div>

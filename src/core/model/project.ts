@@ -59,6 +59,8 @@ export interface ProjectMeta {
   jumps?: { id: Id; from: LinkTarget; to: LinkTarget; node?: boolean }[]
   /** v0.19: in a shared project, the one member whose computer backs it up to Git (push only). */
   gitBackup?: { id: string; name: string } | null
+  /** 0.20: this project may sync to a public repository (off = private repositories only). Turned on deliberately in Git sync. */
+  gitAllowPublic?: boolean
   createdAt: string
   updatedAt: string
 }
