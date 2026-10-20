@@ -25,4 +25,16 @@ describe('git saving only uses private repositories', () => {
     await expect(checkPrivate('git@github.com:me/secret.git')).resolves.toBeUndefined()
     await expect(checkPrivate('https://codeberg.org/me/open.git')).resolves.toBeUndefined()
   })
+
+  it('allows public repositories only for a project that opted in, and still makes new ones private', async () => {
+    setGitHubFetch((async (url: string) => reply(200, { private: !url.includes('open') })) as typeof fetch)
+    await expect(checkPrivate('https://github.com/me/open-game', true)).resolves.toBeUndefined()
+    const posted: boolean[] = []
+    setGitHubFetch((async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/user/repos')) return (posted.push(JSON.parse(String(init?.body)).private), reply(422, {}))
+      return url.endsWith('/user') ? reply(200, { login: 'me' }) : reply(200, { name: 'egd-x', clone_url: 'u', updated_at: '', private: false })
+    }) as typeof fetch)
+    expect((await createProjectRepo('X', true)).cloneUrl).toBe('u')
+    expect(posted).toEqual([true])
+  })
 })

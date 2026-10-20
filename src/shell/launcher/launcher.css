@@ -218,3 +218,17 @@
 .project-git-error {
   color: var(--danger);
 }
+
+.project-git-public {
+  color: var(--danger);
+  align-items: center;
+  gap: 3px;
+}
+.project-git-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  padding: 0 3px;
+}

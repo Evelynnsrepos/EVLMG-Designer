@@ -59,7 +59,7 @@ export async function gitHubLogin(): Promise<string> {
 const PUBLIC = 'That GitHub repository is public, so anyone could read this project. Git saving only uses private repositories: make it private on GitHub (Settings, Danger Zone, Change visibility) and try again.'
 
 /** A private repository for a project; an existing private one with that name is used as it is (e.g. made on another computer). */
-export async function createProjectRepo(projectName: string): Promise<GitHubRepo> {
+export async function createProjectRepo(projectName: string, allowPublic = false): Promise<GitHubRepo> {
   const name = repoNameFor(projectName)
   type Raw = { name: string; clone_url: string; updated_at: string; private: boolean }
   const shape = (r: Raw): GitHubRepo => ({ name: r.name, cloneUrl: r.clone_url, updatedAt: r.updated_at })
@@ -68,7 +68,7 @@ export async function createProjectRepo(projectName: string): Promise<GitHubRepo
   } catch (e) {
     if ((e as { status?: number }).status !== 422) throw e
     const existing = await api<Raw>(`/repos/${await gitHubLogin()}/${name}`)
-    if (!existing.private) throw new Error(PUBLIC)
+    if (!existing.private && !allowPublic) throw new Error(PUBLIC)
     return shape(existing)
   }
 }
@@ -85,10 +85,12 @@ export async function listProjectRepos(): Promise<GitHubRepo[]> {
 }
 
 /**
- * Git saving only uses private repositories: a typed-in github.com address must not be public.
+ * Git saving only uses private repositories: a typed-in github.com address must not be public,
+ * unless the project allows public repositories (`gitAllowPublic`, turned on with a warning).
  * Other hosts (and GitHub addresses we can't look up without a login) can't be checked here.
  */
-export async function checkPrivate(url: string): Promise<void> {
+export async function checkPrivate(url: string, allowPublic = false): Promise<void> {
+  if (allowPublic) return
   const m = /github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?\/?$/i.exec(url.trim())
   if (!m) return
   const repo = await api<{ private: boolean }>(`/repos/${m[1]}/${m[2]}`).catch(() => null)

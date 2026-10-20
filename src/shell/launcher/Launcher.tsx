@@ -286,6 +286,7 @@ function ProjectCard({
           {git && (
             <span className={`project-git project-git-${git.state}`} title={git.detail} aria-label={git.detail}>
               <GitBranch size={13} />
+              {git.state === 'public' && <span className="project-git-badge">Public</span>}
             </span>
           )}
           {project.name}

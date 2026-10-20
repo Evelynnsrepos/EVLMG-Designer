@@ -228,6 +228,8 @@ export const BASICS: Record<string, GuideTopic> = {
       'If you changed the project on two computers without syncing in between, Git sync asks which version to keep. It never mixes them.',
       'Use the Git version: this computer\'s version is saved as a backup first (Restore a backup… in the project\'s menu on the start screen).',
       'Keep this computer\'s version: it replaces the one in the repository.',
+      '## Private only',
+      'Git saving only uses private repositories. To show a project to the world, open Advanced in its Git sync window and allow a public repository. You confirm a red warning and type the project\'s name, and the project gets a red Public mark on the start screen. Turn it off to go back to private only.',
       '## Shared projects',
       'Git sync is for one person only. Two people syncing one project through Git can overwrite each other\'s work. To work together, use Work together or a server.',
       'A shared project can still get a Git backup: one person turns it on, and their computer saves everyone\'s merged work to Git when they close the project. It never takes anything from Git. The others see Git backup by that person in Work together.',

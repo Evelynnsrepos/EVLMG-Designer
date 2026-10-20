@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react'
 import { useCollab } from '@/core/collab'
 import { isTauri } from '@/core/fs'
 import { backupHolder, checkGit, connectGitHub, inSharedRepo, splitIntoProjectRepos, syncNow, syncOpenToGit, turnOffGitSync, turnOnGitSync, useGitSync, type ConflictChoice } from '@/core/gitsync'
-import { useSettings } from '@/core/state'
-import { confirmDialog } from '@/shared/dialogs'
+import { useProjectStore, useSettings } from '@/core/state'
+import { confirmDialog, promptDialog } from '@/shared/dialogs'
 import { Linkified } from '@/shared/links'
 import { Modal } from '@/shared/ui'
 import { GIT_LEARN_LINKS, GIT_SETUP_STEPS } from './setupSteps'
@@ -40,6 +40,14 @@ const T = {
   turnOnAuto: 'Turn on Git saving',
   ownAddress: 'Use my own repository address instead',
   split: 'Give each project its own repository',
+  advanced: 'Advanced',
+  allowPublic: 'Allow syncing to a public repository',
+  publicOn: 'Public repositories are allowed for this project. Anyone on the internet may be able to see it.',
+  publicTitle: 'Allow a public repository?',
+  publicWarning:
+    'A public repository can be seen by everyone on the internet: all your text, story, notes, pictures and drawings in this project, and every older version of them, forever (copies may be made the moment it is public). New repositories are still made private; this only lets the project use a public repository you choose. Only turn this on for a project you really want to show the world.',
+  publicConfirm: 'I understand',
+  typeName: (name: string) => `Type the project name (${name}) to allow public repositories`,
   splitHint: 'This project shares one repository with other projects. Each of them gets its own private GitHub repository; the old one stays as it is, as a backup.',
 }
 
@@ -69,6 +77,17 @@ function GitSyncDialog({ onClose }: { onClose: () => void }) {
   const holder = backupHolder()
   const githubLogin = useSettings((s) => s.githubLogin)
   const [shareRepo, setShareRepo] = useState(false)
+  const meta = useProjectStore((s) => s.meta)
+  const allowPublic = !!meta?.gitAllowPublic
+  /** 0.20: public repositories only after a red warning and typing the project's name. */
+  const setAllowPublic = async (on: boolean) => {
+    if (!meta) return
+    if (on) {
+      if (!(await confirmDialog({ title: T.publicTitle, message: T.publicWarning, confirmLabel: T.publicConfirm, danger: true }))) return
+      if ((await promptDialog(T.typeName(meta.name), ''))?.trim() !== meta.name.trim()) return
+    }
+    useProjectStore.getState().updateMeta({ gitAllowPublic: on })
+  }
   useEffect(() => void inSharedRepo().then(setShareRepo), [mode])
 
   const body = () => {
@@ -163,6 +182,14 @@ function GitSyncDialog({ onClose }: { onClose: () => void }) {
         <p className="muted">{shared ? T.backupIntro : T.intro}</p>
         {body()}
         {!mode && <SetupSteps open={version === ''} />}
+        {allowPublic && <p className="gitsync-error">{T.publicOn}</p>}
+        <details className="gitsync-steps">
+          <summary>{T.advanced}</summary>
+          <label className="settings-check">
+            <input type="checkbox" checked={allowPublic} onChange={(e) => void setAllowPublic(e.target.checked)} />
+            {T.allowPublic}
+          </label>
+        </details>
         {busy && <p className="muted">{busy}</p>}
         {error && <p className="gitsync-error">{error}</p>}
         {notice && <p className="gitsync-notice">{notice}</p>}

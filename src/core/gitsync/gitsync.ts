@@ -312,8 +312,11 @@ async function ownRepo(root: string) {
 }
 
 /** Make the folder its own repository with `url` as origin and full sync on. */
+/** True when the open project `root` allows a public repository (never for closed projects). */
+const allowsPublic = (root: string) => useProjectStore.getState().root === root && !!useProjectStore.getState().meta?.gitAllowPublic
+
 async function setUpRepo(root: string, url: string, mode: GitSyncMode = 'full') {
-  await checkPrivate(url)
+  await checkPrivate(url, allowsPublic(root))
   if (!(await ownRepo(root))) {
     await must(root, ['init', '-q'])
     await must(root, ['symbolic-ref', 'HEAD', 'refs/heads/main'])
@@ -345,14 +348,15 @@ function turnOnFor(root: string, name: string) {
   return tracked(
     root,
     step('Making a private GitHub repository for this project…', async () => {
-      await setUpRepo(root, (await createProjectRepo(name)).cloneUrl)
+      // New repositories are always made private, also when public ones are allowed.
+      await setUpRepo(root, (await createProjectRepo(name, allowsPublic(root))).cloneUrl)
       await pullLatest(root)
       await pushLatest(root)
     }),
   )
 }
 
-export type ProjectGitState = { state: 'synced' | 'off' | 'error'; detail: string }
+export type ProjectGitState = { state: 'synced' | 'off' | 'error' | 'public'; detail: string }
 
 /** For the start screen: is this (closed) project saved to Git, and did the last try work? */
 export async function projectGitState(root: string): Promise<ProjectGitState> {
@@ -360,6 +364,9 @@ export async function projectGitState(root: string): Promise<ProjectGitState> {
   if (!mode) return { state: 'off', detail: 'Not saved to Git' }
   const failed = failures.get(root)
   if (failed) return { state: 'error', detail: failed }
+  // A project that may use a public repository always says so on its mark.
+  const allowed = (JSON.parse(await getFs().readText(await getFs().join(root, 'project.json')).catch(() => '{}')) as { data?: { gitAllowPublic?: boolean } }).data?.gitAllowPublic
+  if (allowed) return { state: 'public', detail: 'Public repositories allowed: anyone on the internet may be able to see this project.' }
   const remote = (await git(root, ['remote', 'get-url', 'origin'])).stdout.trim()
   return { state: 'synced', detail: `Saved to Git: ${remote}` }
 }
@@ -394,7 +401,7 @@ export async function turnOnGitSync(url: string): Promise<boolean> {
   if (!root) return false
   if (!url.trim()) {
     if (!useSettings.getState().githubLogin || !store.meta) return false
-    const made = await step('Making a private GitHub repository for this project…', async () => (url = (await createProjectRepo(store.meta!.name)).cloneUrl))
+    const made = await step('Making a private GitHub repository for this project…', async () => (url = (await createProjectRepo(store.meta!.name, allowsPublic(root))).cloneUrl))
     if (!made) return false
   }
   const shared = useCollab.getState().shared

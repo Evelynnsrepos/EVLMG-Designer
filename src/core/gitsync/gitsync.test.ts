@@ -228,6 +228,14 @@ describe.skipIf(!hasGit)('git sync with a local repository', () => {
     expect((await projectGitState(p)).state).toBe('error')
   })
 
+  it('marks a synced project that allows public repositories', async () => {
+    const p = path.join(home, 'Existing')
+    sh(p, 'remote', 'set-url', 'origin', path.join(home, 'github', 'egd-existing.git'))
+    await write(p, 'project.json', '{"data":{"gitAllowPublic":true}}')
+    expect(await syncProjectToGit(p, 'Existing')).toBe(true)
+    expect((await projectGitState(p)).state).toBe('public')
+  })
+
   it('does not turn on full sync for a shared project from the start screen', async () => {
     const p = path.join(home, 'Shared')
     await write(p, 'project.json', '{}')
