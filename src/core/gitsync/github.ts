@@ -56,16 +56,20 @@ export async function gitHubLogin(): Promise<string> {
   return (await api<{ login: string }>('/user')).login
 }
 
-/** A private repository for a project; an existing one with that name is used as it is (e.g. made on another computer). */
+const PUBLIC = 'That GitHub repository is public, so anyone could read this project. Git saving only uses private repositories: make it private on GitHub (Settings, Danger Zone, Change visibility) and try again.'
+
+/** A private repository for a project; an existing private one with that name is used as it is (e.g. made on another computer). */
 export async function createProjectRepo(projectName: string): Promise<GitHubRepo> {
   const name = repoNameFor(projectName)
-  type Raw = { name: string; clone_url: string; updated_at: string }
+  type Raw = { name: string; clone_url: string; updated_at: string; private: boolean }
   const shape = (r: Raw): GitHubRepo => ({ name: r.name, cloneUrl: r.clone_url, updatedAt: r.updated_at })
   try {
     return shape(await api<Raw>('/user/repos', { method: 'POST', body: JSON.stringify({ name, private: true, description: `Evelopment Games Designer project: ${projectName}` }) }))
   } catch (e) {
     if ((e as { status?: number }).status !== 422) throw e
-    return shape(await api<Raw>(`/repos/${await gitHubLogin()}/${name}`))
+    const existing = await api<Raw>(`/repos/${await gitHubLogin()}/${name}`)
+    if (!existing.private) throw new Error(PUBLIC)
+    return shape(existing)
   }
 }
 
@@ -78,4 +82,15 @@ export async function listProjectRepos(): Promise<GitHubRepo[]> {
     if (batch.length < 100) break
   }
   return out
+}
+
+/**
+ * Git saving only uses private repositories: a typed-in github.com address must not be public.
+ * Other hosts (and GitHub addresses we can't look up without a login) can't be checked here.
+ */
+export async function checkPrivate(url: string): Promise<void> {
+  const m = /github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?\/?$/i.exec(url.trim())
+  if (!m) return
+  const repo = await api<{ private: boolean }>(`/repos/${m[1]}/${m[2]}`).catch(() => null)
+  if (repo && !repo.private) throw new Error(PUBLIC)
 }

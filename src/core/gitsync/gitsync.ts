@@ -4,7 +4,7 @@ import { useCollab } from '../collab'
 import { getFs, isTauri, safeFolderName } from '../fs'
 import { defaultProjectsDir } from '../project'
 import { addProjectLifecycleHook, flushAll, useProjectStore, useSettings } from '../state'
-import { createProjectRepo, gitHubLogin, setCredentialAsker } from './github'
+import { checkPrivate, createProjectRepo, gitHubLogin, setCredentialAsker } from './github'
 
 /**
  * Git sync (0.19): keeps a project folder in a Git repository with the user's own installed git.
@@ -313,6 +313,7 @@ async function ownRepo(root: string) {
 
 /** Make the folder its own repository with `url` as origin and full sync on. */
 async function setUpRepo(root: string, url: string, mode: GitSyncMode = 'full') {
+  await checkPrivate(url)
   if (!(await ownRepo(root))) {
     await must(root, ['init', '-q'])
     await must(root, ['symbolic-ref', 'HEAD', 'refs/heads/main'])
