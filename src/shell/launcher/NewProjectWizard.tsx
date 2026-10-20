@@ -1,10 +1,12 @@
+import { Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { getFs } from '@/core/fs'
-import type { ComponentType } from '@/core/model'
+import { newId, type ComponentType } from '@/core/model'
 import { defaultProjectsDir } from '@/core/project'
 import { allManifests } from '@/core/registry'
-import { useAppStore, useProjectStore } from '@/core/state'
-import { applyTemplate, TEMPLATES, type Template } from './templates'
+import { useAppStore, useProjectStore, useSettings } from '@/core/state'
+import { promptDialog } from '@/shared/dialogs'
+import { applyTemplate, presetTemplate, TEMPLATES, type Template } from './templates'
 import { shownTool } from '../editor/optionalTools'
 import './launcher.css'
 
@@ -18,7 +20,24 @@ export function NewProjectWizard() {
   const [location, setLocation] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [saved, setSaved] = useState<string | null>(null)
+  const presets = useSettings((s) => s.projectPresets)
   const manifests = allManifests().filter((m) => shownTool(m.type))
+  // v0.20: the user's own presets come after the built-in ones; the search box filters both and the tools.
+  const templates = [...TEMPLATES, ...presets.map(presetTemplate)]
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const matches = (text: string) => words.every((w) => text.toLowerCase().includes(w))
+  const shownTemplates = templates.filter((t) => matches(`${t.name} ${t.description} ${t.genre}`))
+  const shownManifests = manifests.filter((m) => matches(`${m.name} ${m.description}`))
+
+  const saveAsPreset = async () => {
+    const presetName = (await promptDialog('Name for this preset', name.trim() ? `${name.trim()} tools` : ''))?.trim()
+    if (!presetName) return
+    const settings = useSettings.getState()
+    settings.update({ projectPresets: [...settings.projectPresets, { id: newId(), name: presetName, description: description.trim(), components, tasks: [] }] })
+    setSaved(presetName)
+  }
 
   useEffect(() => {
     void defaultProjectsDir().then(setLocation)
@@ -95,13 +114,18 @@ export function NewProjectWizard() {
           <>
             <h2>Which tools does this project need?</h2>
             <p className="muted">Start from a preset (a genre, or just writing, drawing or worldbuilding) or pick tools yourself. You can add more later from the sidebar.</p>
+            <label className="launcher-search">
+              <Search size={15} />
+              <input className="input" type="search" placeholder="Search presets and tools" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
+            </label>
+            {words.length > 0 && shownTemplates.length + shownManifests.length === 0 && <p className="muted">Nothing matches "{query}".</p>}
             <div className="template-row">
-              {TEMPLATES.map((t) => (
+              {shownTemplates.map((t) => (
                 <button
                   key={t.id}
                   type="button"
                   title={t.description}
-                  className={`template-chip${template?.id === t.id ? ' on' : ''}`}
+                  className={`template-chip${template?.id === t.id ? ' on' : ''}${t.id.startsWith('custom:') ? ' custom' : ''}`}
                   onClick={() => {
                     setTemplate(template?.id === t.id ? null : t)
                     if (template?.id !== t.id) setComponents(t.components.filter((c) => manifests.some((m) => m.type === c)))
@@ -111,9 +135,10 @@ export function NewProjectWizard() {
                 </button>
               ))}
             </div>
-            {template && <p className="muted">{template.description} The vision page starts with the genre and suggested pillars, and the task board with first steps.</p>}
+            {template && !template.id.startsWith('custom:') && <p className="muted">{template.description} The vision page starts with the genre and suggested pillars, and the task board with first steps.</p>}
+            {template?.id.startsWith('custom:') && template.description && <p className="muted">{template.description}</p>}
             <div className="component-checklist">
-              {manifests.map((m) => (
+              {shownManifests.map((m) => (
                 <label key={m.type} title={m.description}>
                   <input
                     type="checkbox"
@@ -134,6 +159,10 @@ export function NewProjectWizard() {
               <button type="button" className="btn btn-ghost" onClick={() => setComponents([])}>
                 Clear
               </button>
+              <button type="button" className="btn btn-ghost" disabled={!components.length} title="Keep these tools as a preset for your next projects (Settings, Project presets)" onClick={() => void saveAsPreset()}>
+                Save as preset…
+              </button>
+              {saved && <span className="muted"> Saved "{saved}".</span>}
             </div>
           </>
         )}

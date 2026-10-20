@@ -78,3 +78,94 @@
   gap: 6px;
   margin-bottom: 10px;
 }
+
+/* v0.20: tabs, search and the new sections */
+.settings-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.settings-tab {
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.settings-tab:hover {
+  color: var(--text);
+}
+.settings-tab.on {
+  border-color: var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+.settings-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+}
+.settings-search .input {
+  width: 180px;
+}
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 4px;
+}
+.settings-grow {
+  flex: 1;
+  min-width: 200px;
+}
+.settings-mono {
+  font-family: monospace;
+}
+.settings-card {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.settings-card summary {
+  cursor: pointer;
+}
+.settings-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  max-height: 180px;
+  overflow: auto;
+}
+.settings-danger {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+}
+.settings-steps {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

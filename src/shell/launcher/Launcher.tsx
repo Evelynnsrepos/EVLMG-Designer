@@ -1,4 +1,4 @@
-import { CircleHelp, FileArchive, FolderOpen, GitBranch, Image, MoreHorizontal, Moon, Plus, Settings, Sun, Type, Users } from 'lucide-react'
+import { CircleHelp, FileArchive, FolderOpen, GitBranch, Image, MoreHorizontal, Moon, Plus, Search, Settings, Sun, Type, Users } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { saveBinaryFile, safeFileName } from '@/core/export'
 import { getFs, isTauri } from '@/core/fs'
@@ -23,6 +23,7 @@ export function Launcher() {
   const [error, setError] = useState<string | null>(null)
   const [joinOpen, setJoinOpen] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
   /** "Import from GitHub": the person's project repositories to pick from (0.20). */
   const [repos, setRepos] = useState<GitHubRepo[] | null>(null)
   const theme = useTheme()
@@ -107,6 +108,10 @@ export function Launcher() {
     }
   }
 
+  // v0.20: the search box filters the cards by name and description.
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const shown = projects?.filter((p) => words.every((w) => `${p.name} ${p.description}`.toLowerCase().includes(w)))
+
   return (
     <div className="launcher">
       <header className="launcher-header">
@@ -184,8 +189,16 @@ export function Launcher() {
         </div>
       )}
 
+      {!!projects?.length && (
+        <label className="launcher-search">
+          <Search size={15} />
+          <input className="input" type="search" placeholder="Search your projects" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && (e.preventDefault(), setQuery(''))} />
+        </label>
+      )}
+      {!!projects?.length && shown?.length === 0 && <p className="muted">No project matches "{query}".</p>}
+
       <div className="project-grid">
-        {projects?.map((p) => (
+        {shown?.map((p) => (
           <ProjectCard key={p.path} project={p} missing={missing.has(p.path)} onOpen={() => void open(p.path)} onChanged={refresh} onError={setError} gitBusy={!!busy} />
         ))}
       </div>

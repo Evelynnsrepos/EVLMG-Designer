@@ -91,10 +91,13 @@ The whole app in five minutes.
   [Evelopment Games Designer Server](https://github.com/Evelynnsrepos/Evelopment-Games-Designer-Server) so people can
   join and sync even when nobody else is online. Each person gets their own connect code, for editing or view only,
   and the server can offer plugins.
-- **Git sync** (optional, one person): keep a project in your own Git repository with the Git on your computer. It
-  gets the latest version when the project opens and saves when it closes, so you can move between your own
-  computers. Open from Git on the start screen downloads it on a new computer. A shared project can instead get a
-  push-only Git backup by one member.
+- **Git sync** (optional, one person): every project gets its own private GitHub repository, or use GitLab, Gitea,
+  Codeberg or your own server. It gets the latest version when the project opens and saves in the background when you
+  leave it, so you can move between your own computers. Import from Git on the start screen downloads it on a new
+  computer. A shared project can instead get a push-only Git backup by one member.
+- **Search everywhere**: find projects on the start screen, presets and tools when you make a project, and any
+  setting in the Settings search.
+- **Your own project presets**: save the tools you picked as a preset, or make and edit presets in Settings.
 - **Your drawings everywhere**: wherever you add a picture, your drawings from Draw are offered first, like stickers.
 - **Review status and comments** on every tool window and entry, from Idea to Final, with a Reviews board.
 - **Custom categories** (like *Element* or *Faction*) are made once and used on items, characters, towns and enemies.
@@ -107,6 +110,7 @@ The whole app in five minutes.
   The optional grammar helper comes in Small (1.1 GB), Better (2.5 GB) and Best (4.7 GB).
 - **Export a project as a zip** and import it again, for backups or to send to someone.
 - **Plugins** add new tools: install one from a GitHub link or a zip in Settings.
+- **Settings with tabs and search**: General, Writing, Keys & Hotwheel, Project presets, Git and Plugins.
 - **Your own shortcuts**: change any key in Settings; the user guide (`F1`) has a cheatsheet with the default and your key.
 
 </details>
@@ -164,9 +168,14 @@ xattr -dr com.apple.quarantine "/Applications/Evelopment Games Designer.app"
 Use the app on more than one computer, or keep your project's history safe on GitHub. Git sync keeps a project in
 your own Git repository, using the Git installed on your computer and your own login. Nothing goes through us.
 
-- It **gets the latest version** when a project opens and **saves to Git** when it closes. *Sync now* does both.
-- **Open from Git** on the start screen downloads a project onto another computer. One repository can also hold all
-  your projects; they all show up on the start screen.
+- **Connect GitHub** once, and every project gets its own **private** repository (`egd-<project name>`) by itself.
+- It **gets the latest version** when a project opens and **saves to Git** in the background when you leave it.
+  *Sync to Git* and *Sync from Git* do it right away, and a Git mark on the start screen shows each project's state.
+- **Import from Git** on the start screen downloads a project onto another computer.
+- **Private only**: Git sync refuses public repositories on every host. One project can allow a public repository in
+  its Git sync window, after a red warning.
+- **Other hosts**: GitLab, Gitea, Forgejo, Codeberg or your own server work too. *Settings → Git* has login help,
+  an address check, and your own branch, commit message and extra Git settings.
 - It **never mixes versions**: if you changed a project on two computers without syncing, it asks which one to keep
   and backs up the other.
 - **For one person only.** To work on a project together, use *Work together* or a server. A shared project can
@@ -178,8 +187,10 @@ your own Git repository, using the Git installed on your computer and your own l
 2. Make a free [GitHub account](https://github.com/signup).
 3. Log Git in to GitHub once. On Windows, Git shows a sign-in window by itself the first time. On Mac and Linux,
    install [GitHub CLI](https://cli.github.com) and run `gh auth login` in a terminal.
-4. Make an [empty, private repository](https://github.com/new) and copy its HTTPS address (it ends in `.git`).
-5. In the app, open your project, click **Git sync** in the sidebar, paste the address and turn it on.
+4. In the app, open a project, click **Git sync** in the sidebar and click **Connect GitHub**. That's it.
+
+Using another host? Make an empty, private repository there and paste its address under *Use my own repository
+address instead* in the Git sync window.
 
 The Git sync window and the user guide (`F1`) walk you through every step, explain each error message and link to
 beginner guides.

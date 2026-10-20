@@ -83,18 +83,29 @@ export function explainGit(r: GitResult): string {
   if (r.code === -1) return 'Git took too long and was stopped. Check your internet connection and try again.'
   const text = (r.stderr || r.stdout).trim()
   if (/terminal prompts disabled|could not read (Username|Password)|Authentication failed|Permission denied \(publickey|Host key verification failed/i.test(text)) {
-    return 'Git needs you to log in to GitHub. Follow step 3 of the setup (in the Git sync window or the guide), then try again.'
+    return 'Git needs you to log in to your Git host (GitHub, GitLab, Gitea, ...). Follow step 3 of the setup (in the Git sync window or the guide), then try again.'
   }
   if (/Could not resolve host|Network is unreachable|Connection (timed out|refused)|Failed to connect/i.test(text)) return 'Could not reach the repository. Check your internet connection.'
   if (/\[rejected\]|non-fast-forward|fetch first/i.test(text)) return 'The repository has newer changes. Use Sync from Git to get them first.'
   if (/repository .* not found|does not appear to be a git repository/i.test(text)) return 'Git could not find that repository. Check the address.'
+  if (/SSL certificate problem|server certificate verification failed/i.test(text)) {
+    return 'Git does not trust the server\'s certificate. For your own server (like a home Gitea) you can add http.sslVerify=false under Settings, Git, Extra Git settings.'
+  }
   return text.split('\n').filter(Boolean).pop() ?? `Git failed (code ${r.code}).`
 }
+
+/** "key=value" lines from Settings, Git; anything else is ignored. */
+export function parseGitConfig(lines: string[]): string[] {
+  return lines.map((l) => l.trim()).filter((l) => /^[A-Za-z][\w-]*(\.[^=\s]+)+=.*$/.test(l))
+}
+
+/** The user's extra Git settings (Settings, Git) go in front of every command as `-c key=value`. */
+const extraConfig = () => parseGitConfig(useSettings.getState().git.config).flatMap((l) => ['-c', l])
 
 function git(root: string, args: string[], timeout = QUICK_MS, input?: string) {
   // An empty folder would make git run wherever the app was started, in someone else's repository.
   if (!root.trim()) throw new GitError('No project folder for Git.')
-  return runner(root, args, timeout, input)
+  return runner(root, [...extraConfig(), ...args], timeout, input)
 }
 
 /** The GitHub token the computer's git already uses (gh, Git Credential Manager, a keychain); '' when none. */
@@ -109,6 +120,66 @@ async function must(root: string, args: string[], timeout = QUICK_MS) {
 }
 
 const stamp = (d = new Date()) => d.toISOString().slice(0, 16).replace('T', ' ')
+
+// ---- private repositories only (v0.20) -----------------------------------------------
+
+export type RepoVisibility = 'private' | 'public' | 'unknown'
+
+/** Where an anonymous visitor would read the repository: SSH addresses become HTTPS, logins are dropped. Null for folders on this computer. */
+export function publicReadUrl(url: string): string | null {
+  const u = url.trim()
+  const scp = /^[\w.-]+@([\w.-]+):(?!\/\/)(.+)$/.exec(u)
+  if (scp) return `https://${scp[1]}/${scp[2].replace(/^\/+/, '')}`
+  const full = /^(?:ssh|git|https?):\/\/(?:[^@/]*@)?([^/:]+)(?::\d+)?\/(.+)$/i.exec(u)
+  if (!full) return null
+  const keepPort = /^https?:/i.test(u) ? (/^[a-z]+:\/\/(?:[^@/]*@)?[^/:]+(:\d+)/i.exec(u)?.[1] ?? '') : ''
+  return `${/^http:/i.test(u) ? 'http' : 'https'}://${full[1]}${keepPort}/${full[2]}`
+}
+
+/**
+ * Whether anyone on the internet can read the repository: Git asks for it without any login.
+ * Folders on this computer count as private.
+ */
+export async function checkVisibility(url: string): Promise<RepoVisibility> {
+  const open = publicReadUrl(url)
+  if (!open) return 'private'
+  const cwd = await defaultProjectsDir()
+  await getFs().mkdir(cwd)
+  // No saved logins and no login window, so only a public repository answers.
+  const r = await runner(cwd, [...extraConfig(), '-c', 'credential.helper=', '-c', 'core.askPass=', 'ls-remote', '--heads', open], 15_000)
+  if (r.code === 0) return 'public'
+  const text = r.stderr + r.stdout
+  if (/terminal prompts disabled|could not read (Username|Password)|Authentication failed|requested URL returned error: (401|403|404)|not found|HTTP Basic: Access denied/i.test(text)) return 'private'
+  return 'unknown'
+}
+
+export const PUBLIC_REPO_ERROR =
+  'This repository is public: anyone on the internet can see it, including unreleased story and art. Git sync only uses private repositories. Make it private on the website of your Git host, or allow a public repository for this project in its Git sync window (not recommended).'
+
+/** Settings, Git, "Check": can this computer reach the repository with its login, and is it private? */
+export async function testRemote(url: string): Promise<{ ok: boolean; message: string; visibility: RepoVisibility }> {
+  const cwd = await defaultProjectsDir()
+  await getFs().mkdir(cwd)
+  const [r, visibility] = await Promise.all([runner(cwd, [...extraConfig(), 'ls-remote', '--heads', url.trim()], NETWORK_MS), checkVisibility(url)])
+  return { ok: r.code === 0, message: r.code === 0 ? 'Git can reach this repository.' : explainGit(r), visibility }
+}
+
+/**
+ * Stops before anything is sent to a public repository on any host, unless the project allows one
+ * (its Git sync window, behind a warning). github.com addresses are also checked by `checkPrivate`.
+ */
+async function mustBePrivate(url: string, allowPublic: boolean) {
+  if (allowPublic) return
+  if ((await checkVisibility(url)) === 'public') throw new GitError(PUBLIC_REPO_ERROR)
+}
+
+/** The branch name from Settings, Git, when Git would accept it. */
+const safeBranch = () => {
+  const b = useSettings.getState().git.branch.trim()
+  return /^(?!-)(?!.*\.\.)[\w./-]+(?<![./])$/.test(b) ? b : 'main'
+}
+
+const commitMessage = () => (useSettings.getState().git.commitMessage.trim() || 'EGD sync {date}').replaceAll('{date}', stamp())
 
 /** The installed git, checked once. Never available in the browser build. */
 export async function checkGit(): Promise<boolean> {
@@ -150,7 +221,7 @@ export async function commitAll(root: string): Promise<boolean> {
   // Commits need a name; people who never set one up in git get the app's.
   const named = (await git(root, ['config', 'user.email'])).code === 0
   const who = named ? [] : ['-c', `user.name=${useCollab.getState().profile.name || 'Evelopment Games Designer'}`, '-c', 'user.email=egd@localhost']
-  await must(root, [...who, 'commit', '-q', '-m', `EGD sync ${stamp()}`])
+  await must(root, [...who, 'commit', '-q', '-m', commitMessage()])
   return true
 }
 
@@ -166,6 +237,7 @@ async function checkBigFiles(root: string) {
 }
 
 async function push(root: string, force: boolean, timeout = networkMs) {
+  await mustBePrivate(await must(root, ['remote', 'get-url', 'origin']), allowsPublic(root))
   await checkBigFiles(root)
   const b = await branch(root)
   await must(root, ['push', '-q', ...(force ? ['--force-with-lease'] : []), '-u', 'origin', `HEAD:refs/heads/${b}`], timeout)
@@ -317,9 +389,10 @@ const allowsPublic = (root: string) => useProjectStore.getState().root === root 
 
 async function setUpRepo(root: string, url: string, mode: GitSyncMode = 'full') {
   await checkPrivate(url, allowsPublic(root))
+  await mustBePrivate(url, allowsPublic(root))
   if (!(await ownRepo(root))) {
     await must(root, ['init', '-q'])
-    await must(root, ['symbolic-ref', 'HEAD', 'refs/heads/main'])
+    await must(root, ['symbolic-ref', 'HEAD', `refs/heads/${safeBranch()}`])
   }
   const hasRemote = (await git(root, ['remote', 'get-url', 'origin'])).code === 0
   await must(root, ['remote', hasRemote ? 'set-url' : 'add', 'origin', url.trim()])
@@ -510,6 +583,8 @@ export async function cloneProject(url: string): Promise<string[]> {
   const base = safeFolderName(url.trim().replace(/\/+$/, '').split(/[/:]/).pop()!.replace(/\.git$/i, '')) || 'Project'
   let name = base
   for (let i = 2; await fs.exists(await fs.join(parent, name)); i++) name = `${base} ${i}`
+  // Nothing is open yet, so no project can have allowed a public repository.
+  await mustBePrivate(url, false)
   const r = await git(parent, ['clone', '-q', url.trim(), name], 5 * 60_000)
   if (r.code !== 0) throw new GitError(explainGit(r))
   const root = await fs.join(parent, name)

@@ -1,5 +1,5 @@
 import { newId, type ComponentType } from '@/core/model'
-import { loadDocumentNow, updateDocument } from '@/core/state'
+import { loadDocumentNow, updateDocument, type ProjectPreset } from '@/core/state'
 
 /**
  * Project templates by genre (v0.10): which tools a new project starts with,
@@ -173,6 +173,9 @@ export const TEMPLATES: Template[] = [
     tasks: ['Write the one-sentence pitch', 'Pick three pillars', 'Cut the scope to a first version', 'Build the pitch deck'],
   },
 ]
+
+/** A preset the user made in Settings or the wizard (v0.20), as a template; ids start with "custom:". */
+export const presetTemplate = (p: ProjectPreset): Template => ({ ...p, id: `custom:${p.id}`, components: p.components as ComponentType[], tasks: p.tasks.map((t) => t.trim()).filter(Boolean), genre: '', pillars: [] })
 
 /** Fill the new project's vision page and task board from the template. */
 export async function applyTemplate(root: string, t: Template) {
