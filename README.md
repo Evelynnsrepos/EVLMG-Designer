@@ -25,9 +25,9 @@
 </p>
 
 <p align="center">
-  <a href="docs/media/egd-0.10.mp4"><img src="docs/images/preview-0.10.webp" width="800" alt="Evelopment Games Designer 0.10 in action: new project from a genre, skill tree, combat simulator, tiling layout and engine export"></a>
+  <a href="docs/media/egd-0.20.mp4"><img src="docs/images/preview-0.20.webp" width="800" alt="Evelopment Games Designer 0.20 in action: Markdown typing in the Writer, Settings search, your own project presets, hotkey hints and drawing"></a>
   <br>
-  <a href="docs/media/egd-0.10.mp4">▶ Watch the 0.10 video with sound</a>
+  <a href="docs/media/egd-0.20.mp4">▶ Watch the 0.20 video with sound</a>
 </p>
 
 <p align="center"><b>One program for designing your whole game.</b></p>
