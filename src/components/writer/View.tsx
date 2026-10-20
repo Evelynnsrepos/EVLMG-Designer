@@ -98,6 +98,7 @@ export default function View({ documentId }: PanelProps) {
           liveTextName={collabNames.text(collabNames.document('writer', documentId), 'body')}
           refs={refs}
           pickImage={images.pickImage}
+          importImages={images.importImages}
           resolveImageSrc={images.resolveImageSrc}
           onEditor={setEditor}
           extraFormats

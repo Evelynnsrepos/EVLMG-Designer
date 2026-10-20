@@ -36,20 +36,32 @@ async function bridgeNativeDrops() {
   const [{ getCurrentWebview }, { readFile }] = await Promise.all([import('@tauri-apps/api/webview'), import('@tauri-apps/plugin-fs')])
   await getCurrentWebview().onDragDropEvent(async ({ payload }) => {
     if (payload.type !== 'drop' || !payload.paths.length) return
-    const data = new DataTransfer()
+    const files: File[] = []
     for (const path of payload.paths) {
       const name = path.split(/[\\/]/).pop() ?? 'file'
       const ext = name.split('.').pop()?.toLowerCase() ?? ''
       try {
-        data.items.add(new File([await readFile(path)], name, { type: TYPES[ext] ?? '' }))
+        files.push(new File([await readFile(path)], name, { type: TYPES[ext] ?? '' }))
       } catch (e) {
         console.error('Could not read dropped file', path, e)
       }
     }
+    if (!files.length) return
     const x = payload.position.x / devicePixelRatio
     const y = payload.position.y / devicePixelRatio
     const target = document.elementFromPoint(x, y) ?? document.body
-    target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data, clientX: x, clientY: y }))
+    // WebKitGTK may not keep a dataTransfer passed to `new DragEvent` (the drop then arrives empty), so attach it ourselves.
+    const data = {
+      files,
+      items: files.map((f) => ({ kind: 'file', type: f.type, getAsFile: () => f })),
+      types: ['Files'],
+      getData: () => '',
+      dropEffect: 'copy',
+      effectAllowed: 'all',
+    } as unknown as DataTransfer
+    const drop = new Event('drop', { bubbles: true, cancelable: true })
+    Object.defineProperties(drop, { dataTransfer: { value: data }, clientX: { value: x }, clientY: { value: y } })
+    target.dispatchEvent(drop)
   })
 }
 
