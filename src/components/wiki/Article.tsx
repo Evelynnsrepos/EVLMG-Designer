@@ -61,6 +61,7 @@ export function Article({ meta, title, refs, mentionedIn, onRename, onLinksChang
           liveTextName={collabNames.text(collabNames.document('wiki', meta.id), 'body')}
           refs={refs}
           pickImage={images.pickImage}
+          importImages={images.importImages}
           resolveImageSrc={images.resolveImageSrc}
           placeholder={UI.placeholder}
           className="wiki-editor"

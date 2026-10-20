@@ -3,10 +3,13 @@ import { createBackup } from '../backups'
 import { useCollab } from '../collab'
 import { getFs, isTauri, safeFolderName } from '../fs'
 import { defaultProjectsDir } from '../project'
-import { addProjectLifecycleHook, flushAll, useProjectStore } from '../state'
+import { addProjectLifecycleHook, flushAll, useProjectStore, useSettings } from '../state'
+import { checkPrivate, createProjectRepo, gitHubLogin, setCredentialAsker } from './github'
 
 /**
  * Git sync (0.19): keeps a project folder in a Git repository with the user's own installed git.
+ * Git saving (0.20): with GitHub connected, every project gets its own private repository, made by
+ * the app, and pushing after leaving a project runs in the background.
  *
  * - "full" (one person, several computers): pull when the project opens, commit and push when it
  *   closes. Never merges: when both sides changed, the user picks which version wins.
@@ -26,7 +29,7 @@ export interface GitResult {
   stdout: string
   stderr: string
 }
-export type GitRunner = (cwd: string, args: string[], timeoutMs: number) => Promise<GitResult>
+export type GitRunner = (cwd: string, args: string[], timeoutMs: number, input?: string) => Promise<GitResult>
 
 const QUICK_MS = 15_000
 const NETWORK_MS = 60_000
@@ -39,9 +42,9 @@ const WARN_BYTES = 50 * 1024 * 1024
 const MAX_BYTES = 100 * 1024 * 1024
 const IGNORED = ['.backups/', 'collab/']
 
-let runner: GitRunner = async (cwd, args, timeoutMs) => {
+let runner: GitRunner = async (cwd, args, timeoutMs, input) => {
   const { invoke } = await import('@tauri-apps/api/core')
-  return invoke<GitResult>('git_run', { cwd, args, timeoutMs })
+  return invoke<GitResult>('git_run', { cwd, args, timeoutMs, input: input ?? null })
 }
 /** For tests: run git some other way. */
 export const setGitRunner = (next: GitRunner) => void (runner = next)
@@ -83,15 +86,21 @@ export function explainGit(r: GitResult): string {
     return 'Git needs you to log in to GitHub. Follow step 3 of the setup (in the Git sync window or the guide), then try again.'
   }
   if (/Could not resolve host|Network is unreachable|Connection (timed out|refused)|Failed to connect/i.test(text)) return 'Could not reach the repository. Check your internet connection.'
-  if (/\[rejected\]|non-fast-forward|fetch first/i.test(text)) return 'The repository has newer changes. Use Sync now (or close and open the project) to get them first.'
+  if (/\[rejected\]|non-fast-forward|fetch first/i.test(text)) return 'The repository has newer changes. Use Sync from Git to get them first.'
   if (/repository .* not found|does not appear to be a git repository/i.test(text)) return 'Git could not find that repository. Check the address.'
   return text.split('\n').filter(Boolean).pop() ?? `Git failed (code ${r.code}).`
 }
 
-function git(root: string, args: string[], timeout = QUICK_MS) {
+function git(root: string, args: string[], timeout = QUICK_MS, input?: string) {
   // An empty folder would make git run wherever the app was started, in someone else's repository.
   if (!root.trim()) throw new GitError('No project folder for Git.')
-  return runner(root, args, timeout)
+  return runner(root, args, timeout, input)
+}
+
+/** The GitHub token the computer's git already uses (gh, Git Credential Manager, a keychain); '' when none. */
+async function gitHubToken(): Promise<string> {
+  const r = await git(await getFs().documentDir(), ['credential', 'fill'], SIGN_IN_MS, 'protocol=https\nhost=github.com\n\n')
+  return r.code === 0 ? (/^password=(.*)$/m.exec(r.stdout)?.[1]?.trim() ?? '') : ''
 }
 async function must(root: string, args: string[], timeout = QUICK_MS) {
   const r = await git(root, args, timeout)
@@ -103,8 +112,8 @@ const stamp = (d = new Date()) => d.toISOString().slice(0, 16).replace('T', ' ')
 
 /** The installed git, checked once. Never available in the browser build. */
 export async function checkGit(): Promise<boolean> {
-  if (!isTauri()) return false
   if (useGitSync.getState().version === null) {
+    if (!isTauri()) return false
     const { invoke } = await import('@tauri-apps/api/core')
     useGitSync.setState({ version: (await invoke<string | null>('git_version').catch(() => null)) ?? '' })
   }
@@ -230,6 +239,18 @@ async function loadStatus(root: string) {
 }
 
 let installed = false
+/** The last Git failure per project folder, for the start screen's markers; cleared by the next success. */
+const failures = new Map<string, string>()
+async function tracked(root: string, done: Promise<boolean>) {
+  const ok = await done
+  if (ok) failures.delete(root)
+  else failures.set(root, useGitSync.getState().error ?? 'Git sync failed.')
+  return ok
+}
+/** The push started when a project was left; opening a project (or quitting) waits for it. */
+let pending: Promise<unknown> = Promise.resolve()
+/** Resolves once nothing is being saved to Git any more. Quitting the app waits for this. */
+export const gitSyncIdle = () => pending.then(() => undefined)
 
 /** Called once at startup (desktop): pull on open, push on close. */
 export function installGitSync() {
@@ -237,16 +258,23 @@ export function installGitSync() {
   installed = true
   addProjectLifecycleHook({
     async opening(root) {
+      await pending
       // Git sync must never stop a project from opening.
       const mode = await loadStatus(root).catch((e) => (console.error('Git sync status failed', e), null))
       if (mode !== 'full') return
-      const ok = await step('Getting the latest version from Git…', () => pullLatest(root))
+      const ok = await tracked(root, step('Getting the latest version from Git…', () => pullLatest(root)))
       if (!ok) useGitSync.setState((s) => ({ error: `Couldn't get the latest version from Git. ${s.error}` }))
     },
     async opened() {},
     async closing(root) {
-      if (useGitSync.getState().mode) await step('Saving to Git…', () => pushLatest(root, CLOSE_PUSH_MS))
+      // Everything is on disk already; the push runs in the background while you go on working.
+      if (useGitSync.getState().mode) pending = pending.then(() => tracked(root, step('Saving to Git…', () => pushLatest(root, CLOSE_PUSH_MS))))
     },
+  })
+  setCredentialAsker(gitHubToken)
+  // Git saving is on by default: a project without a repository of its own gets one when it opens.
+  useProjectStore.subscribe((s, prev) => {
+    if (s.root && s.root !== prev.root) void autoTurnOn(s.root)
   })
   // One sync method per project: sharing a fully synced project turns Git sync off.
   useCollab.subscribe((s, prev) => {
@@ -269,11 +297,113 @@ export function backupHolder(): { id: string; name: string } | null {
   return holder && holder.id !== useCollab.getState().selfId ? holder : null
 }
 
-/** Turn Git sync on for the open project. Shared projects get the push-only backup. */
+/** Connect GitHub once per computer: checks that git is logged in and remembers the user name. */
+export async function connectGitHub(): Promise<boolean> {
+  const ok = await step('Connecting GitHub…', async () => useSettings.getState().update({ githubLogin: await gitHubLogin() }))
+  const root = useProjectStore.getState().root
+  if (ok && root) await autoTurnOn(root)
+  return ok
+}
+
+/** True when this folder is the top of a git repository of its own. */
+async function ownRepo(root: string) {
+  const r = await git(root, ['rev-parse', '--show-prefix'])
+  return r.code === 0 && r.stdout.trim() === ''
+}
+
+/** Make the folder its own repository with `url` as origin and full sync on. */
+/** True when the open project `root` allows a public repository (never for closed projects). */
+const allowsPublic = (root: string) => useProjectStore.getState().root === root && !!useProjectStore.getState().meta?.gitAllowPublic
+
+async function setUpRepo(root: string, url: string, mode: GitSyncMode = 'full') {
+  await checkPrivate(url, allowsPublic(root))
+  if (!(await ownRepo(root))) {
+    await must(root, ['init', '-q'])
+    await must(root, ['symbolic-ref', 'HEAD', 'refs/heads/main'])
+  }
+  const hasRemote = (await git(root, ['remote', 'get-url', 'origin'])).code === 0
+  await must(root, ['remote', hasRemote ? 'set-url' : 'add', 'origin', url.trim()])
+  await must(root, ['config', '--local', 'egd.sync', mode])
+}
+
+/**
+ * Git saving is on by default (0.20): with GitHub connected, a project opened without a repository of
+ * its own gets a private one. Projects in a repository of several projects (0.19), shared projects,
+ * and projects where it was turned off keep what they have.
+ */
+export async function autoTurnOn(root: string): Promise<boolean> {
+  if (!(await checkGit())) return false
+  // A new project never went through `opening`, so its status is read here.
+  const mode = await loadStatus(root).catch(() => null)
+  if (mode || !useSettings.getState().githubLogin || useCollab.getState().shared || (await ownRepo(root))) return false
+  const meta = useProjectStore.getState().meta
+  if (!meta || useProjectStore.getState().root !== root) return false
+  const ok = await turnOnFor(root, meta.name)
+  if (ok) await loadStatus(root)
+  return ok
+}
+
+/** Give a project folder its own private GitHub repository and save it there (open or not). */
+function turnOnFor(root: string, name: string) {
+  return tracked(
+    root,
+    step('Making a private GitHub repository for this project…', async () => {
+      // New repositories are always made private, also when public ones are allowed.
+      await setUpRepo(root, (await createProjectRepo(name, allowsPublic(root))).cloneUrl)
+      await pullLatest(root)
+      await pushLatest(root)
+    }),
+  )
+}
+
+export type ProjectGitState = { state: 'synced' | 'off' | 'error' | 'public'; detail: string }
+
+/** For the start screen: is this (closed) project saved to Git, and did the last try work? */
+export async function projectGitState(root: string): Promise<ProjectGitState> {
+  const mode = (await checkGit()) ? await readMode(root).catch(() => null) : null
+  if (!mode) return { state: 'off', detail: 'Not saved to Git' }
+  const failed = failures.get(root)
+  if (failed) return { state: 'error', detail: failed }
+  // A project that may use a public repository always says so on its mark.
+  const allowed = (JSON.parse(await getFs().readText(await getFs().join(root, 'project.json')).catch(() => '{}')) as { data?: { gitAllowPublic?: boolean } }).data?.gitAllowPublic
+  if (allowed) return { state: 'public', detail: 'Public repositories allowed: anyone on the internet may be able to see this project.' }
+  const remote = (await git(root, ['remote', 'get-url', 'origin'])).stdout.trim()
+  return { state: 'synced', detail: `Saved to Git: ${remote}` }
+}
+
+/**
+ * "Sync to Git" for a project on the start screen: save it to its repository now. A project without
+ * one gets its own private GitHub repository (GitHub is connected first if needed).
+ */
+export async function syncProjectToGit(root: string, name: string): Promise<boolean> {
+  await pending
+  if (await readMode(root).catch(() => null)) return tracked(root, step('Saving to Git…', () => pushLatest(root)))
+  // A shared project must be turned on from inside (it gets the push-only backup there).
+  if (await getFs().exists(await getFs().join(root, 'collab'))) {
+    useGitSync.setState({ error: 'This project is shared. Open it and turn on the Git backup in Git sync instead.' })
+    return false
+  }
+  if (!useSettings.getState().githubLogin && !(await connectGitHub())) return false
+  return turnOnFor(root, name)
+}
+
+/** "Sync from Git" for a project on the start screen: get the repository's latest version now. */
+export async function syncProjectFromGit(root: string): Promise<boolean> {
+  await pending
+  if (!(await readMode(root).catch(() => null))) return false
+  return tracked(root, step('Getting the latest version from Git…', () => pullLatest(root)))
+}
+
+/** Turn Git sync on for the open project. Shared projects get the push-only backup. Without an address, GitHub makes the repository. */
 export async function turnOnGitSync(url: string): Promise<boolean> {
   const store = useProjectStore.getState()
   const root = store.root
-  if (!root || !url.trim()) return false
+  if (!root) return false
+  if (!url.trim()) {
+    if (!useSettings.getState().githubLogin || !store.meta) return false
+    const made = await step('Making a private GitHub repository for this project…', async () => (url = (await createProjectRepo(store.meta!.name, allowsPublic(root))).cloneUrl))
+    if (!made) return false
+  }
   const shared = useCollab.getState().shared
   const mode: GitSyncMode = shared ? 'backup' : 'full'
   const holder = backupHolder()
@@ -281,17 +411,8 @@ export async function turnOnGitSync(url: string): Promise<boolean> {
     useGitSync.setState({ error: `${holder.name} already backs this project up to Git. Only one person can.` })
     return false
   }
-  const configure = () =>
-    step('Setting up Git sync…', async () => {
-      // A project inside an existing repository (like a folder of all your projects) uses that one.
-      if ((await git(root, ['rev-parse', '--show-toplevel'])).code !== 0) {
-        await must(root, ['init', '-q'])
-        await must(root, ['symbolic-ref', 'HEAD', 'refs/heads/main'])
-      }
-      const hasRemote = (await git(root, ['remote', 'get-url', 'origin'])).code === 0
-      await must(root, ['remote', hasRemote ? 'set-url' : 'add', 'origin', url.trim()])
-      await must(root, ['config', '--local', 'egd.sync', mode])
-    })
+  // Every project gets a repository of its own, also inside a folder that is a repository (0.20).
+  const configure = () => step('Setting up Git sync…', () => setUpRepo(root, url, mode))
 
   if (mode === 'backup') {
     await flushAll(root)
@@ -322,6 +443,14 @@ export async function turnOffGitSync() {
   useGitSync.setState({ mode: null, error: null, notice: null })
 }
 
+/** "Sync to Git" in the open project: save everything to the repository now, without leaving. */
+export async function syncOpenToGit(): Promise<boolean> {
+  const root = useProjectStore.getState().root
+  if (!root || !useGitSync.getState().mode) return false
+  await flushAll(root)
+  return tracked(root, step('Saving to Git…', () => pushLatest(root)))
+}
+
 /** Sync the open project now: full sync closes and opens it again (push, then pull); a backup just pushes. */
 export async function syncNow(): Promise<boolean> {
   const store = useProjectStore.getState()
@@ -337,7 +466,41 @@ export async function syncNow(): Promise<boolean> {
 }
 
 /**
- * "Open from Git": clone a repository into the projects folder and turn on full sync. Returns the
+ * One repository per project (0.20): every project in the open project's shared repository gets its
+ * own private GitHub repository. The old repository stays as it is, on GitHub and on disk, as a backup;
+ * this computer just stops syncing it.
+ */
+export async function splitIntoProjectRepos(): Promise<boolean> {
+  const store = useProjectStore.getState()
+  const root = store.root
+  if (!root || !useSettings.getState().githubLogin || (await ownRepo(root))) return false
+  const fs = getFs()
+  const top = await must(root, ['rev-parse', '--show-toplevel'])
+  await store.close()
+  await pending
+  const ok = await step('Giving each project its own GitHub repository…', async () => {
+    for (const e of await fs.list(top)) {
+      const dir = await fs.join(top, e.name)
+      const file = await fs.join(dir, 'project.json')
+      if (!e.isDirectory || e.name.startsWith('.') || !(await fs.exists(file))) continue
+      const name = (JSON.parse(await fs.readText(file)) as { data?: { name?: string } }).data?.name || e.name
+      await setUpRepo(dir, (await createProjectRepo(name)).cloneUrl)
+      await pushLatest(dir)
+    }
+    await must(top, ['config', '--local', '--unset', 'egd.sync'])
+  })
+  await store.open(root)
+  return ok
+}
+
+/** True when the open project syncs through a repository it shares with other projects (0.19 layout). */
+export async function inSharedRepo(): Promise<boolean> {
+  const root = useProjectStore.getState().root
+  return !!root && !!useGitSync.getState().mode && !(await ownRepo(root))
+}
+
+/**
+ * "Import from Git": clone a repository into the projects folder and turn on full sync. Returns the
  * project folders: the repository itself, or the projects one level inside it.
  */
 export async function cloneProject(url: string): Promise<string[]> {

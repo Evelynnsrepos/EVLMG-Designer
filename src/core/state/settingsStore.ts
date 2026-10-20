@@ -35,6 +35,8 @@ export interface AppSettings {
   hotwheel: HotwheelSettings
   /** 0.19: new Writer documents start with the Markdown Syntax switch on. */
   writerMarkdownSyntax: boolean
+  /** 0.20: the GitHub user Git saving makes repositories for; '' = GitHub not connected on this computer. */
+  githubLogin: string
   /** v0.20: Hotkey hint mode, every button with a key shows it in its corner. */
   hotkeyHints: boolean
 }
@@ -56,7 +58,7 @@ export interface HotwheelSettings {
 export const DEFAULT_INNER = ['close', 'scale', 'jump', 'layout', 'undo', 'search']
 const hotwheelDefaults = (): HotwheelSettings => ({ inner: DEFAULT_INNER, outer: {}, size: 'M', penButton: false, rightHold: false, middle: false })
 
-const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, hotkeyHints: false })
+const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, githubLogin: '', hotkeyHints: false })
 
 async function settingsPath() {
   const fs = getFs()
@@ -85,8 +87,9 @@ export const useSettings = create<SettingsState>()((set, get) => ({
     // Sliders call this many times a second; write once they settle.
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
-      const { spellCheck, spellLanguages, personalWords, aiHelper, aiModel, askProject, penSize, penSmoothing, penOpacity, sharpPixels, shortcuts, toolScale, hotwheel, writerMarkdownSyntax, hotkeyHints } = get()
-      void settingsPath().then((p) => writeVersioned(p, { spellCheck, spellLanguages, personalWords, aiHelper, aiModel, askProject, penSize, penSmoothing, penOpacity, sharpPixels, shortcuts, toolScale, hotwheel, writerMarkdownSyntax, hotkeyHints }))
+      // oxlint-disable-next-line no-unused-vars
+      const { loaded, load, update, addWord, ...settings } = get()
+      void settingsPath().then((p) => writeVersioned(p, settings))
     }, 400)
   },
   addWord(word) {

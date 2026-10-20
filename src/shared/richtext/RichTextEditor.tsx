@@ -30,7 +30,7 @@ import { ProofCard, SpellCheck, type ProofHit } from '../spell'
 import '../spell/spell.css'
 import { liveTextExtensions, openLiveText } from './collab'
 import { normalizeRichText } from './doc'
-import { RichImage } from './imageExtension'
+import { ImageFiles, RichImage, type ImageImporter } from './imageExtension'
 import { FontMark } from './fontExtension'
 import { FONT_SIZES } from './styles'
 import { allLocalFonts, GENERIC_FONTS, systemFonts } from '../fontList'
@@ -51,6 +51,8 @@ export interface RichTextEditorProps {
   pickImage?: ImagePicker
   /** Turn a stored image path into a displayable URL (e.g. Tauri `convertFileSrc`). */
   resolveImageSrc?: (src: string) => string
+  /** Copy dropped or pasted image files into the project. Without it they are left to the browser. */
+  importImages?: ImageImporter
   editable?: boolean
   placeholder?: string
   /** Hide the formatting toolbar, e.g. for small inline fields. */
@@ -107,6 +109,7 @@ const defaultPickImage: ImagePicker = async () => {
 interface LiveProps {
   provider: RefProvider
   resolveImageSrc?: (src: string) => string
+  importImages?: ImageImporter
   onChange?: (next: RichTextDoc) => void
   placeholder: string
   syntax: boolean
@@ -125,6 +128,7 @@ function buildExtensions(live: RefObject<LiveProps>, onMisspelling: (hit: ProofH
     }),
     Placeholder.configure({ placeholder: () => live.current.placeholder }),
     RichImage.configure({ getResolveSrc: () => live.current.resolveImageSrc }),
+    ImageFiles.configure({ getImporter: () => live.current.importImages }),
     FontMark,
     RefExtension.configure({ getProvider: () => live.current.provider, syntax: () => live.current.syntax }),
     RefCard.configure({ getProvider: () => live.current.provider }),
@@ -148,6 +152,7 @@ export function RichTextEditor({
   refs,
   pickImage = defaultPickImage,
   resolveImageSrc,
+  importImages,
   editable = true,
   placeholder = UI.placeholder,
   toolbar = true,
@@ -163,9 +168,9 @@ export function RichTextEditor({
 
   // Extensions are built once (rebuilding would reset the content); they read the latest props through `live`.
   const [misspelling, setMisspelling] = useState<ProofHit | null>(null)
-  const live = useRef<LiveProps>({ provider, resolveImageSrc, onChange, placeholder, syntax: markdownSyntax })
+  const live = useRef<LiveProps>({ provider, resolveImageSrc, importImages, onChange, placeholder, syntax: markdownSyntax })
   useEffect(() => {
-    live.current = { provider, resolveImageSrc, onChange, placeholder, syntax: markdownSyntax }
+    live.current = { provider, resolveImageSrc, importImages, onChange, placeholder, syntax: markdownSyntax }
   })
   const lastEmitted = useRef<RichTextDoc | null>(null)
   // The extensions only read `live` inside editor callbacks, never during render.

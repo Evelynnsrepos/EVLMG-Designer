@@ -29,7 +29,9 @@ export function safeFileName(name: string, fallback = 'Untitled'): string {
  */
 export async function saveTextFile(opts: SaveTextFileOptions): Promise<boolean> {
   if (isTauri()) {
-    const path = await save({ title: opts.title, defaultPath: opts.defaultName, filters: opts.filter ? [opts.filter] : undefined })
+    // A bare file name lets Linux pickers reopen a remembered folder that may be gone.
+    const defaultPath = await getFs().join(await downloadDir(), opts.defaultName)
+    const path = await save({ title: opts.title, defaultPath, filters: opts.filter ? [opts.filter] : undefined })
     if (!path) return false
     await getFs().writeTextAtomic(path, opts.text)
     return true
