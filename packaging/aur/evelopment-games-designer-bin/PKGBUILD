@@ -1,4 +1,4 @@
-# Maintainer: Evelopment Games <https://discord.gg/AGfaBwNKfN>
+# Maintainer: Eve.Lopment Games <https://discord.gg/AGfaBwNKfN>
 # AUR package that installs the prebuilt Linux release from GitHub (no compiling).
 pkgname=evelopment-games-designer-bin
 _pkgname=evelopment-games-designer

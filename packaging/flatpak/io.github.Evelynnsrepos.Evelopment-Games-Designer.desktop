@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=Evelopment Games Designer
+Name=EDG – Eve.Lopment Games Designer
 Comment=Design your whole game in one free program
 Exec=evelopment-games-designer
 Icon=io.github.Evelynnsrepos.Evelopment-Games-Designer
 Categories=Development;Graphics;Office;
-Keywords=game;design;worldbuilding;writing;wiki;map;drawing;
+Keywords=EDG;game;design;worldbuilding;writing;wiki;map;drawing;
 StartupWMClass=evelopment-games-designer
