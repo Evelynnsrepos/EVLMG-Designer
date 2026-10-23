@@ -15,7 +15,7 @@ export const BASICS: Record<string, GuideTopic> = {
   basics: {
     title: 'The basics: Esc and Shift-click',
     body: [
-      'Two moves do most of the work in Evelopment Games Designer: Shift-click and Esc.',
+      'Two moves do most of the work in EDG: Shift-click and Esc.',
       '## Shift-click: open side by side',
       'Click a tool in the sidebar to show only that tool. Shift-click a tool, or a document under it, to open it next to the tools that are already open. To pick the side yourself, drag a tool or document from the sidebar onto an open panel. Drag the dividers between panels to resize them.',
       'Shift works the same way in other places: Shift+Enter in the Ctrl+K search opens the result next to the open tools, Shift-click picks several layers in Draw, and Shift-click on Draw\'s flip buttons flips only the active layer.',
@@ -90,7 +90,7 @@ export const BASICS: Record<string, GuideTopic> = {
       'A project is a normal folder in Documents/Evelopment Games Designer, full of readable JSON files and an assets folder for images and audio. Back it up like any other folder.',
       'Inside a project, the sidebar on the left lists your tools. Click one to show only that tool; Shift-click to open it next to the ones already open. Tools that hold several documents (boards, maps, timelines…) list them underneath; right-click one to rename it. The search field above the list finds tools and documents; the star next to a tool keeps it at the top, and you can drag tools up and down to order them. Right-click a tool to give it a colour or put it in a folder; drag tools onto a folder to add them, click a folder to fold it, and right-click it to rename, colour or remove it.',
     ],
-    tips: ['Lots of projects? The search box on the start screen finds one by its name or description.', 'Questions or ideas? Join the Evelopment Games Discord, linked at the bottom of this list.', 'Press F1 anywhere to open this guide.', 'Use the Projects button at the top of the sidebar to go back to the start screen.'],
+    tips: ['Lots of projects? The search box on the start screen finds one by its name or description.', 'Questions or ideas? Join the Eve.Lopment Games Discord, linked at the bottom of this list.', 'Press F1 anywhere to open this guide.', 'Use the Projects button at the top of the sidebar to go back to the start screen.'],
   },
   pixel: {
     title: 'Pixel art crash course',
@@ -213,7 +213,7 @@ export const BASICS: Record<string, GuideTopic> = {
       'The person who shared the project is the host. When the host closes the project or stops sharing, everyone else is disconnected and asked whether to keep their copy as a normal project or delete it.',
       'Only the host can remove people. Everyone else can Leave project, keeping or deleting their copy.',
       'Privacy: computers connect directly, so the people you work with can see your IP address. When a direct connection is not possible, the encrypted traffic goes through public relay servers run by n0, a US company (the makers of iroh). The project contents stay end-to-end encrypted on the way.',
-      'Working through a server: an Evelopment Games Designer Server keeps a copy of the project, so people can join and catch up even when nobody else is online. Each person gets their own connect code (it starts with EGS1-) from the server\'s admin page. A code can be for editing or view only.',
+      'Working through a server: an EDG Server keeps a copy of the project, so people can join and catch up even when nobody else is online. Each person gets their own connect code (it starts with EGS1-) from the server\'s admin page. A code can be for editing or view only.',
       'To join a project on a server, click Join project on the start screen and paste your connect code. To put the open project on a server, open Work together, click Or work through a server, paste a connect code and click Move to server. People you shared with directly then need their own connect code.',
       'With a server, the Work together window shows the server\'s name and who is online now. Only the server\'s admin can remove people or close the project. The project is stored on that server, so whoever runs it can read it: only use servers you trust.',
       'A server can offer plugins. Click Review to see each one with the usual plugin warning; nothing installs by itself, and a plugin that changes on the server asks again.',
@@ -782,7 +782,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
   },
 }
 
-/** Where to find the developer, Evelopment Games. */
+/** Where to find the developer, Eve.Lopment Games. */
 export const COMMUNITY_LINKS = [
   { label: 'Discord', url: 'https://discord.gg/AGfaBwNKfN', icon: MessageCircle },
   { label: 'YouTube', url: 'https://www.youtube.com/@EvelopmentGames', icon: Play },

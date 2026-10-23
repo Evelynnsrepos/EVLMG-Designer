@@ -13,7 +13,7 @@ export interface TourStep {
 
 export const TOURS: Record<TourId, TourStep[]> = {
   launcher: [
-    { title: 'Welcome to Evelopment Games Designer', text: 'One program for designing your whole game. This short tour shows you around. You can skip it any time and replay it from Help.' },
+    { title: 'Welcome to EDG', text: 'Eve.Lopment Games Designer: one program for designing your whole game. This short tour shows you around. You can skip it any time and replay it from Help.' },
     { target: 'new-project', title: 'Start a project', text: 'Each game is a project. Create one here and pick the tools you want in it.' },
     { target: 'open-folder', title: 'Open a project folder', text: 'Projects are normal folders. Open one you copied from another computer or a backup.' },
     { target: 'theme-toggle', title: 'Light or dark', text: 'Switch between the dark and light theme.' },
