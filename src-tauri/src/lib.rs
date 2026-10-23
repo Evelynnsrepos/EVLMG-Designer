@@ -41,9 +41,11 @@ pub fn run() {
       server_link::server_close,
     ])
     .setup(|app| {
-      // Version in the title bar, e.g. "Evelopment Games Designer 0.4.0".
+      // Version in the title bar, e.g. "EDG – Eve.Lopment Games Designer 0.21.0". The product
+      // name itself stays "Evelopment Games Designer": installers, download names and the
+      // Windows install entry depend on it.
       if let Some(window) = app.get_webview_window("main") {
-        let title = format!("{} {}", app.package_info().name, app.package_info().version);
+        let title = format!("EDG – Eve.Lopment Games Designer {}", app.package_info().version);
         let _ = window.set_title(&title);
       }
       if cfg!(debug_assertions) {

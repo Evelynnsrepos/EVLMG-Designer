@@ -1,4 +1,4 @@
-# AGENTS.md: how to work on Evelopment Games Designer
+# AGENTS.md: how to work on EDG (Eve.Lopment Games Designer)
 
 This file is for coding agents (and humans) building the app. Read it fully before changing anything.
 The product spec is [`docs/SPEC.md`](docs/SPEC.md); requirement IDs like `IT-2` or `ED-5` come from it.

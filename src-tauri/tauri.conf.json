@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Evelopment Games Designer",
+        "title": "EDG – Eve.Lopment Games Designer",
         "width": 1400,
         "height": 900,
         "resizable": true,
@@ -37,7 +37,7 @@
   },
   "bundle": {
     "publisher": "Evelopment Games",
-    "copyright": "© 2026 Evelopment Games. GPL-3.0",
+    "copyright": "© 2026 Eve.Lopment Games. GPL-3.0",
     "active": true,
     "targets": [
       "msi",

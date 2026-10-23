@@ -57,7 +57,7 @@ export function Launcher() {
     const path = await getFs().pickFolder('Open a project folder')
     if (!path) return
     if (!(await isProjectFolder(path))) {
-      setError('That folder is not an Evelopment Games Designer project (no project.json).')
+      setError('That folder is not an EDG project (no project.json).')
       return
     }
     await open(path)
@@ -116,8 +116,8 @@ export function Launcher() {
     <div className="launcher">
       <header className="launcher-header">
         <div>
-          <h1>Evelopment Games Designer</h1>
-          <div className="muted">Your game projects</div>
+          <h1>EDG</h1>
+          <div className="muted">Eve.Lopment Games Designer · your game projects</div>
         </div>
         <div className="launcher-actions">
           <button className="icon-btn" title="Help" data-tour="help" onClick={() => useHelp.getState().openReport()}>

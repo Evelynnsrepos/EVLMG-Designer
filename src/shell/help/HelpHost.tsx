@@ -168,7 +168,7 @@ function GuideDialog({ topic }: { topic: string }) {
                 <m.icon size={14} /> {m.name}
               </button>
             ))}
-            <div className="help-guide-group">Evelopment Games</div>
+            <div className="help-guide-group">Eve.Lopment Games</div>
             {COMMUNITY_LINKS.map((l) => (
               <button key={l.url} title={l.url} onClick={() => void openExternalUrl(l.url)}>
                 <l.icon size={14} /> {l.label}

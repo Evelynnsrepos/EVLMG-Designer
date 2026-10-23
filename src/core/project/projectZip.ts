@@ -63,7 +63,7 @@ export async function importProjectZip(bytes: Uint8Array, parentDir?: string): P
   let prefix = ''
   if (!names.includes('project.json')) {
     const nested = names.filter((n) => /^[^/]+\/project\.json$/.test(n))
-    if (nested.length !== 1) throw new Error('This zip is not an Evelopment Games Designer project (no project.json).')
+    if (nested.length !== 1) throw new Error('This zip is not an EDG project (no project.json).')
     prefix = nested[0].slice(0, -'project.json'.length)
   }
 

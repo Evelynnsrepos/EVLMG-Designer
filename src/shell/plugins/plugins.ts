@@ -151,7 +151,7 @@ export function readPluginZip(bytes: Uint8Array, source: string): PluginPackage 
   }
   const names = Object.keys(all)
   const manifest = names.find((n) => n === 'plugin.json') ?? names.find((n) => /^[^/]+\/plugin\.json$/.test(n))
-  if (!manifest) throw new Error('No plugin.json found. Is this an Evelopment Games Designer plugin?')
+  if (!manifest) throw new Error('No plugin.json found. Is this an EDG plugin?')
   const prefix = manifest.slice(0, -'plugin.json'.length)
   const files: Record<string, Uint8Array> = {}
   for (const name of names) {

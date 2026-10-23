@@ -1,8 +1,9 @@
 <p align="center">
-  <img src="docs/images/logo.png" width="128" alt="Evelopment Games Designer logo">
+  <img src="docs/images/logo.png" width="128" alt="EDG logo">
 </p>
 
-<h1 align="center">Evelopment Games Designer</h1>
+<h1 align="center">EDG</h1>
+<p align="center"><b>Eve.Lopment Games Designer</b></p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/%F0%9F%9A%A7%20status-UNDER%20CONSTRUCTION-FFC800?style=for-the-badge&labelColor=1a1a1a" alt="Under construction">
@@ -19,15 +20,15 @@
 
 <p align="center">
   <a href="https://discord.gg/AGfaBwNKfN"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
-  <a href="https://www.youtube.com/@EvelopmentGames"><img src="https://img.shields.io/badge/YouTube-Evelopment%20Games-FF0000?logo=youtube&logoColor=white" alt="YouTube"></a>
+  <a href="https://www.youtube.com/@EvelopmentGames"><img src="https://img.shields.io/badge/YouTube-Eve.Lopment%20Games-FF0000?logo=youtube&logoColor=white" alt="YouTube"></a>
   <a href="https://www.instagram.com/evelopmentgames/"><img src="https://img.shields.io/badge/Instagram-evelopmentgames-E4405F?logo=instagram&logoColor=white" alt="Instagram"></a>
   <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License: GPL-3.0">
 </p>
 
 <p align="center">
-  <a href="docs/media/egd-showcase.mp4"><img src="docs/images/preview-showcase.webp" width="800" alt="Evelopment Games Designer in action: characters, links between tools, branching stories, maps, timelines, skill trees, a red-string board, drawing, Git saving and engine export"></a>
+  <a href="docs/media/edg-showcase.mp4"><img src="docs/images/preview-showcase.webp" width="800" alt="EDG in action: the new name, then the writer with links, branching stories, a timeline with a what-if, a skill tree build, a red-string board and engine export"></a>
   <br>
-  <a href="docs/media/egd-showcase.mp4">▶ Watch the video with sound</a>
+  <a href="docs/media/edg-showcase.mp4">▶ Watch the video with sound</a>
 </p>
 
 <p align="center"><b>One program for designing your whole game.</b></p>
@@ -88,7 +89,7 @@ The whole app in five minutes.
 - **Work together**: share a project with an invite code and edit it live with others, peer to peer, on Windows, Mac
   and Linux. No account needed; offline changes merge when you reconnect.
 - **Work through a server** (optional): put a project on your own
-  [Evelopment Games Designer Server](https://github.com/Evelynnsrepos/Evelopment-Games-Designer-Server) so people can
+  [EDG Server](https://github.com/Evelynnsrepos/Evelopment-Games-Designer-Server) so people can
   join and sync even when nobody else is online. Each person gets their own connect code, for editing or view only,
   and the server can offer plugins.
 - **Git sync** (optional, one person): every project gets its own private GitHub repository, or use GitLab, Gitea,
@@ -134,6 +135,10 @@ Grab the file for your system from the
 | 🪟 Windows | `*_x64-setup.exe` |
 | 🍎 macOS (Apple Silicon and Intel) | `*_universal.dmg` (read [Mac](#mac) below first) |
 | 🐧 Linux | `*.AppImage` (any distro), `*.deb`, or `*.flatpak` (any distro with Flatpak, NixOS too) |
+
+> [!NOTE]
+> EDG used to be called *Evelopment Games Designer*. Installers, download files and the installed app still carry
+> that name for now, so updates find your existing install and your projects stay where they are.
 
 **Flatpak:** `flatpak install Evelopment.Games.Designer_<version>_x86_64.flatpak`.
 On NixOS, turn Flatpak on first with `services.flatpak.enable = true;` in your system configuration.
@@ -287,7 +292,7 @@ beginner guides.
 
 ## 💬 Community
 
-Made by **Evelopment Games**. Follow along, share what you build, and suggest features:
+Made by **Eve.Lopment Games**. Follow along, share what you build, and suggest features:
 
 - Discord: https://discord.gg/AGfaBwNKfN
 - YouTube: https://www.youtube.com/@EvelopmentGames
@@ -390,9 +395,9 @@ you trust. **Git sync** sends the project to the repository you enter and nowher
 
 ## 📜 License
 
-[GNU General Public License v3.0](LICENSE) © 2026 Evelopment Games.
+[GNU General Public License v3.0](LICENSE) © 2026 Eve.Lopment Games.
 
-Evelopment Games Designer is free and open source. You may use, study, share and change it. If you share a
+EDG (Eve.Lopment Games Designer) is free and open source. You may use, study, share and change it. If you share a
 changed version, it must also be released under the GPL-3.0 with its source code.
 
 The app font, [Lexend Deca](https://github.com/googlefonts/lexend), is under the [SIL Open Font License 1.1](public/fonts/OFL.txt).
