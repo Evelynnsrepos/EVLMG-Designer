@@ -58,7 +58,7 @@ interface CollabState {
   hostId: string
   /** The host ended the shared project; the shell asks whether to keep this computer's copy. */
   ended: { root: string; projectName: string; host: string } | null
-  /** Working through an Evelopment server (0.8) instead of peer to peer. */
+  /** Working through an EDG server (0.8) instead of peer to peer. */
   server: { name: string; role: 'view' | 'write' } | null
   /** Plugins the server offers (the shell compares them with what is installed and asks). */
   serverPlugins: ServerPlugin[]
