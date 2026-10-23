@@ -26,9 +26,9 @@
 </p>
 
 <p align="center">
-  <a href="docs/media/egd-showcase.mp4"><img src="docs/images/preview-showcase.webp" width="800" alt="EDG in action: characters, links between tools, branching stories, maps, timelines, skill trees, a red-string board, drawing, Git saving and engine export"></a>
+  <a href="docs/media/edg-showcase.mp4"><img src="docs/images/preview-showcase.webp" width="800" alt="EDG in action: the new name, then the writer with links, branching stories, a timeline with a what-if, a skill tree build, a red-string board and engine export"></a>
   <br>
-  <a href="docs/media/egd-showcase.mp4">▶ Watch the video with sound</a>
+  <a href="docs/media/edg-showcase.mp4">▶ Watch the video with sound</a>
 </p>
 
 <p align="center"><b>One program for designing your whole game.</b></p>
