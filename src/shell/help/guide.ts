@@ -1,4 +1,4 @@
-import { Camera, MessageCircle, Play } from 'lucide-react'
+import { Camera, Code, Coffee, Globe, MessageCircle, Play } from 'lucide-react'
 import type { ComponentType } from '@/core/model'
 import { GIT_LEARN_LINKS, GIT_SETUP_STEPS } from '../gitsync/setupSteps'
 
@@ -15,7 +15,7 @@ export const BASICS: Record<string, GuideTopic> = {
   basics: {
     title: 'The basics: Esc and Shift-click',
     body: [
-      'Two moves do most of the work in Evelopment Games Designer: Shift-click and Esc.',
+      'Two moves do most of the work in Eve.Lopment Games Designer: Shift-click and Esc.',
       '## Shift-click: open side by side',
       'Click a tool in the sidebar to show only that tool. Shift-click a tool, or a document under it, to open it next to the tools that are already open. To pick the side yourself, drag a tool or document from the sidebar onto an open panel. Drag the dividers between panels to resize them.',
       'Shift works the same way in other places: Shift+Enter in the Ctrl+K search opens the result next to the open tools, Shift-click picks several layers in Draw, and Shift-click on Draw\'s flip buttons flips only the active layer.',
@@ -787,4 +787,7 @@ export const COMMUNITY_LINKS = [
   { label: 'Discord', url: 'https://discord.gg/AGfaBwNKfN', icon: MessageCircle },
   { label: 'YouTube', url: 'https://www.youtube.com/@EvelopmentGames', icon: Play },
   { label: 'Instagram', url: 'https://www.instagram.com/evelopmentgames/', icon: Camera },
+  { label: 'Source code', url: 'https://github.com/Evelynnsrepos/Evelopment-Games-Designer', icon: Code },
+  { label: 'Website', url: 'http://onee.page/evelopmentgames', icon: Globe },
+  { label: 'Support on Ko-fi', url: 'https://ko-fi.com/evelynnevlmg', icon: Coffee },
 ]

@@ -27,7 +27,7 @@ package() {
   install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/$pkgname.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=Evelopment Games Designer
+Name=Eve.Lopment Games Designer
 Comment=$pkgdesc
 Exec=$pkgname
 Icon=$pkgname

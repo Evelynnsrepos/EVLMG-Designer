@@ -65,7 +65,7 @@ export function buildBookHtml(book: BookInput): string {
 <header class="cover"><h1>${e(book.title)}</h1>${book.subtitle ? `<p class="sub">${e(book.subtitle)}</p>` : ''}<p class="date">${e(book.date)}</p></header>
 <nav class="toc"><h1>Contents</h1><ol>${toc}</ol></nav>
 ${body}
-<footer>Made with Evelopment Games Designer</footer>
+<footer>Made with Eve.Lopment Games Designer</footer>
 </body></html>`
 }
 

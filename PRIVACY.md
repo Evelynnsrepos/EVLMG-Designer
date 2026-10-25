@@ -1,10 +1,10 @@
-# Privacy Policy – Evelopment Games Designer
+# Privacy Policy – Eve.Lopment Games Designer
 
 *Last updated: 4 October 2026* · [Deutsche Fassung: DATENSCHUTZ.md](DATENSCHUTZ.md)
 
 ## The short version
 
-Evelopment Games Designer is a desktop app that works **offline**. It has **no account, no telemetry, no analytics, no ads and no crash reporting**. Your projects are saved only on your own computer, in the folder you choose. We, the people who make the app, **never receive or see your data**.
+Eve.Lopment Games Designer is a desktop app that works **offline**. It has **no account, no telemetry, no analytics, no ads and no crash reporting**. Your projects are saved only on your own computer, in the folder you choose. We, the people who make the app, **never receive or see your data**.
 
 The app only connects to the internet when **you** use one of the features listed below.
 

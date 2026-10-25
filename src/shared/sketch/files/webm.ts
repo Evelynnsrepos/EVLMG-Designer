@@ -60,7 +60,7 @@ export function muxWebm(chunks: VideoChunk[], opts: { width: number; height: num
     0x1a45dfa3,
     join(uint(0x4286, 1), uint(0x42f7, 1), uint(0x42f2, 4), uint(0x42f3, 8), str(0x4282, 'webm'), uint(0x4287, 2), uint(0x4285, 2)),
   )
-  const info = el(0x1549a966, join(uint(0x2ad7b1, 1_000_000), str(0x4d80, 'Evelopment Games Designer'), str(0x5741, 'Evelopment Games Designer'), float(0x4489, opts.duration)))
+  const info = el(0x1549a966, join(uint(0x2ad7b1, 1_000_000), str(0x4d80, 'Eve.Lopment Games Designer'), str(0x5741, 'Eve.Lopment Games Designer'), float(0x4489, opts.duration)))
   const video = el(0xe0, join(uint(0xb0, opts.width), uint(0xba, opts.height)))
   const tracks = el(0x1654ae6b, el(0xae, join(uint(0xd7, 1), uint(0x73c5, 1), uint(0x83, 1), str(0x86, opts.codec), video)))
   // Clusters: a new one at each key frame, and before the 16-bit block time would overflow.

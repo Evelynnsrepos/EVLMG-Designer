@@ -41,9 +41,9 @@ pub fn run() {
       server_link::server_close,
     ])
     .setup(|app| {
-      // Version in the title bar, e.g. "Evelopment Games Designer 0.4.0".
       if let Some(window) = app.get_webview_window("main") {
-        let title = format!("{} {}", app.package_info().name, app.package_info().version);
+        // Display name, not productName: productName stays so installers upgrade in place.
+        let title = format!("Eve.Lopment Games Designer {}", app.package_info().version);
         let _ = window.set_title(&title);
       }
       if cfg!(debug_assertions) {

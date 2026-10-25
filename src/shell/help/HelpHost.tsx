@@ -174,7 +174,7 @@ function GuideDialog({ topic }: { topic: string }) {
                 <l.icon size={14} /> {l.label}
               </button>
             ))}
-            <div className="help-guide-credit">Free and open source under the GPL-3.0.</div>
+            <div className="help-guide-credit">Eve.Lopment Games Designer by Evelopment Games. Free and open source under the GPL-3.0.</div>
           </nav>
           <div className="help-guide-body" ref={bodyRef}>
             {current && (

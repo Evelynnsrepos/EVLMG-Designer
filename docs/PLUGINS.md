@@ -1,6 +1,6 @@
 # Plugins
 
-Plugins add new tools to Evelopment Games Designer. A plugin tool shows up in **Add tool** like a built-in one,
+Plugins add new tools to Eve.Lopment Games Designer. A plugin tool shows up in **Add tool** like a built-in one,
 can have several documents, and its data is saved in the project like everything else.
 
 Start from the example plugin, [**Dice Roller**](https://github.com/Evelynnsrepos/Evelopment-Games-Designer-Example-Plugin). It is about 60 lines and needs no build step.

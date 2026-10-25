@@ -1,8 +1,10 @@
 <p align="center">
-  <img src="docs/images/logo.png" width="128" alt="Evelopment Games Designer logo">
+  <img src="docs/images/logo.png" width="128" alt="EVLMG Designer logo">
 </p>
 
-<h1 align="center">Evelopment Games Designer</h1>
+<h1 align="center">Eve.Lopment Games Designer</h1>
+
+<p align="center"><i>EVLMG Designer for short</i></p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/%F0%9F%9A%A7%20status-UNDER%20CONSTRUCTION-FFC800?style=for-the-badge&labelColor=1a1a1a" alt="Under construction">
@@ -21,11 +23,16 @@
   <a href="https://discord.gg/AGfaBwNKfN"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
   <a href="https://www.youtube.com/@EvelopmentGames"><img src="https://img.shields.io/badge/YouTube-Evelopment%20Games-FF0000?logo=youtube&logoColor=white" alt="YouTube"></a>
   <a href="https://www.instagram.com/evelopmentgames/"><img src="https://img.shields.io/badge/Instagram-evelopmentgames-E4405F?logo=instagram&logoColor=white" alt="Instagram"></a>
+  <a href="http://onee.page/evelopmentgames"><img src="https://img.shields.io/badge/Website-onee.page-8A2BE2" alt="Website"></a>
   <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License: GPL-3.0">
 </p>
 
 <p align="center">
-  <a href="docs/media/egd-showcase.mp4"><img src="docs/images/preview-showcase.webp" width="800" alt="Evelopment Games Designer in action: characters, links between tools, branching stories, maps, timelines, skill trees, a red-string board, drawing, Git saving and engine export"></a>
+  <a href="https://ko-fi.com/evelynnevlmg"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi"></a>
+</p>
+
+<p align="center">
+  <a href="docs/media/egd-showcase.mp4"><img src="docs/images/preview-showcase.webp" width="800" alt="EVLMG Designer in action: characters, links between tools, branching stories, maps, timelines, skill trees, a red-string board, drawing, Git saving and engine export"></a>
   <br>
   <a href="docs/media/egd-showcase.mp4">▶ Watch the video with sound</a>
 </p>
@@ -292,6 +299,8 @@ Made by **Evelopment Games**. Follow along, share what you build, and suggest fe
 - Discord: https://discord.gg/AGfaBwNKfN
 - YouTube: https://www.youtube.com/@EvelopmentGames
 - Instagram: https://www.instagram.com/evelopmentgames/
+- Website: http://onee.page/evelopmentgames
+- Like the app? You can buy me a coffee on [Ko-fi](https://ko-fi.com/evelynnevlmg). It stays free either way.
 - Ideas and bugs: [open an issue](https://github.com/Evelynnsrepos/Evelopment-Games-Designer/issues/new)
 
 ## 👩‍💻 For developers
@@ -392,8 +401,12 @@ you trust. **Git sync** sends the project to the repository you enter and nowher
 
 [GNU General Public License v3.0](LICENSE) © 2026 Evelopment Games.
 
-Evelopment Games Designer is free and open source. You may use, study, share and change it. If you share a
+Eve.Lopment Games Designer is free and open source. You may use, study, share and change it. If you share a
 changed version, it must also be released under the GPL-3.0 with its source code.
+
+One extra term applies under section 7(b) of the GPL-3.0 (see [`ADDITIONAL-TERMS.md`](ADDITIONAL-TERMS.md)): any version you
+share must visibly credit the original, *Eve.Lopment Games Designer by Evelopment Games*, with a link to this repository.
+Donating on [Ko-fi](https://ko-fi.com/evelynnevlmg) is welcome but never required.
 
 The app font, [Lexend Deca](https://github.com/googlefonts/lexend), is under the [SIL Open Font License 1.1](public/fonts/OFL.txt).
 

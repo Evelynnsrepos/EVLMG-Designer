@@ -1,10 +1,10 @@
-# Datenschutzerklärung – Evelopment Games Designer
+# Datenschutzerklärung – Eve.Lopment Games Designer
 
 *Stand: 4. Oktober 2026* · [English version: PRIVACY.md](PRIVACY.md)
 
 ## Kurz gesagt
 
-Evelopment Games Designer ist eine Desktop-App, die **offline** funktioniert. Es gibt **kein Konto, keine Telemetrie, keine Analyse, keine Werbung und keine Absturzberichte**. Deine Projekte werden nur auf deinem eigenen Computer gespeichert, in dem Ordner, den du auswählst. Wir, die Macher der App, **erhalten und sehen deine Daten nie**.
+Eve.Lopment Games Designer ist eine Desktop-App, die **offline** funktioniert. Es gibt **kein Konto, keine Telemetrie, keine Analyse, keine Werbung und keine Absturzberichte**. Deine Projekte werden nur auf deinem eigenen Computer gespeichert, in dem Ordner, den du auswählst. Wir, die Macher der App, **erhalten und sehen deine Daten nie**.
 
 Die App verbindet sich nur dann mit dem Internet, wenn **du** eine der unten genannten Funktionen nutzt.
 

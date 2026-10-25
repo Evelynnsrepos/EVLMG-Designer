@@ -4,7 +4,7 @@ pkgname=evelopment-games-designer-bin
 _pkgname=evelopment-games-designer
 pkgver=0.20.0
 pkgrel=1
-pkgdesc="All-in-one game design tool: writing, wiki, maps, boards, lists and calculators"
+pkgdesc="Eve.Lopment Games Designer (EVLMG Designer): all-in-one game design tool: writing, wiki, maps, boards, lists and calculators"
 arch=('x86_64')
 url="https://github.com/Evelynnsrepos/Evelopment-Games-Designer"
 license=('GPL-3.0-only')
@@ -22,5 +22,6 @@ package() {
   # The .deb names the launcher after the app title; use the package name instead.
   mv "$pkgdir/usr/share/applications/Evelopment Games Designer.desktop" \
      "$pkgdir/usr/share/applications/$_pkgname.desktop"
+  sed -i 's/^Name=.*/Name=Eve.Lopment Games Designer/' "$pkgdir/usr/share/applications/$_pkgname.desktop"
   install -Dm644 "LICENSE-$pkgver" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }
