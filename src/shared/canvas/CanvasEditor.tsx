@@ -730,7 +730,16 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
 
   // ---- render ----
 
-  const layers = renderOrder(scene)
+  // Nodes a drag is changing get their own layer, so the rest of the board is not redrawn every frame.
+  // WebKitGTK (the Linux app) needs about 50 ms to redraw a board with a few hundred pen strokes.
+  // Nodes drawn from other nodes (memo: false, like strings and connections) go along, as they follow what moves.
+  const baseNodes = preview ? new Map(props.scene.nodes.map((n) => [n.id, n])) : null
+  const moving = baseNodes
+    ? new Set(scene.nodes.filter((n) => baseNodes.get(n.id) !== n || typeOf(n).memo === false).map((n) => n.id))
+    : null
+  // Nodes the preview removes are left out too.
+  const layers = renderOrder(moving ? { ...props.scene, nodes: props.scene.nodes.filter((n) => nodeMap.has(n.id)) } : scene)
+  const movingLayers = moving ? renderOrder(scene).map(({ layer, nodes }) => ({ layer, nodes: nodes.filter((n) => moving.has(n.id)) })) : []
   const s = viewport.scale
   const outlines = selectedNodes.filter((n) => !transformable(n) || editing).map((n) => ({ id: n.id, b: getWorldBounds(n.id) }))
   let gridStep = 24
@@ -780,13 +789,25 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
           scaleX={s}
           scaleY={s}
         >
-          <KonvaLayer>
+          {/* Not listening while panning: the hit canvas is half of every redraw, and nothing is hit-tested then. */}
+          <KonvaLayer listening={!panning}>
             {layers.map(({ layer, nodes }) =>
               layer.hidden ? null : (
                 <Group key={layer.id} listening={!layer.locked}>
                   {nodes.map((n) =>
-                    n.hidden ? null : <NodeView key={n.id} node={n} type={typeOf(n)} ctx={ctx} editingText={editing?.id === n.id} />,
+                    n.hidden || moving?.has(n.id) ? null : (
+                      <NodeView key={n.id} node={n} type={typeOf(n)} ctx={ctx} editingText={editing?.id === n.id} />
+                    ),
                   )}
+                </Group>
+              ),
+            )}
+          </KonvaLayer>
+          <KonvaLayer listening={false}>
+            {movingLayers.map(({ layer, nodes }) =>
+              layer.hidden ? null : (
+                <Group key={layer.id}>
+                  {nodes.map((n) => (n.hidden ? null : <NodeView key={n.id} node={n} type={typeOf(n)} ctx={ctx} editingText={false} />))}
                 </Group>
               ),
             )}
