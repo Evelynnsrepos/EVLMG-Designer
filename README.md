@@ -46,8 +46,8 @@ calculators all live in one project, and they all know about each other. Free, o
   app somewhere else. An item you create can be linked from the Wiki, dropped by an enemy and counted by the
   Resource Calculator.
 - 🎨 **Your ideas, made by you.** No AI-generated art or stories: the app never writes stories or makes images for you.
-  Optional small helpers that run on your own computer can check spelling and grammar and look things up in your own
-  notes. They are off until you turn them on, and they never write anything for you.
+  The optional small helpers are for spell checking and searching only: they check spelling and grammar and search
+  your own notes, on your own computer. They are off until you turn them on, and they never write anything for you.
 - 🔓 **Fully open source.** The app is [GPL-3.0](LICENSE), and everything it is built from is open source too: all
   libraries (MIT, Apache-2.0, BSD, ISC, MPL-2.0, GPL-3.0 and similar), the English (SCOWL) and German (igerman98,
   GPL) spell check dictionaries, and the optional helper downloads (llama.cpp, MIT, and Qwen models, Apache-2.0).
@@ -246,7 +246,7 @@ beginner guides.
 | **Writing Principles** | Story and game-writing rules (show, don't tell; save the player from themselves…) and story structures like the Hero's Journey, ready to extend and sort. |
 | **Storyboard** | Cutscene frames with shots, camera moves, dialogue and timing, played back as an animatic. |
 | **Localization** | A string table of every player-facing text in every language, collected from the project, with CSV import and export. |
-| **Ask Your Project** | Optional: look things up in your own notes and find contradictions, with the helper running only on your computer. It never writes for you. |
+| **Ask Your Project** | Optional: search your own notes and find contradictions, with the helper running only on your computer. It only searches and never writes for you. |
 
 #### 🎨 Art and boards
 
