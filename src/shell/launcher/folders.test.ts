@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { moveToFolder } from './Launcher'
+import { moveToFolder } from './folders'
 
 describe('moveToFolder', () => {
   const folders = [
