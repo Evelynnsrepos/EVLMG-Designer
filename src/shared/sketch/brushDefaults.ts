@@ -259,7 +259,7 @@ export function defaultLibrary(): BrushLibrary {
   const sets: BrushSet[] = []
   for (const [setId, name, icon, defs] of SETS) {
     sets.push({ id: setId, name, brushIds: defs.map((d) => d[0]), builtIn: true, icon })
-    for (const [id, bname, s] of defs) brushes.push({ ...normalizeSettings(s), id, name: bname, builtIn: true, author: 'Evelopment Games' })
+    for (const [id, bname, s] of defs) brushes.push({ ...normalizeSettings(s), id, name: bname, builtIn: true, author: 'Eve.Lopment Games' })
   }
   return { sets, brushes, recent: [], pinned: [] }
 }

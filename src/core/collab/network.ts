@@ -53,7 +53,7 @@ export type NetworkMode =
       kind: 'member'
       session: CollabSession
       onJoinRequest(request: JoinRequest): Promise<boolean>
-      /** Work through an Evelopment server at this address instead of with members directly. */
+      /** Work through an EVLMG Designer server at this address instead of with members directly. */
       server?: string
     }
   | { kind: 'join'; invite: Invite }

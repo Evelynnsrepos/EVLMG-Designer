@@ -4,7 +4,7 @@ import { deviceIdForKey, fromBase64Url, type ServerCode } from './protocol'
 import type { CollabTransport, ConnId, TransportEvent } from './transport'
 
 /**
- * Connects to an Evelopment Games Designer Server (0.8) over a WebSocket.
+ * Connects to an EVLMG Designer Server (0.8) over a WebSocket.
  * The first text message is the key; the server answers `auth-ok` (or
  * `auth-error`), then protocol v1 runs unchanged in binary messages. Text
  * messages after that are control messages (the plugins the server offers).
