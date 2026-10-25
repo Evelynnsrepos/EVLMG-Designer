@@ -1,5 +1,5 @@
 import { PanelRight } from 'lucide-react'
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { pickAndImportAssets, useAssetUrls } from '@/core/assets'
 import type { Id } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
@@ -9,6 +9,7 @@ import { combineRefProviders, useEntityRefProvider } from '@/shared/richtext'
 import { useArticleRefProvider } from '@/shared/wiki'
 import { createDefaultStory, isStoryNode, isUrlLink, patchStoryNode, setNodeColor, STORY_COLORS, storyNodes, type StoryItem, type StoryLink } from './model'
 import { NodeDetails } from './NodeDetails'
+import { NodeEditor } from './NodeEditor'
 import { makeStoryNodeTypes, STORY_NODE_UI } from './storyNodeType'
 import { connectTool, createTool, severTool, type StoryToolHost } from './tools'
 import './story-writer.css'
@@ -35,6 +36,8 @@ export default function View({ documentId, active }: PanelProps) {
   const [severHoverId, setSeverHoverId] = useState<Id | null>(null)
   const [colorOfferId, setColorOfferId] = useState<Id | null>(null)
   const [showDetails, setShowDetails] = useState(true)
+  /** 0.21: node open for typing (double-click, or right after Create). */
+  const [editingId, setEditingId] = useState<Id | null>(null)
 
   // The color offer belongs to the node just created; it goes away once that node is no longer selected.
   const offerId = colorOfferId && canvas.selection.includes(colorOfferId) ? colorOfferId : null
@@ -67,9 +70,15 @@ export default function View({ documentId, active }: PanelProps) {
         setColorOfferId(null)
         return open
       },
+      editNode: setEditingId,
     }
     return [selectTool, createTool(host), severTool(host), connectTool(host), handTool]
   }, [])
+
+  // Unselect while typing so no handles or outlines sit around the node; it is selected again after.
+  useEffect(() => {
+    if (editingId) apiRef.current?.select([])
+  }, [editingId])
 
   const scene = doc.data?.scene
   const nodes = useMemo(() => (scene ? storyNodes(scene) : []), [scene])
@@ -86,7 +95,7 @@ export default function View({ documentId, active }: PanelProps) {
       },
     [nodes, refs],
   )
-  const nodeTypes = useMemo(() => makeStoryNodeTypes({ lastId, pendingId, severHoverId, linkLabel }), [lastId, pendingId, severHoverId, linkLabel])
+  const nodeTypes = useMemo(() => makeStoryNodeTypes({ lastId, pendingId, severHoverId, linkLabel, editingId }), [lastId, pendingId, severHoverId, linkLabel, editingId])
   const resolveImageSrc = useAssetUrls(nodes.map((n) => n.src))
 
   if (!doc.data || !scene) return null
@@ -140,7 +149,23 @@ export default function View({ documentId, active }: PanelProps) {
               <PanelRight size={17} strokeWidth={1.8} />
             </button>
           }
+          onNodeDoubleClick={(id, api) => {
+            if (isStoryNode(api.scene.nodes.find((n) => n.id === id))) setEditingId(id)
+          }}
           html={(api) => {
+            const editNode = editingId ? nodes.find((n) => n.id === editingId) : undefined
+            if (editNode)
+              return (
+                <NodeEditor
+                  key={editNode.id}
+                  node={editNode}
+                  onDone={(p) => {
+                    setEditingId(null)
+                    if (p) patch(editNode.id, p)
+                    api.select([editNode.id])
+                  }}
+                />
+              )
             if (!offerId) return null
             const b = api.getWorldBounds(offerId)
             if (!b) return null

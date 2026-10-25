@@ -20,6 +20,8 @@ export interface StoryToolHost {
   offerColors(nodeId: Id): void
   /** Close the color offer; true if one was open. */
   closeColorOffer(): boolean
+  /** 0.21: open the node's title and story text for typing. */
+  editNode(id: Id): void
 }
 
 type Api = CanvasApi<StoryItem>
@@ -71,7 +73,7 @@ export function createTool(host: StoryToolHost): CanvasTool<StoryItem> {
       api.select([result.node.id])
       if (result.isBranch) host.offerColors(result.node.id)
       // Optional typing right away (SW-4); clicking elsewhere finishes it.
-      api.editText(result.node.id)
+      host.editNode(result.node.id)
     },
     keyDown(e) {
       if (e.key !== 'Escape') return false
