@@ -21,6 +21,8 @@ export interface StoryNode extends NodeBase {
   /** Optional image, a project asset path (SW-2). */
   src?: string | null
   link?: StoryLink | null
+  /** 0.21: new nodes start as a roomy card with space for the story text; older nodes fit their text. */
+  minHeight?: number
 }
 
 export type StoryItem = StoryNode | ConnectorNode
@@ -34,7 +36,9 @@ export const createDefaultStory = (): StoryDoc => ({ scene: createScene<StoryIte
 /** Colors offered for new branches (SW-3). User content colors, so fixed values are fine. */
 export const STORY_COLORS = ['#d46cf0', '#8fb4ff', '#5fd3a0', '#ffd166', '#ff9061', '#ff6b9a', '#9aa0ad']
 
-export const NODE_WIDTH = 220
+export const NODE_WIDTH = 280
+/** 0.21: height of a new, empty node. */
+export const NEW_NODE_HEIGHT = 140
 export const MIN_NODE_WIDTH = 140
 
 export const isStoryNode = (n: NodeBase | undefined): n is StoryNode => n?.kind === 'story-node'
@@ -59,7 +63,7 @@ export function findConnector(scene: Scene<StoryItem>, fromId: Id, toId: Id): Co
 
 export function makeStoryNode(layerId: Id, at: { x: number; y: number }, fillColor: string): StoryNode {
   // Centered horizontally on the click, title row at the click.
-  return { id: newId(), kind: 'story-node', layerId, x: at.x - NODE_WIDTH / 2, y: at.y - 20, title: '', body: '', width: NODE_WIDTH, fillColor }
+  return { id: newId(), kind: 'story-node', layerId, x: at.x - NODE_WIDTH / 2, y: at.y - 20, title: '', body: '', width: NODE_WIDTH, minHeight: NEW_NODE_HEIGHT, fillColor }
 }
 
 function makeConnector(layerId: Id, fromId: Id, toId: Id, strokeColor: string): ConnectorNode {

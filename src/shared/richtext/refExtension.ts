@@ -1,5 +1,6 @@
 import { InputRule, mergeAttributes, Node, type NodeViewRenderer } from '@tiptap/core'
-import { PluginKey } from '@tiptap/pm/state'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { readJumpDrag, refTargetOf } from '@/shared/jumps/drag'
 import Suggestion from '@tiptap/suggestion'
 import { MISSING_REF_LABEL, REF_CARD_NODE, REF_NODE } from './doc'
 import type { RefMenuEntry } from './RefMenu'
@@ -129,7 +130,22 @@ export const RefExtension = Node.create<RefOptions, RefStorage>({
 
   addProseMirrorPlugins() {
     const getProvider = this.options.getProvider
+    const type = this.type
     return [
+      // 0.21: a jump point dropped into the text becomes a [[link to the same place.
+      new Plugin({
+        props: {
+          handleDrop: (view, event) => {
+            const target = readJumpDrag(event.dataTransfer)
+            if (!target || !view.editable) return false
+            const at = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? view.state.selection.from
+            event.preventDefault()
+            view.dispatch(view.state.tr.insert(at, [type.create(refTargetOf(target)), view.state.schema.text(' ')]))
+            view.focus()
+            return true
+          },
+        },
+      }),
       Suggestion<RefMenuEntry, RefMenuEntry>({
         editor: this.editor,
         pluginKey: refKey,

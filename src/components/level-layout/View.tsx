@@ -94,6 +94,7 @@ export default function View({ documentId, active }: PanelProps) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const selRef = useRef<CellRect | null>(null)
   selRef.current = sel
+  const layerRef = useRef<string | undefined>(undefined)
   const d = doc.data
   const sets = useMemo(() => lib.data?.tilesets ?? [], [lib.data?.tilesets])
   const images = useTilesetImages(sets)
@@ -111,7 +112,8 @@ export default function View({ documentId, active }: PanelProps) {
 
   const layers = useMemo(() => d?.layers ?? [], [d?.layers])
   const layer = layers.find((l) => l.id === layerId) ?? layers[0]
-  const shown = useMemo(() => (drag && d ? { ...d, tiles: drag.tiles, layers: drag.layers, blocked: drag.blocked } : moving && sel && d ? { ...d, ...moveRegion(d, sel, moving.dx, moving.dy) } : d), [drag, d, moving, sel])
+  layerRef.current = layer?.id
+  const shown = useMemo(() => (drag && d ? { ...d, tiles: drag.tiles, layers: drag.layers, blocked: drag.blocked } : moving && sel && d ? { ...d, ...moveRegion(d, sel, moving.dx, moving.dy, layer?.id) } : d), [drag, d, moving, sel])
 
   // One level cell in device pixels. Sharp pixel art: a whole number of screen pixels per tile pixel.
   const dpr = window.devicePixelRatio || 1
@@ -271,7 +273,7 @@ export default function View({ documentId, active }: PanelProps) {
       if ((e.key === 'Delete' || e.key === 'Backspace') && selRef.current) {
         e.preventDefault()
         const r = selRef.current
-        return doc.update((x) => ({ ...x, ...clearRegion(x, r) }))
+        return doc.update((x) => ({ ...x, ...clearRegion(x, r, layerRef.current) }))
       }
       const hit = (['paint', 'select', 'fill', 'erase', 'note', 'block'] as const).find((id) => isShortcut(e, `level.${id}`))
       if (!hit) return
@@ -397,7 +399,7 @@ export default function View({ documentId, active }: PanelProps) {
     setPicking(false)
     if (moving && sel && (moving.dx || moving.dy)) {
       const m = moving
-      doc.update((x) => ({ ...x, ...moveRegion(x, sel, m.dx, m.dy) }))
+      doc.update((x) => ({ ...x, ...moveRegion(x, sel, m.dx, m.dy, layer?.id) }))
       setSel({ x0: sel.x0 + m.dx, y0: sel.y0 + m.dy, x1: sel.x1 + m.dx, y1: sel.y1 + m.dy })
     }
     setMoving(null)
@@ -499,7 +501,7 @@ export default function View({ documentId, active }: PanelProps) {
   }
   const tools: { id: Tool; icon: typeof Brush; label: string }[] = [
     { id: 'paint', icon: Brush, label: 'Paint' },
-    { id: 'select', icon: SquareDashed, label: 'Select and move: drag a rectangle, then drag inside it to move everything in it (Delete empties it, Esc lets go)' },
+    { id: 'select', icon: SquareDashed, label: 'Select and move: drag a rectangle, then drag inside it to move the current layer\'s tiles in it (Delete empties it, Esc lets go)' },
     { id: 'fill', icon: PaintBucket, label: 'Fill (right-click empties)' },
     { id: 'erase', icon: Eraser, label: 'Erase' },
     { id: 'note', icon: StickyNote, label: 'Note' },

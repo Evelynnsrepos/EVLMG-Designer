@@ -1,6 +1,7 @@
 import Konva from 'konva'
 import { jumpTo } from '@/shared/entityList/navigation'
-import { syncBoardJumps } from '@/shared/jumps/Jumps'
+import { syncBoardJumps, targetLabel } from '@/shared/jumps/Jumps'
+import { JUMP_DRAG, readJumpDrag } from '@/shared/jumps/drag'
 import { jumpTool } from './tools'
 import type { JumpNode } from './types'
 import {
@@ -17,7 +18,7 @@ import {
 } from 'react'
 import { Group, Layer as KonvaLayer, Rect, Stage, Transformer } from 'react-konva'
 import { isPresenceActive, setPresence } from '@/core/collab'
-import type { Id } from '@/core/model'
+import { newId, type Id } from '@/core/model'
 import { panelKey, usePanelContext } from '@/core/state'
 import { boardShortcut, comboOf, isShortcut } from '@/core/shortcuts'
 import { RemoteCursors } from './RemoteCursors'
@@ -393,11 +394,15 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
 
   const toolEvent = (ev: PointerEvent | React.PointerEvent, clickCount: number): ToolPointerEvent => {
     const screen = localPoint(ev)
-    const shape = stageRef.current?.getIntersection(screen) ?? null
+    let target: Id | null | undefined
     return {
       world: screenToWorld(screen, live.current.state.viewport),
       screen,
-      targetId: nodeIdOf(shape),
+      // 0.21: hit-test only when a tool asks; drags never need it on every move.
+      get targetId() {
+        if (target === undefined) target = nodeIdOf(stageRef.current?.getIntersection(screen) ?? null)
+        return target
+      },
       button: ev.button,
       shift: ev.shiftKey,
       alt: ev.altKey,
@@ -412,12 +417,29 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
   }
 
   const runGesture = (gesture: ToolGesture, clickCount: number) => {
-    const move = (ev: PointerEvent) => gesture.move?.(toolEvent(ev, clickCount))
+    // 0.21: moves are handled once per frame. WebKitGTK (the Linux app) sends every mouse move, many per
+    // frame, and each one re-rendered the whole board. All moves still reach the tool (pen strokes keep
+    // every point), but in one go, so React draws the board once per frame.
+    let pending: PointerEvent[] = []
+    let raf = 0
+    const flush = () => {
+      cancelAnimationFrame(raf)
+      raf = 0
+      const events = pending
+      pending = []
+      for (const ev of events) gesture.move?.(toolEvent(ev, clickCount))
+    }
+    const move = (ev: PointerEvent) => {
+      pending.push(ev)
+      if (!raf) raf = requestAnimationFrame(flush)
+    }
     const up = (ev: PointerEvent) => {
+      flush()
       endGesture()
       gesture.up?.(toolEvent(ev, clickCount))
     }
     const cancel = () => {
+      cancelAnimationFrame(raf)
       endGesture()
       gesture.cancel?.()
     }
@@ -427,6 +449,7 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
     gestureRef.current = {
       gesture,
       cleanup() {
+        cancelAnimationFrame(raf)
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
         window.removeEventListener('pointercancel', cancel)
@@ -733,6 +756,18 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
       onKeyUp={onKeyUp}
       onBlur={() => setSpaceDown(false)}
       onContextMenu={(e) => e.target instanceof HTMLCanvasElement && e.preventDefault()}
+      onDragOver={(e) => e.dataTransfer.types.includes(JUMP_DRAG) && (e.preventDefault(), (e.dataTransfer.dropEffect = 'copy'))}
+      onDrop={(e) => {
+        // 0.21: a jump point dragged from the jump points list lands here as a jump point on the board.
+        const target = readJumpDrag(e.dataTransfer)
+        if (!target || !rootRef.current) return
+        e.preventDefault()
+        e.stopPropagation()
+        const at = screenToWorld(pointIn(rootRef.current, e), live.current.state.viewport)
+        const node: JumpNode = { id: newId(), kind: 'jump', layerId: api.activeLayerId, x: at.x, y: at.y - 17, target, label: targetLabel(target) }
+        api.update((sc) => ({ ...sc, nodes: [...sc.nodes, node as unknown as N] }))
+        api.select([node.id])
+      }}
     >
       {size.width > 0 && (
         <Stage

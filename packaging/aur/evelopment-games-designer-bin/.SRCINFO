@@ -1,5 +1,5 @@
 pkgbase = evelopment-games-designer-bin
-	pkgdesc = All-in-one game design tool: writing, wiki, maps, boards, lists and calculators
+	pkgdesc = Eve.Lopment Games Designer (EVLMG Designer): all-in-one game design tool: writing, wiki, maps, boards, lists and calculators
 	pkgver = 0.20.0
 	pkgrel = 1
 	url = https://github.com/Evelynnsrepos/Evelopment-Games-Designer

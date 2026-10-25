@@ -8,8 +8,8 @@ const UI = {
   title: (name: string) => `Install "${name}"?`,
   lead: 'Only install plugins from people you trust. A plugin is a program, not a file.',
   risks: [
-    'It runs inside EDG with the same rights as the app: it can read, change and delete any file on this computer, including your projects.',
-    'Nobody checks plugins. Eve.Lopment Games cannot see what this one does.',
+    'It runs inside Eve.Lopment Games Designer with the same rights as the app: it can read, change and delete any file on this computer, including your projects.',
+    'Nobody checks plugins. Evelopment Games cannot see what this one does.',
     'In projects you work on with others (peer to peer), a plugin can change shared data in ways your teammates do not expect, and teammates who do not have the plugin cannot open its tool or may break its data by accident.',
     'A broken plugin can make the app slow or crash it. You can remove it in Settings.',
   ],

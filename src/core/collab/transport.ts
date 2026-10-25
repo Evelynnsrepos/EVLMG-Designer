@@ -2,7 +2,7 @@
  * The only thing the collaboration protocol needs from the network: open
  * authenticated connections to other devices and move bytes. iroh (desktop),
  * BroadcastChannel (browser dev mode) and an in-memory hub (tests) implement
- * it, and `serverTransport.ts` connects to an EDG server.
+ * it, and `serverTransport.ts` connects to an EVLMG Designer server.
  */
 export type ConnId = number
 

@@ -1,9 +1,10 @@
 <p align="center">
-  <img src="docs/images/logo.png" width="128" alt="EDG logo">
+  <img src="docs/images/logo.png" width="128" alt="EVLMG Designer logo">
 </p>
 
-<h1 align="center">EDG</h1>
-<p align="center"><b>Eve.Lopment Games Designer</b></p>
+<h1 align="center">Eve.Lopment Games Designer</h1>
+
+<p align="center"><i>EVLMG Designer for short</i></p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/%F0%9F%9A%A7%20status-UNDER%20CONSTRUCTION-FFC800?style=for-the-badge&labelColor=1a1a1a" alt="Under construction">
@@ -22,11 +23,16 @@
   <a href="https://discord.gg/AGfaBwNKfN"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
   <a href="https://www.youtube.com/@EvelopmentGames"><img src="https://img.shields.io/badge/YouTube-Eve.Lopment%20Games-FF0000?logo=youtube&logoColor=white" alt="YouTube"></a>
   <a href="https://www.instagram.com/evelopmentgames/"><img src="https://img.shields.io/badge/Instagram-evelopmentgames-E4405F?logo=instagram&logoColor=white" alt="Instagram"></a>
+  <a href="http://onee.page/evelopmentgames"><img src="https://img.shields.io/badge/Website-onee.page-8A2BE2" alt="Website"></a>
   <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License: GPL-3.0">
 </p>
 
 <p align="center">
-  <a href="docs/media/edg-showcase.mp4"><img src="docs/images/preview-showcase.webp" width="800" alt="EDG in action: the new name, then the writer with links, branching stories, a timeline with a what-if, a skill tree build, a red-string board and engine export"></a>
+  <a href="https://ko-fi.com/evelynnevlmg"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi"></a>
+</p>
+
+<p align="center">
+  <a href="docs/media/edg-showcase.mp4"><img src="docs/images/preview-showcase.webp" width="800" alt="EVLMG Designer in action: the writer with links, branching stories, a timeline with a what-if, a skill tree build, a red-string board and engine export"></a>
   <br>
   <a href="docs/media/edg-showcase.mp4">▶ Watch the video with sound</a>
 </p>
@@ -72,7 +78,8 @@ The whole app in five minutes.
 5. **Hold `Q` for the Hotwheel.** A round menu under your pointer or pen: program actions inside, the current tool's
    actions outside. Point and let go. Every tool's header also has its shortcuts and a size button for tablets.
 6. **Jump points.** The crossing-arrows button in every tool's header links it to any other tool, document or entry,
-   and lists what points back. On boards, the jump tool (`J`) places a jump point right on the board.
+   and lists what points back. On boards, the jump tool (`J`) places a jump point right on the board. Drag a jump point
+   out of the list onto a board, into any text (it becomes a `[[link`) or onto an entry's Jump to bar.
 7. **Link everything.** Write `[[` in any text to link an article, entry, tool or document. Every entry
    shows what it points at and where it is used, one click away. Jump around and come back with `Alt+Left` and
    `Alt+Right`.
@@ -89,7 +96,7 @@ The whole app in five minutes.
 - **Work together**: share a project with an invite code and edit it live with others, peer to peer, on Windows, Mac
   and Linux. No account needed; offline changes merge when you reconnect.
 - **Work through a server** (optional): put a project on your own
-  [EDG Server](https://github.com/Evelynnsrepos/Evelopment-Games-Designer-Server) so people can
+  [EVLMG Designer Server](https://github.com/Evelynnsrepos/Evelopment-Games-Designer-Server) so people can
   join and sync even when nobody else is online. Each person gets their own connect code, for editing or view only,
   and the server can offer plugins.
 - **Git sync** (optional, one person): every project gets its own private GitHub repository, or use GitLab, Gitea,
@@ -98,6 +105,8 @@ The whole app in five minutes.
   computer. A shared project can instead get a push-only Git backup by one member.
 - **Search everywhere**: find projects on the start screen, presets and tools when you make a project, and any
   setting in the Settings search.
+- **Project folders**: sort the start screen into your own folders (Games, YouTube videos, Writing…), with your
+  recent projects in one row.
 - **Your own project presets**: save the tools you picked as a preset, or make and edit presets in Settings.
 - **Your drawings everywhere**: wherever you add a picture, your drawings from Draw are offered first, like stickers.
 - **Review status and comments** on every tool window and entry, from Idea to Final, with a Reviews board.
@@ -137,7 +146,7 @@ Grab the file for your system from the
 | 🐧 Linux | `*.AppImage` (any distro), `*.deb`, or `*.flatpak` (any distro with Flatpak, NixOS too) |
 
 > [!NOTE]
-> EDG used to be called *Evelopment Games Designer*. Installers, download files and the installed app still carry
+> EVLMG Designer used to be called *Evelopment Games Designer*. Installers, download files and the installed app still carry
 > that name for now, so updates find your existing install and your projects stay where they are.
 
 **Flatpak:** `flatpak install Evelopment.Games.Designer_<version>_x86_64.flatpak`.
@@ -176,7 +185,8 @@ your own Git repository, using the Git installed on your computer and your own l
 - **Connect GitHub** once, and every project gets its own **private** repository (`egd-<project name>`) by itself.
 - It **gets the latest version** when a project opens and **saves to Git** in the background when you leave it.
   *Sync to Git* and *Sync from Git* do it right away, and a Git mark on the start screen shows each project's state.
-- **Import from Git** on the start screen downloads a project onto another computer.
+- **Import from Git** on the start screen lists your GitHub projects (no address needed when Git is logged in) and
+  downloads one, or all that are not on this computer yet.
 - **Private only**: Git sync refuses public repositories on every host. One project can allow a public repository in
   its Git sync window, after a red warning.
 - **Other hosts**: GitLab, Gitea, Forgejo, Codeberg or your own server work too. *Settings → Git* has login help,
@@ -229,7 +239,7 @@ beginner guides.
 | Tool | What it does |
 |---|---|
 | **Writer** | Rich text documents for design docs, scripts and dialogue, with fonts and sizes, images you can size and let the text flow around, live word count, Markdown/text export and Markdown import. A per-document Markdown Syntax switch adds typing shortcuts like `==highlight==`, `- [ ]` checklists, `> [!note]` callouts, tags, footnotes and tables, and turns pasted Markdown into formatting. |
-| **Story Branch Writer** | Mind-map style branching stories: create, branch, connect and sever nodes. |
+| **Story Branch Writer** | Mind-map style branching stories: create, branch, connect and sever nodes. Double-click a node to type its title and story text right on it. |
 | **Timeline** | Timelines with optional years, events with images, and branches for alternative histories (press `B`). |
 | **Quest Designer** | Quests with givers, places, objectives, rewards and chains shown as a graph, plus flags shared with the Dialogue Editor. |
 | **Dialogue Editor** | Branching conversations as a graph with speakers, choices, conditions and flags, a play-through mode, and export to JSON, Yarn Spinner or Ink. |
@@ -255,7 +265,7 @@ beginner guides.
 
 | Tool | What it does |
 |---|---|
-| **Level Layout** | Paint levels and dungeons on a square or isometric grid: doors, enemies, loot, spawns and numbered notes, select and move, brush sizes and zoom from 10 to 800 %. Tilesets shared by every level in a panel like Godot's (search, folders, colours, pop-out), multi-tile stamps, layers for see-through things, an import window with the grid, sharp pixel art, tiles that block movement (walls, fences, houses), and export as a Godot 4 TileMap scene with collision. |
+| **Level Layout** | Paint levels and dungeons on a square or isometric grid: doors, enemies, loot, spawns and numbered notes, select and move (per layer), brush sizes and zoom from 10 to 800 %. Tilesets shared by every level in a panel like Godot's (search, folders, colours, pop-out), multi-tile stamps, layers for see-through things, an import window with the grid, sharp pixel art, tiles that block movement (walls, fences, houses), and export as a Godot 4 TileMap scene with collision. |
 | **Gameplay Loop** | The loop players repeat as a circular timeline: flesh out each step, size steps by time, and branch notes off them. |
 | **Skill Tree** | Skill and talent trees with ranks, costs and requirements, plus a build planner. |
 | **Abilities & Spells** | Abilities and spells with costs, cooldowns and numbers from Damage Calculator formulas. |
@@ -297,6 +307,8 @@ Made by **Eve.Lopment Games**. Follow along, share what you build, and suggest f
 - Discord: https://discord.gg/AGfaBwNKfN
 - YouTube: https://www.youtube.com/@EvelopmentGames
 - Instagram: https://www.instagram.com/evelopmentgames/
+- Website: http://onee.page/evelopmentgames
+- Like the app? You can buy me a coffee on [Ko-fi](https://ko-fi.com/evelynnevlmg). It stays free either way.
 - Ideas and bugs: [open an issue](https://github.com/Evelynnsrepos/Evelopment-Games-Designer/issues/new)
 
 ## 👩‍💻 For developers
@@ -397,8 +409,12 @@ you trust. **Git sync** sends the project to the repository you enter and nowher
 
 [GNU General Public License v3.0](LICENSE) © 2026 Eve.Lopment Games.
 
-EDG (Eve.Lopment Games Designer) is free and open source. You may use, study, share and change it. If you share a
+Eve.Lopment Games Designer is free and open source. You may use, study, share and change it. If you share a
 changed version, it must also be released under the GPL-3.0 with its source code.
+
+One extra term applies under section 7(b) of the GPL-3.0 (see [`ADDITIONAL-TERMS.md`](ADDITIONAL-TERMS.md)): any version you
+share must visibly credit the original, *Eve.Lopment Games Designer by Evelopment Games*, with a link to this repository.
+Donating on [Ko-fi](https://ko-fi.com/evelynnevlmg) is welcome but never required.
 
 The app font, [Lexend Deca](https://github.com/googlefonts/lexend), is under the [SIL Open Font License 1.1](public/fonts/OFL.txt).
 

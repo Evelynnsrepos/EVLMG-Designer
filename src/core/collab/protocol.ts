@@ -177,7 +177,7 @@ export function fromBase64Url(text: string): Uint8Array {
   return out
 }
 
-// ---- server connect codes (EDG Server, 0.8) ------------------
+// ---- server connect codes (EVLMG Designer Server, 0.8) ------------------
 
 /** What a server's connect code holds. The key is personal: it never goes into the shared project. */
 export interface ServerCode {

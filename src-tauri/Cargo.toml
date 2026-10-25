@@ -1,7 +1,7 @@
 [package]
 name = "evelopment-games-designer"
-version = "0.20.0"
-description = "EDG (Eve.Lopment Games Designer): a free all-in-one game design tool"
+version = "0.21.0"
+description = "Eve.Lopment Games Designer (EVLMG Designer): a free all-in-one game design tool"
 authors = ["Eve.Lopment Games"]
 license = "GPL-3.0-only"
 repository = ""

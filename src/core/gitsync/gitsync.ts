@@ -220,7 +220,7 @@ export async function commitAll(root: string): Promise<boolean> {
   if ((await git(root, ['diff', '--cached', '--quiet'])).code === 0) return false
   // Commits need a name; people who never set one up in git get the app's.
   const named = (await git(root, ['config', 'user.email'])).code === 0
-  const who = named ? [] : ['-c', `user.name=${useCollab.getState().profile.name || 'EDG'}`, '-c', 'user.email=egd@localhost']
+  const who = named ? [] : ['-c', `user.name=${useCollab.getState().profile.name || 'Eve.Lopment Games Designer'}`, '-c', 'user.email=egd@localhost']
   await must(root, [...who, 'commit', '-q', '-m', commitMessage()])
   return true
 }
@@ -599,7 +599,7 @@ export async function cloneProject(url: string): Promise<string[]> {
           }),
         )
       ).filter((d): d is string => !!d)
-  if (!roots.length) throw new GitError(`This repository has no EDG project in it. It was downloaded to ${root}.`)
+  if (!roots.length) throw new GitError(`This repository has no Eve.Lopment Games Designer project in it. It was downloaded to ${root}.`)
   await must(root, ['config', '--local', 'egd.sync', 'full'])
   return roots
 }

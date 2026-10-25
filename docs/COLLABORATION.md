@@ -102,7 +102,7 @@ Both tabs share the browser's storage, so use this only to try things out.
 
 ## Working through a server (0.8)
 
-[EDG Server](https://github.com/Evelynnsrepos/Evelopment-Games-Designer-Server) is an always-on member of a
+[EVLMG Designer Server](https://github.com/Evelynnsrepos/Evelopment-Games-Designer-Server) is an always-on member of a
 project: it keeps the Yjs document, relays edits and presence, and stores asset files, so people sync without being online together.
 The protocol is the same version 1; only the transport and the way people get in differ.
 

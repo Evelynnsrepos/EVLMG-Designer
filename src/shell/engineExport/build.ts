@@ -81,7 +81,7 @@ export function buildExport(input: ExportInput, engine: Engine): OutFile[] {
 }
 
 function readme(name: string, engine: Engine) {
-  const intro = `# ${name}: data from EDG (Eve.Lopment Games Designer)\n\nExported ${new Date().toISOString().slice(0, 10)}. Export again after changes; files are overwritten.\n\n`
+  const intro = `# ${name}: data from Eve.Lopment Games Designer\n\nExported ${new Date().toISOString().slice(0, 10)}. Export again after changes; files are overwritten.\n\n`
   const how: Record<Engine, string> = {
     json: 'Plain JSON files: items, characters, towns, enemies (with stats and categories), quests and dialogues, plus strings.csv for translations. Load them with any JSON library.\n',
     godot:
@@ -95,7 +95,7 @@ function readme(name: string, engine: Engine) {
 }
 
 const GODOT = `extends Node
-## Data from EDG (Eve.Lopment Games Designer). Add as an Autoload named "Egd".
+## Data from Eve.Lopment Games Designer. Add as an Autoload named "Egd".
 
 var items: Array = []
 var characters: Array = []
@@ -138,7 +138,7 @@ const UNITY = `using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-// Data from EDG (Eve.Lopment Games Designer). Call EgdData.Load() once, e.g. in a bootstrap MonoBehaviour.
+// Data from Eve.Lopment Games Designer. Call EgdData.Load() once, e.g. in a bootstrap MonoBehaviour.
 [Serializable] public class EgdStat { public string name; public float value; }
 [Serializable] public class EgdCategory { public string name; public string value; }
 [Serializable] public class EgdEntry { public string id; public string uid; public string name; public string description; public string image; public List<EgdStat> stats; public List<EgdCategory> categories;

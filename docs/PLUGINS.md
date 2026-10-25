@@ -1,6 +1,6 @@
 # Plugins
 
-Plugins add new tools to EDG (Eve.Lopment Games Designer). A plugin tool shows up in **Add tool** like a built-in one,
+Plugins add new tools to Eve.Lopment Games Designer. A plugin tool shows up in **Add tool** like a built-in one,
 can have several documents, and its data is saved in the project like everything else.
 
 Start from the example plugin, [**Dice Roller**](https://github.com/Evelynnsrepos/Evelopment-Games-Designer-Example-Plugin). It is about 60 lines and needs no build step.
@@ -23,7 +23,7 @@ in their projects; it comes back when the plugin is installed again.
 
 Plugins live in the app data folder under `plugins/<id>/`.
 
-**From a server (0.8).** A project on an EDG server can offer plugins its admin installed there. The app shows
+**From a server (0.8).** A project on an Evelopment server can offer plugins its admin installed there. The app shows
 "<server> offers plugins" with a **Review** button; each plugin goes through the same warning (with a note that the server's
 admin chose it). Nothing installs by itself, and a plugin that changed on the server asks again.
 

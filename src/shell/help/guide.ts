@@ -1,4 +1,4 @@
-import { Camera, MessageCircle, Play } from 'lucide-react'
+import { Camera, Code, Coffee, Globe, MessageCircle, Play } from 'lucide-react'
 import type { ComponentType } from '@/core/model'
 import { GIT_LEARN_LINKS, GIT_SETUP_STEPS } from '../gitsync/setupSteps'
 
@@ -15,7 +15,7 @@ export const BASICS: Record<string, GuideTopic> = {
   basics: {
     title: 'The basics: Esc and Shift-click',
     body: [
-      'Two moves do most of the work in EDG: Shift-click and Esc.',
+      'Two moves do most of the work in Eve.Lopment Games Designer: Shift-click and Esc.',
       '## Shift-click: open side by side',
       'Click a tool in the sidebar to show only that tool. Shift-click a tool, or a document under it, to open it next to the tools that are already open. To pick the side yourself, drag a tool or document from the sidebar onto an open panel. Drag the dividers between panels to resize them.',
       'Shift works the same way in other places: Shift+Enter in the Ctrl+K search opens the result next to the open tools, Shift-click picks several layers in Draw, and Shift-click on Draw\'s flip buttons flips only the active layer.',
@@ -87,10 +87,11 @@ export const BASICS: Record<string, GuideTopic> = {
     title: 'Getting started',
     body: [
       'Every game you design is a project. Click New Project on the start screen, give it a name and pick the tools you want. You can add more tools later.',
+      'Folders keep the start screen tidy: New folder (next to the search box) makes one, for example Games, YouTube videos or Writing. Drag a project onto a folder or use Move to … in its menu (…); a project is in one folder at a time. Click a folder\'s name to open or close it, and use its menu to rename or delete it (its projects stay). Recent projects shows the ones you opened last.',
       'A project is a normal folder in Documents/Evelopment Games Designer, full of readable JSON files and an assets folder for images and audio. Back it up like any other folder.',
       'Inside a project, the sidebar on the left lists your tools. Click one to show only that tool; Shift-click to open it next to the ones already open. Tools that hold several documents (boards, maps, timelines…) list them underneath; right-click one to rename it. The search field above the list finds tools and documents; the star next to a tool keeps it at the top, and you can drag tools up and down to order them. Right-click a tool to give it a colour or put it in a folder; drag tools onto a folder to add them, click a folder to fold it, and right-click it to rename, colour or remove it.',
     ],
-    tips: ['Lots of projects? The search box on the start screen finds one by its name or description.', 'Questions or ideas? Join the Eve.Lopment Games Discord, linked at the bottom of this list.', 'Press F1 anywhere to open this guide.', 'Use the Projects button at the top of the sidebar to go back to the start screen.'],
+    tips: ['Lots of projects? The search box on the start screen finds one by its name or description.', 'Questions or ideas? Join the Evelopment Games Discord, linked at the bottom of this list.', 'Press F1 anywhere to open this guide.', 'Use the Projects button at the top of the sidebar to go back to the start screen.'],
   },
   pixel: {
     title: 'Pixel art crash course',
@@ -186,6 +187,7 @@ export const BASICS: Record<string, GuideTopic> = {
       'A jump point takes you from one place in your project to another with one click: from a mood board to a drawing, from the gameplay loop to a writing principle, from a level to a character, and back.',
       'Every tool has a jump points button in its header, next to Review (the little crossing arrows). Click it, then Add a jump point…, and pick where it goes in the window: any tool, any document (a drawing, a board, a level, a document in the Writer) or any entry (a character, an item, a town, an enemy). Type to search.',
       'On boards (Moodboard, Design Language, Brainstorm, Map, Story, Timeline, UI Flow) the jump point is also a tool (J): click the board where it should sit and pick its target; a purple chip appears. Double-click the chip, or click it with the jump tool, to go there. Move it like any other note.',
+      'Drag a jump point out of the list into a tool: onto a board it becomes a jump point chip there, into any text (Writer, Wiki, descriptions) it becomes a [[link, and onto an entry\'s Jump to bar it becomes a link. Grab it by the dots at its left; a click opens it as before, and the X at the end of the row removes it.',
       'Pointing here: the same button lists every jump point elsewhere that points at this tool or document, so you can always go back. A character, item, town or enemy shows jump points that point at it in its Jump to bar.',
       'Back and forward (Alt+Left, Alt+Right, or the arrows at the top of the sidebar) retrace your jumps.',
     ],
@@ -213,7 +215,7 @@ export const BASICS: Record<string, GuideTopic> = {
       'The person who shared the project is the host. When the host closes the project or stops sharing, everyone else is disconnected and asked whether to keep their copy as a normal project or delete it.',
       'Only the host can remove people. Everyone else can Leave project, keeping or deleting their copy.',
       'Privacy: computers connect directly, so the people you work with can see your IP address. When a direct connection is not possible, the encrypted traffic goes through public relay servers run by n0, a US company (the makers of iroh). The project contents stay end-to-end encrypted on the way.',
-      'Working through a server: an EDG Server keeps a copy of the project, so people can join and catch up even when nobody else is online. Each person gets their own connect code (it starts with EGS1-) from the server\'s admin page. A code can be for editing or view only.',
+      'Working through a server: an Evelopment Games Designer Server keeps a copy of the project, so people can join and catch up even when nobody else is online. Each person gets their own connect code (it starts with EGS1-) from the server\'s admin page. A code can be for editing or view only.',
       'To join a project on a server, click Join project on the start screen and paste your connect code. To put the open project on a server, open Work together, click Or work through a server, paste a connect code and click Move to server. People you shared with directly then need their own connect code.',
       'With a server, the Work together window shows the server\'s name and who is online now. Only the server\'s admin can remove people or close the project. The project is stored on that server, so whoever runs it can read it: only use servers you trust.',
       'A server can offer plugins. Click Review to see each one with the usual plugin warning; nothing installs by itself, and a plugin that changes on the server asks again.',
@@ -235,7 +237,7 @@ export const BASICS: Record<string, GuideTopic> = {
       'When you leave the project, it saves to Git in the background, so you can go on working. Closing the app waits until that is done.',
       'Sync to Git and Sync from Git (in the Git sync window, or in a project\'s menu on the start screen) do it right away. The Git mark next to a project\'s name on the start screen shows whether it is saved to Git; red means the last try failed (hover it to see why).',
       '## On another computer',
-      'Click Import from Git on the start screen and pick the project from your GitHub list (or paste an address). The project downloads and stays synced.',
+      'Click Import from Git on the start screen. If Git on this computer is logged in to GitHub, it connects by itself and lists your projects on GitHub; no address needed. Pick one, or Import all to download every project that is not on this computer yet. Without a GitHub login you can paste any repository address. Downloaded projects stay synced.',
       'Older setups kept all projects in one repository. Import from Git still puts every project in such a repository on the start screen, and Give each project its own repository in the Git sync window moves them to one repository each. The old repository stays as it is, as a backup.',
       '## Changed in two places?',
       'If you changed the project on two computers without syncing in between, Git sync asks which version to keep. It never mixes them.',
@@ -365,6 +367,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     title: 'Story Branch Writer',
     body: [
       'A mind-map for branching stories. Create nodes, branch them, connect them to each other and sever connections.',
+      'Each node has a bold title and its story text below a thin line. Double-click a node (a new one opens by itself) to type both right on it. Enter in the title jumps to the story text, Shift+Tab or Up at its start goes back to the title, and Esc or clicking away finishes. The Details panel (Select tool) has the same text plus a picture and a link.',
       'Like every canvas tool it has a bottom toolbar; hover a button to see its shortcut letter.',
     ],
     tips: ['Pan with the middle mouse button or Space+drag, zoom with the mouse wheel.'],
@@ -592,7 +595,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     title: 'Level Layout',
     body: [
       'Sketch levels and dungeons on a grid. Pick a tile on the left (floor, wall, door, water, lava, stairs, start, exit, enemy, boss, chest, key, trap, NPC) and paint with the brush.',
-      'Select and move (the dashed square) drags a rectangle over the level; drag inside it to move everything in it, on every layer, with its blocked cells and notes. Delete empties it and Esc lets go. Fill floods an area, Erase clears tiles, and right-click with Fill empties an area. Brush sets how many cells Paint, Erase and Blocked cover at once.',
+      'Select and move (the dashed square) drags a rectangle over the level; drag inside it to move the tiles of the current layer in it (other layers, plan tiles, blocked cells and notes stay put). Delete empties that layer there and Esc lets go. Fill floods an area, Erase clears tiles, and right-click with Fill empties an area. Brush sets how many cells Paint, Erase and Blocked cover at once.',
       'Zoom goes from 10 % to 800 %. Isometric turns the level into diamond cells twice as wide as high, for 32 × 16 tiles; the Godot scene then uses Godot\'s isometric tiles.',
       'Note pins a numbered note on the map for puzzles, secrets or ambushes; the notes are listed on the right. The palette counts how many enemies, chests and so on the level has. Export saves the level as a PNG.',
       'Tilesets live in the panel at the bottom, like in Godot, and every level in the project can use them. Add opens a window that shows the picture cut into tiles: pick a common tile size (or 32 × 16 for isometric tiles) or type your own width and height, and set margin and spacing for pictures with gaps; red shows pixels no tile covers, which are left out. Whole picture is one tile keeps a single object (a tree, a house) at its own size. Pick several pictures at once to add one tileset from each with the same settings. Black is see-through makes pure black pixels transparent, for tilesets drawn on black. Grid opens the window again, and Replace swaps in a new version of the picture while names, folders, blocking tiles and painted levels stay.',
@@ -782,9 +785,12 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
   },
 }
 
-/** Where to find the developer, Eve.Lopment Games. */
+/** Where to find the developer, Evelopment Games. */
 export const COMMUNITY_LINKS = [
   { label: 'Discord', url: 'https://discord.gg/AGfaBwNKfN', icon: MessageCircle },
   { label: 'YouTube', url: 'https://www.youtube.com/@EvelopmentGames', icon: Play },
   { label: 'Instagram', url: 'https://www.instagram.com/evelopmentgames/', icon: Camera },
+  { label: 'Source code', url: 'https://github.com/Evelynnsrepos/Evelopment-Games-Designer', icon: Code },
+  { label: 'Website', url: 'http://onee.page/evelopmentgames', icon: Globe },
+  { label: 'Support on Ko-fi', url: 'https://ko-fi.com/evelynnevlmg', icon: Coffee },
 ]

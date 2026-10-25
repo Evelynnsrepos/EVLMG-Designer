@@ -43,6 +43,18 @@ export interface AppSettings {
   projectPresets: ProjectPreset[]
   /** v0.20: Git sync options for other Git hosts (GitLab, Gitea, ...). */
   git: GitSettings
+  /** 0.21: the start screen's project folders. A project path is in at most one folder. */
+  projectFolders: ProjectFolder[]
+}
+
+/** A folder on the start screen (0.21), e.g. "Games" or "YouTube videos". */
+export interface ProjectFolder {
+  id: string
+  name: string
+  /** Section expanded on the start screen. */
+  open: boolean
+  /** Project folder paths, in the order they were added. */
+  paths: string[]
 }
 
 /** A project preset the user made (v0.20): which tools a new project starts with, plus first tasks. */
@@ -82,7 +94,7 @@ export interface HotwheelSettings {
 export const DEFAULT_INNER = ['close', 'scale', 'jump', 'layout', 'undo', 'search']
 const hotwheelDefaults = (): HotwheelSettings => ({ inner: DEFAULT_INNER, outer: {}, size: 'M', penButton: false, rightHold: false, middle: false })
 
-const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, githubLogin: '', hotkeyHints: false, projectPresets: [], git: gitDefaults() })
+const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, githubLogin: '', hotkeyHints: false, projectPresets: [], git: gitDefaults(), projectFolders: [] })
 
 async function settingsPath() {
   const fs = getFs()

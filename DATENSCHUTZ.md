@@ -1,16 +1,16 @@
-# Datenschutzerklärung – EDG (Eve.Lopment Games Designer)
+# Datenschutzerklärung – Eve.Lopment Games Designer
 
 *Stand: 4. Oktober 2026* · [English version: PRIVACY.md](PRIVACY.md)
 
 ## Kurz gesagt
 
-EDG (Eve.Lopment Games Designer) ist eine Desktop-App, die **offline** funktioniert. Es gibt **kein Konto, keine Telemetrie, keine Analyse, keine Werbung und keine Absturzberichte**. Deine Projekte werden nur auf deinem eigenen Computer gespeichert, in dem Ordner, den du auswählst. Wir, die Macher der App, **erhalten und sehen deine Daten nie**.
+Eve.Lopment Games Designer ist eine Desktop-App, die **offline** funktioniert. Es gibt **kein Konto, keine Telemetrie, keine Analyse, keine Werbung und keine Absturzberichte**. Deine Projekte werden nur auf deinem eigenen Computer gespeichert, in dem Ordner, den du auswählst. Wir, die Macher der App, **erhalten und sehen deine Daten nie**.
 
 Die App verbindet sich nur dann mit dem Internet, wenn **du** eine der unten genannten Funktionen nutzt.
 
 ## Verantwortlich
 
-Herausgeberin der App: **Evelynn Müller, Evelynn.mu@proton.me** (Eve.Lopment Games).
+Herausgeberin der App: **Evelynn Müller, Evelynn.mu@proton.me** (Evelopment Games).
 
 Da die App uns nichts sendet, verarbeiten wir bei der Nutzung keine personenbezogenen Daten über dich. Dieser Text erklärt, was die App auf deinem Computer tut und welche anderen Dienste sie auf deinen Wunsch hin kontaktieren kann.
 
@@ -32,7 +32,7 @@ Nur wenn du eine dieser Aktionen startest:
 | Lokale KI-Hilfe einschalten (einmaliger Download) | Hugging Face (KI-Modelldatei) und GitHub (Programm llama.cpp) | Deine IP-Adresse und dass die Datei geladen wurde. Dein Text wird nie gesendet. |
 | Ein Plugin über einen GitHub-Link installieren | GitHub (github.com, api.github.com, codeload.github.com) | Deine IP-Adresse und welches Plugin du geladen hast. |
 | Direkt zusammenarbeiten (Peer-to-Peer) | Die Personen, mit denen du teilst; bei Bedarf öffentliche Relay- und Such-Server von n0 (US-Firma, Entwickler von iroh) | Mitwirkende sehen bei direkten Verbindungen deine IP-Adresse. n0 sieht deine IP-Adresse und eine zufällige Geräte-ID. Projektinhalte sind Ende-zu-Ende-verschlüsselt, n0 kann sie nicht lesen. |
-| Über einen EDG Server arbeiten | Den Server aus deinem Verbindungscode | Der Server speichert das Projekt und den Namen, den du eingibst. Verantwortlich ist, wer den Server betreibt; diese Person oder Firma muss dir eigene Datenschutzhinweise geben. Nutze nur Server, denen du vertraust. |
+| Über einen Evelopment Games Designer Server arbeiten | Den Server aus deinem Verbindungscode | Der Server speichert das Projekt und den Namen, den du eingibst. Verantwortlich ist, wer den Server betreibt; diese Person oder Firma muss dir eigene Datenschutzhinweise geben. Nutze nur Server, denen du vertraust. |
 | Git-Sync (nur wenn du ihn einschaltest) | Das Git-Repository, das du einträgst, über das auf deinem Computer installierte Git | Das ganze Projekt geht mit deinem eigenen Git-Login an dieses Repository. Wer es hostet (zum Beispiel GitHub), verarbeitet es nach den eigenen Datenschutzhinweisen. Ein privates Repository wird empfohlen. |
 | GitHub für das Git-Speichern verbinden (nur wenn du auf GitHub verbinden klickst) | Die GitHub-API (api.github.com), mit dem GitHub-Login, den das Git auf deinem Computer schon hat | GitHub sieht deine IP-Adresse und dein Konto. Die App liest deinen Benutzernamen und deine Repositorys, deren Name mit egd- beginnt, und legt für jedes Projekt ein privates Repository an. Der Login-Token bleibt auf deinem Computer und wird von der App nicht gespeichert. |
 | Einen Link anklicken (GitHub, Discord, YouTube, Instagram, Problem melden oder eigene Links) | Die Webseite, geöffnet in deinem normalen Browser | Die üblichen Daten, die eine Webseite erhält. Es gelten deren Datenschutzerklärungen. |

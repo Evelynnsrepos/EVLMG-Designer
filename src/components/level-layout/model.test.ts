@@ -83,14 +83,14 @@ describe('v0.15 tilesets, layers and stamps', () => {
 })
 
 describe('v0.16 select and move, isometric levels', () => {
-  it('moves and clears everything inside a rectangle', () => {
-    const d: LevelDoc = { ...createLevelDoc(), width: 4, height: 4, tiles: { '0,0': 'wall', '3,3': 'door' }, layers: [{ id: 'g', name: 'G', art: { '1,0': 't:0:0' } }], blocked: { '0,1': true }, notes: [{ id: 'n', x: 1, y: 1, text: '' }] }
-    const m = moveRegion(d, { x0: 0, y0: 0, x1: 1, y1: 1 }, 2, 2)
-    expect(m.tiles).toEqual({ '2,2': 'wall', '3,3': 'door' })
+  it('moves and clears only the current layer inside a rectangle', () => {
+    const d: LevelDoc = { ...createLevelDoc(), width: 4, height: 4, tiles: { '0,0': 'wall' }, layers: [{ id: 'g', name: 'G', art: { '1,0': 't:0:0' } }, { id: 'h', name: 'H', art: { '0,0': 't:1:0' } }], blocked: { '0,1': true }, notes: [{ id: 'n', x: 1, y: 1, text: '' }] }
+    const m = moveRegion(d, { x0: 0, y0: 0, x1: 1, y1: 1 }, 2, 2, 'g')
     expect(m.layers![0].art).toEqual({ '3,2': 't:0:0' })
-    expect(m.blocked).toEqual({ '2,3': true })
-    expect(m.notes[0]).toMatchObject({ x: 3, y: 3 })
-    expect(Object.keys(clearRegion(d, { x0: 0, y0: 0, x1: 3, y1: 3 }).tiles)).toHaveLength(0)
+    expect(m.layers![1].art).toEqual({ '0,0': 't:1:0' })
+    expect(m).not.toHaveProperty('tiles')
+    const c = clearRegion(d, { x0: 0, y0: 0, x1: 3, y1: 3 }, 'h')
+    expect(c.layers!.map((l) => Object.keys(l.art).length)).toEqual([1, 0])
   })
 
   it('finds isometric cells under the pointer and exports an isometric TileSet', () => {

@@ -160,8 +160,11 @@ export interface CellRect {
 }
 export const inRect = (r: CellRect, x: number, y: number) => x >= Math.min(r.x0, r.x1) && x <= Math.max(r.x0, r.x1) && y >= Math.min(r.y0, r.y1) && y <= Math.max(r.y0, r.y1)
 
-/** Everything in the rectangle (plan tiles, picture tiles on every layer, blocked cells, notes) moved by dx,dy; what lands outside the level is dropped. */
-export function moveRegion(d: LevelDoc, r: CellRect, dx: number, dy: number): Pick<LevelDoc, 'tiles' | 'layers' | 'blocked' | 'notes'> {
+/**
+ * The current layer's picture tiles in the rectangle moved by dx,dy (0.21: other layers, plan tiles, blocked cells
+ * and notes stay where they are); what lands outside the level is dropped.
+ */
+export function moveRegion(d: LevelDoc, r: CellRect, dx: number, dy: number, layerId: string | undefined): Pick<LevelDoc, 'layers'> {
   const move = <T,>(map: Record<string, T>): Record<string, T> => {
     const out: Record<string, T> = {}
     const moved: [string, T][] = []
@@ -173,18 +176,13 @@ export function moveRegion(d: LevelDoc, r: CellRect, dx: number, dy: number): Pi
     for (const [k, v] of moved) out[k] = v
     return out
   }
-  return {
-    tiles: move(d.tiles),
-    layers: (d.layers ?? []).map((l) => ({ ...l, art: move(l.art) })),
-    blocked: move(d.blocked ?? {}),
-    notes: d.notes.map((n) => (inRect(r, n.x, n.y) ? { ...n, x: n.x + dx, y: n.y + dy } : n)).filter((n) => n.x >= 0 && n.y >= 0 && n.x < d.width && n.y < d.height),
-  }
+  return { layers: (d.layers ?? []).map((l) => (l.id === layerId ? { ...l, art: move(l.art) } : l)) }
 }
 
-/** Every cell in the rectangle emptied (all layers, plan tiles, blocked cells and notes). */
-export function clearRegion(d: LevelDoc, r: CellRect): Pick<LevelDoc, 'tiles' | 'layers' | 'blocked' | 'notes'> {
+/** The current layer's picture tiles in the rectangle removed (0.21: like moving, only that layer). */
+export function clearRegion(d: LevelDoc, r: CellRect, layerId: string | undefined): Pick<LevelDoc, 'layers'> {
   const keep = <T,>(map: Record<string, T>) => Object.fromEntries(Object.entries(map).filter(([k]) => !inRect(r, ...(k.split(',').map(Number) as [number, number]))))
-  return { tiles: keep(d.tiles), layers: (d.layers ?? []).map((l) => ({ ...l, art: keep(l.art) })), blocked: keep(d.blocked ?? {}), notes: d.notes.filter((n) => !inRect(r, n.x, n.y)) }
+  return { layers: (d.layers ?? []).map((l) => (l.id === layerId ? { ...l, art: keep(l.art) } : l)) }
 }
 
 /**

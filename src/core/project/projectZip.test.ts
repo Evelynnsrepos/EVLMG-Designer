@@ -22,7 +22,7 @@ describe('project zip', () => {
   })
 
   it('rejects zips without a project and unsafe paths', async () => {
-    await expect(importProjectZip(zipSync({ 'a.txt': new Uint8Array() }))).rejects.toThrow(/not an EDG project/)
+    await expect(importProjectZip(zipSync({ 'a.txt': new Uint8Array() }))).rejects.toThrow(/not an Eve.Lopment/)
     const evil = zipSync({ 'project.json': new TextEncoder().encode('{"data":{"name":"x"}}'), '../evil.txt': new Uint8Array() })
     await expect(importProjectZip(evil)).rejects.toThrow(/Unsafe/)
     expect(isSafeEntryPath('C:/x')).toBe(false)

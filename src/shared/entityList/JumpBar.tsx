@@ -6,6 +6,7 @@ import { getManifest } from '@/core/registry'
 import { useProjectStore } from '@/core/state'
 import { describeReference } from '@/shared/entityDelete'
 import { TYPE_LABEL, TYPE_PLURAL } from './links'
+import { JUMP_DRAG, readJumpDrag } from '@/shared/jumps/drag'
 import { jumpTo, type JumpTarget } from './navigation'
 
 interface Chip {
@@ -120,7 +121,18 @@ export function JumpBar({ type, entity, onConnect }: { type: EntityType; entity:
 
   if (chips.length === 0 && !onConnect) return null
   return (
-    <nav className="jump-bar" aria-label="Jump to">
+    <nav
+      className="jump-bar"
+      aria-label="Jump to"
+      // 0.21: a jump point dropped here becomes a link made by hand.
+      onDragOver={(e) => onConnect && e.dataTransfer.types.includes(JUMP_DRAG) && e.preventDefault()}
+      onDrop={(e) => {
+        const t = readJumpDrag(e.dataTransfer)
+        if (!t || !onConnect) return
+        e.preventDefault()
+        if (!own.some((o) => targetKey(o) === targetKey(t)) && !(t.kind === 'entity' && t.id === entity.id)) onConnect([...own, t])
+      }}
+    >
       <span className="elist-muted">Jump to</span>
       {chips.map((c) => (
         <span key={c.key} className={`jump-chip${c.own ? ' own' : ''}`}>

@@ -1,20 +1,36 @@
-import { CircleHelp, FileArchive, FolderOpen, GitBranch, Image, MoreHorizontal, Moon, Plus, Search, Settings, Sun, Type, Users } from 'lucide-react'
+import { ChevronDown, ChevronRight, CircleHelp, FileArchive, FolderOpen, FolderPlus, GitBranch, Image, MoreHorizontal, Moon, Plus, Search, Settings, Sun, Type, Users } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { saveBinaryFile, safeFileName } from '@/core/export'
 import { getFs, isTauri } from '@/core/fs'
-import { cloneProject, listProjectRepos, projectGitState, syncProjectFromGit, syncProjectToGit, useGitSync, type GitHubRepo, type ProjectGitState } from '@/core/gitsync'
+import { cloneProject, connectGitHub, listProjectRepos, repoNameFor, projectGitState, syncProjectFromGit, syncProjectToGit, useGitSync, type GitHubRepo, type ProjectGitState } from '@/core/gitsync'
 import { assetUrl, pickAndImportAssets } from '@/core/assets'
-import type { RecentProject } from '@/core/model'
+import { newId, type RecentProject } from '@/core/model'
 import { deleteProject, importProjectZip, isProjectFolder, loadProject, readRecents, removeRecent, saveMeta, upsertRecent, zipProject } from '@/core/project'
-import { useAppStore, useProjectStore, useSettings } from '@/core/state'
+import { useAppStore, useProjectStore, useSettings, type ProjectFolder } from '@/core/state'
 import { confirmDialog, promptDialog } from '@/shared/dialogs'
 import { Modal } from '@/shared/ui'
 import { maybeStartTour, useHelp } from '../help/help'
 import { toggleTheme, useTheme } from '../theme'
 import { openSettings } from '../settings/open'
 import { BackupsDialog } from './BackupsDialog'
+import { moveToFolder } from './folders'
 import { JoinDialog } from '../collab/CollabDialogs'
 import './launcher.css'
+
+/** Drag type for a project card dragged onto a start-screen folder (0.21). */
+const PROJECT_DRAG = 'application/x-egd-project'
+/** How many cards the Recent projects row shows. */
+const RECENT_COUNT = 6
+
+const setFolders = (projectFolders: ProjectFolder[]) => useSettings.getState().update({ projectFolders })
+
+async function newFolder(path?: string) {
+  const name = (await promptDialog('New folder', ''))?.trim()
+  if (!name) return
+  const id = newId()
+  const folders = [...useSettings.getState().projectFolders, { id, name, open: true, paths: [] }]
+  setFolders(path ? moveToFolder(folders, path, id) : folders)
+}
 
 /** Project list shown on startup (spec 4, PM-1..PM-8). */
 export function Launcher() {
@@ -27,6 +43,7 @@ export function Launcher() {
   /** "Import from GitHub": the person's project repositories to pick from (0.20). */
   const [repos, setRepos] = useState<GitHubRepo[] | null>(null)
   const theme = useTheme()
+  const folders = useSettings((s) => s.projectFolders)
 
   const refresh = useCallback(async () => {
     const list = await readRecents()
@@ -57,14 +74,20 @@ export function Launcher() {
     const path = await getFs().pickFolder('Open a project folder')
     if (!path) return
     if (!(await isProjectFolder(path))) {
-      setError('That folder is not an EDG project (no project.json).')
+      setError('That folder is not an Eve.Lopment Games Designer project (no project.json).')
       return
     }
     await open(path)
   }
 
   const openFromGit = async () => {
-    if (!useSettings.getState().githubLogin) return cloneFrom((await promptDialog('Import from Git: repository address', ''))?.trim())
+    // 0.21: Git on this computer is usually logged in to GitHub already, so connect first instead of asking for an address.
+    if (!useSettings.getState().githubLogin) {
+      setBusy('Connecting GitHub…')
+      const ok = await connectGitHub()
+      setBusy(null)
+      if (!ok) return cloneFrom((await promptDialog('Import from Git: repository address', ''))?.trim())
+    }
     try {
       setError(null)
       setBusy('Looking up your projects on GitHub…')
@@ -76,6 +99,15 @@ export function Launcher() {
     }
   }
 
+  /** Put downloaded project folders on the start screen. */
+  const addRecents = async (roots: string[]) => {
+    for (const path of roots) {
+      const { meta } = await loadProject(path)
+      await upsertRecent({ path, name: meta.name, description: meta.description, image: meta.image ?? null, lastOpened: new Date().toISOString(), stats: { words: 0, images: 0 } })
+    }
+    await refresh()
+  }
+
   const cloneFrom = async (url: string | undefined) => {
     setRepos(null)
     if (!url) return
@@ -85,16 +117,31 @@ export function Launcher() {
       const roots = await cloneProject(url)
       if (roots.length === 1) return void (await open(roots[0]))
       // A repository with several projects: put them all on the start screen.
-      for (const path of roots) {
-        const { meta } = await loadProject(path)
-        await upsertRecent({ path, name: meta.name, description: meta.description, image: meta.image ?? null, lastOpened: new Date().toISOString(), stats: { words: 0, images: 0 } })
-      }
-      await refresh()
+      await addRecents(roots)
     } catch (e) {
       setError(`Could not open from Git: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setBusy(null)
     }
+  }
+
+  /** GitHub projects that are not on this computer yet (the start screen has no project with that repository name). */
+  const onGitHubOnly = (list: GitHubRepo[]) => list.filter((r) => !projects?.some((p) => repoNameFor(p.name) === r.name))
+
+  /** 0.21: download every GitHub project that is not here yet, onto the start screen. */
+  const importAll = async (list: GitHubRepo[]) => {
+    setRepos(null)
+    const failed: string[] = []
+    for (const [i, r] of list.entries()) {
+      setBusy(`Downloading ${r.name} (${i + 1} of ${list.length})…`)
+      try {
+        await addRecents(await cloneProject(r.cloneUrl))
+      } catch (e) {
+        failed.push(`${r.name}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+    setBusy(null)
+    setError(failed.length ? `Could not download ${failed.length} of ${list.length}:\n${failed.join('\n')}` : null)
   }
 
   const importZip = async () => {
@@ -112,12 +159,19 @@ export function Launcher() {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
   const shown = projects?.filter((p) => words.every((w) => `${p.name} ${p.description}`.toLowerCase().includes(w)))
 
+  const card = (p: RecentProject) => (
+    <ProjectCard key={p.path} project={p} missing={missing.has(p.path)} onOpen={() => void open(p.path)} onChanged={refresh} onError={setError} gitBusy={!!busy} />
+  )
+
   return (
     <div className="launcher">
       <header className="launcher-header">
-        <div>
-          <h1>EDG</h1>
-          <div className="muted">Eve.Lopment Games Designer · your game projects</div>
+        <div className="launcher-brand">
+          <img src="/favicon.png" alt="" className="launcher-logo" />
+          <div>
+            <h1>Eve.Lopment Games Designer</h1>
+            <div className="muted">Your game projects</div>
+          </div>
         </div>
         <div className="launcher-actions">
           <button className="icon-btn" title="Help" data-tour="help" onClick={() => useHelp.getState().openReport()}>
@@ -157,9 +211,14 @@ export function Launcher() {
             <h3>Import from GitHub</h3>
             {repos.length === 0 && <p className="muted">No project repositories (egd-…) on GitHub yet.</p>}
             <div className="gitsync-choices">
+              {onGitHubOnly(repos).length > 1 && (
+                <button className="btn btn-primary" onClick={() => void importAll(onGitHubOnly(repos))}>
+                  Import all {onGitHubOnly(repos).length} projects that are not on this computer yet
+                </button>
+              )}
               {repos.map((r) => (
                 <button key={r.name} className="btn" onClick={() => void cloneFrom(r.cloneUrl)}>
-                  {r.name} <span className="muted gitsync-small">{new Date(r.updatedAt).toLocaleDateString()}</span>
+                  {r.name} <span className="muted gitsync-small">{onGitHubOnly([r]).length ? new Date(r.updatedAt).toLocaleDateString() : 'already on this computer'}</span>
                 </button>
               ))}
               <button className="btn btn-ghost" onClick={() => void promptDialog('Import from Git: repository address', '').then((u) => cloneFrom(u?.trim()))}>
@@ -190,19 +249,103 @@ export function Launcher() {
       )}
 
       {!!projects?.length && (
-        <label className="launcher-search">
-          <Search size={15} />
-          <input className="input" type="search" placeholder="Search your projects" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && (e.preventDefault(), setQuery(''))} />
-        </label>
+        <div className="launcher-tools">
+          <label className="launcher-search">
+            <Search size={15} />
+            <input className="input" type="search" placeholder="Search your projects" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && (e.preventDefault(), setQuery(''))} />
+          </label>
+          <button className="btn" onClick={() => void newFolder()}>
+            <FolderPlus size={16} /> New folder
+          </button>
+          {folders.length > 0 && (
+            <button className="btn btn-ghost" onClick={() => setFolders(folders.map((f) => ({ ...f, open: !folders.every((g) => g.open) })))}>
+              {folders.every((f) => f.open) ? 'Collapse all folders' : 'Expand all folders'}
+            </button>
+          )}
+        </div>
       )}
       {!!projects?.length && shown?.length === 0 && <p className="muted">No project matches "{query}".</p>}
 
-      <div className="project-grid">
-        {shown?.map((p) => (
-          <ProjectCard key={p.path} project={p} missing={missing.has(p.path)} onOpen={() => void open(p.path)} onChanged={refresh} onError={setError} gitBusy={!!busy} />
-        ))}
-      </div>
+      {words.length ? (
+        <div className="project-grid">{shown?.map(card)}</div>
+      ) : (
+        !!projects?.length && (
+          <>
+            {folders.map((f) => (
+              <FolderSection key={f.id} folder={f} folders={folders}>
+                {projects.filter((p) => f.paths.includes(p.path)).map(card)}
+              </FolderSection>
+            ))}
+            <section className="launcher-section">
+              <h2 className="launcher-section-title">Recent projects</h2>
+              <div className="project-grid launcher-recent">{projects.slice(0, RECENT_COUNT).map(card)}</div>
+            </section>
+            <FolderSection folders={folders}>{projects.filter((p) => !folders.some((f) => f.paths.includes(p.path))).map(card)}</FolderSection>
+          </>
+        )
+      )}
     </div>
+  )
+}
+
+/** A start-screen folder (0.21): a section you can expand, rename, delete and drop projects onto. */
+function FolderSection({ folder, folders, children }: { folder?: ProjectFolder; folders: ProjectFolder[]; children: React.ReactNode[] }) {
+  const [over, setOver] = useState(false)
+  const [menu, setMenu] = useState(false)
+  // The "Not in a folder" section has no folder; it is hidden when empty and is always open.
+  if (!folder && !children.length) return null
+  const open = folder?.open ?? true
+  const update = (patch: Partial<ProjectFolder>) => setFolders(folders.map((f) => (f.id === folder!.id ? { ...f, ...patch } : f)))
+  const rename = async () => {
+    setMenu(false)
+    const name = (await promptDialog('Rename folder', folder!.name))?.trim()
+    if (name) update({ name })
+  }
+  const remove = async () => {
+    setMenu(false)
+    const ok = await confirmDialog({ title: `Delete the folder "${folder!.name}"?`, message: 'Only the folder goes away. Its projects stay and move back to "Not in a folder".', confirmLabel: 'Delete folder' })
+    if (ok) setFolders(folders.filter((f) => f.id !== folder!.id))
+  }
+  return (
+    <section
+      className={`launcher-section${over ? ' drop' : ''}`}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(PROJECT_DRAG)) return
+        e.preventDefault()
+        setOver(true)
+      }}
+      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(false)}
+      onDrop={(e) => {
+        setOver(false)
+        const path = e.dataTransfer.getData(PROJECT_DRAG)
+        if (path) setFolders(moveToFolder(folders, path, folder?.id ?? null))
+      }}
+    >
+      <h2 className="launcher-section-title">
+        {folder ? (
+          <>
+            <button className="launcher-section-toggle" onClick={() => update({ open: !open })} aria-expanded={open}>
+              {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />} {folder.name}
+              <span className="muted launcher-section-count">{children.length}</span>
+            </button>
+            <button className="icon-btn" title="Folder menu" onClick={() => setMenu(!menu)}>
+              <MoreHorizontal size={16} />
+            </button>
+            {menu && (
+              <div className="menu launcher-section-menu" onMouseLeave={() => setMenu(false)}>
+                <button onClick={() => void rename()}>Rename</button>
+                <button className="danger" onClick={() => void remove()}>
+                  Delete folder
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          folders.length ? 'Not in a folder' : 'All projects'
+        )}
+      </h2>
+      {open && (children.length ? <div className="project-grid">{children}</div> : <p className="muted launcher-section-empty">Drag a project here, or use Move to folder in its menu.</p>)}
+    </section>
   )
 }
 
@@ -238,6 +381,8 @@ function ProjectCard({
     onChanged()
   }
   const [showBackups, setShowBackups] = useState(false)
+  const folders = useSettings((s) => s.projectFolders)
+  const inFolder = folders.find((f) => f.paths.includes(project.path))
 
   const editMeta = async (field: 'name' | 'description') => {
     const value = await promptDialog(field === 'name' ? 'Rename project' : 'Edit description', project[field])
@@ -292,7 +437,7 @@ function ProjectCard({
   }
 
   return (
-    <div className={`project-card${missing ? ' missing' : ''}`}>
+    <div className={`project-card${missing ? ' missing' : ''}`} draggable onDragStart={(e) => e.dataTransfer.setData(PROJECT_DRAG, project.path)}>
       <button className="project-card-main" onClick={onOpen} disabled={missing}>
         {project.image && imageUrl && <img className="project-card-image" src={imageUrl} alt="" />}
         <h3>
@@ -340,6 +485,15 @@ function ProjectCard({
               <button onClick={() => void editMeta('description')}>Edit description</button>
               <button onClick={() => void setImage(true)}>{project.image ? 'Change picture…' : 'Add a picture…'}</button>
               {project.image && <button onClick={() => void setImage(false)}>Remove picture</button>}
+              {folders
+                .filter((f) => f.id !== inFolder?.id)
+                .map((f) => (
+                  <button key={f.id} onClick={() => (setMenu(false), setFolders(moveToFolder(folders, project.path, f.id)))}>
+                    Move to {f.name}
+                  </button>
+                ))}
+              {inFolder && <button onClick={() => (setMenu(false), setFolders(moveToFolder(folders, project.path, null)))}>Take out of {inFolder.name}</button>}
+              <button onClick={() => (setMenu(false), void newFolder(project.path))}>Move to a new folder…</button>
               <button onClick={() => void getFs().revealInFolder(project.path)}>Show in folder</button>
               <button onClick={() => void exportZip()}>Export as zip…</button>
               {isTauri() && (

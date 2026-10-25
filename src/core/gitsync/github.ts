@@ -64,7 +64,7 @@ export async function createProjectRepo(projectName: string, allowPublic = false
   type Raw = { name: string; clone_url: string; updated_at: string; private: boolean }
   const shape = (r: Raw): GitHubRepo => ({ name: r.name, cloneUrl: r.clone_url, updatedAt: r.updated_at })
   try {
-    return shape(await api<Raw>('/user/repos', { method: 'POST', body: JSON.stringify({ name, private: true, description: `EDG (Eve.Lopment Games Designer) project: ${projectName}` }) }))
+    return shape(await api<Raw>('/user/repos', { method: 'POST', body: JSON.stringify({ name, private: true, description: `Eve.Lopment Games Designer project: ${projectName}` }) }))
   } catch (e) {
     if ((e as { status?: number }).status !== 422) throw e
     const existing = await api<Raw>(`/repos/${await gitHubLogin()}/${name}`)

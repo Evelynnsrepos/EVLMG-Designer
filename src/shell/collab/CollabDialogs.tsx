@@ -60,7 +60,7 @@ const T = {
   close: 'Close',
   joinTitle: 'Join a shared project',
   joinIntro:
-    'Paste the invite code someone sent you, or a connect code from an EDG server. The project is copied to this computer and stays in sync.',
+    'Paste the invite code someone sent you, or a connect code from an EVLMG Designer server. The project is copied to this computer and stays in sync.',
   codePlaceholder: 'EGD1-... or EGS1-...',
   saveIn: 'Save in',
   change: 'Change…',
@@ -72,7 +72,7 @@ const T = {
   needName: 'Please enter your name so the others know who you are.',
   serverTitle: 'Or work through a server',
   serverIntro:
-    'With an EDG server, people can sync even when nobody else is online. Paste the connect code you got from the server’s admin; this project is copied to the server.',
+    'With an EVLMG Designer server, people can sync even when nobody else is online. Paste the connect code you got from the server’s admin; this project is copied to the server.',
   serverPlaceholder: 'EGS1-...',
   moveToServer: 'Move to server',
   moving: 'Moving…',

@@ -20,6 +20,6 @@ export const projectPaths = {
   collabRestored: (root: string) => getFs().join(root, 'collab', 'restored.txt'),
 }
 
-// The app is called EDG (Eve.Lopment Games Designer) now, but the folder keeps its
+// The app is called Eve.Lopment Games Designer now, but the folder keeps its
 // old name: renaming it would hide everyone's existing projects.
 export const APP_FOLDER_NAME = 'Evelopment Games Designer'

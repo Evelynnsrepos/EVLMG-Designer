@@ -1,4 +1,4 @@
-import { CornerDownRight, Plus, Waypoints, X } from 'lucide-react'
+import { CornerDownRight, GripVertical, Plus, Waypoints, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
 import { ENTITY_TYPES, newId, type ComponentType, type Entity, type Id, type LinkTarget } from '@/core/model'
@@ -8,6 +8,7 @@ import { targetKey, useTargetName } from '@/shared/entityList/JumpBar'
 import { TYPE_PLURAL } from '@/shared/entityList/links'
 import { jumpTo } from '@/shared/entityList/navigation'
 import { Modal } from '@/shared/ui'
+import { setJumpDrag } from './drag'
 import './jumps.css'
 
 /**
@@ -137,6 +138,8 @@ export function PanelJumps({ type, documentId }: { type: ComponentType; document
   const jumps = useProjectStore((s) => s.meta?.jumps)
   const name = useTargetName()
   const [open, setOpen] = useState<DOMRect | null>(null)
+  /** 0.21: an entry is being dragged into a tool; the list lets the drop through and closes after. */
+  const [dragging, setDragging] = useState(false)
   // Esc closes the list (and does not toggle Layout Mode).
   useEffect(() => {
     if (!open) return
@@ -161,6 +164,33 @@ export function PanelJumps({ type, documentId }: { type: ComponentType; document
     setOpen(null)
     jumpTo(t)
   }
+  const drag = (t: LinkTarget) => ({
+    draggable: true,
+    title: 'Click to open. Drag into a board or a text to place it there.',
+    onDragStart: (e: React.DragEvent) => {
+      setJumpDrag(e.dataTransfer, t, name(t))
+      // After the drag image is taken, or the browser cancels the drag.
+      setTimeout(() => setDragging(true))
+    },
+    onDragEnd: () => {
+      setDragging(false)
+      setOpen(null)
+    },
+  })
+  const row = (key: string, t: LinkTarget, back: boolean, onRemove?: () => void) => (
+    <div key={key} className="jump-menu-row">
+      <button className="jump-menu-go" onClick={() => go(t)} {...drag(t)}>
+        <GripVertical size={13} className="jump-menu-grip" />
+        <CornerDownRight size={13} style={back ? { transform: 'scaleX(-1)' } : undefined} />
+        <span className="jump-menu-name">{name(t)}</span>
+      </button>
+      {onRemove && (
+        <button className="icon-btn jump-menu-x" title="Remove this jump point" aria-label={`Remove the jump point to ${name(t)}`} onClick={onRemove}>
+          <X size={14} />
+        </button>
+      )}
+    </div>
+  )
   return (
     <>
       <button className={`panel-jumps${count ? ' has' : ''}`} title="Jump points: jump to any tool, document or entry, and see what points here" onClick={(e) => setOpen(open ? null : e.currentTarget.getBoundingClientRect())}>
@@ -169,33 +199,18 @@ export function PanelJumps({ type, documentId }: { type: ComponentType; document
       </button>
       {open && (
         <>
-          <div className="menu-backdrop" onClick={() => setOpen(null)} />
-          <div className="menu jump-menu" style={{ position: 'fixed', top: open.bottom + 4, left: Math.max(8, Math.min(open.right - 360, window.innerWidth - 370)) }}>
+          <div className="menu-backdrop" style={dragging ? { pointerEvents: 'none' } : undefined} onClick={() => setOpen(null)} />
+          <div className={`menu jump-menu${dragging ? ' dragging' : ''}`} style={{ position: 'fixed', top: open.bottom + 4, left: Math.max(8, Math.min(open.right - 360, window.innerWidth - 370)) }}>
             <div className="jump-menu-head">Jump to</div>
             {out.length === 0 && <div className="muted jump-menu-empty">No jump points here yet.</div>}
-            {out.map((j) => (
-              <div key={j.id} className="jump-menu-row">
-                <button onClick={() => go(j.to)}>
-                  <CornerDownRight size={13} /> {name(j.to)}
-                </button>
-                <button className="icon-btn" title="Remove this jump point" onClick={() => removeJump(j.id)}>
-                  <X size={12} />
-                </button>
-              </div>
-            ))}
+            {out.map((j) => row(j.id, j.to, false, () => removeJump(j.id)))}
             <button className="jump-menu-add" onClick={add}>
               <Plus size={13} /> Add a jump point…
             </button>
             {into.length > 0 && (
               <>
                 <div className="jump-menu-head">Pointing here</div>
-                {into.map((j) => (
-                  <div key={j.id} className="jump-menu-row">
-                    <button onClick={() => go(j.from)}>
-                      <CornerDownRight size={13} style={{ transform: 'scaleX(-1)' }} /> {name(j.from)}
-                    </button>
-                  </div>
-                ))}
+                {into.map((j) => row(j.id, j.from, true))}
               </>
             )}
           </div>
