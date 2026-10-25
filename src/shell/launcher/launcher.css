@@ -314,3 +314,12 @@
 .launcher-section-empty {
   margin: 0 0 0 22px;
 }
+/* One row of cards; scroll sideways when the window is narrow. */
+.project-grid.launcher-recent {
+  display: flex;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.launcher-recent .project-card {
+  flex: 0 0 260px;
+}

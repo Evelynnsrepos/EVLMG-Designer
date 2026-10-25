@@ -243,7 +243,7 @@ export function Launcher() {
             ))}
             <section className="launcher-section">
               <h2 className="launcher-section-title">Recent projects</h2>
-              <div className="project-grid">{projects.slice(0, RECENT_COUNT).map(card)}</div>
+              <div className="project-grid launcher-recent">{projects.slice(0, RECENT_COUNT).map(card)}</div>
             </section>
             <FolderSection folders={folders}>{projects.filter((p) => !folders.some((f) => f.paths.includes(p.path))).map(card)}</FolderSection>
           </>

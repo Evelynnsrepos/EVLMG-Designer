@@ -1,6 +1,7 @@
 import Konva from 'konva'
 import { jumpTo } from '@/shared/entityList/navigation'
-import { syncBoardJumps } from '@/shared/jumps/Jumps'
+import { syncBoardJumps, targetLabel } from '@/shared/jumps/Jumps'
+import { JUMP_DRAG, readJumpDrag } from '@/shared/jumps/drag'
 import { jumpTool } from './tools'
 import type { JumpNode } from './types'
 import {
@@ -17,7 +18,7 @@ import {
 } from 'react'
 import { Group, Layer as KonvaLayer, Rect, Stage, Transformer } from 'react-konva'
 import { isPresenceActive, setPresence } from '@/core/collab'
-import type { Id } from '@/core/model'
+import { newId, type Id } from '@/core/model'
 import { panelKey, usePanelContext } from '@/core/state'
 import { boardShortcut, comboOf, isShortcut } from '@/core/shortcuts'
 import { RemoteCursors } from './RemoteCursors'
@@ -733,6 +734,18 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
       onKeyUp={onKeyUp}
       onBlur={() => setSpaceDown(false)}
       onContextMenu={(e) => e.target instanceof HTMLCanvasElement && e.preventDefault()}
+      onDragOver={(e) => e.dataTransfer.types.includes(JUMP_DRAG) && (e.preventDefault(), (e.dataTransfer.dropEffect = 'copy'))}
+      onDrop={(e) => {
+        // 0.21: a jump point dragged from the jump points list lands here as a jump point on the board.
+        const target = readJumpDrag(e.dataTransfer)
+        if (!target || !rootRef.current) return
+        e.preventDefault()
+        e.stopPropagation()
+        const at = screenToWorld(pointIn(rootRef.current, e), live.current.state.viewport)
+        const node: JumpNode = { id: newId(), kind: 'jump', layerId: api.activeLayerId, x: at.x, y: at.y - 17, target, label: targetLabel(target) }
+        api.update((sc) => ({ ...sc, nodes: [...sc.nodes, node as unknown as N] }))
+        api.select([node.id])
+      }}
     >
       {size.width > 0 && (
         <Stage

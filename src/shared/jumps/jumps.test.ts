@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { useProjectStore } from '@/core/state'
 import { addJump, syncBoardJumps } from './Jumps'
+import { refTargetOf } from './drag'
 
 describe('jump points', () => {
   it('keeps the project list in step with a board, and leaves hand-made ones alone', () => {
@@ -12,5 +13,11 @@ describe('jump points', () => {
     expect(useProjectStore.getState().meta!.jumps!.map((j) => j.id).sort()).toEqual(['hand', 'n1'])
     syncBoardJumps('moodboard', 'm', [])
     expect(useProjectStore.getState().meta!.jumps!.map((j) => j.id)).toEqual(['hand'])
+  })
+
+  it('turns a dragged jump point into the [[link that goes to the same place', () => {
+    expect(refTargetOf({ kind: 'entity', type: 'item', id: 'i' })).toEqual({ kind: 'item', id: 'i' })
+    expect(refTargetOf({ kind: 'document', type: 'writer', documentId: 'w' })).toEqual({ kind: 'doc', id: 'w' })
+    expect(refTargetOf({ kind: 'document', type: 'map', documentId: null })).toEqual({ kind: 'tool', id: 'map' })
   })
 })
