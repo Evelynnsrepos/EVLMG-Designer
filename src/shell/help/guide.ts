@@ -237,7 +237,7 @@ export const BASICS: Record<string, GuideTopic> = {
       'When you leave the project, it saves to Git in the background, so you can go on working. Closing the app waits until that is done.',
       'Sync to Git and Sync from Git (in the Git sync window, or in a project\'s menu on the start screen) do it right away. The Git mark next to a project\'s name on the start screen shows whether it is saved to Git; red means the last try failed (hover it to see why).',
       '## On another computer',
-      'Click Import from Git on the start screen and pick the project from your GitHub list (or paste an address). The project downloads and stays synced.',
+      'Click Import from Git on the start screen. If Git on this computer is logged in to GitHub, it connects by itself and lists your projects on GitHub; no address needed. Pick one, or Import all to download every project that is not on this computer yet. Without a GitHub login you can paste any repository address. Downloaded projects stay synced.',
       'Older setups kept all projects in one repository. Import from Git still puts every project in such a repository on the start screen, and Give each project its own repository in the Git sync window moves them to one repository each. The old repository stays as it is, as a backup.',
       '## Changed in two places?',
       'If you changed the project on two computers without syncing in between, Git sync asks which version to keep. It never mixes them.',

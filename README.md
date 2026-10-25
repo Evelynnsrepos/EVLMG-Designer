@@ -185,7 +185,8 @@ your own Git repository, using the Git installed on your computer and your own l
 - **Connect GitHub** once, and every project gets its own **private** repository (`egd-<project name>`) by itself.
 - It **gets the latest version** when a project opens and **saves to Git** in the background when you leave it.
   *Sync to Git* and *Sync from Git* do it right away, and a Git mark on the start screen shows each project's state.
-- **Import from Git** on the start screen downloads a project onto another computer.
+- **Import from Git** on the start screen lists your GitHub projects (no address needed when Git is logged in) and
+  downloads one, or all that are not on this computer yet.
 - **Private only**: Git sync refuses public repositories on every host. One project can allow a public repository in
   its Git sync window, after a red warning.
 - **Other hosts**: GitLab, Gitea, Forgejo, Codeberg or your own server work too. *Settings → Git* has login help,

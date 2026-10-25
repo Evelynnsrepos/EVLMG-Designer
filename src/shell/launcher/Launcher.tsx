@@ -2,7 +2,7 @@ import { ChevronDown, ChevronRight, CircleHelp, FileArchive, FolderOpen, FolderP
 import { useCallback, useEffect, useState } from 'react'
 import { saveBinaryFile, safeFileName } from '@/core/export'
 import { getFs, isTauri } from '@/core/fs'
-import { cloneProject, listProjectRepos, projectGitState, syncProjectFromGit, syncProjectToGit, useGitSync, type GitHubRepo, type ProjectGitState } from '@/core/gitsync'
+import { cloneProject, connectGitHub, listProjectRepos, repoNameFor, projectGitState, syncProjectFromGit, syncProjectToGit, useGitSync, type GitHubRepo, type ProjectGitState } from '@/core/gitsync'
 import { assetUrl, pickAndImportAssets } from '@/core/assets'
 import { newId, type RecentProject } from '@/core/model'
 import { deleteProject, importProjectZip, isProjectFolder, loadProject, readRecents, removeRecent, saveMeta, upsertRecent, zipProject } from '@/core/project'
@@ -81,7 +81,13 @@ export function Launcher() {
   }
 
   const openFromGit = async () => {
-    if (!useSettings.getState().githubLogin) return cloneFrom((await promptDialog('Import from Git: repository address', ''))?.trim())
+    // 0.21: Git on this computer is usually logged in to GitHub already, so connect first instead of asking for an address.
+    if (!useSettings.getState().githubLogin) {
+      setBusy('Connecting GitHub…')
+      const ok = await connectGitHub()
+      setBusy(null)
+      if (!ok) return cloneFrom((await promptDialog('Import from Git: repository address', ''))?.trim())
+    }
     try {
       setError(null)
       setBusy('Looking up your projects on GitHub…')
@@ -93,6 +99,15 @@ export function Launcher() {
     }
   }
 
+  /** Put downloaded project folders on the start screen. */
+  const addRecents = async (roots: string[]) => {
+    for (const path of roots) {
+      const { meta } = await loadProject(path)
+      await upsertRecent({ path, name: meta.name, description: meta.description, image: meta.image ?? null, lastOpened: new Date().toISOString(), stats: { words: 0, images: 0 } })
+    }
+    await refresh()
+  }
+
   const cloneFrom = async (url: string | undefined) => {
     setRepos(null)
     if (!url) return
@@ -102,16 +117,31 @@ export function Launcher() {
       const roots = await cloneProject(url)
       if (roots.length === 1) return void (await open(roots[0]))
       // A repository with several projects: put them all on the start screen.
-      for (const path of roots) {
-        const { meta } = await loadProject(path)
-        await upsertRecent({ path, name: meta.name, description: meta.description, image: meta.image ?? null, lastOpened: new Date().toISOString(), stats: { words: 0, images: 0 } })
-      }
-      await refresh()
+      await addRecents(roots)
     } catch (e) {
       setError(`Could not open from Git: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setBusy(null)
     }
+  }
+
+  /** GitHub projects that are not on this computer yet (the start screen has no project with that repository name). */
+  const onGitHubOnly = (list: GitHubRepo[]) => list.filter((r) => !projects?.some((p) => repoNameFor(p.name) === r.name))
+
+  /** 0.21: download every GitHub project that is not here yet, onto the start screen. */
+  const importAll = async (list: GitHubRepo[]) => {
+    setRepos(null)
+    const failed: string[] = []
+    for (const [i, r] of list.entries()) {
+      setBusy(`Downloading ${r.name} (${i + 1} of ${list.length})…`)
+      try {
+        await addRecents(await cloneProject(r.cloneUrl))
+      } catch (e) {
+        failed.push(`${r.name}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+    setBusy(null)
+    setError(failed.length ? `Could not download ${failed.length} of ${list.length}:\n${failed.join('\n')}` : null)
   }
 
   const importZip = async () => {
@@ -181,9 +211,14 @@ export function Launcher() {
             <h3>Import from GitHub</h3>
             {repos.length === 0 && <p className="muted">No project repositories (egd-…) on GitHub yet.</p>}
             <div className="gitsync-choices">
+              {onGitHubOnly(repos).length > 1 && (
+                <button className="btn btn-primary" onClick={() => void importAll(onGitHubOnly(repos))}>
+                  Import all {onGitHubOnly(repos).length} projects that are not on this computer yet
+                </button>
+              )}
               {repos.map((r) => (
                 <button key={r.name} className="btn" onClick={() => void cloneFrom(r.cloneUrl)}>
-                  {r.name} <span className="muted gitsync-small">{new Date(r.updatedAt).toLocaleDateString()}</span>
+                  {r.name} <span className="muted gitsync-small">{onGitHubOnly([r]).length ? new Date(r.updatedAt).toLocaleDateString() : 'already on this computer'}</span>
                 </button>
               ))}
               <button className="btn btn-ghost" onClick={() => void promptDialog('Import from Git: repository address', '').then((u) => cloneFrom(u?.trim()))}>
