@@ -78,7 +78,8 @@ The whole app in five minutes.
 5. **Hold `Q` for the Hotwheel.** A round menu under your pointer or pen: program actions inside, the current tool's
    actions outside. Point and let go. Every tool's header also has its shortcuts and a size button for tablets.
 6. **Jump points.** The crossing-arrows button in every tool's header links it to any other tool, document or entry,
-   and lists what points back. On boards, the jump tool (`J`) places a jump point right on the board.
+   and lists what points back. On boards, the jump tool (`J`) places a jump point right on the board. Drag a jump point
+   out of the list onto a board, into any text (it becomes a `[[link`) or onto an entry's Jump to bar.
 7. **Link everything.** Write `[[` in any text to link an article, entry, tool or document. Every entry
    shows what it points at and where it is used, one click away. Jump around and come back with `Alt+Left` and
    `Alt+Right`.
@@ -104,6 +105,8 @@ The whole app in five minutes.
   computer. A shared project can instead get a push-only Git backup by one member.
 - **Search everywhere**: find projects on the start screen, presets and tools when you make a project, and any
   setting in the Settings search.
+- **Project folders**: sort the start screen into your own folders (Games, YouTube videos, Writing…), with your
+  recent projects in one row.
 - **Your own project presets**: save the tools you picked as a preset, or make and edit presets in Settings.
 - **Your drawings everywhere**: wherever you add a picture, your drawings from Draw are offered first, like stickers.
 - **Review status and comments** on every tool window and entry, from Idea to Final, with a Reviews board.
@@ -231,7 +234,7 @@ beginner guides.
 | Tool | What it does |
 |---|---|
 | **Writer** | Rich text documents for design docs, scripts and dialogue, with fonts and sizes, images you can size and let the text flow around, live word count, Markdown/text export and Markdown import. A per-document Markdown Syntax switch adds typing shortcuts like `==highlight==`, `- [ ]` checklists, `> [!note]` callouts, tags, footnotes and tables, and turns pasted Markdown into formatting. |
-| **Story Branch Writer** | Mind-map style branching stories: create, branch, connect and sever nodes. |
+| **Story Branch Writer** | Mind-map style branching stories: create, branch, connect and sever nodes. Double-click a node to type its title and story text right on it. |
 | **Timeline** | Timelines with optional years, events with images, and branches for alternative histories (press `B`). |
 | **Quest Designer** | Quests with givers, places, objectives, rewards and chains shown as a graph, plus flags shared with the Dialogue Editor. |
 | **Dialogue Editor** | Branching conversations as a graph with speakers, choices, conditions and flags, a play-through mode, and export to JSON, Yarn Spinner or Ink. |
@@ -257,7 +260,7 @@ beginner guides.
 
 | Tool | What it does |
 |---|---|
-| **Level Layout** | Paint levels and dungeons on a square or isometric grid: doors, enemies, loot, spawns and numbered notes, select and move, brush sizes and zoom from 10 to 800 %. Tilesets shared by every level in a panel like Godot's (search, folders, colours, pop-out), multi-tile stamps, layers for see-through things, an import window with the grid, sharp pixel art, tiles that block movement (walls, fences, houses), and export as a Godot 4 TileMap scene with collision. |
+| **Level Layout** | Paint levels and dungeons on a square or isometric grid: doors, enemies, loot, spawns and numbered notes, select and move (per layer), brush sizes and zoom from 10 to 800 %. Tilesets shared by every level in a panel like Godot's (search, folders, colours, pop-out), multi-tile stamps, layers for see-through things, an import window with the grid, sharp pixel art, tiles that block movement (walls, fences, houses), and export as a Godot 4 TileMap scene with collision. |
 | **Gameplay Loop** | The loop players repeat as a circular timeline: flesh out each step, size steps by time, and branch notes off them. |
 | **Skill Tree** | Skill and talent trees with ranks, costs and requirements, plus a build planner. |
 | **Abilities & Spells** | Abilities and spells with costs, cooldowns and numbers from Damage Calculator formulas. |

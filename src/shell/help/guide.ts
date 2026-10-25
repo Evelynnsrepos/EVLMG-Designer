@@ -87,6 +87,7 @@ export const BASICS: Record<string, GuideTopic> = {
     title: 'Getting started',
     body: [
       'Every game you design is a project. Click New Project on the start screen, give it a name and pick the tools you want. You can add more tools later.',
+      'Folders keep the start screen tidy: New folder (next to the search box) makes one, for example Games, YouTube videos or Writing. Drag a project onto a folder or use Move to … in its menu (…); a project is in one folder at a time. Click a folder\'s name to open or close it, and use its menu to rename or delete it (its projects stay). Recent projects shows the ones you opened last.',
       'A project is a normal folder in Documents/Evelopment Games Designer, full of readable JSON files and an assets folder for images and audio. Back it up like any other folder.',
       'Inside a project, the sidebar on the left lists your tools. Click one to show only that tool; Shift-click to open it next to the ones already open. Tools that hold several documents (boards, maps, timelines…) list them underneath; right-click one to rename it. The search field above the list finds tools and documents; the star next to a tool keeps it at the top, and you can drag tools up and down to order them. Right-click a tool to give it a colour or put it in a folder; drag tools onto a folder to add them, click a folder to fold it, and right-click it to rename, colour or remove it.',
     ],
@@ -186,6 +187,7 @@ export const BASICS: Record<string, GuideTopic> = {
       'A jump point takes you from one place in your project to another with one click: from a mood board to a drawing, from the gameplay loop to a writing principle, from a level to a character, and back.',
       'Every tool has a jump points button in its header, next to Review (the little crossing arrows). Click it, then Add a jump point…, and pick where it goes in the window: any tool, any document (a drawing, a board, a level, a document in the Writer) or any entry (a character, an item, a town, an enemy). Type to search.',
       'On boards (Moodboard, Design Language, Brainstorm, Map, Story, Timeline, UI Flow) the jump point is also a tool (J): click the board where it should sit and pick its target; a purple chip appears. Double-click the chip, or click it with the jump tool, to go there. Move it like any other note.',
+      'Drag a jump point out of the list into a tool: onto a board it becomes a jump point chip there, into any text (Writer, Wiki, descriptions) it becomes a [[link, and onto an entry\'s Jump to bar it becomes a link. Grab it by the dots at its left; a click opens it as before, and the X at the end of the row removes it.',
       'Pointing here: the same button lists every jump point elsewhere that points at this tool or document, so you can always go back. A character, item, town or enemy shows jump points that point at it in its Jump to bar.',
       'Back and forward (Alt+Left, Alt+Right, or the arrows at the top of the sidebar) retrace your jumps.',
     ],
@@ -365,6 +367,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     title: 'Story Branch Writer',
     body: [
       'A mind-map for branching stories. Create nodes, branch them, connect them to each other and sever connections.',
+      'Each node has a bold title and its story text below a thin line. Double-click a node (a new one opens by itself) to type both right on it. Enter in the title jumps to the story text, Shift+Tab or Up at its start goes back to the title, and Esc or clicking away finishes. The Details panel (Select tool) has the same text plus a picture and a link.',
       'Like every canvas tool it has a bottom toolbar; hover a button to see its shortcut letter.',
     ],
     tips: ['Pan with the middle mouse button or Space+drag, zoom with the mouse wheel.'],
