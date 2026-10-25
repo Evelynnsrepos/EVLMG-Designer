@@ -9,7 +9,7 @@ and to every work based on it.
 If you convey the program or a modified version of it, in source or binary form, you must keep a visible author
 attribution to the original:
 
-> Based on Eve.Lopment Games Designer by Evelopment Games: https://github.com/Evelynnsrepos/Evelopment-Games-Designer
+> Based on Eve.Lopment Games Designer by Evelopment Games: https://github.com/Evelynnsrepos/EVLMG-Designer
 
 This attribution must appear in the Appropriate Legal Notices that your version displays (for example an About or
 help screen, or the start screen) and in its README or equivalent documentation. You may not remove it or make it

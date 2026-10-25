@@ -24,32 +24,33 @@
     <p>No generative AI: every idea and every stroke is yours. Everything stays on your computer.</p>
   </description>
   <launchable type="desktop-id">io.github.Evelynnsrepos.Evelopment-Games-Designer.desktop</launchable>
-  <url type="homepage">https://github.com/Evelynnsrepos/Evelopment-Games-Designer</url>
-  <url type="bugtracker">https://github.com/Evelynnsrepos/Evelopment-Games-Designer/issues</url>
+  <url type="homepage">https://github.com/Evelynnsrepos/EVLMG-Designer</url>
+  <url type="bugtracker">https://github.com/Evelynnsrepos/EVLMG-Designer/issues</url>
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/Evelynnsrepos/Evelopment-Games-Designer/main/docs/images/launcher.jpg</image>
+      <image>https://raw.githubusercontent.com/Evelynnsrepos/EVLMG-Designer/main/docs/images/launcher.jpg</image>
       <caption>Your projects</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/Evelynnsrepos/Evelopment-Games-Designer/main/docs/images/items.jpg</image>
+      <image>https://raw.githubusercontent.com/Evelynnsrepos/EVLMG-Designer/main/docs/images/items.jpg</image>
       <caption>Item list with rarities and stats</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/Evelynnsrepos/Evelopment-Games-Designer/main/docs/images/brainstorm.jpg</image>
+      <image>https://raw.githubusercontent.com/Evelynnsrepos/EVLMG-Designer/main/docs/images/brainstorm.jpg</image>
       <caption>Brainstorm board</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/Evelynnsrepos/Evelopment-Games-Designer/main/docs/images/story.jpg</image>
+      <image>https://raw.githubusercontent.com/Evelynnsrepos/EVLMG-Designer/main/docs/images/story.jpg</image>
       <caption>Branching story writer</caption>
     </screenshot>
     <screenshot>
-      <image>https://raw.githubusercontent.com/Evelynnsrepos/Evelopment-Games-Designer/main/docs/images/timeline.jpg</image>
+      <image>https://raw.githubusercontent.com/Evelynnsrepos/EVLMG-Designer/main/docs/images/timeline.jpg</image>
       <caption>Timelines</caption>
     </screenshot>
   </screenshots>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.21.0" date="2026-10-25"/>
     <release version="0.20.0" date="2026-10-20"/>
     <release version="0.19.1" date="2026-10-20"/>
     <release version="0.19.0" date="2026-10-19"/>

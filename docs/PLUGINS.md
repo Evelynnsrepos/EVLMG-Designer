@@ -3,7 +3,7 @@
 Plugins add new tools to Eve.Lopment Games Designer. A plugin tool shows up in **Add tool** like a built-in one,
 can have several documents, and its data is saved in the project like everything else.
 
-Start from the example plugin, [**Dice Roller**](https://github.com/Evelynnsrepos/Evelopment-Games-Designer-Example-Plugin). It is about 60 lines and needs no build step.
+Start from the example plugin, [**Dice Roller**](https://github.com/Evelynnsrepos/EVLMG-Designer-Example-Plugin). It is about 60 lines and needs no build step.
 
 > **Plugins are programs.** A plugin runs inside the app with the same rights as the app: it can read, change and
 > delete any file on the computer. Nobody reviews plugins. In shared (peer-to-peer) projects a plugin can change

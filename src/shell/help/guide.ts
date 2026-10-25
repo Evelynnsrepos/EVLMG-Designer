@@ -790,7 +790,7 @@ export const COMMUNITY_LINKS = [
   { label: 'Discord', url: 'https://discord.gg/AGfaBwNKfN', icon: MessageCircle },
   { label: 'YouTube', url: 'https://www.youtube.com/@EvelopmentGames', icon: Play },
   { label: 'Instagram', url: 'https://www.instagram.com/evelopmentgames/', icon: Camera },
-  { label: 'Source code', url: 'https://github.com/Evelynnsrepos/Evelopment-Games-Designer', icon: Code },
+  { label: 'Source code', url: 'https://github.com/Evelynnsrepos/EVLMG-Designer', icon: Code },
   { label: 'Website', url: 'http://onee.page/evelopmentgames', icon: Globe },
   { label: 'Support on Ko-fi', url: 'https://ko-fi.com/evelynnevlmg', icon: Coffee },
 ]

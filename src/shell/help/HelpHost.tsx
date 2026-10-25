@@ -42,7 +42,7 @@ const BASIC_ICONS: Record<string, LucideIcon> = {
 /** The first pages, in this order: Esc and Shift-click, the cheat sheet, the crash course. */
 const START = ['basics', 'shortcuts', 'course', 'hotwheel']
 
-export const REPO_URL = 'https://github.com/Evelynnsrepos/Evelopment-Games-Designer'
+export const REPO_URL = 'https://github.com/Evelynnsrepos/EVLMG-Designer'
 
 /** Mount once at the app root: user guide dialog, tours and the F1 shortcut. */
 export function HelpHost() {

@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Evelynnsrepos/Evelopment-Games-Designer/releases/latest"><b>⬇ Download</b></a> ·
+  <a href="https://github.com/Evelynnsrepos/EVLMG-Designer/releases/latest"><b>⬇ Download</b></a> ·
   <a href="#-crash-course">Crash course</a> ·
   <a href="#-install">Install</a> ·
   <a href="#-git-sync">Git sync</a> ·
@@ -32,9 +32,9 @@
 </p>
 
 <p align="center">
-  <a href="docs/media/edg-showcase.mp4"><img src="docs/images/preview-showcase.webp" width="800" alt="EVLMG Designer in action: the writer with links, branching stories, a timeline with a what-if, a skill tree build, a red-string board and engine export"></a>
+  <a href="docs/media/evlmg-showcase.mp4"><img src="docs/images/preview-showcase.webp" width="800" alt="EVLMG Designer 0.21 in action: Import from Git lists your GitHub projects, Import all, project folders, dragging a jump point into text, typing a story node and a brainstorm board"></a>
   <br>
-  <a href="docs/media/edg-showcase.mp4">▶ Watch the video with sound</a>
+  <a href="docs/media/evlmg-showcase.mp4">▶ Watch the video with sound</a>
 </p>
 
 <p align="center"><b>One program for designing your whole game.</b></p>
@@ -59,7 +59,7 @@ calculators all live in one project, and they all know about each other. Free, o
 > ### 🚧 Under construction 🚧
 > Every tool works, but this is early development: expect rough edges, and the project format may still change.
 > **Your ideas shape what gets built next.** Found a bug, missing a tool, or have an idea?
-> Please [open an issue](https://github.com/Evelynnsrepos/Evelopment-Games-Designer/issues/new) or come say hi on
+> Please [open an issue](https://github.com/Evelynnsrepos/EVLMG-Designer/issues/new) or come say hi on
 > [Discord](https://discord.gg/AGfaBwNKfN). Every suggestion gets read.
 
 ## 🛠 Crash course
@@ -137,7 +137,7 @@ The whole app in five minutes.
 ## ⬇ Install
 
 Grab the file for your system from the
-[Releases page](https://github.com/Evelynnsrepos/Evelopment-Games-Designer/releases/latest):
+[Releases page](https://github.com/Evelynnsrepos/EVLMG-Designer/releases/latest):
 
 | System | File |
 |---|---|
@@ -309,7 +309,7 @@ Made by **Eve.Lopment Games**. Follow along, share what you build, and suggest f
 - Instagram: https://www.instagram.com/evelopmentgames/
 - Website: http://onee.page/evelopmentgames
 - Like the app? You can buy me a coffee on [Ko-fi](https://ko-fi.com/evelynnevlmg). It stays free either way.
-- Ideas and bugs: [open an issue](https://github.com/Evelynnsrepos/Evelopment-Games-Designer/issues/new)
+- Ideas and bugs: [open an issue](https://github.com/Evelynnsrepos/EVLMG-Designer/issues/new)
 
 ## 👩‍💻 For developers
 
