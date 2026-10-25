@@ -394,11 +394,15 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
 
   const toolEvent = (ev: PointerEvent | React.PointerEvent, clickCount: number): ToolPointerEvent => {
     const screen = localPoint(ev)
-    const shape = stageRef.current?.getIntersection(screen) ?? null
+    let target: Id | null | undefined
     return {
       world: screenToWorld(screen, live.current.state.viewport),
       screen,
-      targetId: nodeIdOf(shape),
+      // 0.21: hit-test only when a tool asks; drags never need it on every move.
+      get targetId() {
+        if (target === undefined) target = nodeIdOf(stageRef.current?.getIntersection(screen) ?? null)
+        return target
+      },
       button: ev.button,
       shift: ev.shiftKey,
       alt: ev.altKey,
@@ -413,12 +417,29 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
   }
 
   const runGesture = (gesture: ToolGesture, clickCount: number) => {
-    const move = (ev: PointerEvent) => gesture.move?.(toolEvent(ev, clickCount))
+    // 0.21: moves are handled once per frame. WebKitGTK (the Linux app) sends every mouse move, many per
+    // frame, and each one re-rendered the whole board. All moves still reach the tool (pen strokes keep
+    // every point), but in one go, so React draws the board once per frame.
+    let pending: PointerEvent[] = []
+    let raf = 0
+    const flush = () => {
+      cancelAnimationFrame(raf)
+      raf = 0
+      const events = pending
+      pending = []
+      for (const ev of events) gesture.move?.(toolEvent(ev, clickCount))
+    }
+    const move = (ev: PointerEvent) => {
+      pending.push(ev)
+      if (!raf) raf = requestAnimationFrame(flush)
+    }
     const up = (ev: PointerEvent) => {
+      flush()
       endGesture()
       gesture.up?.(toolEvent(ev, clickCount))
     }
     const cancel = () => {
+      cancelAnimationFrame(raf)
       endGesture()
       gesture.cancel?.()
     }
@@ -428,6 +449,7 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
     gestureRef.current = {
       gesture,
       cleanup() {
+        cancelAnimationFrame(raf)
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
         window.removeEventListener('pointercancel', cancel)
