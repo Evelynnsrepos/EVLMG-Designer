@@ -29,12 +29,19 @@ jobs:
           v=$(sed -n 's/.*"version": "\(.*\)".*/\1/p' package.json | head -1)
           echo "version=$v" >> "$GITHUB_OUTPUT"
           url="https://github.com/${{ github.repository }}/releases/download/v$v/Evelopment.Games.Designer_${v}_amd64.deb"
+          # A push to main can come before the release has its .deb; the release run builds it later.
+          if [ "${{ github.event_name }}" = push ] && ! curl -fsIL -o /dev/null "$url"; then
+            echo "::notice::v$v has no .deb yet, the release run builds the Flatpak"
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
           curl -fsSL -o egd.deb "$url"
           sha=$(sha256sum egd.deb | cut -d' ' -f1)
           m=packaging/flatpak/io.github.Evelynnsrepos.Evelopment-Games-Designer.yml
           sed -i "s#url: .*\.deb#url: $url#; s#sha256: .*#sha256: '$sha'#" "$m"
           grep -n "url:\|sha256:" "$m"
       - name: Build
+        if: steps.version.outputs.ready == 'true'
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           bundle: evelopment-games-designer.flatpak
@@ -42,6 +49,7 @@ jobs:
           cache-key: flatpak-builder-${{ github.sha }}
           upload-artifact: false
       - name: Every library the app needs is in the runtime
+        if: steps.version.outputs.ready == 'true'
         run: |
           flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak --user install -y --noninteractive evelopment-games-designer.flatpak
@@ -49,6 +57,7 @@ jobs:
           echo "$missing"
           test -z "$missing"
       - name: Attach it to the release
+        if: steps.version.outputs.ready == 'true'
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

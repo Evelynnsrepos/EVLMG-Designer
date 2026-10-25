@@ -1,11 +1,11 @@
 # Builds the app from this checkout and installs it as a normal Arch package.
 # Usage: cd packaging/arch && makepkg -si
 pkgname=evelopment-games-designer
-pkgver=0.19.1
+pkgver=0.21.0
 pkgrel=1
 pkgdesc="All-in-one game design tool: writing, wiki, maps, boards, lists and calculators"
 arch=('x86_64' 'aarch64')
-url="https://github.com/Evelynnsrepos/evelopment-games-designer"
+url="https://github.com/Evelynnsrepos/EVLMG-Designer"
 license=('GPL-3.0-only')
 depends=('webkit2gtk-4.1' 'gtk3' 'hicolor-icon-theme')
 makedepends=('cargo' 'nodejs' 'npm')
