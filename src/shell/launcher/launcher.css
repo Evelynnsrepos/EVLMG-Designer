@@ -262,3 +262,55 @@
 .template-chip.custom {
   border-style: dashed;
 }
+
+/* 0.21: project folders on the start screen */
+.launcher-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.launcher-tools .launcher-search {
+  flex: 1;
+  margin-bottom: 0;
+}
+.launcher-section {
+  margin-bottom: 22px;
+  border-radius: var(--radius);
+}
+.launcher-section.drop {
+  outline: 2px dashed var(--accent);
+  outline-offset: 6px;
+}
+.launcher-section-title {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.launcher-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.launcher-section-count {
+  font-weight: 400;
+  font-size: 13px;
+}
+.launcher-section-menu {
+  top: 30px;
+  left: 0;
+}
+.launcher-section-empty {
+  margin: 0 0 0 22px;
+}
