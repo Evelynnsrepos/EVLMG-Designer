@@ -53,7 +53,8 @@ export interface Variant {
 export interface Field {
   id: Id
   name: string
-  kind: 'text' | 'image'
+  /** 'number' only takes numbers (stats like Attack, Health, Cost). */
+  kind: 'text' | 'number' | 'image'
 }
 
 export interface Card {
@@ -77,6 +78,8 @@ export interface CardDoc {
   cards: Card[]
   /** Cards come live from a Spreadsheet sheet instead of `cards`: row 1 names the fields. */
   sheet?: { documentId: Id; sheetId: Id }
+  /** Own icons for `:name:` in text, besides the built-in ones. */
+  icons?: { id: Id; name: string; src: string }[]
 }
 
 export const CARD_SIZES: { id: string; name: string; w: number; h: number }[] = [
@@ -101,7 +104,7 @@ export function createCardDoc(): CardDoc {
   const slots = [slot('Background', '#f4ecd8'), slot('Frame', '#7a3b2e'), slot('Text', '#1c1d22'), slot('Accent', '#d9a441')]
   const [bg, frame, text, accent] = slots
   const field = (name: string, kind: Field['kind'] = 'text'): Field => ({ id: newId(), name, kind })
-  const fields = [field('Name'), field('Cost'), field('Type'), field('Rules'), field('Art', 'image')]
+  const fields = [field('Name'), field('Cost', 'number'), field('Type'), field('Rules'), field('Art', 'image')]
   const art = fields[4]
 
   const front = createScene<CardNode>('Background')
@@ -193,7 +196,7 @@ const colName = (col: number) => {
 /**
  * Cards from a sheet: row 1 holds field names, every following row with any value is a card.
  * Columns named "Copies" (or "Count") and "Variant" set those; other names match fields (ignoring case).
- * shortcut: formula cells show what was typed (e.g. "=A2+1"), not the result; compute them if people ask.
+ * Formulas should already be results here (`evaluatedSheet`).
  */
 export function cardsFromSheet(sheet: SheetLike, fields: Field[], variants: Variant[]): Card[] {
   const cell = (c: number, r: number) => (sheet.cells[`${colName(c)}${r + 1}`]?.v ?? '').trim()
@@ -245,8 +248,60 @@ export function deckJson(name: string, doc: CardDoc, cards: Card[], images?: Map
       id: c.id,
       copies: c.copies,
       variant: c.variantId ?? null,
-      values: Object.fromEntries(doc.fields.map((f) => [f.name, c.values[f.id] ?? ''])),
+      values: Object.fromEntries(doc.fields.map((f) => [f.name, jsonValue(f, c.values[f.id] ?? '')])),
       ...(images?.has(c.id) ? { image: images.get(c.id) } : {}),
     })),
   }
+}
+
+/** Number fields export as numbers when they hold one; anything else stays text. */
+function jsonValue(f: Field, v: string): string | number {
+  return f.kind === 'number' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : v
+}
+
+/** `:sword:` style icon names in a text. */
+export const ICON_TOKEN = /:([a-z0-9_-]+):/gi
+
+export interface LaidOutItem {
+  kind: 'text' | 'icon'
+  /** The word, or the icon name. */
+  value: string
+  x: number
+  width: number
+}
+
+/**
+ * Lay out text with inline icons (each icon is one font size wide), wrapping words at `width`.
+ * Returns the lines with item positions and each line's width, for alignment.
+ */
+export function layoutRichText(text: string, isIcon: (name: string) => boolean, measure: (word: string) => number, width: number, fontSize: number) {
+  const lines: { items: LaidOutItem[]; width: number }[] = [{ items: [], width: 0 }]
+  const space = measure(' ')
+  let pendingSpace = false
+  for (const part of text.split(/(\n|:[a-z0-9_-]+:|[ \t]+)/i)) {
+    if (!part) continue
+    let line = lines[lines.length - 1]
+    if (part === '\n') {
+      lines.push({ items: [], width: 0 })
+      pendingSpace = false
+      continue
+    }
+    if (/^[ \t]+$/.test(part)) {
+      pendingSpace = line.items.length > 0
+      continue
+    }
+    const icon = /^:([a-z0-9_-]+):$/i.exec(part)
+    const kind: LaidOutItem['kind'] = icon && isIcon(icon[1].toLowerCase()) ? 'icon' : 'text'
+    const w = kind === 'icon' ? fontSize : measure(part)
+    let x = line.width + (pendingSpace ? space : 0)
+    if (line.items.length && x + w > width) {
+      line = { items: [], width: 0 }
+      lines.push(line)
+      x = 0
+    }
+    line.items.push({ kind, value: kind === 'icon' ? icon![1].toLowerCase() : part, x, width: w })
+    line.width = x + w
+    pendingSpace = false
+  }
+  return lines
 }

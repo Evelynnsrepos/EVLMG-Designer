@@ -75,5 +75,5 @@ export async function preloadImages(paths: string[], resolveUrl: (p: string) => 
       await preloadImage(url)
     }),
   )
-  return (p) => urls.get(p) ?? ''
+  return (p) => urls.get(p) ?? (/^(data|blob|https?):/.test(p) ? p : '')
 }

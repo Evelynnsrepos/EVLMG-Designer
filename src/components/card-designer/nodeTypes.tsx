@@ -1,9 +1,10 @@
 import { cloneElement, isValidElement, type ReactElement } from 'react'
-import { Image as KonvaImage, Rect, Text } from 'react-konva'
+import { Group, Image as KonvaImage, Path, Rect, Text } from 'react-konva'
 import type { Id } from '@/core/model'
 import { cssFamily } from '@/shared/fontList'
 import { BUILTIN_NODE_TYPES, measureTextHeight, placeholderPattern, useLoadedImage, type NodeType, type NodeTypes, type RenderContext } from '@/shared/canvas'
-import { applySlots, fillText, type CardImageNode, type CardNode, type CardTextNode, type Field } from './model'
+import { BUILTIN_ICONS, iconPaths } from './icons'
+import { applySlots, fillText, ICON_TOKEN, layoutRichText, type CardImageNode, type CardNode, type CardTextNode, type Field } from './model'
 
 /** What one card shows: its slot colours and field values (null = the template's own `{Field}` text). */
 export interface CardBinding {
@@ -12,6 +13,50 @@ export interface CardBinding {
   values: Record<Id, string> | null
   /** Exporting: empty picture fields stay empty instead of showing the missing-picture pattern. */
   print?: boolean
+  /** Own icons by lower-case name (picture path); built-in icons need no entry. */
+  icons?: Map<string, string>
+}
+
+const LINE_HEIGHT = 1.2
+let measureCtx: CanvasRenderingContext2D | null = null
+
+/** Text with `:icon:` tokens: words and icons laid out by hand, since canvas text can't hold pictures. */
+function RichText({ text, n, b, ctx }: { text: string; n: CardTextNode; b: CardBinding; ctx: RenderContext }) {
+  const isIcon = (name: string) => !!BUILTIN_ICONS[name] || !!b.icons?.has(name)
+  measureCtx ??= document.createElement('canvas').getContext('2d')
+  const layout = (size: number) => {
+    measureCtx!.font = `${fontStyle(n) === 'normal' ? '' : fontStyle(n)} ${size}px ${cssFamily(n.fontFamily)}`
+    return layoutRichText(text, isIcon, (w) => measureCtx!.measureText(w).width, n.width, size)
+  }
+  // Shrink until it fits, like plain text.
+  let size = n.fontSize
+  let lines = layout(size)
+  for (let i = 0; i < 12 && size > 6 && lines.length * size * LINE_HEIGHT > n.height; i++) lines = layout((size *= 0.9))
+  const color = n.textColor ?? '#1c1d22'
+  const icon = size * 0.95
+  return (
+    <Group>
+      {lines.flatMap((line, li) => {
+        const dx = n.align === 'center' ? (n.width - line.width) / 2 : n.align === 'right' ? n.width - line.width : 0
+        const y = li * size * LINE_HEIGHT
+        return line.items.map((it, i) => {
+          const x = dx + it.x
+          const key = `${li}-${i}`
+          if (it.kind === 'text') return <Text key={key} x={x} y={y} text={it.value} fontSize={size} fontFamily={cssFamily(n.fontFamily)} fontStyle={fontStyle(n)} lineHeight={LINE_HEIGHT} fill={color} />
+          const iy = y + (size * LINE_HEIGHT - icon) / 2
+          const own = b.icons?.get(it.value)
+          if (own) return <Group key={key} x={x} y={iy}><CoverImage src={own} width={icon} height={icon} ctx={ctx} print={b.print} /></Group>
+          return (
+            <Group key={key} x={x} y={iy} scaleX={icon / 24} scaleY={icon / 24}>
+              {iconPaths(it.value).map((d, j) => (
+                <Path key={j} data={d} stroke={color} strokeWidth={2} lineCap="round" lineJoin="round" />
+              ))}
+            </Group>
+          )
+        })
+      })}
+    </Group>
+  )
 }
 
 const fontStyle = (n: CardTextNode) => [n.italic && 'italic', n.bold && 'bold'].filter(Boolean).join(' ') || 'normal'
@@ -43,8 +88,10 @@ function CoverImage({ src, width, height, ctx, print }: { src: string | undefine
 export function cardNodeTypes(b: CardBinding): NodeTypes {
   const textType: NodeType<CardTextNode> = {
     label: 'Text',
-    render: (n) => {
+    render: (n, ctx) => {
       const text = fillText(n.text, b.fields, b.values)
+      const hasIcon = [...text.matchAll(ICON_TOKEN)].some((m) => BUILTIN_ICONS[m[1].toLowerCase()] || b.icons?.has(m[1].toLowerCase()))
+      if (hasIcon) return <RichText text={text} n={n} b={b} ctx={ctx} />
       return (
         <Text
           text={text}

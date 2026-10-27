@@ -150,3 +150,23 @@
 .cd-nowrap {
   white-space: nowrap;
 }
+.cd-row > .cd-kind {
+  flex: none;
+  width: 92px;
+}
+.cd-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.cd-icon-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 12px;
+  background: none;
+  color: var(--text);
+}

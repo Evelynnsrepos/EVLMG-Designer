@@ -20,7 +20,7 @@ import {
   type CanvasTool,
   type Scene,
 } from '@/shared/canvas'
-import { confirmDialog } from '@/shared/dialogs'
+import { confirmDialog, promptDialog } from '@/shared/dialogs'
 import { cssFamily, systemFonts } from '@/shared/fontList'
 import { LayersPanel } from '@/shared/moodboard/LayersPanel'
 import type { MoodNode } from '@/shared/moodboard/model'
@@ -45,7 +45,9 @@ import {
   type SheetLike,
   type SlotKeys,
 } from './model'
+import { BUILTIN_ICONS } from './icons'
 import { cardNodeTypes } from './nodeTypes'
+import { evaluatedSheet } from './sheetValues'
 import { loadSceneFonts, preloadImages, renderCard } from './render'
 import './card-designer.css'
 
@@ -91,13 +93,13 @@ export default function View({ documentId, active }: PanelProps) {
     if (!d) return []
     const fieldIds = new Set(d.fields.filter((f) => f.kind === 'image').map((f) => f.id))
     const fromCards = cards.flatMap((c) => Object.entries(c.values).filter(([k]) => fieldIds.has(k)).map(([, v]) => v))
-    const fixed = [...d.front.nodes, ...d.back.nodes].flatMap((n) => (n.kind === 'image' ? [n.src] : []))
+    const fixed = [...d.front.nodes, ...d.back.nodes].flatMap((n) => (n.kind === 'image' ? [n.src] : [])).concat((d.icons ?? []).map((i) => i.src))
     return [...fromCards, ...fixed]
   }, [d, cards])
   const resolve = useAssetUrls(imagePaths)
 
   const types = useMemo(
-    () => (d ? cardNodeTypes({ colors: slotColors(d, preview?.variantId), fields: d.fields, values: preview?.values ?? null }) : {}),
+    () => (d ? cardNodeTypes({ colors: slotColors(d, preview?.variantId), fields: d.fields, values: preview?.values ?? null, icons: ownIcons(d) }) : {}),
     // fontsReady: new renderers redraw the text once a font has loaded.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
     [d, preview, fontsReady],
@@ -256,6 +258,9 @@ const cardTextTool: CanvasTool<CardNode> = {
   },
 }
 
+/** Own icons by name for `:name:` in text. */
+const ownIcons = (d: CardDoc) => new Map((d.icons ?? []).map((i) => [i.name, i.src]))
+
 function cardLabel(d: CardDoc, c: Card): string {
   const first = d.fields.find((f) => f.kind === 'text')
   return (first && c.values[first.id]) || 'Card'
@@ -265,7 +270,7 @@ function cardLabel(d: CardDoc, c: Card): string {
 function LinkedSheet({ link, fields, variants, onCards }: { link: NonNullable<CardDoc['sheet']>; fields: Field[]; variants: CardDoc['variants']; onCards(c: Card[] | null): void }) {
   const wb = useDocument<{ sheets: SheetLike[] }>('spreadsheet', link.documentId, () => ({ sheets: [] })).data
   const sheet = wb?.sheets.find((s) => s.id === link.sheetId) ?? wb?.sheets[0]
-  const cards = useMemo(() => (sheet ? cardsFromSheet(sheet, fields, variants) : null), [sheet, fields, variants])
+  const cards = useMemo(() => (sheet && wb ? cardsFromSheet(evaluatedSheet(wb.sheets, sheet), fields, variants) : null), [wb, sheet, fields, variants])
   useEffect(() => {
     onCards(cards)
     return () => onCards(null)
@@ -295,6 +300,13 @@ function DeckPanel({ d, cards, previewId, onPreview, update }: { d: CardDoc; car
       back: renameFieldInScene(x.back, f.name, name),
     }))
   const total = expandCopies(cards).length
+  const addIcon = async () => {
+    if (!root) return
+    const [a] = await pickAndImportAssets(root, 'image')
+    if (!a) return
+    const name = (await promptDialog('Icon name (type it as :name: in text)', a.name.replace(/\.[^.]+$/, '')))?.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-')
+    if (name) update((x) => ({ ...x, icons: [...(x.icons ?? []).filter((i) => i.name !== name), { id: newId(), name, src: a.path }] }))
+  }
 
   return (
     <div className="cd-panel">
@@ -302,7 +314,11 @@ function DeckPanel({ d, cards, previewId, onPreview, update }: { d: CardDoc; car
       {d.fields.map((f) => (
         <div key={f.id} className="cd-row">
           <input className="input" value={f.name} aria-label="Field name" onChange={(e) => renameField(f, e.target.value)} />
-          <span className="cd-muted">{f.kind === 'image' ? 'picture' : `{${f.name}}`}</span>
+          <select className="input cd-kind" value={f.kind} aria-label="Field type" onChange={(e) => update((x) => ({ ...x, fields: x.fields.map((y) => (y.id === f.id ? { ...y, kind: e.target.value as Field['kind'] } : y)) }))}>
+            <option value="text">Text</option>
+            <option value="number">Number</option>
+            <option value="image">Picture</option>
+          </select>
           <button className="btn btn-ghost" title="Delete field" aria-label="Delete field" onClick={() => update((x) => ({ ...x, fields: x.fields.filter((y) => y.id !== f.id) }))}>
             <Trash size={14} />
           </button>
@@ -311,6 +327,9 @@ function DeckPanel({ d, cards, previewId, onPreview, update }: { d: CardDoc; car
       <div className="cd-row">
         <button className="btn" onClick={() => update((x) => ({ ...x, fields: [...x.fields, { id: newId(), name: `Field ${x.fields.length + 1}`, kind: 'text' }] }))}>
           + Text field
+        </button>
+        <button className="btn" onClick={() => update((x) => ({ ...x, fields: [...x.fields, { id: newId(), name: `Stat ${x.fields.length + 1}`, kind: 'number' }] }))}>
+          + Number field
         </button>
         <button className="btn" onClick={() => update((x) => ({ ...x, fields: [...x.fields, { id: newId(), name: `Picture ${x.fields.length + 1}`, kind: 'image' }] }))}>
           + Picture field
@@ -356,7 +375,14 @@ function DeckPanel({ d, cards, previewId, onPreview, update }: { d: CardDoc; car
                         {c.values[f.id] ? '🖼' : '+'}
                       </button>
                     ) : (
-                      <input className="input" readOnly={linked} value={c.values[f.id] ?? ''} aria-label={f.name} onChange={(e) => setValue(c, f.id, e.target.value)} />
+                      <input
+                        className={'input' + (f.kind === 'number' ? ' cd-num' : '')}
+                        type={f.kind === 'number' && !linked ? 'number' : 'text'}
+                        readOnly={linked}
+                        value={c.values[f.id] ?? ''}
+                        aria-label={f.name}
+                        onChange={(e) => setValue(c, f.id, e.target.value)}
+                      />
                     )}
                   </td>
                 ))}
@@ -395,6 +421,27 @@ function DeckPanel({ d, cards, previewId, onPreview, update }: { d: CardDoc; car
           + Card
         </button>
       )}
+
+      <h4>Icons</h4>
+      <p className="cd-muted">Type :name: in any text to show an icon in the text colour. Click a name to copy it.</p>
+      <div className="cd-icons">
+        {Object.keys(BUILTIN_ICONS).map((name) => (
+          <button key={name} className="cd-icon-chip" title={`Copy :${name}:`} onClick={() => void navigator.clipboard?.writeText(`:${name}:`)}>
+            :{name}:
+          </button>
+        ))}
+        {(d.icons ?? []).map((i) => (
+          <span key={i.id} className="cd-icon-chip">
+            :{i.name}:
+            <button className="btn btn-ghost" title="Delete icon" aria-label={`Delete icon ${i.name}`} onClick={() => update((x) => ({ ...x, icons: (x.icons ?? []).filter((y) => y.id !== i.id) }))}>
+              <Trash size={12} />
+            </button>
+          </span>
+        ))}
+      </div>
+      <button className="btn" onClick={() => void addIcon()}>
+        + Own icon (picture)
+      </button>
     </div>
   )
 }
@@ -469,7 +516,7 @@ function StylePanel({ d, selected, onScene }: { d: CardDoc; selected: CardNode[]
             </select>
           </div>
           {colorRow('Text', 'textColor', texts)}
-          <p className="cd-muted">Long text shrinks to fit its box. Drag the box handles to change its size.</p>
+          <p className="cd-muted">Long text shrinks to fit its box. Drag the box handles to change its size. Type :sword:, :heart:, :mana: and other icon names (listed in the Deck tab) to put icons in the text.</p>
         </>
       ) : null}
       {shapes.length ? (
@@ -676,12 +723,16 @@ function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: string; car
   const renderAll = async (withBleed: boolean, res: number) => {
     await loadSceneFonts([d.front, d.back])
     const imageFields = d.fields.filter((f) => f.kind === 'image').map((f) => f.id)
-    const paths = [...cards.flatMap((c) => imageFields.map((f) => c.values[f] ?? '')), ...[...d.front.nodes, ...d.back.nodes].flatMap((n) => (n.kind === 'image' ? [n.src] : []))]
+    const paths = [
+      ...cards.flatMap((c) => imageFields.map((f) => c.values[f] ?? '')),
+      ...[...d.front.nodes, ...d.back.nodes].flatMap((n) => (n.kind === 'image' ? [n.src] : [])),
+      ...(d.icons ?? []).map((i) => i.src),
+    ]
     const resolve = await preloadImages(paths, (p) => (root ? assetUrl(root, p) : Promise.resolve(null)))
     const fronts = new Map<Id, HTMLCanvasElement>()
     const backsMap = new Map<Id, HTMLCanvasElement>()
     for (const c of cards) {
-      const types = cardNodeTypes({ colors: slotColors(d, c.variantId), fields: d.fields, values: c.values, print: true })
+      const types = cardNodeTypes({ colors: slotColors(d, c.variantId), fields: d.fields, values: c.values, print: true, icons: ownIcons(d) })
       fronts.set(c.id, renderCard(d, d.front, types, resolve, res, withBleed))
       backsMap.set(c.id, renderCard(d, d.back, types, resolve, res, withBleed))
     }
