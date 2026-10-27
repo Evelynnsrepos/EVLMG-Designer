@@ -120,6 +120,11 @@ export interface CanvasEditorProps<N extends NodeBase> {
   /** Receive the API once, for actions triggered outside the canvas (export buttons, layers panel). */
   apiRef?: { current: CanvasApi<N> | null }
   ariaLabel?: string
+  /**
+   * 0.22: select, move, delete and every other edit only reach the active layer; other layers can't be clicked.
+   * Alt+click (select tool) switches to the layer of the item under the pointer.
+   */
+  layerScoped?: boolean
 }
 
 const DEFAULT_TOOLS: CanvasTool<any>[] = [selectTool, handTool]
@@ -313,6 +318,9 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
       get activeLayerId() {
         return resolveActiveLayer(L().props.scene, L().state.activeLayerId)
       },
+      get scopeLayerId() {
+        return L().props.layerScoped ? a.activeLayerId : null
+      },
       screenToWorld: (p) => screenToWorld(p, L().state.viewport),
       getWorldBounds,
       editText: (id, newNode) => setEditing({ id, draft: newNode }),
@@ -364,11 +372,12 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
     if (props.scene.layers.length === 0) props.onChange((s) => (s.layers.length ? s : addLayer(s, {}).scene), { undoable: false })
   }, [props.scene.layers.length, props])
 
-  // Drop selected ids that no longer exist (after undo or delete elsewhere).
+  // Drop selected ids that no longer exist (after undo or delete elsewhere), or that left the scoped layer.
+  const scopeLayerId = props.layerScoped ? resolveActiveLayer(props.scene, state.activeLayerId) : null
   useEffect(() => {
-    const valid = selection.filter((id) => nodeMap.has(id))
+    const valid = selection.filter((id) => nodeMap.has(id) && (!scopeLayerId || nodeMap.get(id)!.layerId === scopeLayerId))
     if (valid.length !== selection.length) state.setSelection(valid)
-  }, [selection, nodeMap, state])
+  }, [selection, nodeMap, state, scopeLayerId])
 
   useLayoutEffect(() => {
     const el = rootRef.current
@@ -501,6 +510,21 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
       startPan(e)
       return
     }
+    if (props.layerScoped && e.altKey && e.button === 0 && tool?.id === 'select') {
+      // Other layers don't listen for the pointer, so find the topmost item under it by its bounds.
+      const w = screenToWorld(screen, state.viewport)
+      const hit = selectableNodes(props.scene)
+        .reverse()
+        .find((n) => {
+          const b = getWorldBounds(n.id)
+          return b && w.x >= b.x && w.x <= b.x + b.width && w.y >= b.y && w.y <= b.y + b.height
+        })
+      if (hit) {
+        state.setActiveLayerId(hit.layerId)
+        api.select([hit.id])
+      }
+      return
+    }
     const gesture = tool?.pointerDown?.(toolEvent(e, count), api)
     if (gesture) runGesture(gesture, count)
   }
@@ -564,7 +588,7 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
   const zoomReset = () => zoomCentered(1 / state.viewport.scale)
 
   const deleteSelection = () => {
-    const ids = selectableNodes(props.scene)
+    const ids = selectableNodes(props.scene, scopeLayerId)
       .filter((n) => selection.includes(n.id))
       .map((n) => n.id)
     if (ids.length === 0) return
@@ -597,7 +621,7 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
     if (isShortcut(e, 'app.redo')) return handled(), props.onRedo?.()
     if (mod) {
       const k = key.toLowerCase()
-      if (k === 'a') api.select(selectableNodes(props.scene).map((n) => n.id))
+      if (k === 'a') api.select(selectableNodes(props.scene, scopeLayerId).map((n) => n.id))
       else if (k === 'd') {
         let ids: Id[] = []
         props.onChange((s) => {
@@ -783,7 +807,7 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
           <KonvaLayer>
             {layers.map(({ layer, nodes }) =>
               layer.hidden ? null : (
-                <Group key={layer.id} listening={!layer.locked}>
+                <Group key={layer.id} listening={!layer.locked && (!scopeLayerId || layer.id === scopeLayerId)}>
                   {nodes.map((n) =>
                     n.hidden ? null : <NodeView key={n.id} node={n} type={typeOf(n)} ctx={ctx} editingText={editing?.id === n.id} />,
                   )}

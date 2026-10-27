@@ -111,7 +111,7 @@ export function startMarquee(e: ToolPointerEvent, api: CanvasApi<any>) {
         return
       }
       const box = rectFromPoints(startWorld, m.world)
-      const hits = selectableNodes(api.scene)
+      const hits = selectableNodes(api.scene, api.scopeLayerId)
         .filter((n) => {
           const b = api.getWorldBounds(n.id)
           return b ? rectsIntersect(box, b) : false
@@ -429,7 +429,7 @@ export const eraserTool = (options: { shortcut?: string } = {}): CanvasTool<any>
       const reach = 8 / api.viewport.scale
       let changed = false
       // Only what can be selected: hidden and locked lines (or layers) stay.
-      for (const n of selectableNodes(api.scene) as LineNode[]) {
+      for (const n of selectableNodes(api.scene, api.scopeLayerId) as LineNode[]) {
         if (n.kind !== 'line' || gone.has(n.id)) continue
         const local = worldToLocal(p, n)
         const r = reach / Math.max(0.01, Math.min(Math.abs(n.scaleX ?? 1), Math.abs(n.scaleY ?? 1)))

@@ -92,6 +92,17 @@ describe('layers', () => {
     expect(selectableNodes(s)).toHaveLength(0)
   })
 
+  it('limits selection to one layer when scoped, never a locked one (0.22)', () => {
+    let s = createScene()
+    const a = s.layers[0].id
+    const b = addLayer(s, {})
+    s = addNodes(b.scene, [rect('x', a), rect('y', b.id), rect('z', b.id)])
+    expect(selectableNodes(s, b.id).map((n) => n.id)).toEqual(['y', 'z'])
+    expect(selectableNodes(s, a).map((n) => n.id)).toEqual(['x'])
+    s = updateLayer(s, b.id, { locked: true })
+    expect(selectableNodes(s, b.id)).toHaveLength(0)
+  })
+
   it('picks a usable layer for new nodes', () => {
     let s = sample()
     const first = s.layers[0].id

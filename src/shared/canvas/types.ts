@@ -266,6 +266,8 @@ export interface CanvasApi<N extends NodeBase = NodeBase> {
   setViewport(v: Viewport): void
   /** Layer where tools add new nodes. */
   readonly activeLayerId: Id
+  /** With `layerScoped`, the only layer that can be selected and edited (the active one); null otherwise. */
+  readonly scopeLayerId: Id | null
   screenToWorld(p: Point): Point
   getWorldBounds(id: Id): Rect | null
   /** Start inline text editing of an existing node, or of a new node that is added only if the text is not empty. */

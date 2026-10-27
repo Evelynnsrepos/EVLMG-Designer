@@ -34,10 +34,10 @@ export function visibleNodes<N extends NodeBase>(scene: Scene<N>): N[] {
   return renderOrder(scene).flatMap(({ layer, nodes }) => (layer.hidden ? [] : nodes.filter((n) => !n.hidden)))
 }
 
-/** Nodes the user can select: visible and not locked (node or layer). */
-export function selectableNodes<N extends NodeBase>(scene: Scene<N>): N[] {
+/** Nodes the user can select: visible and not locked (node or layer); with `layerId`, only that layer's (layer-scoped tools). */
+export function selectableNodes<N extends NodeBase>(scene: Scene<N>, layerId?: Id | null): N[] {
   const locked = new Set(scene.layers.filter((l) => l.locked).map((l) => l.id))
-  return visibleNodes(scene).filter((n) => !n.locked && !locked.has(n.layerId))
+  return visibleNodes(scene).filter((n) => !n.locked && !locked.has(n.layerId) && (layerId == null || n.layerId === layerId))
 }
 
 /** Layer for new nodes: the requested one if usable, else the topmost visible unlocked layer. */
