@@ -15,7 +15,18 @@ export interface CardBinding {
   print?: boolean
   /** Own icons by lower-case name (picture path); built-in icons need no entry. */
   icons?: Map<string, string>
+  /** Foil mask export: only foil items, in solid black. */
+  mask?: boolean
 }
+
+const FOIL_STOPS = [0, '#7d8396', 0.2, '#c9a640', 0.4, '#3fa3b8', 0.6, '#a65fb8', 0.8, '#6fa85a', 1, '#7d8396']
+/** Shiny gradient props for a foil fill or outline over a w×h box starting at x,y. */
+const foilProps = (part: 'fill' | 'stroke', w: number, h: number, x = 0, y = 0) => ({
+  [`${part}LinearGradientStartPoint`]: { x, y },
+  [`${part}LinearGradientEndPoint`]: { x: x + w, y: y + h },
+  [`${part}LinearGradientColorStops`]: FOIL_STOPS,
+  ...(part === 'fill' ? { fillPriority: 'linear-gradient' } : {}),
+})
 
 const LINE_HEIGHT = 1.2
 let measureCtx: CanvasRenderingContext2D | null = null
@@ -33,6 +44,7 @@ function RichText({ text, n, b, ctx }: { text: string; n: CardTextNode; b: CardB
   let lines = layout(size)
   for (let i = 0; i < 12 && size > 6 && lines.length * size * LINE_HEIGHT > n.height; i++) lines = layout((size *= 0.9))
   const color = n.textColor ?? '#1c1d22'
+  const foil = n.foil && !b.mask
   const icon = size * 0.95
   return (
     <Group>
@@ -42,14 +54,14 @@ function RichText({ text, n, b, ctx }: { text: string; n: CardTextNode; b: CardB
         return line.items.map((it, i) => {
           const x = dx + it.x
           const key = `${li}-${i}`
-          if (it.kind === 'text') return <Text key={key} x={x} y={y} text={it.value} fontSize={size} fontFamily={cssFamily(n.fontFamily)} fontStyle={fontStyle(n)} lineHeight={LINE_HEIGHT} fill={color} />
+          if (it.kind === 'text') return <Text key={key} x={x} y={y} text={it.value} fontSize={size} fontFamily={cssFamily(n.fontFamily)} fontStyle={fontStyle(n)} lineHeight={LINE_HEIGHT} fill={color} {...(foil ? foilProps('fill', n.width, n.height, -x, -y) : {})} />
           const iy = y + (size * LINE_HEIGHT - icon) / 2
           const own = b.icons?.get(it.value)
           if (own) return <Group key={key} x={x} y={iy}><CoverImage src={own} width={icon} height={icon} ctx={ctx} print={b.print} /></Group>
           return (
             <Group key={key} x={x} y={iy} scaleX={icon / 24} scaleY={icon / 24}>
               {iconPaths(it.value).map((d, j) => (
-                <Path key={j} data={d} stroke={color} strokeWidth={2} lineCap="round" lineJoin="round" />
+                <Path key={j} data={d} stroke={color} strokeWidth={2} lineCap="round" lineJoin="round" {...(foil ? foilProps('stroke', 24, 24) : {})} />
               ))}
             </Group>
           )
@@ -131,9 +143,27 @@ export function cardNodeTypes(b: CardBinding): NodeTypes {
       {
         ...t,
         render: (n: CardNode, ctx: RenderContext) => {
-          const c = applySlots(n, b.colors)
+          if (b.mask && !n.foil) return null
+          let c = applySlots(n, b.colors)
+          const hasFill = !!(c as { fillColor?: string }).fillColor
+          if (b.mask) c = { ...c, ...(hasFill ? { fillColor: '#000' } : {}), strokeColor: '#000', textColor: '#000' }
+          const { width: w = 400, height: h = 400 } = c as { width?: number; height?: number }
+          // Pictures: solid in the mask, a shine laid over them on screen.
+          if (k === 'card-image' || k === 'image') {
+            if (b.mask) return <Rect width={w} height={h} fill="#000" />
+            const el = t.render(c, ctx)
+            return n.foil ? <Group>{el}<Rect width={w} height={h} listening={false} opacity={0.55} globalCompositeOperation="overlay" {...foilProps('fill', w, h)} /></Group> : el
+          }
           const el = t.render(c, ctx)
-          return (k === 'rect' || k === 'ellipse') && isValidElement(el) ? cloneElement(el as ReactElement<{ fillEnabled?: boolean }>, { fillEnabled: !!(c as { fillColor?: string }).fillColor }) : el
+          if (!isValidElement(el)) return el
+          const props: Record<string, unknown> = k === 'rect' || k === 'ellipse' ? { fillEnabled: hasFill } : {}
+          // Single shapes (and plain text) take the shine directly; rich text does it per word.
+          if (n.foil && !b.mask) {
+            const [x, y] = k === 'ellipse' ? [-w / 2, -h / 2] : [0, 0]
+            if (hasFill || k === 'card-text') Object.assign(props, foilProps('fill', w, h, x, y))
+            if (k !== 'card-text') Object.assign(props, foilProps('stroke', w, h, x, y))
+          }
+          return Object.keys(props).length ? cloneElement(el as ReactElement<Record<string, unknown>>, props) : el
         },
       },
     ]),

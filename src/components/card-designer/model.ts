@@ -35,7 +35,8 @@ export interface CardImageNode extends NodeBase {
 
 /** Built-in shapes may take their colours from slots too. */
 export type SlotKeys = { fillSlotId?: Id; strokeSlotId?: Id }
-export type CardNode = (BuiltinNode & SlotKeys) | CardTextNode | CardImageNode
+/** `foil`: printed in foil (shown with a shine; exported as a black foil mask for print shops). */
+export type CardNode = ((BuiltinNode & SlotKeys) | CardTextNode | CardImageNode) & { foil?: boolean }
 
 export interface ColorSlot {
   id: Id

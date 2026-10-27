@@ -177,7 +177,18 @@ export default function View({ documentId, active }: PanelProps) {
               {s === 'front' ? TEXT.front : TEXT.back}
             </button>
           ))}
-          {preview ? <span className="cd-previewing">{cardLabel(d, preview)}</span> : null}
+          <span className="cd-previewing">
+            <select className="input" value={preview?.id ?? ''} aria-label="Card shown" title="The card shown on the canvas" onChange={(e) => setPreviewId(e.target.value)}>
+              {cards.map((c, i) => (
+                <option key={c.id} value={c.id}>
+                  {i + 1}. {cardLabel(d, c)}
+                </option>
+              ))}
+            </select>
+            <button className="btn" disabled={!!d.sheet} title={d.sheet ? 'Cards come from the linked Spreadsheet: add a row there' : 'Add a new card to the deck (same design, its own values)'} onClick={() => setPreviewId(addCard(d, update))}>
+              <Plus size={14} /> Card
+            </button>
+          </span>
         </div>
         <CanvasEditor<CardNode>
           key={side}
@@ -266,6 +277,14 @@ function cardLabel(d: CardDoc, c: Card): string {
   return (first && c.values[first.id]) || 'Card'
 }
 
+/** Adds an empty card named "Card N" and returns its id. */
+function addCard(d: CardDoc, update: Update): Id {
+  const id = newId()
+  const name = d.fields.find((f) => f.kind === 'text')
+  update((x) => ({ ...x, cards: [...x.cards, { id, copies: 1, values: name ? { [name.id]: `Card ${x.cards.length + 1}` } : {} }] }))
+  return id
+}
+
 /** Reads a linked Spreadsheet sheet and hands its rows up as cards. Mounted only while a sheet is linked. */
 function LinkedSheet({ link, fields, variants, onCards }: { link: NonNullable<CardDoc['sheet']>; fields: Field[]; variants: CardDoc['variants']; onCards(c: Card[] | null): void }) {
   const wb = useDocument<{ sheets: SheetLike[] }>('spreadsheet', link.documentId, () => ({ sheets: [] })).data
@@ -336,7 +355,15 @@ function DeckPanel({ d, cards, previewId, onPreview, update }: { d: CardDoc; car
         </button>
       </div>
 
-      <h4>Cards ({total} to print)</h4>
+      <div className="cd-row">
+        <h4>Cards ({total} to print)</h4>
+        {linked ? null : (
+          <button className="btn" onClick={() => onPreview(addCard(d, update))}>
+            + Card
+          </button>
+        )}
+      </div>
+      <p className="cd-muted">Every card uses the design on the left; each row fills in its own values. Click a row to see that card.</p>
       <label className="cd-row">
         From Spreadsheet
         <select
@@ -416,11 +443,6 @@ function DeckPanel({ d, cards, previewId, onPreview, update }: { d: CardDoc; car
           </tbody>
         </table>
       </div>
-      {linked ? null : (
-        <button className="btn" onClick={() => update((x) => ({ ...x, cards: [...x.cards, { id: newId(), copies: 1, values: {} }] }))}>
-          + Card
-        </button>
-      )}
 
       <h4>Icons</h4>
       <p className="cd-muted">Type :name: in any text to show an icon in the text colour. Click a name to copy it.</p>
@@ -489,8 +511,13 @@ function StylePanel({ d, selected, onScene }: { d: CardDoc; selected: CardNode[]
     )
   }
 
+  const foil = selected.every((n) => n.foil)
   return (
     <div className="cd-panel">
+      <label className="cd-row" title="Printed in shiny foil. Shows a shine here; export the foil mask for the print shop.">
+        <input type="checkbox" checked={foil} onChange={() => patch((n) => ({ ...n, foil: !foil || undefined }))} />
+        Foil
+      </label>
       {t ? (
         <>
           <h4>Text</h4>
@@ -577,8 +604,20 @@ function ColorsPanel({ d, update, onScene, activeLayerId, side }: { d: CardDoc; 
     }))
   }
 
+  const foilLayer = !!layer && card(d, side).nodes.some((n) => n.layerId === layer.id) && card(d, side).nodes.every((n) => n.layerId !== layer.id || n.foil)
+  const setLayerFoil = () => {
+    if (!layer || layer.locked) return
+    onScene((s) => ({ ...s, nodes: s.nodes.map((n) => (n.layerId === layer.id && !n.locked ? { ...n, foil: !foilLayer || undefined } : n)) }))
+  }
+
   return (
     <div className="cd-panel">
+      <h4>Card colours</h4>
+      <p className="cd-muted">The background of each side, set here even when its layer is locked.</p>
+      {(['front', 'back'] as const).map((sd) => (
+        <SideColor key={sd} d={d} side={sd} update={update} />
+      ))}
+
       <h4>Colour slots</h4>
       <p className="cd-muted">Change a slot and everything using it changes on every card.</p>
       {d.slots.map((s) => (
@@ -615,6 +654,11 @@ function ColorsPanel({ d, update, onScene, activeLayerId, side }: { d: CardDoc; 
         </button>
       </div>
 
+      <label className="cd-row" title={layer?.locked ? 'This layer is locked' : 'Everything on this layer is printed in shiny foil'}>
+        <input type="checkbox" disabled={!layer || layer.locked} checked={foilLayer} onChange={setLayerFoil} />
+        Foil layer (everything on “{layer?.name ?? ''}” is foil)
+      </label>
+
       <h4>Variants</h4>
       <p className="cd-muted">Other colours for some slots, e.g. one per faction or rarity. Pick a card’s variant in the deck.</p>
       {d.variants.map((v) => (
@@ -645,6 +689,48 @@ function ColorsPanel({ d, update, onScene, activeLayerId, side }: { d: CardDoc; 
       <button className="btn" onClick={() => update((x) => ({ ...x, variants: [...x.variants, { id: newId(), name: `Variant ${x.variants.length + 1}`, colors: [] }] }))}>
         + Variant
       </button>
+    </div>
+  )
+}
+
+/** The side's background: the shape named Background, else the first filled rectangle on the bottom layer. */
+function backgroundOf(s: Scene<CardNode>) {
+  return s.nodes.find((n) => n.name === 'Background' && n.kind === 'rect') ?? s.nodes.find((n) => n.layerId === s.layers[0]?.id && n.kind === 'rect' && n.fillColor)
+}
+
+function SideColor({ d, side, update }: { d: CardDoc; side: Side; update: Update }) {
+  const bg = backgroundOf(card(d, side)) as (CardNode & SlotKeys) | undefined
+  const set = (patch: { fillColor?: string; fillSlotId?: Id }) =>
+    update((x) => {
+      const s = card(x, side)
+      const cur = backgroundOf(s)
+      const b = x.bleedMm * MM
+      const nodes = cur
+        ? s.nodes.map((n) => (n === cur ? { ...n, ...patch } : n))
+        : [{ id: newId(), kind: 'rect', layerId: s.layers[0].id, x: -b, y: -b, width: x.widthMm * MM + 2 * b, height: x.heightMm * MM + 2 * b, strokeWidth: 0, name: 'Background', ...patch } as CardNode, ...s.nodes]
+      return { ...x, [side]: { ...s, nodes } }
+    })
+  const label = side === 'front' ? 'Front' : 'Back'
+  return (
+    <div className="cd-row">
+      <span className="cd-label">{label}</span>
+      <select
+        className="input"
+        value={bg?.fillSlotId ?? ''}
+        aria-label={`${label} background colour slot`}
+        onChange={(e) => {
+          const slot = d.slots.find((x) => x.id === e.target.value)
+          set({ fillSlotId: slot?.id, ...(slot ? { fillColor: slot.color } : {}) })
+        }}
+      >
+        <option value="">{TEXT.fixed}</option>
+        {d.slots.map((x) => (
+          <option key={x.id} value={x.id}>
+            {x.name}
+          </option>
+        ))}
+      </select>
+      {bg?.fillSlotId ? null : <input type="color" aria-label={`${label} background colour`} value={bg ? colorOf(bg, 'fillColor') : '#ffffff'} onChange={(e) => set({ fillColor: e.target.value, fillSlotId: undefined })} />}
     </div>
   )
 }
@@ -711,6 +797,18 @@ function CardPanel({ d, update }: { d: CardDoc; update: Update }) {
   )
 }
 
+/** Foil masks go to print shops black on white. */
+function onWhite(src: HTMLCanvasElement) {
+  const c = document.createElement('canvas')
+  c.width = src.width
+  c.height = src.height
+  const g = c.getContext('2d')!
+  g.fillStyle = '#fff'
+  g.fillRect(0, 0, c.width, c.height)
+  g.drawImage(src, 0, 0)
+  return c
+}
+
 function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: string; cards: Card[]; root: string | null }) {
   const [paper, setPaper] = useState('a4')
   const [dpi, setDpi] = useState(300)
@@ -720,7 +818,7 @@ function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: string; car
   const name = safeFileName(title)
 
   /** Draw every card (each card once, by id), fronts and backs. */
-  const renderAll = async (withBleed: boolean, res: number) => {
+  const renderAll = async (withBleed: boolean, res: number, mask = false) => {
     await loadSceneFonts([d.front, d.back])
     const imageFields = d.fields.filter((f) => f.kind === 'image').map((f) => f.id)
     const paths = [
@@ -732,7 +830,7 @@ function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: string; car
     const fronts = new Map<Id, HTMLCanvasElement>()
     const backsMap = new Map<Id, HTMLCanvasElement>()
     for (const c of cards) {
-      const types = cardNodeTypes({ colors: slotColors(d, c.variantId), fields: d.fields, values: c.values, print: true, icons: ownIcons(d) })
+      const types = cardNodeTypes({ colors: slotColors(d, c.variantId), fields: d.fields, values: c.values, print: true, icons: ownIcons(d), mask })
       fronts.set(c.id, renderCard(d, d.front, types, resolve, res, withBleed))
       backsMap.set(c.id, renderCard(d, d.back, types, resolve, res, withBleed))
     }
@@ -751,11 +849,13 @@ function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: string; car
     }
   }
 
-  const sheets = async () => {
+  const hasFoil = [...d.front.nodes, ...d.back.nodes].some((n) => n.foil)
+
+  const sheets = async (mask = false) => {
     const page = PAGE_SIZES.find((p) => p.id === paper)!
     const layout = sheetLayout(page, { w: d.widthMm, h: d.heightMm }, d.bleedMm)
     if (!layout.slots.length) throw new Error('The card is bigger than the paper.')
-    const r = await renderAll(true, dpi)
+    const r = await renderAll(true, dpi, mask)
     const deck = expandCopies(cards)
     return { layout, pages: drawSheets(layout, deck.map((c) => r.fronts.get(c.id)!), dpi, d.bleedMm, backs ? deck.map((c) => r.backs.get(c.id)!) : undefined) }
   }
@@ -763,6 +863,10 @@ function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: string; car
   const pdf = run('Print sheets (PDF)', async () => {
     const { layout, pages } = await sheets()
     await saveBinaryFile({ title: 'Export print sheets', defaultName: `${name} print.pdf`, bytes: await sheetsToPdf(layout, pages), filter: { name: 'PDF', extensions: ['pdf'] } })
+  })
+  const foilPdf = run('Foil mask sheets', async () => {
+    const { layout, pages } = await sheets(true)
+    await saveBinaryFile({ title: 'Export foil mask sheets', defaultName: `${name} foil mask.pdf`, bytes: await sheetsToPdf(layout, pages), filter: { name: 'PDF', extensions: ['pdf'] } })
   })
   const png = run('Print sheets (PNG)', async () => {
     const { pages } = await sheets()
@@ -797,6 +901,14 @@ function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: string; car
       images.set(c.id, `cards/${base}.png`)
       files[`cards/${base}.png`] = await canvasBytes(r.fronts.get(c.id)!)
       files[`cards/${base} back.png`] = await canvasBytes(r.backs.get(c.id)!)
+    }
+    if (hasFoil) {
+      const m = await renderAll(false, dpi, true)
+      for (const c of cards) {
+        const base = images.get(c.id)!.replace(/\.png$/, '')
+        files[`${base} foil.png`] = await canvasBytes(onWhite(m.fronts.get(c.id)!))
+        files[`${base} back foil.png`] = await canvasBytes(onWhite(m.backs.get(c.id)!))
+      }
     }
     files['deck.json'] = new TextEncoder().encode(JSON.stringify(deckJson(title, d, cards, images), null, 2))
     await saveBinaryFile({ title: 'Export cards', defaultName: `${name} cards.zip`, bytes: zipSync(files, { level: 0 }), filter: { name: 'Zip', extensions: ['zip'] } })
@@ -839,6 +951,14 @@ function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: string; car
       <button className="btn" disabled={!!busy} onClick={() => void confirmBig(png)}>
         Print sheets (PNG)
       </button>
+      {hasFoil ? (
+        <>
+          <button className="btn" disabled={!!busy} onClick={() => void confirmBig(foilPdf)}>
+            Foil mask sheets (PDF)
+          </button>
+          <p className="cd-muted">Black where the foil goes, laid out like the print sheets. Print shops use it as the foil layer.</p>
+        </>
+      ) : null}
       <h4>Images and data</h4>
       <button className="btn" disabled={!!busy} onClick={() => void deckImage()}>
         Deck image (all cards in one PNG)

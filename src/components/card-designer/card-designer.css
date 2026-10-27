@@ -28,6 +28,9 @@
 }
 .cd-previewing {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   color: var(--text-muted);
   font-size: 12px;
 }

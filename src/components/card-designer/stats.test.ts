@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import type { ReactElement } from 'react'
+import type { RenderContext } from '@/shared/canvas'
 import { iconPaths } from './icons'
+import { cardNodeTypes } from './nodeTypes'
 import { createCardDoc, deckJson, layoutRichText } from './model'
 import { evaluatedSheet } from './sheetValues'
 
@@ -40,5 +43,15 @@ describe('custom stats', () => {
     expect(out.cells.A2.v).toBe('8')
     expect(out.cells.B2.v).toBe('0.3333333333')
     expect(out.cells.C2.v).toBe('Text')
+  })
+
+  it('draws only foil items, in black, for the foil mask', () => {
+    const doc = createCardDoc()
+    const ctx = { theme: { text: '#111' }, resolveImageSrc: (p: string) => p } as unknown as RenderContext
+    const types = cardNodeTypes({ colors: new Map(), fields: doc.fields, values: null, mask: true })
+    const rect = { id: 'r', kind: 'rect', layerId: 'l', x: 0, y: 0, width: 10, height: 10, fillColor: '#f00', strokeColor: '#0f0' } as const
+    expect(types.rect.render(rect, ctx)).toBeNull()
+    const el = types.rect.render({ ...rect, foil: true }, ctx) as ReactElement<{ fill: string; stroke: string }>
+    expect([el.props.fill, el.props.stroke]).toEqual(['#000', '#000'])
   })
 })
