@@ -1,5 +1,5 @@
 import { ArrowUpToLine, ChevronDown, ChevronUp, Circle, Eye, EyeOff, Image, Lock, LockOpen, MoveUpRight, Pencil, Plus, Shapes, Slash, Square, StickyNote, Trash, Type, X, type LucideIcon } from 'lucide-react'
-import { useState, type DragEvent } from 'react'
+import { useState, type DragEvent, type ReactNode } from 'react'
 import type { Id } from '@/core/model'
 import { confirmDialog, promptDialog } from '@/shared/dialogs'
 import {
@@ -89,6 +89,9 @@ export interface LayersPanelProps {
   activeLayerId: Id
   onActiveLayer(id: Id): void
   onClose(): void
+  /** Optional per-layer extras (0.24 Card Designer): a small picture before the name, buttons after the built-in ones. */
+  layerPreview?(layer: Layer): ReactNode
+  layerActions?(layer: Layer): ReactNode
 }
 
 type DragData = { kind: 'node'; id: Id } | { kind: 'layer'; id: Id }
@@ -210,13 +213,16 @@ export function LayersPanel(p: LayersPanelProps) {
                 title={l.alwaysOnTop ? LAYER_TEXT.onTopHint : isActive ? LAYER_TEXT.active : undefined}
               >
                 {l.alwaysOnTop ? <ArrowUpToLine size={14} className="moodboard-layer-badge" aria-label={LAYER_TEXT.onTop} /> : null}
+                {p.layerPreview?.(l)}
                 <span className="moodboard-layer-name">{l.name}</span>
                 <span className="moodboard-row-actions">
+                  {p.layerPreview ? <RowButton label={LAYER_TEXT.renameLayer} onClick={() => void renameLayer(l)} icon={Pencil} /> : null}
                   <RowButton label={LAYER_TEXT.up} disabled={gi === group.length - 1} onClick={() => shiftLayer(l, 1)} icon={ChevronUp} />
                   <RowButton label={LAYER_TEXT.down} disabled={gi === 0} onClick={() => shiftLayer(l, -1)} icon={ChevronDown} />
                   <RowButton label={l.locked ? LAYER_TEXT.unlock : LAYER_TEXT.lock} on={!!l.locked} onClick={() => p.onChange((s) => updateLayer(s, l.id, { locked: !l.locked }))} icon={l.locked ? Lock : LockOpen} />
                   <RowButton label={l.hidden ? LAYER_TEXT.show : LAYER_TEXT.hide} on={!!l.hidden} onClick={() => p.onChange((s) => updateLayer(s, l.id, { hidden: !l.hidden }))} icon={l.hidden ? EyeOff : Eye} />
                   <RowButton label={LAYER_TEXT.deleteLayer} disabled={!canDelete} onClick={() => deleteLayer(l)} icon={Trash} />
+                  {p.layerActions?.(l)}
                 </span>
               </div>
               {nodes.length === 0 ? <div className="moodboard-item-empty">{LAYER_TEXT.empty}</div> : null}

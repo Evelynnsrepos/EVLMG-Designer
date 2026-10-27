@@ -1,0 +1,46 @@
+import { newId, type Id } from '@/core/model'
+import type { Scene } from '@/shared/canvas'
+import type { Card, CardDoc, CardNode } from './model'
+
+/** Texts shared by the Card Designer's panels. */
+export const TEXT = {
+  front: 'Front',
+  back: 'Back',
+  layers: 'Layers panel',
+  addText: 'Text (T): click on the card to type. {Name} shows the card’s value for the field Name.',
+  addPicture: 'Add a picture field: shows each card’s picture',
+  addImage: 'Add a fixed image (the same on every card)',
+  fixed: 'Fixed colour',
+  noSelection: 'Select something on the card to style it. Only the active layer can be selected; Alt+click picks an item on another layer.',
+  sheetHint: 'Row 1 holds the field names. Columns named Copies and Variant set those.',
+  exportHint: 'Print at "actual size" (100 %), not "fit to page". For double-sided printing, flip on the long edge.',
+}
+
+export type Side = 'front' | 'back'
+export type Update = (recipe: (x: CardDoc) => CardDoc, options?: { undoable?: boolean }) => void
+export type OnScene = (recipe: (s: Scene<CardNode>) => Scene<CardNode>) => void
+
+export const sideScene = (d: CardDoc, side: Side) => (side === 'front' ? d.front : d.back)
+
+/** Own icons by name for `:name:` in text. */
+export const ownIcons = (d: CardDoc) => new Map((d.icons ?? []).map((i) => [i.name, i.src]))
+
+export function cardLabel(d: CardDoc, c: Card): string {
+  const first = d.fields.find((f) => f.kind === 'text')
+  return (first && c.values[first.id]) || 'Card'
+}
+
+/** Adds an empty card named "Card N" and returns its id. */
+export function addCard(d: CardDoc, update: Update): Id {
+  const id = newId()
+  const name = d.fields.find((f) => f.kind === 'text')
+  update((x) => ({ ...x, cards: [...x.cards, { id, copies: 1, values: name ? { [name.id]: `Card ${x.cards.length + 1}` } : {} }] }))
+  return id
+}
+
+/** Every node of a design, both sides and every card's own items (for fonts, pictures and foil). */
+export const allNodes = (d: CardDoc): CardNode[] => [
+  ...d.front.nodes,
+  ...d.back.nodes,
+  ...Object.values(d.overrides ?? {}).flatMap((o) => Object.values(o.nodes ?? {}).flat()),
+]

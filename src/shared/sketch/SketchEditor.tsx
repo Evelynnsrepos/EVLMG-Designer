@@ -203,6 +203,17 @@ export interface SketchEditorHandle {
 }
 
 /** A raster editor: pressure brushes, layers with blend modes, selection, mirror and references (v0.5). */
+/** Card canvas lines (0.24): the cut line (corners rounded) inside the bleed, and the safe area for text. */
+function CardGuides({ g, width, height, scale }: { g: NonNullable<SketchDoc['cardGuides']>; width: number; height: number; scale: number }) {
+  const s = g.bleed + g.safe
+  return (
+    <g fill="none" strokeWidth={1.5 / scale} pointerEvents="none">
+      <rect x={g.bleed} y={g.bleed} width={width - 2 * g.bleed} height={height - 2 * g.bleed} rx={g.corner} stroke="#e5484d" />
+      <rect x={s} y={s} width={width - 2 * s} height={height - 2 * s} stroke="#3e8ed0" strokeDasharray={`${6 / scale} ${4 / scale}`} />
+    </g>
+  )
+}
+
 export function SketchEditor({ doc, update, active, title, actions, swatches = SWATCHES, panel, editorRef }: SketchEditorProps) {
   const root = useProjectStore((s) => s.root)
   const engineRef = useRef<SketchEngine | null>(null)
@@ -1101,6 +1112,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
           {view && (
             <svg className="sketch-overlay">
               <g transform={`matrix(${viewMatrix(view).join(' ')})`}>
+                {doc.cardGuides && doc.cardGuides.visible !== false && <CardGuides g={doc.cardGuides} width={doc.width} height={doc.height} scale={view.scale} />}
                 {liveGuide && <GuideOverlay guide={liveGuide} width={doc.width} height={doc.height} scale={view.scale} editing={editingGuide} toDoc={toDoc} onChange={setGuide} />}
                 <SelectionOutline sel={sel} />
                 <TextBoxes layers={doc.layers} activeId={activeLayer?.id} scale={view.scale} all={tool === 'text'} />

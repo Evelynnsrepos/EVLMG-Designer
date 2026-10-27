@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import type { PanelProps } from '@/core/registry'
 import { useDocument, useProjectStore } from '@/core/state'
 import { CANVAS_PRESETS, createSketchDoc, SketchEditor, type SketchDoc } from '@/shared/sketch'
+import { CARD_SIZES, mmToPx } from '@/shared/print'
 import { useInputSettings } from '@/shared/sketch/inputSettings'
 import { promptDialog } from '@/shared/dialogs'
 import { IMAGE_TARGETS, sendImageTo } from '@/shell/editor/actions'
@@ -18,6 +19,8 @@ const UI = {
   presetName: 'Name for this canvas size',
   removePreset: 'Remove this size',
   mine: 'My sizes',
+  cards: 'Card sizes (300 DPI, 3 mm bleed; the guide lines show the cut and the safe area)',
+  cardGuides: 'Card guide lines',
   send: 'Send to…',
   sent: (to: string) => `Sent to ${to}`,
 }
@@ -34,9 +37,18 @@ export default function View({ documentId, active }: PanelProps) {
   const doc = useDocument<SketchToolDoc>('sketch', documentId!, createDoc)
   const title = useProjectStore((s) => s.meta?.documents.find((d) => d.id === documentId)?.title ?? 'Draw')
   if (!doc.data) return null
-  if (!doc.data.started) return <SizePicker onStart={(width, height) => doc.update((d) => ({ ...d, ...createSketchDoc(width, height), started: true }))} />
+  if (!doc.data.started) return <SizePicker onStart={(width, height, cardGuides) => doc.update((d) => ({ ...d, ...createSketchDoc(width, height), cardGuides, started: true }))} />
+  const guides = doc.data.cardGuides
   return (
     <SketchEditor
+      panel={
+        guides && (
+          <label className="sketch-row">
+            <input type="checkbox" checked={guides.visible !== false} onChange={(e) => doc.update((d) => ({ ...d, cardGuides: { ...guides, visible: e.target.checked } }))} />
+            {UI.cardGuides}
+          </label>
+        )
+      }
       doc={doc.data}
       update={(fn) => doc.update((d) => ({ ...d, ...fn(d) }), { undoable: false })}
       active={active}
@@ -46,9 +58,16 @@ export default function View({ documentId, active }: PanelProps) {
   )
 }
 
-function SizePicker({ onStart }: { onStart: (w: number, h: number) => void }) {
+/** Card canvases at print resolution, bleed included. */
+const CARD_DPI = 300
+const CARD_BLEED_MM = 3
+const cardPx = (mm: number) => mmToPx(mm + 2 * CARD_BLEED_MM, CARD_DPI)
+const CARD_GUIDES = { bleed: mmToPx(CARD_BLEED_MM, CARD_DPI), safe: mmToPx(3, CARD_DPI), corner: mmToPx(3, CARD_DPI) }
+
+function SizePicker({ onStart }: { onStart: (w: number, h: number, cardGuides?: SketchDoc['cardGuides']) => void }) {
   const [w, setW] = useState(1920)
   const [h, setH] = useState(1080)
+  const [isCard, setIsCard] = useState(false)
   const clamp = (v: number) => Math.max(16, Math.min(8192, Math.round(v) || 16))
   const mine = useInputSettings((s) => s.canvasPresets)
   useEffect(() => {
@@ -72,9 +91,26 @@ function SizePicker({ onStart }: { onStart: (w: number, h: number) => void }) {
             onClick={() => {
               setW(p.width)
               setH(p.height)
+              setIsCard(false)
             }}
           >
             {p.label}
+          </button>
+        ))}
+      </div>
+      <p className="muted sketch-start-mine">{UI.cards}</p>
+      <div className="sketch-start-presets">
+        {CARD_SIZES.map((c) => (
+          <button
+            key={c.id}
+            className={`btn${isCard && cardPx(c.w) === w && cardPx(c.h) === h ? ' btn-primary' : ''}`}
+            onClick={() => {
+              setW(cardPx(c.w))
+              setH(cardPx(c.h))
+              setIsCard(true)
+            }}
+          >
+            {c.name}
           </button>
         ))}
       </div>
@@ -89,6 +125,7 @@ function SizePicker({ onStart }: { onStart: (w: number, h: number) => void }) {
                   onClick={() => {
                     setW(p.width)
                     setH(p.height)
+                    setIsCard(false)
                   }}
                 >
                   {p.name} <span className="muted">{p.width} × {p.height}</span>
@@ -119,7 +156,7 @@ function SizePicker({ onStart }: { onStart: (w: number, h: number) => void }) {
           {UI.savePreset}
         </button>
       </div>
-      <button className="btn btn-primary" onClick={() => onStart(clamp(w), clamp(h))}>
+      <button className="btn btn-primary" onClick={() => onStart(clamp(w), clamp(h), isCard ? CARD_GUIDES : undefined)}>
         {UI.start}
       </button>
     </div>

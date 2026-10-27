@@ -49,38 +49,6 @@
   border: 2px dashed #3e8ed0;
   opacity: 0.6;
 }
-.cd-side {
-  display: flex;
-  flex-direction: column;
-  flex: none;
-  width: 300px;
-  border-left: 1px solid var(--border);
-  background: var(--bg-elevated);
-  min-height: 0;
-  font-size: 13px;
-}
-.cd-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--border);
-}
-.cd-tab {
-  flex: 1;
-  padding: 8px 2px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  font: inherit;
-}
-.cd-tab.is-on {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-}
-.cd-tab-body {
-  flex: 1;
-  overflow: auto;
-}
 .cd-panel {
   display: flex;
   flex-direction: column;
@@ -172,4 +140,232 @@
   font-size: 12px;
   background: none;
   color: var(--text);
+}
+
+/* 0.24 layout: deck on the left, card in the middle, style/export/layers on the right. */
+.cd-left,
+.cd-right {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  min-height: 0;
+  background: var(--bg-elevated);
+  font-size: 13px;
+}
+.cd-left {
+  width: 300px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.cd-right {
+  width: 340px;
+  border-left: 1px solid var(--border);
+}
+.cd-right-top {
+  flex: none;
+  max-height: 55%;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border);
+}
+.cd-right .moodboard-layers {
+  flex: 1;
+  width: auto;
+  border-left: 0;
+}
+.cd-section {
+  border-bottom: 1px solid var(--border);
+}
+.cd-section > summary,
+.cd-section > h3 {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.cd-section > h3 {
+  cursor: default;
+}
+.cd-section-cards {
+  flex: 1;
+  border-bottom: 0;
+}
+.cd-sub {
+  margin-top: 6px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.cd-details > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 4px 0;
+}
+.cd-details[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cd-wrap {
+  flex-wrap: wrap;
+}
+.cd-swatch {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.cd-slot.is-on .cd-swatch {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.cd-chain.is-off {
+  color: var(--accent);
+}
+.cd-scope {
+  flex: none;
+  width: 58px;
+  font-size: 11px;
+  color: var(--accent);
+}
+.cd-scope.is-all {
+  color: var(--text-muted);
+}
+.cd-field-name {
+  flex: none;
+  width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cd-row > .cd-field-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cd-expand {
+  padding: 2px;
+}
+.cd-field-more {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 6px 22px;
+}
+.cd-card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cd-card-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.cd-card-item:hover {
+  background: var(--bg-hover);
+}
+.cd-card-item.is-on {
+  background: var(--bg-sunken);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.cd-card-no {
+  flex: none;
+  width: 22px;
+  text-align: right;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.cd-card-thumb {
+  flex: none;
+  width: 30px;
+  height: 42px;
+  object-fit: contain;
+  border-radius: 3px;
+  background: var(--bg-sunken);
+}
+.cd-card-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cd-copies {
+  flex: none;
+  width: 44px;
+}
+.cd-card-actions {
+  display: none;
+}
+.cd-card-item:hover .cd-card-actions {
+  display: flex;
+}
+.cd-picker {
+  position: relative;
+}
+.cd-picker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.cd-picker-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  width: 260px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+}
+.cd-picker-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.cd-picker-list li {
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cd-picker-list li:hover,
+.cd-picker-list li.is-on {
+  background: var(--bg-hover);
+}
+.cd-layer-thumb {
+  flex: none;
+  width: 20px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 2px;
+  background: repeating-conic-gradient(var(--bg-sunken) 0 25%, transparent 0 50%) 0 0 / 8px 8px;
+}
+.cd-start {
+  margin: auto;
+}
+.cd-right .moodboard-layer-name {
+  min-width: 48px;
 }

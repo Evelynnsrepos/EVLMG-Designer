@@ -86,3 +86,15 @@ export function cropMarks(layout: SheetLayout, bleed: number, gap = 1): number[]
   for (const y of ys) out.push([0, y, left - gap, y], [right + gap, y, page.w, y])
   return out.filter(([x1, y1, x2, y2]) => Math.hypot(x2 - x1, y2 - y1) > 0.5)
 }
+
+/** Common card sizes in mm (Card Designer, and Draw's card canvas presets). */
+export const CARD_SIZES: { id: string; name: string; w: number; h: number }[] = [
+  { id: 'poker', name: 'Poker (63 × 88 mm)', w: 63, h: 88 },
+  { id: 'bridge', name: 'Bridge (57 × 89 mm)', w: 57, h: 89 },
+  { id: 'tarot', name: 'Tarot (70 × 120 mm)', w: 70, h: 120 },
+  { id: 'mini', name: 'Mini (44 × 63 mm)', w: 44, h: 63 },
+  { id: 'euro', name: 'Euro (59 × 92 mm)', w: 59, h: 92 },
+  { id: 'square', name: 'Square (70 × 70 mm)', w: 70, h: 70 },
+  { id: 'business', name: 'Business card (85 × 55 mm)', w: 85, h: 55 },
+  { id: 'token', name: 'Token (25 × 25 mm)', w: 25, h: 25 },
+]

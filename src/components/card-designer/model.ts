@@ -83,18 +83,24 @@ export interface CardDoc {
   sheet?: { documentId: Id; sheetId: Id }
   /** Own icons for `:name:` in text, besides the built-in ones. */
   icons?: { id: Id; name: string; src: string }[]
+  /** 0.24: false while a new deck waits for its card size; missing = an older deck, already started. */
+  started?: boolean
+  /** Layers whose items each card can change for itself (the template's items are the starting point). */
+  perCardLayers?: Id[]
+  /** What one card changes for itself, by card id (also works for cards from a Spreadsheet row). */
+  overrides?: Record<Id, CardOverride>
 }
 
-export const CARD_SIZES: { id: string; name: string; w: number; h: number }[] = [
-  { id: 'poker', name: 'Poker (63 × 88 mm)', w: 63, h: 88 },
-  { id: 'bridge', name: 'Bridge (57 × 89 mm)', w: 57, h: 89 },
-  { id: 'tarot', name: 'Tarot (70 × 120 mm)', w: 70, h: 120 },
-  { id: 'mini', name: 'Mini (44 × 63 mm)', w: 44, h: 63 },
-  { id: 'euro', name: 'Euro (59 × 92 mm)', w: 59, h: 92 },
-  { id: 'square', name: 'Square (70 × 70 mm)', w: 70, h: 70 },
-  { id: 'business', name: 'Business card (85 × 55 mm)', w: 85, h: 55 },
-  { id: 'token', name: 'Token (25 × 25 mm)', w: 25, h: 25 },
-]
+export interface CardOverride {
+  /** Colour slots unlinked from the deck: slot id → this card's colour. */
+  colors?: Record<Id, string>
+  /** This card's own items on per-card layers: layer id → items. */
+  nodes?: Record<Id, CardNode[]>
+  /** Layers turned off on this card. */
+  hidden?: Id[]
+}
+
+export { CARD_SIZES } from '@/shared/print'
 
 export const DEFAULT_FONT = 'Lexend Deca'
 
@@ -148,14 +154,86 @@ export function createCardDoc(): CardDoc {
   const cards: Card[] = [
     { id: newId(), copies: 1, values: { [fields[0].id]: 'Fire Bolt', [fields[1].id]: '2', [fields[2].id]: 'Spell', [fields[3].id]: 'Deal 3 damage to one enemy.' } },
   ]
-  return { widthMm: 63, heightMm: 88, bleedMm: 3, cornerMm: 3, front: s, back, slots, variants: [], fields, cards }
+  return { widthMm: 63, heightMm: 88, bleedMm: 3, cornerMm: 3, front: s, back, slots, variants: [], fields, cards, started: false }
 }
 
-/** Slot colours for a card: the base colours with its variant's colours on top. */
-export function slotColors(doc: Pick<CardDoc, 'slots' | 'variants'>, variantId?: Id): Map<Id, string> {
+/** Slot colours for a card: the base colours, its variant's colours on top, then the card's own unlinked colours. */
+export function slotColors(doc: Pick<CardDoc, 'slots' | 'variants' | 'overrides'>, variantId?: Id, cardId?: Id): Map<Id, string> {
   const map = new Map(doc.slots.map((s) => [s.id, s.color]))
   for (const c of doc.variants.find((v) => v.id === variantId)?.colors ?? []) if (map.has(c.slotId)) map.set(c.slotId, c.color)
+  for (const [id, c] of Object.entries((cardId && doc.overrides?.[cardId]?.colors) || {})) if (map.has(id)) map.set(id, c)
   return map
+}
+
+/** Change one card's override (empty overrides are dropped). */
+export function setOverride(doc: CardDoc, cardId: Id, fn: (o: CardOverride) => CardOverride): CardDoc {
+  const o = fn(doc.overrides?.[cardId] ?? {})
+  const empty = !Object.keys(o.colors ?? {}).length && !Object.keys(o.nodes ?? {}).length && !(o.hidden ?? []).length
+  const { [cardId]: _, ...rest } = doc.overrides ?? {}
+  return { ...doc, overrides: empty ? rest : { ...rest, [cardId]: o } }
+}
+
+const sameNodes = (a: CardNode[], b: CardNode[]) => a.length === b.length && a.every((n, i) => n === b[i])
+
+/**
+ * One side as a card shows it: the template with the card's own items on per-card layers, and the layers
+ * it turned off hidden and locked. Without overrides this is the template itself (same object).
+ */
+export function composeScene(doc: CardDoc, side: 'front' | 'back', cardId: Id | null | undefined): Scene<CardNode> {
+  const tpl = doc[side]
+  const ov = cardId ? doc.overrides?.[cardId] : undefined
+  if (!ov) return tpl
+  const own = ov.nodes ?? {}
+  const off = new Set(ov.hidden ?? [])
+  const per = (doc.perCardLayers ?? []).filter((l) => own[l] && tpl.layers.some((x) => x.id === l))
+  return {
+    ...tpl,
+    layers: off.size ? tpl.layers.map((l) => (off.has(l.id) ? { ...l, hidden: true, locked: true } : l)) : tpl.layers,
+    nodes: [...tpl.nodes.filter((n) => !per.includes(n.layerId)), ...per.flatMap((l) => own[l])],
+  }
+}
+
+/**
+ * Store an edit made on a composed side: items on per-card layers go to the card (only when they
+ * changed, so other cards keep following the template), everything else to the template.
+ */
+export function splitScene(doc: CardDoc, side: 'front' | 'back', cardId: Id | null | undefined, next: Scene<CardNode>): CardDoc {
+  const before = composeScene(doc, side, cardId)
+  if (before === doc[side] && !(cardId && doc.perCardLayers?.length)) return { ...doc, [side]: next }
+  const tpl = doc[side]
+  const per = new Set(cardId ? (doc.perCardLayers ?? []) : [])
+  const off = new Set((cardId && doc.overrides?.[cardId]?.hidden) || [])
+  // Layers turned off for this card keep the template's own hidden/locked state.
+  const layers = next.layers.map((l) => {
+    const t = tpl.layers.find((x) => x.id === l.id)
+    return off.has(l.id) && t ? { ...l, hidden: t.hidden, locked: t.locked } : l
+  })
+  let out: CardDoc = { ...doc, [side]: { ...next, layers, nodes: [...next.nodes.filter((n) => !per.has(n.layerId)), ...tpl.nodes.filter((n) => per.has(n.layerId))] } }
+  for (const l of per) {
+    const now = next.nodes.filter((n) => n.layerId === l)
+    if (!sameNodes(now, before.nodes.filter((n) => n.layerId === l))) out = setOverride(out, cardId!, (o) => ({ ...o, nodes: { ...o.nodes, [l]: now } }))
+  }
+  return out
+}
+
+/** Scale the whole design (both sides and every card's own items) to a new card size. */
+export function resizeDesign(doc: CardDoc, widthMm: number, heightMm: number): CardDoc {
+  const sx = widthMm / doc.widthMm
+  const sy = heightMm / doc.heightMm
+  if (sx === 1 && sy === 1) return doc
+  const scale = (n: CardNode): CardNode => {
+    const m = { ...n, x: n.x * sx, y: n.y * sy } as CardNode & { width?: number; height?: number; fontSize?: number; points?: number[] }
+    if (m.width !== undefined) m.width *= sx
+    if (m.height !== undefined) m.height *= sy
+    if (m.fontSize !== undefined) m.fontSize *= Math.min(sx, sy)
+    if (m.points) m.points = m.points.map((v, i) => v * (i % 2 ? sy : sx))
+    return m
+  }
+  const side = (s: Scene<CardNode>) => ({ ...s, nodes: s.nodes.map(scale) })
+  const overrides = Object.fromEntries(
+    Object.entries(doc.overrides ?? {}).map(([id, o]) => [id, o.nodes ? { ...o, nodes: Object.fromEntries(Object.entries(o.nodes).map(([l, ns]) => [l, ns.map(scale)])) } : o]),
+  )
+  return { ...doc, widthMm, heightMm, front: side(doc.front), back: side(doc.back), overrides }
 }
 
 /** Replace `{Field}` with the card's values (field names ignore case). Unknown names stay as typed. */
