@@ -1,4 +1,4 @@
-import { Bold, Copy, Image as ImageIcon, Italic, PanelRight, Plus, Trash, Type } from 'lucide-react'
+import { Bold, ChevronLeft, ChevronRight, Copy, Image as ImageIcon, Italic, PanelRight, Plus, Trash, Type } from 'lucide-react'
 import { zipSync } from 'fflate'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { assetUrl, pickAndImportAssets, useAssetUrls } from '@/core/assets'
@@ -118,6 +118,20 @@ export default function View({ documentId, active }: PanelProps) {
     return [selectTool, handTool, rectTool({ defaults: ink }), ellipseTool({ defaults: ink }), lineTool({ defaults: ink }), cardTextTool] as CanvasTool<CardNode>[]
   }, [])
 
+  const index = preview ? cards.indexOf(preview) : -1
+  const step = (dir: number) => cards.length && setPreviewId(cards[(index + dir + cards.length) % cards.length].id)
+  // Page Up / Page Down switch cards while the deck is open.
+  useEffect(() => {
+    if (!active) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'PageUp' && e.key !== 'PageDown') return
+      e.preventDefault()
+      step(e.key === 'PageDown' ? 1 : -1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
   if (!d || !scene) return null
 
   const update = (recipe: (x: CardDoc) => CardDoc, options?: { undoable?: boolean }) => doc.update(recipe, options)
@@ -178,6 +192,9 @@ export default function View({ documentId, active }: PanelProps) {
             </button>
           ))}
           <span className="cd-previewing">
+            <button className="btn btn-ghost" title="Previous card (Page Up)" aria-label="Previous card" disabled={cards.length < 2} onClick={() => step(-1)}>
+              <ChevronLeft size={16} />
+            </button>
             <select className="input" value={preview?.id ?? ''} aria-label="Card shown" title="The card shown on the canvas" onChange={(e) => setPreviewId(e.target.value)}>
               {cards.map((c, i) => (
                 <option key={c.id} value={c.id}>
@@ -185,6 +202,9 @@ export default function View({ documentId, active }: PanelProps) {
                 </option>
               ))}
             </select>
+            <button className="btn btn-ghost" title="Next card (Page Down)" aria-label="Next card" disabled={cards.length < 2} onClick={() => step(1)}>
+              <ChevronRight size={16} />
+            </button>
             <button className="btn" disabled={!!d.sheet} title={d.sheet ? 'Cards come from the linked Spreadsheet: add a row there' : 'Add a new card to the deck (same design, its own values)'} onClick={() => setPreviewId(addCard(d, update))}>
               <Plus size={14} /> Card
             </button>

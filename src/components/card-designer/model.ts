@@ -12,6 +12,7 @@ export const MM = 10
 /** Text on a card; `{Name}` shows the card's value for the field "Name". */
 export interface CardTextNode extends NodeBase {
   kind: 'card-text'
+  foil?: boolean
   text: string
   width: number
   height: number
@@ -28,6 +29,7 @@ export interface CardTextNode extends NodeBase {
 /** A picture box filled from the card's value for an image field (or the placeholder). */
 export interface CardImageNode extends NodeBase {
   kind: 'card-image'
+  foil?: boolean
   width: number
   height: number
   fieldId: Id

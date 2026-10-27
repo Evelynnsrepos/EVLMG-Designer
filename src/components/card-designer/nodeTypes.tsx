@@ -146,7 +146,7 @@ export function cardNodeTypes(b: CardBinding): NodeTypes {
           if (b.mask && !n.foil) return null
           let c = applySlots(n, b.colors)
           const hasFill = !!(c as { fillColor?: string }).fillColor
-          if (b.mask) c = { ...c, ...(hasFill ? { fillColor: '#000' } : {}), strokeColor: '#000', textColor: '#000' }
+          if (b.mask) c = { ...c, ...(hasFill ? { fillColor: '#000' } : {}), strokeColor: '#000', textColor: '#000' } as unknown as CardNode
           const { width: w = 400, height: h = 400 } = c as { width?: number; height?: number }
           // Pictures: solid in the mask, a shine laid over them on screen.
           if (k === 'card-image' || k === 'image') {
