@@ -625,6 +625,20 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     ],
     tips: ['Shortcuts: B pencil, E eraser, L line, U rectangle, O ellipse, G fill, I eyedropper, S shade, M select, Q lasso, W magic wand, V move, C curve, F lasso fill, D gradient, A spray, T text, X swap colours, [ and ] size, comma and period for frames, Enter to play, Tab for tiles and map. Change them in Settings.'],
   },
+  'card-designer': {
+    title: 'Card Designer',
+    body: [
+      'Design the front and back of a card, fill a whole deck from a table, and print it or export images and JSON. Each document is one deck with one card design. A new deck starts as a poker card with a background, picture, frame and text, ready to change.',
+      'Layers: the panel on the right lists every layer of the side you are on. Click a layer to work on it: Select, the selection box, Ctrl+A, the arrow keys, Delete and recolouring only reach the active layer, so the frame never moves when you drag the art. Lock a layer and nothing on it can be selected or changed. Alt+click an item on another layer to jump to that layer.',
+      'Text (T): click on the card and type. {Name} shows the value of the field Name for each card, so one design makes the whole deck. Long text shrinks to fit its box. The Style tab sets the font (the app comes with free fonts for fantasy, comic, sci-fi and retro looks, plus easy-to-read ones), size, bold, italic, alignment and colour.',
+      'The picture button adds a picture field that shows each card\u2019s own picture; the plus button adds a picture that is the same on every card. Rectangle, ellipse and line draw frames, gems and dividers.',
+      'Colours: colour slots like Background, Frame and Accent are used by the shapes and text. Change a slot and every card changes. Recolour layer gives everything on the active layer one colour or slot at once. Variants give some slots other colours, like one per faction or rarity; pick a card\u2019s variant in the deck.',
+      'Deck: add fields (text or picture) and one row per card with how many copies to print. Or pick a Spreadsheet: row 1 names the fields, every row below is a card, and columns named Copies and Variant set those. Click a row to see that card on the canvas.',
+      'Card: pick a size (poker, bridge, tarot, mini, euro, square, business card, token) or type your own in mm. The red dashed line is the bleed: let background art reach it so no white edge shows after cutting. Keep text inside the blue safe line.',
+      'Export: Print sheets as PDF or PNG fit as many cards as possible on A4, A3, A5, Letter or Legal paper, with crop marks and bleed, and backs on every other page for double-sided printing (flip on the long edge). Print at actual size. Deck image puts every card into one PNG, 10 per row. Card images + JSON saves a PNG of every card side plus deck.json; Deck JSON saves only the data, for game engines.',
+    ],
+    tips: ['Shortcuts: V select, H pan, R rectangle, O ellipse, L line, T text, Alt+click to switch layers. The layers panel button is in the bottom toolbar.'],
+  },
   achievements: {
     title: 'Achievements',
     body: [

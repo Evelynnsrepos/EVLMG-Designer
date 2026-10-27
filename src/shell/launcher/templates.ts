@@ -154,7 +154,7 @@ export const TEMPLATES: Template[] = [
     id: 'tabletop',
     name: 'Tabletop / pen and paper',
     description: 'Characters, monsters, items, maps, quests and the world for a campaign or a board game.',
-    components: ['character-list', 'enemy-list', 'item-list', 'town-list', 'map', 'quests', 'wiki', 'factions', 'names', 'timeline', 'writer'],
+    components: ['character-list', 'enemy-list', 'item-list', 'town-list', 'map', 'quests', 'wiki', 'factions', 'names', 'timeline', 'writer', 'card-designer'],
     genre: 'Tabletop',
     pillars: [],
     tasks: ['Write the first session', 'Prepare the main villain', 'Draw the starting town'],
