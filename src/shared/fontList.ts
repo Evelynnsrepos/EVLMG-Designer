@@ -1,8 +1,15 @@
 /**
- * Font families to offer in font menus (Draw text layers, the Writer, per-tool fonts). The app ships no font
- * files: the browser's generic families, common system fonts that are really installed, and every local
+ * Font families to offer in font menus (Draw text layers, the Writer, per-tool fonts): the browser's generic
+ * families, the fonts bundled with the app, common system fonts that are really installed, and every local
  * font when the webview lets us list them.
  */
+
+/** 0.22: fonts that ship with the app (`public/fonts/`, see `gameFonts.css`), so every computer has them. */
+export const BUNDLED_FONTS = [
+  'Lexend Deca', 'Almendra', 'Atkinson Hyperlegible Next', 'Bangers', 'Bebas Neue', 'Cinzel', 'Cinzel Decorative', 'Crimson Pro',
+  'EB Garamond', 'Fredoka', 'Grenze Gotisch', 'IM Fell English', 'Luckiest Guy', 'MedievalSharp', 'OpenDyslexic', 'Oswald',
+  'Pirata One', 'Press Start 2P', 'Uncial Antiqua',
+]
 
 export const GENERIC_FONTS = ['sans-serif', 'serif', 'monospace', 'cursive']
 
@@ -29,11 +36,11 @@ function installed(ctx: CanvasRenderingContext2D, family: string): boolean {
 
 let systemCache: string[] | null = null
 
-/** Common fonts that are installed on this computer. */
+/** The bundled fonts, then common fonts that are installed on this computer. */
 export function systemFonts(): string[] {
   if (systemCache) return systemCache
   const ctx = document.createElement('canvas').getContext('2d')
-  systemCache = ctx ? COMMON_FONTS.filter((f) => installed(ctx, f)) : []
+  systemCache = [...BUNDLED_FONTS, ...(ctx ? COMMON_FONTS.filter((f) => installed(ctx, f)) : [])]
   return systemCache
 }
 

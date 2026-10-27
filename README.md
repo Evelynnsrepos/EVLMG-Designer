@@ -418,4 +418,9 @@ Donating on [Ko-fi](https://ko-fi.com/evelynnevlmg) is welcome but never require
 
 The app font, [Lexend Deca](https://github.com/googlefonts/lexend), is under the [SIL Open Font License 1.1](public/fonts/OFL.txt).
 
+The game font pack bundled for cards and every font menu is free to use: Almendra, Atkinson Hyperlegible Next, Bangers, Bebas Neue,
+Cinzel, Cinzel Decorative, Crimson Pro, EB Garamond, Fredoka, Grenze Gotisch, IM Fell English, MedievalSharp, OpenDyslexic, Oswald,
+Pirata One, Press Start 2P and Uncial Antiqua are under the SIL Open Font License 1.1, and Luckiest Guy is under the Apache License 2.0.
+Each font's licence and authors are in [`public/fonts/game/licenses/`](public/fonts/game/licenses/). Thank you to all the font makers!
+
 <p align="center">🚧 <i>Still building. Thanks for stopping by!</i> 🚧</p>
