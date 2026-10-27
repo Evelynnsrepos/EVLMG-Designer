@@ -1,4 +1,4 @@
-import { Ban, ChevronLeft, ChevronRight, Image as ImageIcon, Link2, PanelRight, Plus, Sparkles, Type, Unlink2 } from 'lucide-react'
+import { Ban, ChevronLeft, ChevronRight, Circle, CopyPlus, FlipHorizontal, Image as ImageIcon, Layers as LayersIcon, Link2, Lock, Minus, Plus, Shapes, Sparkles, Square, Type, Unlink2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { assetUrl, pickAndImportAssets, useAssetUrls } from '@/core/assets'
 import { newId, type Id } from '@/core/model'
@@ -19,6 +19,7 @@ import {
   type Scene,
 } from '@/shared/canvas'
 import { confirmDialog } from '@/shared/dialogs'
+import { useHotwheel } from '@/shared/hotwheel'
 import { LayersPanel } from '@/shared/moodboard/LayersPanel'
 import type { MoodNode } from '@/shared/moodboard/model'
 import '@/shared/moodboard/moodboard.css'
@@ -43,7 +44,7 @@ import {
 import { cardNodeTypes } from './nodeTypes'
 import { CardPanel, ExportPanel, StylePanel } from './panels'
 import { loadSceneFonts, preloadImages, renderCard } from './render'
-import { addCard, allNodes, ownIcons, TEXT, type Side } from './ui'
+import { addCard, allNodes, ownIcons, sideScene, TEXT, type Side } from './ui'
 import '@/components/sketch/sketch-tool.css'
 import './card-designer.css'
 
@@ -92,7 +93,9 @@ export default function View({ documentId, active }: PanelProps) {
 
   const tools = useMemo<CanvasTool<CardNode>[]>(() => {
     const ink = () => ({ strokeColor: '#1c1d22', strokeWidth: 6 })
-    return [selectTool, handTool, rectTool({ defaults: ink }), ellipseTool({ defaults: ink }), lineTool({ defaults: ink }), cardTextTool] as CanvasTool<CardNode>[]
+    // Only Select and Text sit in the bar; shapes live behind the Shapes button, panning is Space+drag (H still works).
+    const hide = <T extends CanvasTool<CardNode>>(t: T) => ({ ...t, hidden: true })
+    return [selectTool, cardTextTool, hide(handTool), hide(rectTool({ defaults: ink })), hide(ellipseTool({ defaults: ink })), hide(lineTool({ defaults: ink }))] as CanvasTool<CardNode>[]
   }, [])
 
   const index = preview ? cards.indexOf(preview) : -1
@@ -109,6 +112,21 @@ export default function View({ documentId, active }: PanelProps) {
     return () => window.removeEventListener('keydown', onKey)
   })
 
+  const flipSide = () => (setSide((s) => (s === 'front' ? 'back' : 'front')), canvas.setSelection([]), canvas.setActiveLayerId(null))
+  useHotwheel(() => {
+    if (!d || !scene || d.started === false) return []
+    const l = sideScene(d, side).layers.find((x) => x.id === resolveActiveLayer(scene, canvas.activeLayerId))
+    return [
+      { id: 'cards-step', label: 'Card', halves: [{ label: 'Previous', run: () => step(-1) }, { label: 'Next', run: () => step(1) }] },
+      { id: 'cards-side', label: side === 'front' ? 'Show back' : 'Show front', icon: FlipHorizontal, run: flipSide },
+      { id: 'cards-add', label: 'New card', icon: CopyPlus, run: () => !d.sheet && setPreviewId(addCard(d, doc.update)) },
+      { id: 'cards-text', label: 'Text', icon: Type, run: () => apiRef.current?.setTool('card-text') },
+      { id: 'cards-shapes', label: 'Rectangle', icon: Square, run: () => apiRef.current?.setTool('rect') },
+      { id: 'cards-foil', label: 'Foil', icon: Sparkles, on: !!selectedFoil(), run: () => toggleSelectedFoil() },
+      { id: 'cards-lock', label: l?.locked ? 'Unlock layer' : 'Lock layer', icon: Lock, on: !!l?.locked, run: () => l && doc.update((x) => ({ ...x, [side]: { ...sideScene(x, side), layers: sideScene(x, side).layers.map((y) => (y.id === l.id ? { ...y, locked: !y.locked } : y)) } })) },
+    ]
+  })
+
   if (!d || !scene) return null
   if (d.started === false) return <SizePicker onStart={(w, h, bleed) => doc.update((x) => ({ ...resizeDesign(x, w, h), bleedMm: bleed, started: true }), { undoable: false })} />
 
@@ -118,6 +136,13 @@ export default function View({ documentId, active }: PanelProps) {
 
   const activeLayerId = resolveActiveLayer(scene, canvas.activeLayerId)
   const selected = scene.nodes.filter((n) => canvas.selection.includes(n.id))
+  function selectedFoil() {
+    return selected.length > 0 && selected.every((n) => n.foil)
+  }
+  function toggleSelectedFoil() {
+    const on = !selectedFoil()
+    if (selected.length) onScene((s) => ({ ...s, nodes: s.nodes.map((n) => (canvas.selection.includes(n.id) ? { ...n, foil: on || undefined } : n)) }))
+  }
   const perCard = new Set(d.perCardLayers ?? [])
   const offHere = new Set((cardId && d.overrides?.[cardId]?.hidden) || [])
 
@@ -180,14 +205,12 @@ export default function View({ documentId, active }: PanelProps) {
 
   const toolbarExtra = (
     <>
+      <ShapesButton toolId={canvas.toolId} onTool={(id) => apiRef.current?.setTool(id)} />
       <button className="canvas-toolbar-btn" title={TEXT.addPicture} aria-label={TEXT.addPicture} onClick={addPictureField}>
         <ImageIcon size={17} strokeWidth={1.8} />
       </button>
       <button className="canvas-toolbar-btn" title={TEXT.addImage} aria-label={TEXT.addImage} onClick={() => void addFixedImage()}>
         <Plus size={17} strokeWidth={1.8} />
-      </button>
-      <button className={'canvas-toolbar-btn' + (showLayers ? ' is-active' : '')} title={TEXT.layers} aria-label={TEXT.layers} aria-pressed={showLayers} onClick={() => setShowLayers((v) => !v)}>
-        <PanelRight size={17} strokeWidth={1.8} />
       </button>
     </>
   )
@@ -304,9 +327,45 @@ export default function View({ documentId, active }: PanelProps) {
               </>
             )}
           />
-        ) : null}
+        ) : (
+          <button className="btn btn-ghost cd-show-layers" onClick={() => setShowLayers(true)}>
+            <LayersIcon size={14} /> Show layers
+          </button>
+        )}
       </aside>
     </div>
+  )
+}
+
+const SHAPES = [
+  { id: 'rect', label: 'Rectangle (R)', icon: Square },
+  { id: 'ellipse', label: 'Ellipse (O)', icon: Circle },
+  { id: 'line', label: 'Line (L)', icon: Minus },
+]
+
+/** Rectangle, ellipse and line behind one toolbar button. */
+function ShapesButton({ toolId, onTool }: { toolId: string; onTool(id: string): void }) {
+  const [open, setOpen] = useState(false)
+  const current = SHAPES.find((s) => s.id === toolId)
+  const Icon = current?.icon ?? Shapes
+  return (
+    <span className="cd-shapes">
+      <button className={'canvas-toolbar-btn' + (current ? ' is-active' : '')} title="Shapes: rectangle, ellipse, line" aria-label="Shapes" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Icon size={17} strokeWidth={1.8} />
+      </button>
+      {open ? (
+        <>
+          <div className="menu-backdrop" onClick={() => setOpen(false)} />
+          <div className="cd-shapes-menu" role="menu">
+            {SHAPES.map((s) => (
+              <button key={s.id} role="menuitem" className={'canvas-toolbar-btn' + (s.id === toolId ? ' is-active' : '')} title={s.label} aria-label={s.label} onClick={() => (onTool(s.id), setOpen(false))}>
+                <s.icon size={17} strokeWidth={1.8} />
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </span>
   )
 }
 

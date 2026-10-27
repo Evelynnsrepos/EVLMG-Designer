@@ -39,7 +39,7 @@ export interface CanvasToolbarProps {
 export function CanvasToolbar(p: CanvasToolbarProps) {
   return (
     <div className="canvas-toolbar" role="toolbar" aria-label={TOOLBAR_LABELS.toolbar} onPointerDown={(e) => e.stopPropagation()}>
-      {p.tools.map((t) => {
+      {p.tools.filter((t) => !t.hidden).map((t) => {
         const Icon = t.icon
         const key = boardShortcut(t.id, t.shortcut)
         const title = key ? `${t.label} (${formatCombo(key)})` : t.label

@@ -369,3 +369,28 @@
 .cd-right .moodboard-layer-name {
   min-width: 48px;
 }
+.cd-shapes {
+  position: relative;
+  display: inline-flex;
+}
+.cd-shapes-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 500;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+}
+.cd-show-layers {
+  margin: 8px;
+  align-self: flex-start;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}

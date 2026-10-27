@@ -287,6 +287,8 @@ export interface CanvasTool<N extends NodeBase = NodeBase> {
   cursor?: string
   /** Pressing the shortcut again returns to the first tool (TL-6). */
   toggle?: boolean
+  /** Not in the toolbar (the host shows it elsewhere); its shortcut still works. */
+  hidden?: boolean
   pointerDown?(e: ToolPointerEvent, api: CanvasApi<N>): ToolGesture | void
   /** Pointer moved with no button pressed. */
   hover?(e: ToolPointerEvent | null, api: CanvasApi<N>): void
