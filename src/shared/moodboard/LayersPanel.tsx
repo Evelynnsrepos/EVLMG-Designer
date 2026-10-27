@@ -53,7 +53,7 @@ const LAYER_TEXT = {
   },
 }
 
-const KIND_ICON: Record<string, LucideIcon> = { image: Image, rect: Square, ellipse: Circle, text: Type, note: StickyNote, connector: Slash }
+const KIND_ICON: Record<string, LucideIcon> = { image: Image, rect: Square, ellipse: Circle, text: Type, note: StickyNote, connector: Slash, 'card-text': Type, 'card-image': Image }
 
 function iconOf(n: MoodNode): LucideIcon {
   if (n.kind === 'line') return n.smooth ? Pencil : n.arrow ? MoveUpRight : Slash
@@ -72,8 +72,11 @@ function itemLabel(n: MoodNode): string {
     case 'text':
     case 'note':
       return n.text.trim().split('\n')[0].slice(0, 40) || k[n.kind]
-    default:
-      return k[n.kind as keyof typeof k] ?? n.kind
+    default: {
+      // Other tools' kinds (0.22 Card Designer) are named by their text when they have one.
+      const text = (n as { text?: unknown }).text
+      return (typeof text === 'string' && text.trim().split('\n')[0].slice(0, 40)) || (k[n.kind as keyof typeof k] ?? n.kind)
+    }
   }
 }
 

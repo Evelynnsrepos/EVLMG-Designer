@@ -511,14 +511,17 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
       return
     }
     if (props.layerScoped && e.altKey && e.button === 0 && tool?.id === 'select') {
-      // Other layers don't listen for the pointer, so find the topmost item under it by its bounds.
-      const w = screenToWorld(screen, state.viewport)
-      const hit = selectableNodes(props.scene)
-        .reverse()
-        .find((n) => {
-          const b = getWorldBounds(n.id)
-          return b && w.x >= b.x && w.x <= b.x + b.width && w.y >= b.y && w.y <= b.y + b.height
-        })
+      // Other layers don't listen for the pointer: let every unlocked layer listen for this one hit test.
+      const stage = stageRef.current
+      const groups = stage?.find<Konva.Group>('.canvas-layer') ?? []
+      const was = groups.map((g) => g.listening())
+      const unlocked = new Set(props.scene.layers.filter((l) => !l.locked).map((l) => l.id))
+      groups.forEach((g) => g.listening(unlocked.has(g.id())))
+      groups[0]?.getLayer()?.drawHit()
+      const id = nodeIdOf(stage?.getIntersection(screen) ?? null)
+      groups.forEach((g, i) => g.listening(was[i]))
+      groups[0]?.getLayer()?.drawHit()
+      const hit = id ? selectableNodes(props.scene).find((n) => n.id === id) : undefined
       if (hit) {
         state.setActiveLayerId(hit.layerId)
         api.select([hit.id])
@@ -807,7 +810,7 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
           <KonvaLayer>
             {layers.map(({ layer, nodes }) =>
               layer.hidden ? null : (
-                <Group key={layer.id} listening={!layer.locked && (!scopeLayerId || layer.id === scopeLayerId)}>
+                <Group key={layer.id} id={layer.id} name="canvas-layer" listening={!layer.locked && (!scopeLayerId || layer.id === scopeLayerId)}>
                   {nodes.map((n) =>
                     n.hidden ? null : <NodeView key={n.id} node={n} type={typeOf(n)} ctx={ctx} editingText={editing?.id === n.id} />,
                   )}

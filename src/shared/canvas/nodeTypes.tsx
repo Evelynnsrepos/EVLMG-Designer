@@ -63,29 +63,40 @@ export function useLoadedImage(url: string | null | undefined): Loaded {
   const [, force] = useState(0)
   useEffect(() => {
     if (!url) return
-    let entry = imageCache.get(url)
-    if (!entry) {
-      const img = new window.Image()
-      const created: Loaded & { waiters: Set<() => void> } = { status: 'loading', img, waiters: new Set() }
-      entry = created
-      imageCache.set(url, created)
-      img.onload = () => {
-        created.status = 'ok'
-        created.waiters.forEach((w) => w())
-      }
-      img.onerror = () => {
-        created.status = 'error'
-        created.waiters.forEach((w) => w())
-      }
-      img.src = url
-    }
-    const wake = () => force((n) => n + 1)
-    entry.waiters.add(wake)
-    return () => void entry.waiters.delete(wake)
+    void preloadImage(url).then(() => force((n) => n + 1))
   }, [url])
   if (!url) return { status: 'error' }
   const entry = imageCache.get(url)
   return entry ? { status: entry.status, img: entry.img } : { status: 'loading' }
+}
+
+/** Load an image into the shared cache and wait for it, so a canvas drawn right after shows it (exports). */
+export function preloadImage(url: string): Promise<void> {
+  let entry = imageCache.get(url)
+  if (entry?.status !== 'loading' && entry) return Promise.resolve()
+  if (!entry) {
+    const img = new window.Image()
+    const created: Loaded & { waiters: Set<() => void> } = { status: 'loading', img, waiters: new Set() }
+    entry = created
+    imageCache.set(url, created)
+    img.onload = () => {
+      created.status = 'ok'
+      created.waiters.forEach((w) => w())
+    }
+    img.onerror = () => {
+      created.status = 'error'
+      created.waiters.forEach((w) => w())
+    }
+    img.src = url
+  }
+  const e = entry
+  return new Promise((done) => {
+    const w = () => {
+      e.waiters.delete(w)
+      done()
+    }
+    e.waiters.add(w)
+  })
 }
 
 let checkerboard: HTMLCanvasElement | null = null
