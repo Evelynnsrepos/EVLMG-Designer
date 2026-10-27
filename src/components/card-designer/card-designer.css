@@ -1,0 +1,152 @@
+.cd-root {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+}
+.cd-canvas {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cd-canvas > .canvas-root {
+  flex: 1;
+}
+.cd-sides {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.cd-sides .is-on,
+.cd-panel .is-on {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.cd-previewing {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.cd-guide {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.cd-bleed {
+  border: 2px dashed #e5484d;
+}
+.cd-trim {
+  border: 2px solid var(--text-muted);
+}
+.cd-safe {
+  border: 2px dashed #3e8ed0;
+  opacity: 0.6;
+}
+.cd-side {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: 300px;
+  border-left: 1px solid var(--border);
+  background: var(--bg-elevated);
+  min-height: 0;
+  font-size: 13px;
+}
+.cd-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+.cd-tab {
+  flex: 1;
+  padding: 8px 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+}
+.cd-tab.is-on {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.cd-tab-body {
+  flex: 1;
+  overflow: auto;
+}
+.cd-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+}
+.cd-panel h4 {
+  margin: 10px 0 2px;
+  font-size: 13px;
+}
+.cd-panel h4:first-child {
+  margin-top: 0;
+}
+.cd-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cd-row > .input {
+  flex: 1;
+  min-width: 0;
+}
+.cd-indent {
+  padding-left: 12px;
+}
+.cd-label {
+  min-width: 70px;
+}
+.cd-num {
+  width: 64px;
+  flex: none !important;
+}
+.cd-muted {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 0;
+}
+.cd-error {
+  color: var(--danger);
+  margin: 0;
+}
+.cd-variant {
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.cd-table-wrap {
+  overflow-x: auto;
+}
+.cd-table {
+  border-collapse: collapse;
+  width: max-content;
+}
+.cd-table th {
+  text-align: left;
+  font-weight: 600;
+  padding: 2px 4px;
+}
+.cd-table td {
+  padding: 1px 2px;
+}
+.cd-table td .input {
+  width: 110px;
+}
+.cd-table td .cd-num {
+  width: 52px;
+}
+.cd-table tr.is-on td {
+  background: var(--bg-sunken);
+}
+.cd-nowrap {
+  white-space: nowrap;
+}
