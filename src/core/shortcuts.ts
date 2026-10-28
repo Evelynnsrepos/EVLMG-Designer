@@ -43,6 +43,7 @@ export const SHORTCUT_GROUPS = [
       { id: 'level.erase', label: 'Erase', keys: ['e'] },
       { id: 'level.note', label: 'Note', keys: ['n'] },
       { id: 'level.block', label: 'Blocked', keys: ['x'] },
+      { id: 'level.scatter', label: 'Scatter', keys: ['r'] },
     ],
   },
   {
