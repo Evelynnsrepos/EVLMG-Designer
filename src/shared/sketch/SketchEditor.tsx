@@ -203,7 +203,7 @@ export interface SketchEditorHandle {
 }
 
 /** A raster editor: pressure brushes, layers with blend modes, selection, mirror and references (v0.5). */
-/** Card canvas lines (0.24): the cut line (corners rounded) inside the bleed, and the safe area for text. */
+/** Card canvas lines (0.23.3): the cut line (corners rounded) inside the bleed, and the safe area for text. */
 function CardGuides({ g, width, height, scale }: { g: NonNullable<SketchDoc['cardGuides']>; width: number; height: number; scale: number }) {
   const s = g.bleed + g.safe
   return (

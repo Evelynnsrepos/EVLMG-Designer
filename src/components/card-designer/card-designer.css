@@ -142,7 +142,7 @@
   color: var(--text);
 }
 
-/* 0.24 layout: deck on the left, card in the middle, style/export/layers on the right. */
+/* 0.23.3 layout: deck on the left, card in the middle, style/export/layers on the right. */
 .cd-left,
 .cd-right {
   display: flex;

@@ -49,7 +49,7 @@ import '@/components/sketch/sketch-tool.css'
 import './card-designer.css'
 
 /**
- * Card Designer (0.22, layout 0.24): colours, fields and the card list on the left, the card in the
+ * Card Designer (0.22, layout 0.23.3): colours, fields and the card list on the left, the card in the
  * middle, style, size, export and layers on the right. One design for the deck; each card fills in its
  * values and may change colours and per-card layers for itself.
  */

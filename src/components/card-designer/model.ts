@@ -83,7 +83,7 @@ export interface CardDoc {
   sheet?: { documentId: Id; sheetId: Id }
   /** Own icons for `:name:` in text, besides the built-in ones. */
   icons?: { id: Id; name: string; src: string }[]
-  /** 0.24: false while a new deck waits for its card size; missing = an older deck, already started. */
+  /** 0.23.3: false while a new deck waits for its card size; missing = an older deck, already started. */
   started?: boolean
   /** Layers whose items each card can change for itself (the template's items are the starting point). */
   perCardLayers?: Id[]

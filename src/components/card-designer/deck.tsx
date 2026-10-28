@@ -15,7 +15,7 @@ const short = (s: string) => (s.length > NAME_MAX ? s.slice(0, NAME_MAX - 1) + '
 const matches = (d: CardDoc, c: Card, q: string) => !q || Object.values(c.values).some((v) => v.toLowerCase().includes(q)) || cardLabel(d, c).toLowerCase().includes(q)
 
 /**
- * Fields (0.24): every field with the shown card's value. Open a field to rename it, change its type,
+ * Fields (0.23.3): every field with the shown card's value. Open a field to rename it, change its type,
  * delete it or put the shown card's value on every card at once.
  */
 export function FieldsSection({ d, card, update }: { d: CardDoc; card: Card | null; update: Update }) {

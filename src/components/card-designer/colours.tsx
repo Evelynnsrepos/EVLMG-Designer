@@ -8,7 +8,7 @@ import { colorOf } from './panels'
 import { sideScene, TEXT, type OnScene, type Side, type Update } from './ui'
 
 /**
- * Colours (0.24), at the top of the left column: the card backgrounds, colour slots with a chain to unlink a
+ * Colours (0.23.3), at the top of the left column: the card backgrounds, colour slots with a chain to unlink a
  * slot for the shown card only, the colour wheel for the picked slot, the card's variant and the variants list.
  */
 export function ColoursSection({ d, card, update, onScene, activeLayerId, side }: { d: CardDoc; card: Card | null; update: Update; onScene: OnScene; activeLayerId: Id | undefined; side: Side }) {

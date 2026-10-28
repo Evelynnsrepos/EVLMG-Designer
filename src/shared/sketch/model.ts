@@ -78,7 +78,7 @@ export interface SketchDoc {
   selections?: { id: Id; name: string; image: AssetPath }[]
   /** Drawing guide and the layers with Drawing Assist (Sketch Pro); missing = no guide. */
   guide?: DrawingGuide
-  /** 0.24: a card canvas: bleed, safe margin and corner radius in canvas pixels, shown as guide lines. */
+  /** 0.23.3: a card canvas: bleed, safe margin and corner radius in canvas pixels, shown as guide lines. */
   cardGuides?: { bleed: number; safe: number; corner: number; visible?: boolean }
   // Sketch Pro canvas, time-lapse and files (feat/sketch-files); all optional.
   /** Strokes and drawing time, shown in Canvas info; missing = nothing counted yet. */

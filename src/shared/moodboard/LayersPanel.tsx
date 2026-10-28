@@ -89,7 +89,7 @@ export interface LayersPanelProps {
   activeLayerId: Id
   onActiveLayer(id: Id): void
   onClose(): void
-  /** Optional per-layer extras (0.24 Card Designer): a small picture before the name, buttons after the built-in ones. */
+  /** Optional per-layer extras (0.23.3 Card Designer): a small picture before the name, buttons after the built-in ones. */
   layerPreview?(layer: Layer): ReactNode
   layerActions?(layer: Layer): ReactNode
 }
