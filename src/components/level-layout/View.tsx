@@ -62,7 +62,7 @@ const MAX_CANVAS = 12000
 
 type Draft = { tiles: Record<string, TileId>; layers: ArtLayer[]; blocked: Record<string, true>; unblock?: boolean }
 type Point = { x: number; y: number }
-/** 0.24: one Scatter stroke or fill, kept so Re-roll can do it again with another seed. */
+/** 0.23.4: one Scatter stroke or fill, kept so Re-roll can do it again with another seed. */
 type ScatterJob = Omit<ScatterInput, 'set' | 'seed'> & { setId: string; layerId: string; erase?: boolean; result?: Record<string, string> }
 
 // The snap setting is a per-computer convenience, not project data.
@@ -118,7 +118,7 @@ export default function View({ documentId, active }: PanelProps) {
   const last = useRef<{ x: number; y: number } | null>(null)
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
   const [noteId, setNoteId] = useState<string | null>(null)
-  // 0.24: how stamps and brushes line up, the stroke being dragged (Shift line, repeated stamp copies, scatter) and Scatter's state.
+  // 0.23.4: how stamps and brushes line up, the stroke being dragged (Shift line, repeated stamp copies, scatter) and Scatter's state.
   const [snap, setSnapState] = useState<Snap>(loadSnap)
   const stroke = useRef<{ start: Point; axis?: 'x' | 'y'; first?: Point; placed: Set<string>; scatter?: ScatterJob & { seed: number; seen: Set<string> } } | null>(null)
   const [scatterId, setScatterId] = useState<string | null>(null)
@@ -347,7 +347,7 @@ export default function View({ documentId, active }: PanelProps) {
     for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (inside({ x: f.x + x, y: f.y + y })) next = { ...next, ...paintCell(next, { x: f.x + x, y: f.y + y }) }
     return next
   }
-  /** One point of a drag: a stamp only goes down again once the mouse reaches the next copy's place (0.24). */
+  /** One point of a drag: a stamp only goes down again once the mouse reaches the next copy's place (0.23.4). */
   const strokeAt = (cur: Draft, p: Point): Draft => {
     const st = stroke.current
     if (!(stamp && tool === 'paint' && st?.first)) return paintAt(cur, p)
@@ -358,7 +358,7 @@ export default function View({ documentId, active }: PanelProps) {
     return paintAt(cur, t)
   }
 
-  // ---- Scatter (0.24) ----
+  // ---- Scatter (0.23.4) ----
   /** The tile under the picked layer at x,y: the topmost picture tile on a layer below, or the plan tile. */
   const below = (x: number, y: number): string | undefined => {
     const k = cellKey(x, y)
@@ -658,7 +658,7 @@ export default function View({ documentId, active }: PanelProps) {
   const css = cellPx / dpr
   const brushTool = tool === 'paint' || tool === 'erase' || tool === 'block' || tool === 'scatter'
 
-  /** 0.24: what the next click puts down, for the preview under the mouse. */
+  /** 0.23.4: what the next click puts down, for the preview under the mouse. */
   const ghost = ((): Ghost | null => {
     if (!hover || moving || picking || !brushTool || (tool === 'scatter' && scatterFill && !drag)) return null
     if (tool === 'paint' && stamp) {

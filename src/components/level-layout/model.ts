@@ -121,11 +121,11 @@ export function stampTileAt(s: Stamp, ox: number, oy: number, x: number, y: numb
   return artKey(s.set, s.col + mod(x - ox, s.w), s.row + mod(y - oy, s.h))
 }
 
-/** 0.24: how a stamp or brush lines up with the level: on the cell under the mouse, or on a grid its own size. */
+/** 0.23.4: how a stamp or brush lines up with the level: on the cell under the mouse, or on a grid its own size. */
 export type Snap = 'cell' | 'grid'
 
 /**
- * The top left cell of a w × h stamp or brush for the cell p under the mouse (0.24). Stamps hang down-right from p,
+ * The top left cell of a w × h stamp or brush for the cell p under the mouse (0.23.4). Stamps hang down-right from p,
  * brushes are centred on it; "grid" puts it on a grid as big as itself that starts at the level's top left.
  */
 export function footprint(p: { x: number; y: number }, w: number, h: number, snap: Snap, centred: boolean) {
@@ -133,13 +133,13 @@ export function footprint(p: { x: number; y: number }, w: number, h: number, sna
   return centred ? { x: p.x - Math.floor((w - 1) / 2), y: p.y - Math.floor((h - 1) / 2) } : { x: p.x, y: p.y }
 }
 
-/** The copy of a dragged w × h stamp that cell p falls in (0.24): copies sit side by side, starting at the first one. */
+/** The copy of a dragged w × h stamp that cell p falls in (0.23.4): copies sit side by side, starting at the first one. */
 export const repeatAt = (first: { x: number; y: number }, p: { x: number; y: number }, w: number, h: number) => ({
   x: first.x + Math.floor((p.x - first.x) / w) * w,
   y: first.y + Math.floor((p.y - first.y) / h) * h,
 })
 
-/** Shift held while dragging (0.24): p kept on the line through start, across or down. */
+/** Shift held while dragging (0.23.4): p kept on the line through start, across or down. */
 export const straighten = (start: { x: number; y: number }, p: { x: number; y: number }, axis: 'x' | 'y') => (axis === 'x' ? { x: p.x, y: start.y } : { x: start.x, y: p.y })
 
 /**

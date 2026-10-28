@@ -18,7 +18,7 @@ interface Props {
   onReplace(t: Tileset): void
   onGrid(t: Tileset): void
   onRemove(t: Tileset): void
-  /** 0.24: while Scatter is picked, a click or drag adds the tiles to the scatter set instead of picking a stamp. */
+  /** 0.23.4: while Scatter is picked, a click or drag adds the tiles to the scatter set instead of picking a stamp. */
   scatter?: { pieces: Stamp[]; onPick(s: Stamp): void }
 }
 
@@ -174,7 +174,7 @@ function SolidCheck({ set, stamp, change }: { set: Tileset; stamp: Stamp; change
 
 /**
  * The tileset picture with its grid; click a tile, or drag over several to paint them as one stamp.
- * With `onPick` (0.24, Scatter) the block is handed over once the mouse is let go, and the scatter set's details are outlined.
+ * With `onPick` (0.23.4, Scatter) the block is handed over once the mouse is let go, and the scatter set's details are outlined.
  */
 function Atlas({ set, image, stamp, onStamp, pieces, onPick }: { set: Tileset; image?: TileImage; stamp: Stamp | null; onStamp(s: Stamp): void; pieces?: Stamp[]; onPick?(s: Stamp): void }) {
   const canvas = useRef<HTMLCanvasElement>(null)

@@ -17,7 +17,7 @@ interface Props {
   change(id: string, patch: Partial<ScatterSet>): void
 }
 
-/** 0.24: the Scatter tool's sets, their details and how strongly they spread. Shown on the right while Scatter is picked. */
+/** 0.23.4: the Scatter tool's sets, their details and how strongly they spread. Shown on the right while Scatter is picked. */
 export function ScatterPanel({ sets, current, tilesets, images, onPick, onAdd, onRemove, change }: Props) {
   const set = current
   const pieces = (fn: (p: ScatterPiece[]) => ScatterPiece[]) => set && change(set.id, { pieces: fn(set.pieces) })

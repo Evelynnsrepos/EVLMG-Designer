@@ -24,7 +24,7 @@ interface Props {
 }
 
 /**
- * 0.24: the brush preview, on its own see-through canvas over the level. Moving the mouse only clears and redraws
+ * 0.23.4: the brush preview, on its own see-through canvas over the level. Moving the mouse only clears and redraws
  * the few cells under it, so big levels don't get slower.
  */
 export function Preview({ ghost, iso, width, height, cellPx, sharp, sets, images, style }: Props) {

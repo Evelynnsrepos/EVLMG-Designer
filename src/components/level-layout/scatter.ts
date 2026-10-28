@@ -1,14 +1,14 @@
 import { newId, type Id } from '@/core/model'
 import { artKey, cellKey, parseArt, type Stamp, type TileLibrary } from './model'
 
-/** 0.24: one detail a scatter set puts down: a single tile, or a group of tiles that always goes down whole. */
+/** 0.23.4: one detail a scatter set puts down: a single tile, or a group of tiles that always goes down whole. */
 export interface ScatterPiece extends Stamp {
   id: Id
   /** How often it shows up compared to the set's other details, 1–10. */
   weight: number
 }
 
-/** 0.24: details spread at random, like Godot's scattering: rocks in a field, different stones in a path. */
+/** 0.23.4: details spread at random, like Godot's scattering: rocks in a field, different stones in a path. */
 export interface ScatterSet {
   id: Id
   name: string
