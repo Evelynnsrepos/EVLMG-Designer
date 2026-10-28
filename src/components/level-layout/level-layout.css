@@ -91,6 +91,18 @@
 .lv-canvas canvas {
   cursor: crosshair;
 }
+.lv-stage {
+  position: relative;
+  display: inline-block;
+}
+.lv-stage canvas {
+  display: block;
+}
+.lv-canvas canvas.lv-preview {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
 .lv-canvas canvas.sharp {
   image-rendering: pixelated;
 }
@@ -397,4 +409,67 @@
 }
 .lv-zoom input[type='range'] {
   width: 220px;
+}
+.lv-scatter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.lv-scatter > strong {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.lv-scatter-set {
+  display: flex;
+  gap: 4px;
+}
+.lv-scatter-set select {
+  flex: 1;
+  min-width: 0;
+}
+.lv-piece {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lv-piece-thumb {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  object-fit: contain;
+}
+.lv-piece-thumb.sharp {
+  image-rendering: pixelated;
+}
+.lv-piece-weight {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.lv-scatter-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.lv-scatter-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lv-scatter-controls label span {
+  float: right;
+  color: var(--text-muted);
+}
+.lv-toolbar select.input {
+  width: auto;
+  padding: 3px 6px;
 }

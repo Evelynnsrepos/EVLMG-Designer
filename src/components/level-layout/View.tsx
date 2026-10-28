@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Ban, Brush, Download, Eraser, Eye, EyeOff, PaintBucket, Plus, SquareDashed, StickyNote, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Ban, Brush, Dices, Download, Eraser, Eye, EyeOff, PaintBucket, Plus, Sparkles, SquareDashed, StickyNote, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PanelProps } from '@/core/registry'
 import { useDocument, useProjectStore, useSettings, isTextField, useUndoRedoKeys } from '@/core/state'
@@ -24,6 +24,7 @@ import {
   counts,
   createLevelDoc,
   createLibrary,
+  footprint,
   godotScene,
   grid,
   isBlocked,
@@ -33,34 +34,60 @@ import {
   newLayer,
   newNote,
   parseArt,
+  repeatAt,
   stampCells,
   stampTileAt,
+  straighten,
   tileColor,
   tileRect,
   TILES,
   usedTilesets,
   type ArtLayer,
   type LevelDoc,
+  type Snap,
   type Stamp,
   type TileId,
-  type TileLibrary,
   type Tileset,
 } from './model'
+import { Preview, type Ghost } from './Preview'
+import { newScatterSet, scatter, unscatter, type LevelLibrary, type ScatterInput, type ScatterSet } from './scatter'
+import { ScatterPanel } from './ScatterPanel'
 import { TilesetDock } from './TilesetDock'
 import './level-layout.css'
 
-type Tool = 'paint' | 'erase' | 'select' | 'fill' | 'note' | 'block'
+type Tool = 'paint' | 'erase' | 'select' | 'fill' | 'note' | 'block' | 'scatter'
 const CELL = 22
 /** Canvases bigger than this fail in some browsers; the level is drawn smaller and scaled up instead. */
 const MAX_CANVAS = 12000
 
 type Draft = { tiles: Record<string, TileId>; layers: ArtLayer[]; blocked: Record<string, true>; unblock?: boolean }
+type Point = { x: number; y: number }
+/** 0.24: one Scatter stroke or fill, kept so Re-roll can do it again with another seed. */
+type ScatterJob = Omit<ScatterInput, 'set' | 'seed'> & { setId: string; layerId: string; erase?: boolean; result?: Record<string, string> }
+
+// The snap setting is a per-computer convenience, not project data.
+const SNAP_KEY = 'egd.level-layout.snap'
+function loadSnap(): Snap {
+  try {
+    return localStorage.getItem(SNAP_KEY) === 'grid' ? 'grid' : 'cell'
+  } catch {
+    return 'cell'
+  }
+}
+function saveSnap(s: Snap) {
+  try {
+    localStorage.setItem(SNAP_KEY, s)
+  } catch {
+    // Not important enough to report.
+  }
+}
+const newSeed = () => (Math.random() * 2 ** 32) >>> 0
 
 /** Level / dungeon layout editor (v0.10). */
 export default function View({ documentId, active }: PanelProps) {
   const doc = useDocument<LevelDoc>('level-layout', documentId!, createLevelDoc)
   // v0.15: the tilesets are shared by every level in the project.
-  const lib = useDocument<TileLibrary>('level-layout', LIBRARY_ID, createLibrary)
+  const lib = useDocument<LevelLibrary>('level-layout', LIBRARY_ID, createLibrary)
   useUndoRedoKeys(doc, active)
   const title = useProjectStore((s) => s.meta?.documents.find((x) => x.id === documentId)?.title ?? 'Level')
   const root = useProjectStore((s) => s.root)
@@ -91,6 +118,12 @@ export default function View({ documentId, active }: PanelProps) {
   const last = useRef<{ x: number; y: number } | null>(null)
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null)
   const [noteId, setNoteId] = useState<string | null>(null)
+  // 0.24: how stamps and brushes line up, the stroke being dragged (Shift line, repeated stamp copies, scatter) and Scatter's state.
+  const [snap, setSnapState] = useState<Snap>(loadSnap)
+  const stroke = useRef<{ start: Point; axis?: 'x' | 'y'; first?: Point; placed: Set<string>; scatter?: ScatterJob & { seed: number; seen: Set<string> } } | null>(null)
+  const [scatterId, setScatterId] = useState<string | null>(null)
+  const [scatterFill, setScatterFill] = useState(false)
+  const [lastScatter, setLastScatter] = useState<(ScatterJob & { result: Record<string, string> }) | null>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const selRef = useRef<CellRect | null>(null)
   selRef.current = sel
@@ -98,6 +131,8 @@ export default function View({ documentId, active }: PanelProps) {
   const d = doc.data
   const sets = useMemo(() => lib.data?.tilesets ?? [], [lib.data?.tilesets])
   const images = useTilesetImages(sets)
+  const scatterSets = lib.data?.scatter ?? []
+  const scatterSet = scatterSets.find((s) => s.id === scatterId) ?? scatterSets[0]
 
   const updateLib = lib.update
   const updateDoc = doc.update
@@ -275,7 +310,7 @@ export default function View({ documentId, active }: PanelProps) {
         const r = selRef.current
         return doc.update((x) => ({ ...x, ...clearRegion(x, r, layerRef.current) }))
       }
-      const hit = (['paint', 'select', 'fill', 'erase', 'note', 'block'] as const).find((id) => isShortcut(e, `level.${id}`))
+      const hit = (['paint', 'select', 'fill', 'erase', 'note', 'block', 'scatter'] as const).find((id) => isShortcut(e, `level.${id}`))
       if (!hit) return
       e.preventDefault()
       setTool(hit)
@@ -303,13 +338,98 @@ export default function View({ documentId, active }: PanelProps) {
   }
   const withLayer = (draft: Draft, fn: (art: Record<string, string>) => Record<string, string>): ArtLayer[] => draft.layers.map((l) => (l.id === layer?.id ? { ...l, art: fn(l.art) } : l))
 
-  /** The brush: one cell painted at every cell of a size × size square around p (stamps paint once). */
-  const paintAt = (cur: Draft, p: { x: number; y: number }): Draft => {
-    if (size === 1 || (stamp && tool === 'paint')) return paintCell(cur, p)
-    const lo = Math.floor((size - 1) / 2)
+  /** The brush: one cell painted at every cell of a size × size square around p (stamps paint once, with p as their top left). */
+  const paintAt = (cur: Draft, p: Point): Draft => {
+    if (stamp && tool === 'paint') return paintCell(cur, p)
+    const f = footprint(p, size, size, snap, true)
+    if (tool === 'scatter') return scatterAt(cur, f)
     let next = cur
-    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (inside({ x: p.x - lo + x, y: p.y - lo + y })) next = { ...next, ...paintCell(next, { x: p.x - lo + x, y: p.y - lo + y }) }
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (inside({ x: f.x + x, y: f.y + y })) next = { ...next, ...paintCell(next, { x: f.x + x, y: f.y + y }) }
     return next
+  }
+  /** One point of a drag: a stamp only goes down again once the mouse reaches the next copy's place (0.24). */
+  const strokeAt = (cur: Draft, p: Point): Draft => {
+    const st = stroke.current
+    if (!(stamp && tool === 'paint' && st?.first)) return paintAt(cur, p)
+    const t = repeatAt(st.first, p, stamp.w, stamp.h)
+    const k = cellKey(t.x, t.y)
+    if (st.placed.has(k)) return cur
+    st.placed.add(k)
+    return paintAt(cur, t)
+  }
+
+  // ---- Scatter (0.24) ----
+  /** The tile under the picked layer at x,y: the topmost picture tile on a layer below, or the plan tile. */
+  const below = (x: number, y: number): string | undefined => {
+    const k = cellKey(x, y)
+    for (let i = layers.findIndex((l) => l.id === layer?.id) - 1; i >= 0; i--) if (layers[i].art[k]) return layers[i].art[k]
+    return d.tiles[k]
+  }
+  /** Where the set may put details: not on blocked cells (unless painting over them), and what "Only on" allows. */
+  const allowedFor = (set: ScatterSet, start: string | undefined) => (x: number, y: number) =>
+    !guarded(x, y) && (set.onlyOn === 'anywhere' || (set.onlyOn === 'tiles' ? !!below(x, y) : below(x, y) === start))
+  const runJob = (set: ScatterSet, job: ScatterJob, seed: number) => (job.erase ? unscatter(job.art, job.cells, set) : scatter({ ...job, set, seed }))
+  /** The brush square added to the stroke's area, and the whole stroke scattered again from where it started. */
+  const scatterAt = (cur: Draft, f: Point): Draft => {
+    const job = stroke.current?.scatter
+    const set = scatterSets.find((s) => s.id === job?.setId)
+    if (!job || !set) return cur
+    for (let y = f.y; y < f.y + size; y++)
+      for (let x = f.x; x < f.x + size; x++) {
+        const k = cellKey(x, y)
+        if (!inside({ x, y }) || job.seen.has(k)) continue
+        job.seen.add(k)
+        job.cells.push([x, y])
+      }
+    const art = runJob(set, job, job.seed)
+    job.result = art
+    return { ...cur, layers: cur.layers.map((l) => (l.id === job.layerId ? { ...l, art } : l)) }
+  }
+  /** Scatter over a whole area at once (Fill, In selection). */
+  const scatterArea = (cells: [number, number][], start: string | undefined) => {
+    if (!scatterSet || !layer) return
+    const job: ScatterJob = { art: layer.art, cells, size: { width: d.width, height: d.height }, allowed: allowedFor(scatterSet, start), setId: scatterSet.id, layerId: layer.id }
+    const result = runJob(scatterSet, job, newSeed())
+    doc.update((x) => ({ ...x, layers: (x.layers ?? []).map((l) => (l.id === job.layerId ? { ...l, art: result } : l)) }))
+    setLastScatter({ ...job, result })
+  }
+  const scatterSelection = () => {
+    if (!sel) return
+    const cells: [number, number][] = []
+    for (let y = Math.min(sel.y0, sel.y1); y <= Math.max(sel.y0, sel.y1); y++) for (let x = Math.min(sel.x0, sel.x1); x <= Math.max(sel.x0, sel.x1); x++) cells.push([x, y])
+    // "The tile you start on" means the tile most of the selection stands on.
+    const seen = new Map<string | undefined, number>()
+    for (const [x, y] of cells) seen.set(below(x, y), (seen.get(below(x, y)) ?? 0) + 1)
+    scatterArea(cells, [...seen].sort((a, b) => b[1] - a[1])[0]?.[0])
+  }
+  /** Re-roll: the last scatter again with a new seed and the set's current settings, while nothing else changed on its layer. */
+  const rerollSet = lastScatter && layers.find((l) => l.id === lastScatter.layerId)?.art === lastScatter.result ? scatterSets.find((s) => s.id === lastScatter.setId) : undefined
+  const reroll = () => {
+    if (!lastScatter || !rerollSet) return
+    const result = runJob(rerollSet, lastScatter, newSeed())
+    doc.update((x) => ({ ...x, layers: (x.layers ?? []).map((l) => (l.id === lastScatter.layerId ? { ...l, art: result } : l)) }))
+    setLastScatter({ ...lastScatter, result })
+  }
+  const setScatter = (fn: (s: ScatterSet[]) => ScatterSet[]) => lib.update((x) => ({ ...x, scatter: fn(x.scatter ?? []) }))
+  const addScatterSet = () => {
+    const s = newScatterSet(`Scatter set ${scatterSets.length + 1}`)
+    setScatter((all) => [...all, s])
+    setScatterId(s.id)
+  }
+  const removeScatterSet = async (s: ScatterSet) => {
+    if (s.pieces.length && !(await confirmDialog({ title: `Delete ${s.name}?`, message: 'Details already scattered on your levels stay.', confirmLabel: 'Delete', danger: true }))) return
+    setScatter((all) => all.filter((x) => x.id !== s.id))
+  }
+  /** A tile or block picked in the tileset panel becomes a detail of the set (a new set when there is none). */
+  const addPiece = (st: Stamp) => {
+    const piece = { ...st, id: newId(), weight: 5 }
+    if (!scatterSet) {
+      const s = { ...newScatterSet('Scatter set 1'), pieces: [piece] }
+      setScatterId(s.id)
+      return setScatter((all) => [...all, s])
+    }
+    if (scatterSet.pieces.some((p) => p.set === st.set && p.col === st.col && p.row === st.row && p.w === st.w && p.h === st.h)) return
+    setScatter((all) => all.map((s) => (s.id === scatterSet.id ? { ...s, pieces: [...s.pieces, piece] } : s)))
   }
   /** One cell painted (or erased: the picture tile of this layer first, then the plan tile). */
   const paintCell = (cur: Draft, p: { x: number; y: number }): Draft => {
@@ -375,13 +495,37 @@ export default function View({ documentId, active }: PanelProps) {
       setSel({ x0: p.x, y0: p.y, x1: p.x, y1: p.y })
       return setPicking(true)
     }
+    stroke.current = { start: p, placed: new Set() }
+    let at = p
+    if (tool === 'scatter') {
+      if (!scatterSet || !layer) return
+      const erase = e.button === 2
+      if (scatterFill && !erase) {
+        // The connected area of the picked layer that looks like the clicked cell (usually all its empty cells).
+        const cells: [number, number][] = []
+        bucket({ ...d, tiles: layer.art }, p.x, p.y, (x, y) => (cells.push([x, y]), 'x'))
+        return scatterArea(cells, below(p.x, p.y))
+      }
+      stroke.current.scatter = { art: layer.art, cells: [], seen: new Set(), seed: newSeed(), size: { width: d.width, height: d.height }, allowed: allowedFor(scatterSet, below(p.x, p.y)), setId: scatterSet.id, layerId: layer.id, erase }
+    } else if (stamp && tool === 'paint') {
+      at = footprint(p, stamp.w, stamp.h, snap, false)
+      stroke.current.first = at
+      stroke.current.placed.add(cellKey(at.x, at.y))
+    }
     const first = { ...start, unblock: tool === 'block' && (!!d.blocked?.[cellKey(p.x, p.y)] || e.button === 2) }
     last.current = p
-    setDrag({ x: p.x, y: p.y, ...paintAt(first, p) })
+    setDrag({ x: p.x, y: p.y, ...paintAt(first, at) })
   }
   const onMove = (e: React.MouseEvent) => {
-    const p = cellAt(e)
-    setHover(inside(p) ? p : null)
+    let p = cellAt(e)
+    const st = stroke.current
+    // Shift keeps the drag on a straight line, across or down, whichever way it went first.
+    if (drag && st && e.shiftKey) {
+      if (!st.axis && (p.x !== st.start.x || p.y !== st.start.y)) st.axis = Math.abs(p.x - st.start.x) >= Math.abs(p.y - st.start.y) ? 'x' : 'y'
+      if (st.axis) p = straighten(st.start, p, st.axis)
+    }
+    const h = inside(p) ? p : null
+    if (h?.x !== hover?.x || h?.y !== hover?.y) setHover(h)
     if (picking && sel) return setSel({ ...sel, x1: Math.max(0, Math.min(d.width - 1, p.x)), y1: Math.max(0, Math.min(d.height - 1, p.y)) })
     if (moving) return setMoving({ ...moving, dx: p.x - moving.x, dy: p.y - moving.y })
     if (!drag || !inside(p)) return
@@ -389,12 +533,15 @@ export default function View({ documentId, active }: PanelProps) {
     const from = last.current ?? p
     const n = Math.max(Math.abs(p.x - from.x), Math.abs(p.y - from.y))
     let next = drag
-    for (let i = 1; i <= n; i++) next = { ...next, ...paintAt(next, { x: Math.round(from.x + ((p.x - from.x) * i) / n), y: Math.round(from.y + ((p.y - from.y) * i) / n) }) }
+    for (let i = 1; i <= n; i++) next = { ...next, ...strokeAt(next, { x: Math.round(from.x + ((p.x - from.x) * i) / n), y: Math.round(from.y + ((p.y - from.y) * i) / n) }) }
     last.current = p
     if (n) setDrag(next)
   }
   const onUp = () => {
     if (drag) apply(drag)
+    const job = stroke.current?.scatter
+    if (drag && job?.result && !job.erase) setLastScatter({ ...job, result: job.result })
+    stroke.current = null
     setDrag(null)
     setPicking(false)
     if (moving && sel && (moving.dx || moving.dy)) {
@@ -506,8 +653,31 @@ export default function View({ documentId, active }: PanelProps) {
     { id: 'erase', icon: Eraser, label: 'Erase' },
     { id: 'note', icon: StickyNote, label: 'Note' },
     { id: 'block', icon: Ban, label: 'Blocked: mark where nothing can walk (click a blocked cell or right-click to clear)' },
+    { id: 'scatter', icon: Sparkles, label: 'Scatter: spread details like rocks or flowers at random (right-click takes them out again)' },
   ]
   const css = cellPx / dpr
+  const brushTool = tool === 'paint' || tool === 'erase' || tool === 'block' || tool === 'scatter'
+
+  /** 0.24: what the next click puts down, for the preview under the mouse. */
+  const ghost = ((): Ghost | null => {
+    if (!hover || moving || picking || !brushTool || (tool === 'scatter' && scatterFill && !drag)) return null
+    if (tool === 'paint' && stamp) {
+      const st = stroke.current
+      const t = drag && st?.first ? repeatAt(st.first, hover, stamp.w, stamp.h) : footprint(hover, stamp.w, stamp.h, snap, false)
+      return {
+        tone: 'paint',
+        cells: stampCells(stamp, t.x, t.y, d).map(([k, art]) => {
+          const [x, y] = k.split(',').map(Number)
+          return { x, y, art, skip: guarded(x, y) }
+        }),
+      }
+    }
+    const f = footprint(hover, size, size, snap, true)
+    const cells: Ghost['cells'] = []
+    for (let y = f.y; y < f.y + size; y++)
+      for (let x = f.x; x < f.x + size; x++) if (inside({ x, y })) cells.push({ x, y, color: tool === 'paint' ? tileColor(tile) : undefined, skip: (tool === 'paint' || tool === 'scatter') && guarded(x, y) })
+    return { tone: tool as Ghost['tone'], cells }
+  })()
 
   return (
     <div className="lv">
@@ -526,11 +696,42 @@ export default function View({ documentId, active }: PanelProps) {
           <NumberInput value={d.width} min={4} max={200} onChange={(v) => doc.update((x) => ({ ...x, width: Math.max(4, Math.min(200, Math.round(v))) }))} />×
           <NumberInput value={d.height} min={4} max={200} onChange={(v) => doc.update((x) => ({ ...x, height: Math.max(4, Math.min(200, Math.round(v))) }))} />
         </label>
-        {(tool === 'paint' || tool === 'erase' || tool === 'block') && (
+        {brushTool && !(tool === 'paint' && stamp) && !(tool === 'scatter' && scatterFill) && (
           <label className="ld-inline" title="Brush size in cells">
             Brush
             <input type="range" min={1} max={9} step={1} value={size} onChange={(e) => setSize(Number(e.target.value))} /> {size}
           </label>
+        )}
+        {brushTool && (
+          <label className="ld-inline" title="Cell: the stamp or brush goes on the cell under the mouse. Stamp grid: it only lands on a grid as big as itself, so the pieces always line up.">
+            Snap
+            <select
+              className="input"
+              value={snap}
+              onChange={(e) => {
+                const v = e.target.value as Snap
+                setSnapState(v)
+                saveSnap(v)
+              }}
+            >
+              <option value="cell">Cell</option>
+              <option value="grid">Stamp grid</option>
+            </select>
+          </label>
+        )}
+        {tool === 'scatter' && (
+          <>
+            <select className="input" aria-label="Scatter with" value={scatterFill ? 'fill' : 'brush'} onChange={(e) => setScatterFill(e.target.value === 'fill')} title="Brush: paint the details on. Fill: click to scatter over a whole connected area.">
+              <option value="brush">Brush</option>
+              <option value="fill">Fill area</option>
+            </select>
+            <button className="btn btn-ghost lv-btn" disabled={!sel || !scatterSet} title={sel ? 'Scatter over the selected rectangle' : 'Make a selection with Select and move first'} onClick={scatterSelection}>
+              <SquareDashed size={14} /> In selection
+            </button>
+            <button className="btn btn-ghost lv-btn" disabled={!rerollSet} title="The same scatter again with a new random layout (and the set's current settings)" onClick={reroll}>
+              <Dices size={14} /> Re-roll
+            </button>
+          </>
         )}
         <label className="ld-inline lv-zoom">
           Zoom
@@ -570,18 +771,33 @@ export default function View({ documentId, active }: PanelProps) {
           ))}
         </div>
         <div className="lv-canvas">
-          <canvas
-            ref={canvas}
-            className={sharp ? 'sharp' : ''}
-            style={{ width: geometry(d.iso, d.width, d.height, css).width, height: geometry(d.iso, d.width, d.height, css).height }}
-            onMouseDown={onDown}
-            onMouseMove={onMove}
-            onMouseUp={onUp}
-            onMouseLeave={() => (onUp(), setHover(null))}
-            onContextMenu={(e) => e.preventDefault()}
-          />
+          <div className="lv-stage">
+            <canvas
+              ref={canvas}
+              className={sharp ? 'sharp' : ''}
+              style={{ width: geometry(d.iso, d.width, d.height, css).width, height: geometry(d.iso, d.width, d.height, css).height }}
+              onMouseDown={onDown}
+              onMouseMove={onMove}
+              onMouseUp={onUp}
+              onMouseLeave={() => (onUp(), setHover(null))}
+              onContextMenu={(e) => e.preventDefault()}
+            />
+            <Preview ghost={ghost} iso={d.iso} width={d.width} height={d.height} cellPx={cellPx} sharp={sharp} sets={sets} images={images} style={{ width: geometry(d.iso, d.width, d.height, css).width, height: geometry(d.iso, d.width, d.height, css).height }} />
+          </div>
         </div>
         <aside className="lv-notes">
+          {tool === 'scatter' && (
+            <ScatterPanel
+              sets={scatterSets}
+              current={scatterSet}
+              tilesets={sets}
+              images={images}
+              onPick={setScatterId}
+              onAdd={addScatterSet}
+              onRemove={(s) => void removeScatterSet(s)}
+              change={(id, patch) => setScatter((all) => all.map((s) => (s.id === id ? { ...s, ...patch } : s)))}
+            />
+          )}
           <div className="lv-layers">
             <strong>
               Layers
@@ -642,6 +858,7 @@ export default function View({ documentId, active }: PanelProps) {
         onReplace={(t) => void pickPicture(t)}
         onGrid={editGrid}
         onRemove={(t) => void removeSet(t)}
+        scatter={tool === 'scatter' ? { pieces: scatterSet?.pieces ?? [], onPick: addPiece } : undefined}
       />
       {importing && <ImportDialog image={importing.image} title={importing.title} initial={importing.initial} count={1 + (importing.more?.length ?? 0)} onDone={(v) => void finishImport(v)} onClose={() => setImporting(null)} />}
     </div>

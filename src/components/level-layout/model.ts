@@ -104,12 +104,12 @@ export interface Stamp {
   h: number
 }
 
-/** The picture tiles a stamp puts down with its top left corner at x,y, cut off at the level's edge. */
+/** The picture tiles a stamp puts down with its top left corner at x,y, cut off at the level's edges. */
 export function stampCells(s: Stamp, x: number, y: number, size: { width: number; height: number }): [string, string][] {
   const out: [string, string][] = []
   for (let dy = 0; dy < s.h; dy++)
     for (let dx = 0; dx < s.w; dx++) {
-      if (x + dx >= size.width || y + dy >= size.height) continue
+      if (x + dx < 0 || y + dy < 0 || x + dx >= size.width || y + dy >= size.height) continue
       out.push([cellKey(x + dx, y + dy), artKey(s.set, s.col + dx, s.row + dy)])
     }
   return out
@@ -120,6 +120,27 @@ export function stampTileAt(s: Stamp, ox: number, oy: number, x: number, y: numb
   const mod = (a: number, n: number) => ((a % n) + n) % n
   return artKey(s.set, s.col + mod(x - ox, s.w), s.row + mod(y - oy, s.h))
 }
+
+/** 0.24: how a stamp or brush lines up with the level: on the cell under the mouse, or on a grid its own size. */
+export type Snap = 'cell' | 'grid'
+
+/**
+ * The top left cell of a w × h stamp or brush for the cell p under the mouse (0.24). Stamps hang down-right from p,
+ * brushes are centred on it; "grid" puts it on a grid as big as itself that starts at the level's top left.
+ */
+export function footprint(p: { x: number; y: number }, w: number, h: number, snap: Snap, centred: boolean) {
+  if (snap === 'grid') return { x: Math.floor(p.x / w) * w, y: Math.floor(p.y / h) * h }
+  return centred ? { x: p.x - Math.floor((w - 1) / 2), y: p.y - Math.floor((h - 1) / 2) } : { x: p.x, y: p.y }
+}
+
+/** The copy of a dragged w × h stamp that cell p falls in (0.24): copies sit side by side, starting at the first one. */
+export const repeatAt = (first: { x: number; y: number }, p: { x: number; y: number }, w: number, h: number) => ({
+  x: first.x + Math.floor((p.x - first.x) / w) * w,
+  y: first.y + Math.floor((p.y - first.y) / h) * h,
+})
+
+/** Shift held while dragging (0.24): p kept on the line through start, across or down. */
+export const straighten = (start: { x: number; y: number }, p: { x: number; y: number }, axis: 'x' | 'y') => (axis === 'x' ? { x: p.x, y: start.y } : { x: start.x, y: p.y })
 
 /**
  * Where cells sit on the canvas (v0.16): a square grid, or isometric diamonds (twice as wide as high,

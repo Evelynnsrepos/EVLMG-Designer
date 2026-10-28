@@ -18,6 +18,8 @@ interface Props {
   onReplace(t: Tileset): void
   onGrid(t: Tileset): void
   onRemove(t: Tileset): void
+  /** 0.24: while Scatter is picked, a click or drag adds the tiles to the scatter set instead of picking a stamp. */
+  scatter?: { pieces: Stamp[]; onPick(s: Stamp): void }
 }
 
 /**
@@ -136,8 +138,20 @@ export function TilesetDock(p: Props) {
                 <Trash2 size={14} />
               </button>
             </div>
-            {p.stamp?.set === current.id && <SolidCheck set={current} stamp={p.stamp} change={p.change} />}
-            <Atlas key={current.id} set={current} image={p.images[current.id]} stamp={p.stamp?.set === current.id ? p.stamp : null} onStamp={p.onStamp} />
+            {p.scatter ? (
+              <p className="muted lv-solid">Click a tile to add it to the scatter set, or drag over several to add them as one group.</p>
+            ) : (
+              p.stamp?.set === current.id && <SolidCheck set={current} stamp={p.stamp} change={p.change} />
+            )}
+            <Atlas
+              key={current.id}
+              set={current}
+              image={p.images[current.id]}
+              stamp={!p.scatter && p.stamp?.set === current.id ? p.stamp : null}
+              onStamp={p.onStamp}
+              pieces={p.scatter?.pieces.filter((s) => s.set === current.id)}
+              onPick={p.scatter?.onPick}
+            />
           </div>
         )}
       </div>
@@ -158,11 +172,15 @@ function SolidCheck({ set, stamp, change }: { set: Tileset; stamp: Stamp; change
   )
 }
 
-/** The tileset picture with its grid; click a tile, or drag over several to paint them as one stamp. */
-function Atlas({ set, image, stamp, onStamp }: { set: Tileset; image?: TileImage; stamp: Stamp | null; onStamp(s: Stamp): void }) {
+/**
+ * The tileset picture with its grid; click a tile, or drag over several to paint them as one stamp.
+ * With `onPick` (0.24, Scatter) the block is handed over once the mouse is let go, and the scatter set's details are outlined.
+ */
+function Atlas({ set, image, stamp, onStamp, pieces, onPick }: { set: Tileset; image?: TileImage; stamp: Stamp | null; onStamp(s: Stamp): void; pieces?: Stamp[]; onPick?(s: Stamp): void }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const [zoom, setZoom] = useState(() => Math.max(1, Math.min(4, Math.floor(48 / set.tileSize) || 1)))
   const [drag, setDrag] = useState<{ col: number; row: number } | null>(null)
+  const [pending, setPending] = useState<Stamp | null>(null)
 
   useEffect(() => {
     const c = canvas.current
@@ -187,14 +205,17 @@ function Atlas({ set, image, stamp, onStamp }: { set: Tileset; image?: TileImage
           g.fillRect(r.x, r.y, r.size, r.h)
         }
       }
-    if (stamp) {
-      const a = tileRect(set, stamp.col, stamp.row)
-      const b = tileRect(set, stamp.col + stamp.w - 1, stamp.row + stamp.h - 1)
+    const outline = (s: Stamp, color: string) => {
+      const a = tileRect(set, s.col, s.row)
+      const b = tileRect(set, s.col + s.w - 1, s.row + s.h - 1)
       g.lineWidth = 2 / zoom
-      g.strokeStyle = '#4dabf7'
+      g.strokeStyle = color
       g.strokeRect(a.x, a.y, b.x + b.size - a.x, b.y + b.h - a.y)
     }
-  }, [set, image, zoom, stamp])
+    for (const s of pieces ?? []) outline(s, '#f5a623')
+    const picked = pending ?? stamp
+    if (picked) outline(picked, '#4dabf7')
+  }, [set, image, zoom, stamp, pieces, pending])
 
   const tileAt = (e: React.PointerEvent) => {
     const r = canvas.current!.getBoundingClientRect()
@@ -203,8 +224,8 @@ function Atlas({ set, image, stamp, onStamp }: { set: Tileset; image?: TileImage
     const sp = set.spacing ?? 0
     return { col: Math.max(0, Math.min(set.columns - 1, Math.floor(px / (set.tileSize + sp)))), row: Math.max(0, Math.min(set.rows - 1, Math.floor(py / ((set.tileHeight ?? set.tileSize) + sp)))) }
   }
-  const pick = (a: { col: number; row: number }, b: { col: number; row: number }) =>
-    onStamp({ set: set.id, col: Math.min(a.col, b.col), row: Math.min(a.row, b.row), w: Math.abs(a.col - b.col) + 1, h: Math.abs(a.row - b.row) + 1 })
+  const block = (a: { col: number; row: number }, b: { col: number; row: number }): Stamp => ({ set: set.id, col: Math.min(a.col, b.col), row: Math.min(a.row, b.row), w: Math.abs(a.col - b.col) + 1, h: Math.abs(a.row - b.row) + 1 })
+  const pick = (a: { col: number; row: number }, b: { col: number; row: number }) => (onPick ? setPending(block(a, b)) : onStamp(block(a, b)))
 
   return (
     <div className="lv-atlas-wrap">
@@ -220,7 +241,11 @@ function Atlas({ set, image, stamp, onStamp }: { set: Tileset; image?: TileImage
               pick(t, t)
             }}
             onPointerMove={(e) => drag && pick(drag, tileAt(e))}
-            onPointerUp={() => setDrag(null)}
+            onPointerUp={() => {
+              if (pending) onPick?.(pending)
+              setPending(null)
+              setDrag(null)
+            }}
           />
         ) : (
           <p className="muted">Loading the picture…</p>
