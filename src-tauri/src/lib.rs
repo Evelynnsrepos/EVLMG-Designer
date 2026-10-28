@@ -46,6 +46,9 @@ pub fn run() {
         let title = format!("Eve.Lopment Games Designer {}", app.package_info().version);
         let _ = window.set_title(&title);
       }
+      // btop/top show the process name (15 bytes at most): put the version there too.
+      #[cfg(target_os = "linux")]
+      let _ = std::fs::write("/proc/self/comm", format!("EVLMG {}", app.package_info().version));
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
