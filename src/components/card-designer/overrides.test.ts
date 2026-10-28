@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { composeScene, createCardDoc, legacyPerCardLayers, onEveryCard, resizeDesign, setLayerOnEveryCard, setOnEveryCard, setOverride, slotColors, splitScene, type CardDoc } from './model'
+import { composeScene, createCardDoc, legacyPerCardLayers, onEveryCard, sameTextEverywhere, toggleSameText, resizeDesign, setLayerOnEveryCard, setOnEveryCard, setOverride, slotColors, splitScene, type CardDoc } from './model'
 
 describe('what is on every card', () => {
   const base = createCardDoc()
@@ -52,6 +52,18 @@ describe('what is on every card', () => {
     expect(find(out, 'b', text.id)).toMatchObject({ text: (text as { text: string }).text })
     const moved = edit(out, 'b', text.id, { x: 7 })
     expect(find(moved, 'a', text.id)).toMatchObject({ x: 7, text: 'Only A' })
+  })
+
+  it('lets copies of a box on a layer off every card share their text, or not', () => {
+    const per = setLayerOnEveryCard(doc, text.layerId, false, ['a', 'b'])
+    const copy = (c: string) => composeScene(per, 'front', c).nodes.find((n) => n.kind === 'card-text' && n.textKey === text.id)!
+    const a = copy('a')
+    expect(sameTextEverywhere(per, 'front', a)).toBe(true)
+    const shared = edit(per, 'a', a.id, { text: 'Both', x: 3 })
+    expect(composeScene(shared, 'front', 'b').nodes.find((n) => (n as { textKey?: string }).textKey === text.id)).toMatchObject({ text: 'Both', x: text.x })
+    const own = edit(toggleSameText(shared, 'front', 'a', a.id), 'a', a.id, { text: 'Only A' })
+    expect(find(own, 'a', a.id)).toMatchObject({ text: 'Only A' })
+    expect(composeScene(own, 'front', 'b').nodes.find((n) => (n as { textKey?: string }).textKey === text.id)).toMatchObject({ text: 'Both' })
   })
 
   it('turns 0.23.3 per-card layers into copies per card', () => {

@@ -16,6 +16,8 @@ export interface CardTextNode extends NodeBase {
   text: string
   /** The box is on every card but each card types its own text (`CardOverride.texts`; the template's text until then). */
   ownText?: boolean
+  /** A box only on some cards: copies with the same key show `CardDoc.sharedTexts[key]` unless `ownText`. */
+  textKey?: Id
   width: number
   height: number
   fontSize: number
@@ -91,6 +93,8 @@ export interface CardDoc {
   perCardLayers?: Id[]
   /** What one card changes for itself, by card id (also works for cards from a Spreadsheet row). */
   overrides?: Record<Id, CardOverride>
+  /** Text shared by cards' own text boxes, by `textKey`. */
+  sharedTexts?: Record<Id, string>
 }
 
 export interface CardOverride {
@@ -202,9 +206,32 @@ export function composeScene(doc: CardDoc, side: 'front' | 'back', cardId: Id | 
     layers: off.size ? tpl.layers.map((l) => (off.has(l.id) ? { ...l, hidden: true, locked: true } : l)) : tpl.layers,
     nodes: [
       ...tpl.nodes.filter((n) => !legacy(n)).map((n) => (n.kind === 'card-text' && n.ownText && texts[n.id] !== undefined ? { ...n, text: texts[n.id] } : n)),
-      ...tpl.layers.flatMap((l) => ov.nodes?.[l.id] ?? []),
+      ...tpl.layers.flatMap((l) => ov.nodes?.[l.id] ?? []).map((n) => {
+        const t = sharedText(doc, n)
+        return t === undefined ? n : { ...n, text: t }
+      }),
     ],
   }
+}
+
+/** The shared text a card's own text box shows, if it shares one. */
+const sharedText = (doc: CardDoc, n: CardNode) => (n.kind === 'card-text' && n.textKey && !n.ownText ? doc.sharedTexts?.[n.textKey] : undefined)
+
+/** Whether a text box shows the same text on every card (a template box without `ownText`, or a card's box sharing its text). */
+export const sameTextEverywhere = (doc: CardDoc, side: 'front' | 'back', n: CardNode) =>
+  n.kind === 'card-text' && !n.ownText && (onEveryCard(doc, side, n.id) || !!n.textKey)
+
+/** Switch a text box between the same text on every card and each card's own text. */
+export function toggleSameText(doc: CardDoc, side: 'front' | 'back', cardId: Id | null, id: Id): CardDoc {
+  const shown = composeScene(doc, side, cardId).nodes.find((n) => n.id === id)
+  if (shown?.kind !== 'card-text') return doc
+  const same = sameTextEverywhere(doc, side, shown)
+  if (onEveryCard(doc, side, id)) return { ...doc, [side]: { ...doc[side], nodes: doc[side].nodes.map((n) => (n.id === id ? { ...n, ownText: same || undefined } : n)) } }
+  if (!cardId) return doc
+  const key = shown.textKey ?? id
+  const next: CardNode = same ? { ...shown, ownText: true } : { ...shown, ownText: undefined, textKey: key }
+  const out: CardDoc = same || doc.sharedTexts?.[key] !== undefined ? doc : { ...doc, sharedTexts: { ...doc.sharedTexts, [key]: shown.text } }
+  return setOverride(out, cardId, (o) => ({ ...o, nodes: { ...o.nodes, [shown.layerId]: (o.nodes?.[shown.layerId] ?? []).map((n) => (n.id === id ? next : n)) } }))
 }
 
 /** Whether an item shown on a card is on every card (a template item) rather than only on this card. */
@@ -241,7 +268,13 @@ export function splitScene(doc: CardDoc, side: 'front' | 'back', cardId: Id | nu
   // Template items on per-card layers (0.23.3 decks) stay as they are; an edit gives this card its own copy.
   const legacy = tpl.nodes.filter((n) => per.has(n.layerId))
   const otherSide = Object.fromEntries(Object.entries(ov.nodes ?? {}).filter(([l]) => !sideLayers.has(l)))
-  const out: CardDoc = { ...doc, [side]: { ...next, layers, nodes: [...shared, ...legacy] } }
+  const sharedTexts = { ...doc.sharedTexts }
+  const before = new Map(composeScene(doc, side, cardId).nodes.map((n) => [n.id, n]))
+  for (const n of next.nodes) {
+    const b = before.get(n.id)
+    if (n.kind === 'card-text' && b?.kind === 'card-text' && isOwn(n) && sharedText(doc, b) !== undefined && n.text !== b.text) sharedTexts[b.textKey!] = n.text
+  }
+  const out: CardDoc = { ...doc, [side]: { ...next, layers, nodes: [...shared, ...legacy] }, ...(doc.sharedTexts || Object.keys(sharedTexts).length ? { sharedTexts } : {}) }
   return setOverride(out, cardId, (o) => ({ ...o, nodes: withoutEmpty({ ...otherSide, ...byLayer(next.nodes.filter(isOwn)) }), texts }))
 }
 
@@ -281,12 +314,17 @@ export function setLayerOnEveryCard(doc: CardDoc, layerId: Id, every: boolean, c
   const per = doc.perCardLayers ?? []
   if (every) return { ...doc, perCardLayers: per.filter((l) => l !== layerId) }
   const side = doc.front.layers.some((l) => l.id === layerId) ? 'front' : 'back'
-  const items = doc[side].nodes.filter((n) => n.layerId === layerId)
+  const tplItems = doc[side].nodes.filter((n) => n.layerId === layerId)
   const legacy = per.includes(layerId)
-  let out: CardDoc = { ...doc, perCardLayers: legacy ? per : [...per, layerId], [side]: { ...doc[side], nodes: doc[side].nodes.filter((n) => n.layerId !== layerId) } }
+  // Text that was the same on every card stays shared between the copies (textKey = the template box's id).
+  const sharedTexts = { ...doc.sharedTexts }
+  for (const n of tplItems) if (n.kind === 'card-text' && !n.ownText) sharedTexts[n.id] = n.text
+  let out: CardDoc = { ...doc, sharedTexts, perCardLayers: legacy ? per : [...per, layerId], [side]: { ...doc[side], nodes: doc[side].nodes.filter((n) => n.layerId !== layerId) } }
   for (const c of cardIds) {
     if (legacy && doc.overrides?.[c]?.nodes?.[layerId]) continue
-    out = setOverride(out, c, (o) => ({ ...o, nodes: { ...o.nodes, [layerId]: [...(o.nodes?.[layerId] ?? []), ...items.map((n) => ({ ...n, id: newId() }))] } }))
+    const shown = composeScene(doc, side, c).nodes.filter((n) => tplItems.some((t) => t.id === n.id))
+    const copies = shown.map((n): CardNode => ({ ...n, id: newId(), ...(n.kind === 'card-text' ? { textKey: n.id } : {}) }))
+    out = setOverride(out, c, (o) => ({ ...o, nodes: { ...o.nodes, [layerId]: [...(o.nodes?.[layerId] ?? []), ...copies] } }))
   }
   return out
 }

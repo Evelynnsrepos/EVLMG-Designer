@@ -32,6 +32,8 @@ import {
   onEveryCard,
   setLayerOnEveryCard,
   setOnEveryCard,
+  sameTextEverywhere,
+  toggleSameText,
   createCardDoc,
   DEFAULT_FONT,
   MM,
@@ -189,8 +191,8 @@ export default function View({ documentId, active }: PanelProps) {
     const every = onEveryCard(d, side, n.id)
     update((x) => setOnEveryCard(x, side, cardId, [n.id], !every))
   }
-  const toggleOwnText = (n: CardNode) =>
-    n.kind === 'card-text' && update((x) => ({ ...x, [side]: { ...sideScene(x, side), nodes: sideScene(x, side).nodes.map((m) => (m.id === n.id ? { ...m, ownText: !n.ownText || undefined } : m)) } }))
+  const sameText = (n: CardNode) => sameTextEverywhere(d, side, n)
+  const toggleOwnText = (n: CardNode) => update((x) => toggleSameText(x, side, cardId, n.id))
   const toggleOff = (l: Layer) =>
     cardId && update((x) => setOverride(x, cardId, (o) => ({ ...o, hidden: (o.hidden ?? []).includes(l.id) ? o.hidden!.filter((h) => h !== l.id) : [...(o.hidden ?? []), l.id] })))
   const layerFoil = (l: Layer) => scene.nodes.some((n) => n.layerId === l.id) && scene.nodes.every((n) => n.layerId !== l.id || n.foil)
@@ -334,8 +336,14 @@ export default function View({ documentId, active }: PanelProps) {
               const every = onEveryCard(d, side, n.id)
               return (
                 <>
-                  {n.kind === 'card-text' && every
-                    ? layerButton(n.ownText ? 'Each card types its own text in this box. Click to use the same text on every card.' : 'Same text on every card. Click to let each card type its own text in this box.', false, <Type size={14} className={n.ownText ? '' : 'cd-every-icon'} />, () => toggleOwnText(n))
+                  {n.kind === 'card-text'
+                    ? layerButton(
+                        sameText(n) ? 'Same text on every card. Click to let this box have its own text.' : every ? 'Each card types its own text in this box. Click to use the same text on every card.' : 'This box has its own text. Click to share it with the copies of this box on every card.',
+                        false,
+                        <Type size={14} className={sameText(n) ? 'cd-every-icon' : ''} />,
+                        () => toggleOwnText(n),
+                        !every && !cardId,
+                      )
                     : null}
                   {layerButton(
                     every ? 'On every card. Click to keep it on this card only.' : perCard.has(n.layerId) ? 'Only on this card. Click to put it on every card (its layer goes on every card too).' : 'Only on this card. Click to put it on every card.',
