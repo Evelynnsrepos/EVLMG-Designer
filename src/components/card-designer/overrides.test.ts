@@ -114,4 +114,13 @@ describe('what is on every card', () => {
     expect(out.fields.map((f) => f.name)).toEqual([...doc.fields.map((f) => f.name), 'Power'])
     expect(withTokenFields(out)).toBe(out)
   })
+
+  it('keeps an item in its place in the stack when it goes on one card only and back', () => {
+    const ids = (d: CardDoc, c: string) => composeScene(d, 'front', c).nodes.map((n) => n.id)
+    const own = setOnEveryCard(doc, 'front', 'a', [frame.id], false)
+    expect(ids(own, 'a')).toEqual(ids(doc, 'a'))
+    const moved = edit(own, 'a', frame.id, { x: 1 })
+    expect(ids(moved, 'a')).toEqual(ids(doc, 'a'))
+    expect(setOnEveryCard(moved, 'front', 'a', [frame.id], true).front.nodes.map((n) => n.id)).toEqual(doc.front.nodes.map((n) => n.id))
+  })
 })

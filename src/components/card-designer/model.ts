@@ -42,7 +42,11 @@ export interface CardImageNode extends NodeBase {
 /** Built-in shapes may take their colours from slots too. */
 export type SlotKeys = { fillSlotId?: Id; strokeSlotId?: Id }
 /** `foil`: printed in foil (shown with a shine; exported as a black foil mask for print shops). */
-export type CardNode = ((BuiltinNode & SlotKeys) | CardTextNode | CardImageNode) & { foil?: boolean }
+export type CardNode = ((BuiltinNode & SlotKeys) | CardTextNode | CardImageNode) & {
+  foil?: boolean
+  /** A card's own item sits right above this template item ('' = at the bottom); keeps its place in the stack. */
+  after?: Id
+}
 
 export interface ColorSlot {
   id: Id
@@ -204,14 +208,31 @@ export function composeScene(doc: CardDoc, side: 'front' | 'back', cardId: Id | 
   return {
     ...tpl,
     layers: off.size ? tpl.layers.map((l) => (off.has(l.id) ? { ...l, hidden: true, locked: true } : l)) : tpl.layers,
-    nodes: [
-      ...tpl.nodes.filter((n) => !legacy(n)).map((n) => (n.kind === 'card-text' && n.ownText && texts[n.id] !== undefined ? { ...n, text: texts[n.id] } : n)),
-      ...tpl.layers.flatMap((l) => ov.nodes?.[l.id] ?? []).map((n) => {
+    nodes: placeOwn(
+      tpl.nodes.filter((n) => !legacy(n)).map((n) => (n.kind === 'card-text' && n.ownText && texts[n.id] !== undefined ? { ...n, text: texts[n.id] } : n)),
+      tpl.layers.flatMap((l) => ov.nodes?.[l.id] ?? []).map((n) => {
         const t = sharedText(doc, n)
         return t === undefined ? n : { ...n, text: t }
       }),
-    ],
+    ),
   }
+}
+
+/** Put a card's own items back in their place among the template's (by `after`); the rest go on top. */
+function placeOwn(shared: CardNode[], own: CardNode[]): CardNode[] {
+  if (!own.length) return shared
+  const out = [...own.filter((n) => n.after === ''), ...shared.flatMap((t) => [t, ...own.filter((n) => n.after === t.id)])]
+  const placed = new Set(out.map((n) => n.id))
+  return [...out, ...own.filter((n) => !placed.has(n.id))]
+}
+
+/** Remember where each own item sits: right above the nearest template item below it. */
+function markPlaces(nodes: CardNode[], isOwn: (n: CardNode) => boolean): CardNode[] {
+  let below = ''
+  return nodes.map((n) => {
+    if (!isOwn(n)) return ((below = n.id), n)
+    return n.after === below ? n : { ...n, after: below }
+  })
 }
 
 /** The shared text a card's own text box shows, if it shares one. */
@@ -274,7 +295,7 @@ export function splitScene(doc: CardDoc, side: 'front' | 'back', cardId: Id | nu
     if (n.kind === 'card-text' && b?.kind === 'card-text' && isOwn(n) && sharedText(doc, b) !== undefined && n.text !== b.text) sharedTexts[b.textKey!] = n.text
   }
   const out: CardDoc = { ...doc, [side]: { ...next, layers, nodes: [...shared, ...legacy] }, ...(doc.sharedTexts || Object.keys(sharedTexts).length ? { sharedTexts } : {}) }
-  return setOverride(out, cardId, (o) => ({ ...o, nodes: withoutEmpty({ ...otherSide, ...byLayer(next.nodes.filter(isOwn)) }), texts }))
+  return setOverride(out, cardId, (o) => ({ ...o, nodes: withoutEmpty({ ...otherSide, ...byLayer(markPlaces(next.nodes, isOwn).filter(isOwn)) }), texts }))
 }
 
 /**
@@ -287,22 +308,30 @@ export function setOnEveryCard(doc: CardDoc, side: 'front' | 'back', cardId: Id,
   const moved = new Set(shown.map((n) => n.id))
   const tpl = doc[side]
   if (!every) {
+    const placed = new Map(markPlaces(composeScene(doc, side, cardId).nodes, (n) => moved.has(n.id) || !onEveryCard(doc, side, n.id)).map((n) => [n.id, n]))
     return setOverride({ ...doc, [side]: { ...tpl, nodes: tpl.nodes.filter((n) => !moved.has(n.id)) } }, cardId, (o) => {
       const nodes = { ...o.nodes }
-      for (const n of shown) nodes[n.layerId] = [...(nodes[n.layerId] ?? []), n]
+      for (const n of shown) nodes[n.layerId] = [...(nodes[n.layerId] ?? []), placed.get(n.id) ?? n]
       return { ...o, nodes }
     })
   }
   // A copy made per card can share its id with other cards' copies: give the shared item a fresh one then.
   const taken = new Set(Object.entries(doc.overrides ?? {}).flatMap(([id, o]) => (id === cardId ? [] : Object.values(o.nodes ?? {}).flat().map((n) => n.id))))
   const layers = new Set(shown.map((n) => n.layerId))
-  const placed = shown.map((n) => (taken.has(n.id) ? { ...n, id: newId() } : n))
+  const placed = new Map(shown.map((n): [Id, CardNode] => [n.id, { ...n, id: taken.has(n.id) ? newId() : n.id, after: undefined }]))
   // A text box with its own text goes on every card empty; this card keeps its text.
-  const texts = Object.fromEntries(placed.flatMap((n) => (n.kind === 'card-text' && n.ownText ? [[n.id, n.text]] : [])))
+  const texts = Object.fromEntries([...placed.values()].flatMap((n) => (n.kind === 'card-text' && n.ownText ? [[n.id, n.text]] : [])))
+  const tplById = new Map(tpl.nodes.map((n) => [n.id, n]))
+  // Keep the stack order the card shows.
+  const nodes = composeScene(doc, side, cardId).nodes.flatMap((n) => {
+    const m = placed.get(n.id)
+    if (m) return [m.kind === 'card-text' && m.ownText ? { ...m, text: '' } : m]
+    return tplById.has(n.id) ? [tplById.get(n.id)!] : []
+  })
   const out: CardDoc = {
     ...doc,
     perCardLayers: (doc.perCardLayers ?? []).filter((l) => !layers.has(l)),
-    [side]: { ...tpl, nodes: [...tpl.nodes, ...placed.map((n) => (n.kind === 'card-text' && n.ownText ? { ...n, text: '' } : n))] },
+    [side]: { ...tpl, nodes: [...nodes, ...tpl.nodes.filter((n) => !nodes.includes(n))] },
   }
   return setOverride(out, cardId, (o) => ({
     ...o,
