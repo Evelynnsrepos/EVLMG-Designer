@@ -405,29 +405,32 @@
   box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 50%, transparent);
 }
 .cd-add {
-  position: relative;
-  padding: 8px;
+  padding: 2px 8px 6px 28px;
 }
 .cd-add-btn {
-  width: 100%;
   display: inline-flex;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
-  justify-content: center;
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.cd-add-btn:hover {
+  background: var(--bg);
+  color: var(--text);
 }
 .cd-add-menu {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: calc(100% - 4px);
-  z-index: 500;
   display: flex;
   flex-direction: column;
+  margin-top: 2px;
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg-elevated);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
 }
 .cd-add-item {
   padding: 6px 10px;

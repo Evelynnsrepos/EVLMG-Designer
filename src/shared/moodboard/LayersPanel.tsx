@@ -96,6 +96,8 @@ export interface LayersPanelProps {
   layerClass?(layer: Layer): string
   itemClass?(node: MoodNode): string
   itemActions?(node: MoodNode): ReactNode
+  /** Shown under a layer's items (the Card Designer's + to add something to that layer). */
+  layerFooter?(layer: Layer): ReactNode
 }
 
 type DragData = { kind: 'node'; id: Id } | { kind: 'layer'; id: Id }
@@ -270,6 +272,7 @@ export function LayersPanel(p: LayersPanelProps) {
                   </div>
                 )
               })}
+              {p.layerFooter?.(l)}
             </div>
           )
         })}
