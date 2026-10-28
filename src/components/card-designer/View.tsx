@@ -28,6 +28,10 @@ import { CardList, CardPicker, FieldsSection, LinkedSheet } from './deck'
 import {
   CARD_SIZES,
   composeScene,
+  legacyPerCardLayers,
+  onEveryCard,
+  setLayerOnEveryCard,
+  setOnEveryCard,
   createCardDoc,
   DEFAULT_FONT,
   MM,
@@ -112,6 +116,12 @@ export default function View({ documentId, active }: PanelProps) {
     return () => window.removeEventListener('keydown', onKey)
   })
 
+  // Decks from 0.23.3: per-card layers become a copy per card (see setLayerOnEveryCard).
+  const legacy = d && cards.length ? legacyPerCardLayers(d) : []
+  useEffect(() => {
+    if (legacy.length) doc.update((x) => legacy.reduce((y, l) => setLayerOnEveryCard(y, l, false, cards.map((c) => c.id)), x), { undoable: false })
+  }, [legacy.join()]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const flipSide = () => (setSide((s) => (s === 'front' ? 'back' : 'front')), canvas.setSelection([]), canvas.setActiveLayerId(null))
   useHotwheel(() => {
     if (!d || !scene || d.started === false) return []
@@ -167,17 +177,20 @@ export default function View({ documentId, active }: PanelProps) {
     canvas.setSelection(nodes.map((n) => n.id))
   }
 
+  const cardIds = cards.map((c) => c.id)
   const togglePerCard = async (l: Layer) => {
-    if (perCard.has(l.id)) {
-      const own = Object.values(d.overrides ?? {}).some((o) => o.nodes?.[l.id])
-      if (own && !(await confirmDialog({ title: `Make “${l.name}” the same on every card?`, message: 'Cards that changed this layer for themselves go back to the deck’s version. You can undo this with Ctrl+Z.', confirmLabel: 'Same on every card' }))) return
-      update((x) => ({
-        ...x,
-        perCardLayers: (x.perCardLayers ?? []).filter((id) => id !== l.id),
-        overrides: Object.fromEntries(Object.entries(x.overrides ?? {}).map(([id, o]) => [id, o.nodes ? { ...o, nodes: Object.fromEntries(Object.entries(o.nodes).filter(([k]) => k !== l.id)) } : o])),
-      }))
-    } else update((x) => ({ ...x, perCardLayers: [...(x.perCardLayers ?? []), l.id] }))
+    if (perCard.has(l.id)) return update((x) => setLayerOnEveryCard(x, l.id, true, cardIds))
+    const count = scene.nodes.filter((n) => n.layerId === l.id && onEveryCard(d, side, n.id)).length
+    if (count && !(await confirmDialog({ title: `Take “${l.name}” off every card?`, message: `Every card gets its own copy of the ${count} item(s) on this layer, to change for itself. Nothing on it is on every card any more. You can undo this with Ctrl+Z.`, confirmLabel: 'Each card its own' }))) return
+    update((x) => setLayerOnEveryCard(x, l.id, false, cardIds))
   }
+  const toggleItemEveryCard = (n: CardNode) => {
+    if (!cardId) return
+    const every = onEveryCard(d, side, n.id)
+    update((x) => setOnEveryCard(x, side, cardId, [n.id], !every))
+  }
+  const toggleOwnText = (n: CardNode) =>
+    n.kind === 'card-text' && update((x) => ({ ...x, [side]: { ...sideScene(x, side), nodes: sideScene(x, side).nodes.map((m) => (m.id === n.id ? { ...m, ownText: !n.ownText || undefined } : m)) } }))
   const toggleOff = (l: Layer) =>
     cardId && update((x) => setOverride(x, cardId, (o) => ({ ...o, hidden: (o.hidden ?? []).includes(l.id) ? o.hidden!.filter((h) => h !== l.id) : [...(o.hidden ?? []), l.id] })))
   const layerFoil = (l: Layer) => scene.nodes.some((n) => n.layerId === l.id) && scene.nodes.every((n) => n.layerId !== l.id || n.foil)
@@ -314,13 +327,34 @@ export default function View({ documentId, active }: PanelProps) {
             onActiveLayer={(id) => (canvas.setActiveLayerId(id), canvas.setSelection([]))}
             onClose={() => setShowLayers(false)}
             layerPreview={(l) => (layerThumbs.get(l.id) ? <img className="cd-layer-thumb" src={layerThumbs.get(l.id)} alt="" /> : <span className="cd-layer-thumb" />)}
+            layerClass={(l) => (perCard.has(l.id) ? '' : ' cd-every-card')}
+            itemClass={(n) => (onEveryCard(d, side, n.id) ? ' cd-every-card' : '')}
+            itemActions={(m) => {
+              const n = m as unknown as CardNode
+              const every = onEveryCard(d, side, n.id)
+              return (
+                <>
+                  {n.kind === 'card-text' && every
+                    ? layerButton(n.ownText ? 'Each card types its own text in this box. Click to use the same text on every card.' : 'Same text on every card. Click to let each card type its own text in this box.', false, <Type size={14} className={n.ownText ? '' : 'cd-every-icon'} />, () => toggleOwnText(n))
+                    : null}
+                  {layerButton(
+                    every ? 'On every card. Click to keep it on this card only.' : perCard.has(n.layerId) ? 'Only on this card. Click to put it on every card (its layer goes on every card too).' : 'Only on this card. Click to put it on every card.',
+                    false,
+                    every ? <Link2 size={14} className="cd-every-icon" /> : <Unlink2 size={14} />,
+                    () => toggleItemEveryCard(n),
+                    !cardId,
+                  )}
+                </>
+              )
+            }}
             layerActions={(l) => (
               <>
                 {layerButton(
-                  perCard.has(l.id) ? 'Per card: each card can change this layer for itself. Click to make it the same on every card.' : 'Same on every card. Click to let each card change this layer for itself.',
-                  perCard.has(l.id),
+                  perCard.has(l.id) ? 'Not on every card: only each card’s own items. Click to put this layer on every card.' : 'On every card. Click to give each card its own copy of this layer instead.',
+                  !perCard.has(l.id),
                   perCard.has(l.id) ? <Unlink2 size={14} /> : <Link2 size={14} />,
                   () => void togglePerCard(l),
+                  !cardId,
                 )}
                 {layerButton(offHere.has(l.id) ? 'Off on this card. Click to show it again.' : 'Turn this layer off on this card only', offHere.has(l.id), <Ban size={14} />, () => toggleOff(l), !cardId)}
                 {layerButton(layerFoil(l) ? 'Foil layer: everything here is foil. Click to turn foil off.' : 'Make everything on this layer foil', layerFoil(l), <Sparkles size={14} />, () => toggleFoil(l), !!l.locked)}

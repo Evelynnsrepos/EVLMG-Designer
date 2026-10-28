@@ -14,6 +14,8 @@ export interface CardTextNode extends NodeBase {
   kind: 'card-text'
   foil?: boolean
   text: string
+  /** The box is on every card but each card types its own text (`CardOverride.texts`; the template's text until then). */
+  ownText?: boolean
   width: number
   height: number
   fontSize: number
@@ -85,7 +87,7 @@ export interface CardDoc {
   icons?: { id: Id; name: string; src: string }[]
   /** 0.23.3: false while a new deck waits for its card size; missing = an older deck, already started. */
   started?: boolean
-  /** Layers whose items each card can change for itself (the template's items are the starting point). */
+  /** Layers that are not on every card: they only hold each card's own items. */
   perCardLayers?: Id[]
   /** What one card changes for itself, by card id (also works for cards from a Spreadsheet row). */
   overrides?: Record<Id, CardOverride>
@@ -94,8 +96,10 @@ export interface CardDoc {
 export interface CardOverride {
   /** Colour slots unlinked from the deck: slot id → this card's colour. */
   colors?: Record<Id, string>
-  /** This card's own items on per-card layers: layer id → items. */
+  /** Items only on this card: layer id → items. */
   nodes?: Record<Id, CardNode[]>
+  /** This card's own text for template text boxes with `ownText`: node id → text. */
+  texts?: Record<Id, string>
   /** Layers turned off on this card. */
   hidden?: Id[]
 }
@@ -168,53 +172,127 @@ export function slotColors(doc: Pick<CardDoc, 'slots' | 'variants' | 'overrides'
 /** Change one card's override (empty overrides are dropped). */
 export function setOverride(doc: CardDoc, cardId: Id, fn: (o: CardOverride) => CardOverride): CardDoc {
   const o = fn(doc.overrides?.[cardId] ?? {})
-  const empty = !Object.keys(o.colors ?? {}).length && !Object.keys(o.nodes ?? {}).length && !(o.hidden ?? []).length
+  const empty = !Object.keys(o.colors ?? {}).length && !Object.keys(o.nodes ?? {}).length && !Object.keys(o.texts ?? {}).length && !(o.hidden ?? []).length
   const { [cardId]: _, ...rest } = doc.overrides ?? {}
   return { ...doc, overrides: empty ? rest : { ...rest, [cardId]: o } }
 }
 
-const sameNodes = (a: CardNode[], b: CardNode[]) => a.length === b.length && a.every((n, i) => n === b[i])
+const withoutEmpty = <T,>(r: Record<Id, T[]>) => Object.fromEntries(Object.entries(r).filter(([, v]) => v.length))
+const byLayer = (nodes: CardNode[]) => {
+  const out: Record<Id, CardNode[]> = {}
+  for (const n of nodes) (out[n.layerId] ??= []).push(n)
+  return out
+}
 
 /**
- * One side as a card shows it: the template with the card's own items on per-card layers, and the layers
- * it turned off hidden and locked. Without overrides this is the template itself (same object).
+ * One side as a card shows it: the template's items (on every card) plus the card's own items, its own text
+ * in `ownText` boxes, and the layers it turned off hidden and locked. Without overrides this is the template
+ * itself (same object).
  */
 export function composeScene(doc: CardDoc, side: 'front' | 'back', cardId: Id | null | undefined): Scene<CardNode> {
   const tpl = doc[side]
   const ov = cardId ? doc.overrides?.[cardId] : undefined
   if (!ov) return tpl
-  const own = ov.nodes ?? {}
   const off = new Set(ov.hidden ?? [])
-  const per = (doc.perCardLayers ?? []).filter((l) => own[l] && tpl.layers.some((x) => x.id === l))
+  const texts = ov.texts ?? {}
+  // Decks from 0.23.3 kept template items on per-card layers as a fallback; a card's own items replace them.
+  const legacy = (n: CardNode) => doc.perCardLayers?.includes(n.layerId) && ov.nodes?.[n.layerId]
   return {
     ...tpl,
     layers: off.size ? tpl.layers.map((l) => (off.has(l.id) ? { ...l, hidden: true, locked: true } : l)) : tpl.layers,
-    nodes: [...tpl.nodes.filter((n) => !per.includes(n.layerId)), ...per.flatMap((l) => own[l])],
+    nodes: [
+      ...tpl.nodes.filter((n) => !legacy(n)).map((n) => (n.kind === 'card-text' && n.ownText && texts[n.id] !== undefined ? { ...n, text: texts[n.id] } : n)),
+      ...tpl.layers.flatMap((l) => ov.nodes?.[l.id] ?? []),
+    ],
   }
 }
 
+/** Whether an item shown on a card is on every card (a template item) rather than only on this card. */
+export const onEveryCard = (doc: CardDoc, side: 'front' | 'back', id: Id) => doc[side].nodes.some((n) => n.id === id)
+
 /**
- * Store an edit made on a composed side: items on per-card layers go to the card (only when they
- * changed, so other cards keep following the template), everything else to the template.
+ * Store an edit made on a composed side: the card's own items and everything on layers that are not on
+ * every card go to the card, the text of `ownText` boxes to the card's texts, everything else to the template.
  */
 export function splitScene(doc: CardDoc, side: 'front' | 'back', cardId: Id | null | undefined, next: Scene<CardNode>): CardDoc {
-  const before = composeScene(doc, side, cardId)
-  if (before === doc[side] && !(cardId && doc.perCardLayers?.length)) return { ...doc, [side]: next }
+  if (!cardId) return { ...doc, [side]: next }
   const tpl = doc[side]
-  const per = new Set(cardId ? (doc.perCardLayers ?? []) : [])
-  const off = new Set((cardId && doc.overrides?.[cardId]?.hidden) || [])
+  const ov = doc.overrides?.[cardId] ?? {}
+  const sideLayers = new Set(tpl.layers.map((l) => l.id))
+  const per = new Set(doc.perCardLayers ?? [])
+  const ownIds = new Set(tpl.layers.flatMap((l) => (ov.nodes?.[l.id] ?? []).map((n) => n.id)))
+  const isOwn = (n: CardNode) => ownIds.has(n.id) || per.has(n.layerId)
+  const off = new Set(ov.hidden ?? [])
   // Layers turned off for this card keep the template's own hidden/locked state.
   const layers = next.layers.map((l) => {
     const t = tpl.layers.find((x) => x.id === l.id)
     return off.has(l.id) && t ? { ...l, hidden: t.hidden, locked: t.locked } : l
   })
-  let out: CardDoc = { ...doc, [side]: { ...next, layers, nodes: [...next.nodes.filter((n) => !per.has(n.layerId)), ...tpl.nodes.filter((n) => per.has(n.layerId))] } }
-  for (const l of per) {
-    const now = next.nodes.filter((n) => n.layerId === l)
-    if (!sameNodes(now, before.nodes.filter((n) => n.layerId === l))) out = setOverride(out, cardId!, (o) => ({ ...o, nodes: { ...o.nodes, [l]: now } }))
+  const tplById = new Map(tpl.nodes.map((n) => [n.id, n]))
+  const texts = { ...ov.texts }
+  const shared = next.nodes
+    .filter((n) => !isOwn(n))
+    .map((n) => {
+      const t = tplById.get(n.id)
+      if (n.kind !== 'card-text' || t?.kind !== 'card-text' || !t.ownText || !n.ownText) return n
+      if (n.text !== (texts[n.id] ?? t.text)) texts[n.id] = n.text
+      return { ...n, text: t.text }
+    })
+  // Template items on per-card layers (0.23.3 decks) stay as they are; an edit gives this card its own copy.
+  const legacy = tpl.nodes.filter((n) => per.has(n.layerId))
+  const otherSide = Object.fromEntries(Object.entries(ov.nodes ?? {}).filter(([l]) => !sideLayers.has(l)))
+  const out: CardDoc = { ...doc, [side]: { ...next, layers, nodes: [...shared, ...legacy] } }
+  return setOverride(out, cardId, (o) => ({ ...o, nodes: withoutEmpty({ ...otherSide, ...byLayer(next.nodes.filter(isOwn)) }), texts }))
+}
+
+/**
+ * Put items on every card (they leave the card's own items; a layer that is not on every card becomes one)
+ * or only on this card (they leave the template, so other cards lose them).
+ */
+export function setOnEveryCard(doc: CardDoc, side: 'front' | 'back', cardId: Id, ids: Id[], every: boolean): CardDoc {
+  const shown = composeScene(doc, side, cardId).nodes.filter((n) => ids.includes(n.id) && onEveryCard(doc, side, n.id) !== every)
+  if (!shown.length) return doc
+  const moved = new Set(shown.map((n) => n.id))
+  const tpl = doc[side]
+  if (!every) {
+    return setOverride({ ...doc, [side]: { ...tpl, nodes: tpl.nodes.filter((n) => !moved.has(n.id)) } }, cardId, (o) => {
+      const nodes = { ...o.nodes }
+      for (const n of shown) nodes[n.layerId] = [...(nodes[n.layerId] ?? []), n]
+      return { ...o, nodes }
+    })
+  }
+  // A copy made per card can share its id with other cards' copies: give the shared item a fresh one then.
+  const taken = new Set(Object.entries(doc.overrides ?? {}).flatMap(([id, o]) => (id === cardId ? [] : Object.values(o.nodes ?? {}).flat().map((n) => n.id))))
+  const layers = new Set(shown.map((n) => n.layerId))
+  const out: CardDoc = {
+    ...doc,
+    perCardLayers: (doc.perCardLayers ?? []).filter((l) => !layers.has(l)),
+    [side]: { ...tpl, nodes: [...tpl.nodes, ...shown.map((n) => (taken.has(n.id) ? { ...n, id: newId() } : n))] },
+  }
+  return setOverride(out, cardId, (o) => ({ ...o, nodes: withoutEmpty(Object.fromEntries(Object.entries(o.nodes ?? {}).map(([l, ns]) => [l, ns.filter((n) => !moved.has(n.id))]))) }))
+}
+
+/**
+ * Put a layer on every card again, or take it off: then its template items become each card's own copy
+ * (`cardIds`), ready to change per card. Also turns 0.23.3 per-card layers (template items as a fallback)
+ * into that: cards that already had their own items keep them.
+ */
+export function setLayerOnEveryCard(doc: CardDoc, layerId: Id, every: boolean, cardIds: Id[]): CardDoc {
+  const per = doc.perCardLayers ?? []
+  if (every) return { ...doc, perCardLayers: per.filter((l) => l !== layerId) }
+  const side = doc.front.layers.some((l) => l.id === layerId) ? 'front' : 'back'
+  const items = doc[side].nodes.filter((n) => n.layerId === layerId)
+  const legacy = per.includes(layerId)
+  let out: CardDoc = { ...doc, perCardLayers: legacy ? per : [...per, layerId], [side]: { ...doc[side], nodes: doc[side].nodes.filter((n) => n.layerId !== layerId) } }
+  for (const c of cardIds) {
+    if (legacy && doc.overrides?.[c]?.nodes?.[layerId]) continue
+    out = setOverride(out, c, (o) => ({ ...o, nodes: { ...o.nodes, [layerId]: [...(o.nodes?.[layerId] ?? []), ...items.map((n) => ({ ...n, id: newId() }))] } }))
   }
   return out
 }
+
+/** Per-card layers that still hold template items (decks from 0.23.3). */
+export const legacyPerCardLayers = (doc: CardDoc) => (doc.perCardLayers ?? []).filter((l) => doc.front.nodes.some((n) => n.layerId === l) || doc.back.nodes.some((n) => n.layerId === l))
 
 /** Scale the whole design (both sides and every card's own items) to a new card size. */
 export function resizeDesign(doc: CardDoc, widthMm: number, heightMm: number): CardDoc {

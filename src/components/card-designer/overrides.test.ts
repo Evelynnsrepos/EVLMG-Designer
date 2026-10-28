@@ -1,27 +1,67 @@
 import { describe, expect, it } from 'vitest'
-import { composeScene, createCardDoc, resizeDesign, setOverride, slotColors, splitScene } from './model'
+import { composeScene, createCardDoc, legacyPerCardLayers, onEveryCard, resizeDesign, setLayerOnEveryCard, setOnEveryCard, setOverride, slotColors, splitScene, type CardDoc } from './model'
 
-describe('per-card overrides', () => {
+describe('what is on every card', () => {
   const base = createCardDoc()
   const art = base.front.nodes.find((n) => n.kind === 'card-image')!
   const frame = base.front.nodes.find((n) => n.name === 'Frame')!
-  const doc = { ...base, cards: [{ id: 'a', copies: 1, values: {} }, { id: 'b', copies: 1, values: {} }], perCardLayers: [art.layerId] }
-  const move = (cardId: string, id: string, dx: number) => {
-    const s = composeScene(doc, 'front', cardId)
-    return splitScene(doc, 'front', cardId, { ...s, nodes: s.nodes.map((n) => (n.id === id ? { ...n, x: n.x + dx } : n)) })
+  const text = base.front.nodes.find((n) => n.kind === 'card-text')!
+  const doc: CardDoc = { ...base, cards: [{ id: 'a', copies: 1, values: {} }, { id: 'b', copies: 1, values: {} }] }
+  const edit = (d: CardDoc, cardId: string, id: string, patch: object) => {
+    const s = composeScene(d, 'front', cardId)
+    return splitScene(d, 'front', cardId, { ...s, nodes: s.nodes.map((n) => (n.id === id ? ({ ...n, ...patch } as typeof n) : n)) })
   }
+  const find = (d: CardDoc, cardId: string, id: string) => composeScene(d, 'front', cardId).nodes.find((n) => n.id === id)
 
-  it('keeps edits on a per-card layer on that card only', () => {
-    const out = move('a', art.id, 50)
-    expect(composeScene(out, 'front', 'a').nodes.find((n) => n.id === art.id)!.x).toBe(art.x + 50)
-    expect(composeScene(out, 'front', 'b').nodes.find((n) => n.id === art.id)!.x).toBe(art.x)
-    expect(out.front.nodes.find((n) => n.id === art.id)!.x).toBe(art.x)
-  })
-
-  it('puts edits on other layers into the design for every card', () => {
-    const out = move('a', frame.id, 10)
+  it('puts edits of items on every card into the design', () => {
+    const out = edit(doc, 'a', frame.id, { x: frame.x + 10 })
     expect(out.front.nodes.find((n) => n.id === frame.id)!.x).toBe(frame.x + 10)
     expect(out.overrides?.a).toBeUndefined()
+  })
+
+  it('moves an item to one card only, and back to every card', () => {
+    const own = setOnEveryCard(doc, 'front', 'a', [frame.id], false)
+    expect(find(own, 'a', frame.id)).toBeTruthy()
+    expect(find(own, 'b', frame.id)).toBeUndefined()
+    expect(onEveryCard(own, 'front', frame.id)).toBe(false)
+    const moved = edit(own, 'a', frame.id, { x: 5 })
+    expect(moved.overrides!.a.nodes![frame.layerId][0].x).toBe(5)
+    const back = setOnEveryCard(moved, 'front', 'a', [frame.id], true)
+    expect(find(back, 'b', frame.id)!.x).toBe(5)
+    expect(back.overrides?.a).toBeUndefined()
+  })
+
+  it('takes a layer off every card as a copy per card, and an item back onto every card links the layer', () => {
+    const per = setLayerOnEveryCard(doc, art.layerId, false, ['a', 'b'])
+    expect(per.front.nodes.some((n) => n.layerId === art.layerId)).toBe(false)
+    const a = composeScene(per, 'front', 'a').nodes.find((n) => n.layerId === art.layerId)!
+    const b = composeScene(per, 'front', 'b').nodes.find((n) => n.layerId === art.layerId)!
+    expect(a.id).not.toBe(b.id)
+    const out = edit(per, 'a', a.id, { x: 99 })
+    expect(find(out, 'a', a.id)!.x).toBe(99)
+    expect(find(out, 'b', b.id)!.x).toBe(art.x)
+    const linked = setOnEveryCard(out, 'front', 'a', [a.id], true)
+    expect(linked.perCardLayers).toEqual([])
+    expect(find(linked, 'b', a.id)!.x).toBe(99)
+  })
+
+  it('gives each card its own text in a box that is on every card', () => {
+    const d = { ...doc, front: { ...doc.front, nodes: doc.front.nodes.map((n) => (n.id === text.id ? { ...n, ownText: true } : n)) } }
+    const out = edit(d, 'a', text.id, { text: 'Only A' })
+    expect(find(out, 'a', text.id)).toMatchObject({ text: 'Only A' })
+    expect(find(out, 'b', text.id)).toMatchObject({ text: (text as { text: string }).text })
+    const moved = edit(out, 'b', text.id, { x: 7 })
+    expect(find(moved, 'a', text.id)).toMatchObject({ x: 7, text: 'Only A' })
+  })
+
+  it('turns 0.23.3 per-card layers into copies per card', () => {
+    const old = setOverride({ ...doc, perCardLayers: [art.layerId] }, 'a', (o) => ({ ...o, nodes: { [art.layerId]: [{ ...art, x: 1 }] } }))
+    expect(find(old, 'b', art.id)!.x).toBe(art.x)
+    expect(legacyPerCardLayers(old)).toEqual([art.layerId])
+    const out = setLayerOnEveryCard(old, art.layerId, false, ['a', 'b'])
+    expect(legacyPerCardLayers(out)).toEqual([])
+    expect(find(out, 'a', art.id)!.x).toBe(1)
+    expect(composeScene(out, 'front', 'b').nodes.find((n) => n.layerId === art.layerId)!.x).toBe(art.x)
   })
 
   it('turns a layer off on one card without changing the design', () => {
@@ -41,7 +81,8 @@ describe('per-card overrides', () => {
   })
 
   it('scales the design and cards’ own items to a new size', () => {
-    const out = resizeDesign(move('a', art.id, 0 + 10), 126, 176)
+    const own = edit(setOnEveryCard(doc, 'front', 'a', [art.id], false), 'a', art.id, { x: art.x + 10 })
+    const out = resizeDesign(own, 126, 176)
     expect(out.front.nodes.find((n) => n.id === frame.id)!.x).toBe(frame.x * 2)
     expect(out.overrides!.a.nodes![art.layerId][0].x).toBe((art.x + 10) * 2)
   })

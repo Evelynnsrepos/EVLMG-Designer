@@ -92,6 +92,10 @@ export interface LayersPanelProps {
   /** Optional per-layer extras (0.23.3 Card Designer): a small picture before the name, buttons after the built-in ones. */
   layerPreview?(layer: Layer): ReactNode
   layerActions?(layer: Layer): ReactNode
+  /** Extra class names and buttons per layer and item (the Card Designer marks what is on every card). */
+  layerClass?(layer: Layer): string
+  itemClass?(node: MoodNode): string
+  itemActions?(node: MoodNode): ReactNode
 }
 
 type DragData = { kind: 'node'; id: Id } | { kind: 'layer'; id: Id }
@@ -188,7 +192,7 @@ export function LayersPanel(p: LayersPanelProps) {
           return (
             <div key={l.id} className={'moodboard-layer' + (l.hidden ? ' is-hidden' : '')} role="treeitem" aria-expanded>
               <div
-                className={'moodboard-layer-row' + (isActive ? ' is-active' : '') + (dropAt?.id === l.id ? ' is-drop' : '')}
+                className={'moodboard-layer-row' + (isActive ? ' is-active' : '') + (dropAt?.id === l.id ? ' is-drop' : '') + (p.layerClass?.(l) ?? '')}
                 tabIndex={0}
                 onClick={() => !l.alwaysOnTop && p.onActiveLayer(l.id)}
                 onDoubleClick={() => renameLayer(l)}
@@ -233,7 +237,7 @@ export function LayersPanel(p: LayersPanelProps) {
                 return (
                   <div
                     key={n.id}
-                    className={'moodboard-item' + (selected ? ' is-selected' : '') + (n.hidden ? ' is-hidden' : '') + drop}
+                    className={'moodboard-item' + (selected ? ' is-selected' : '') + (n.hidden ? ' is-hidden' : '') + drop + (p.itemClass?.(n) ?? '')}
                     role="treeitem"
                     aria-selected={selected}
                     {...dragProps({ kind: 'node', id: n.id })}
@@ -261,6 +265,7 @@ export function LayersPanel(p: LayersPanelProps) {
                       <RowButton label={n.locked ? LAYER_TEXT.unlock : LAYER_TEXT.lock} on={!!n.locked} onClick={() => p.onChange((s) => updateNode(s, n.id, { locked: !n.locked || undefined }))} icon={n.locked ? Lock : LockOpen} />
                       <RowButton label={n.hidden ? LAYER_TEXT.show : LAYER_TEXT.hide} on={!!n.hidden} onClick={() => p.onChange((s) => updateNode(s, n.id, { hidden: !n.hidden || undefined }))} icon={n.hidden ? EyeOff : Eye} />
                       <RowButton label={LAYER_TEXT.deleteItem} onClick={() => p.onChange((s) => deleteNodes(s, [n.id]))} icon={Trash} />
+                      {p.itemActions?.(n)}
                     </span>
                   </div>
                 )

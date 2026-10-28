@@ -394,3 +394,13 @@
   gap: 6px;
   align-items: center;
 }
+/* On every card: layers and items in the accent colour. */
+.cd-right .cd-every-card .moodboard-layer-name,
+.cd-right .cd-every-card .moodboard-item-name,
+.cd-right .cd-every-card .moodboard-item-icon,
+.cd-right .cd-every-icon {
+  color: var(--accent);
+}
+.cd-right .moodboard-item.cd-every-card {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 50%, transparent);
+}
