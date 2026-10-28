@@ -218,8 +218,7 @@ export function composeScene(doc: CardDoc, side: 'front' | 'back', cardId: Id | 
 const sharedText = (doc: CardDoc, n: CardNode) => (n.kind === 'card-text' && n.textKey && !n.ownText ? doc.sharedTexts?.[n.textKey] : undefined)
 
 /** Whether a text box shows the same text on every card (a template box without `ownText`, or a card's box sharing its text). */
-export const sameTextEverywhere = (doc: CardDoc, side: 'front' | 'back', n: CardNode) =>
-  n.kind === 'card-text' && !n.ownText && (onEveryCard(doc, side, n.id) || !!n.textKey)
+export const sameTextEverywhere = (_doc: CardDoc, _side: 'front' | 'back', n: CardNode) => n.kind === 'card-text' && !n.ownText
 
 /** Switch a text box between the same text on every card and each card's own text. */
 export function toggleSameText(doc: CardDoc, side: 'front' | 'back', cardId: Id | null, id: Id): CardDoc {
@@ -297,12 +296,19 @@ export function setOnEveryCard(doc: CardDoc, side: 'front' | 'back', cardId: Id,
   // A copy made per card can share its id with other cards' copies: give the shared item a fresh one then.
   const taken = new Set(Object.entries(doc.overrides ?? {}).flatMap(([id, o]) => (id === cardId ? [] : Object.values(o.nodes ?? {}).flat().map((n) => n.id))))
   const layers = new Set(shown.map((n) => n.layerId))
+  const placed = shown.map((n) => (taken.has(n.id) ? { ...n, id: newId() } : n))
+  // A text box with its own text goes on every card empty; this card keeps its text.
+  const texts = Object.fromEntries(placed.flatMap((n) => (n.kind === 'card-text' && n.ownText ? [[n.id, n.text]] : [])))
   const out: CardDoc = {
     ...doc,
     perCardLayers: (doc.perCardLayers ?? []).filter((l) => !layers.has(l)),
-    [side]: { ...tpl, nodes: [...tpl.nodes, ...shown.map((n) => (taken.has(n.id) ? { ...n, id: newId() } : n))] },
+    [side]: { ...tpl, nodes: [...tpl.nodes, ...placed.map((n) => (n.kind === 'card-text' && n.ownText ? { ...n, text: '' } : n))] },
   }
-  return setOverride(out, cardId, (o) => ({ ...o, nodes: withoutEmpty(Object.fromEntries(Object.entries(o.nodes ?? {}).map(([l, ns]) => [l, ns.filter((n) => !moved.has(n.id))]))) }))
+  return setOverride(out, cardId, (o) => ({
+    ...o,
+    texts: { ...o.texts, ...texts },
+    nodes: withoutEmpty(Object.fromEntries(Object.entries(o.nodes ?? {}).map(([l, ns]) => [l, ns.filter((n) => !moved.has(n.id))]))),
+  }))
 }
 
 /**
@@ -350,6 +356,22 @@ export function resizeDesign(doc: CardDoc, widthMm: number, heightMm: number): C
     Object.entries(doc.overrides ?? {}).map(([id, o]) => [id, o.nodes ? { ...o, nodes: Object.fromEntries(Object.entries(o.nodes).map(([l, ns]) => [l, ns.map(scale)])) } : o]),
   )
   return { ...doc, widthMm, heightMm, front: side(doc.front), back: side(doc.back), overrides }
+}
+
+/** Add a text field for every `{Name}` in a text box that no field has yet (so Fields follow the layers). */
+export function withTokenFields(doc: CardDoc): CardDoc {
+  const known = new Set(doc.fields.map((f) => f.name.trim().toLowerCase()))
+  const add: Field[] = []
+  for (const n of [...doc.front.nodes, ...doc.back.nodes, ...Object.values(doc.overrides ?? {}).flatMap((o) => Object.values(o.nodes ?? {}).flat())]) {
+    if (n.kind !== 'card-text') continue
+    for (const [, raw] of n.text.matchAll(/\{([^{}]+)\}/g)) {
+      const name = raw.trim()
+      if (!name || known.has(name.toLowerCase())) continue
+      known.add(name.toLowerCase())
+      add.push({ id: newId(), name, kind: 'text' })
+    }
+  }
+  return add.length ? { ...doc, fields: [...doc.fields, ...add] } : doc
 }
 
 /** Replace `{Field}` with the card's values (field names ignore case). Unknown names stay as typed. */

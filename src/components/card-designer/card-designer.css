@@ -404,3 +404,40 @@
 .cd-right .moodboard-item.cd-every-card {
   box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 50%, transparent);
 }
+.cd-add {
+  position: relative;
+  padding: 8px;
+}
+.cd-add-btn {
+  width: 100%;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+}
+.cd-add-menu {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: calc(100% - 4px);
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+}
+.cd-add-item {
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.cd-add-item:hover {
+  background: var(--bg);
+}

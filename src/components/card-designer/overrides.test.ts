@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { composeScene, createCardDoc, legacyPerCardLayers, onEveryCard, sameTextEverywhere, toggleSameText, resizeDesign, setLayerOnEveryCard, setOnEveryCard, setOverride, slotColors, splitScene, type CardDoc } from './model'
+import { composeScene, createCardDoc, legacyPerCardLayers, onEveryCard, sameTextEverywhere, toggleSameText, resizeDesign, setLayerOnEveryCard, setOnEveryCard, setOverride, slotColors, splitScene, withTokenFields, type CardDoc } from './model'
 
 describe('what is on every card', () => {
   const base = createCardDoc()
@@ -66,6 +66,15 @@ describe('what is on every card', () => {
     expect(composeScene(own, 'front', 'b').nodes.find((n) => (n as { textKey?: string }).textKey === text.id)).toMatchObject({ text: 'Both' })
   })
 
+  it('puts a box on every card with its text, or empty when it keeps its own text', () => {
+    const own = setOnEveryCard(doc, 'front', 'a', [text.id], false)
+    const withText = setOnEveryCard(own, 'front', 'a', [text.id], true)
+    expect(find(withText, 'b', text.id)).toMatchObject({ text: (text as { text: string }).text })
+    const empty = setOnEveryCard(toggleSameText(own, 'front', 'a', text.id), 'front', 'a', [text.id], true)
+    expect(find(empty, 'b', text.id)).toMatchObject({ text: '' })
+    expect(find(empty, 'a', text.id)).toMatchObject({ text: (text as { text: string }).text })
+  })
+
   it('turns 0.23.3 per-card layers into copies per card', () => {
     const old = setOverride({ ...doc, perCardLayers: [art.layerId] }, 'a', (o) => ({ ...o, nodes: { [art.layerId]: [{ ...art, x: 1 }] } }))
     expect(find(old, 'b', art.id)!.x).toBe(art.x)
@@ -97,5 +106,12 @@ describe('what is on every card', () => {
     const out = resizeDesign(own, 126, 176)
     expect(out.front.nodes.find((n) => n.id === frame.id)!.x).toBe(frame.x * 2)
     expect(out.overrides!.a.nodes![art.layerId][0].x).toBe((art.x + 10) * 2)
+  })
+
+  it('adds a field for a new {Name} in a text box', () => {
+    const d = { ...doc, front: { ...doc.front, nodes: doc.front.nodes.map((n) => (n.id === text.id ? { ...n, text: '{Power} and {name}' } : n)) } }
+    const out = withTokenFields(d)
+    expect(out.fields.map((f) => f.name)).toEqual([...doc.fields.map((f) => f.name), 'Power'])
+    expect(withTokenFields(out)).toBe(out)
   })
 })

@@ -32,6 +32,7 @@ import {
   onEveryCard,
   setLayerOnEveryCard,
   setOnEveryCard,
+  withTokenFields,
   sameTextEverywhere,
   toggleSameText,
   createCardDoc,
@@ -142,7 +143,7 @@ export default function View({ documentId, active }: PanelProps) {
   if (!d || !scene) return null
   if (d.started === false) return <SizePicker onStart={(w, h, bleed) => doc.update((x) => ({ ...resizeDesign(x, w, h), bleedMm: bleed, started: true }), { undoable: false })} />
 
-  const update = (recipe: (x: CardDoc) => CardDoc, options?: { undoable?: boolean }) => doc.update(recipe, options)
+  const update = (recipe: (x: CardDoc) => CardDoc, options?: { undoable?: boolean }) => doc.update((x) => withTokenFields(recipe(x)), options)
   const onScene = (recipe: (s: Scene<CardNode>) => Scene<CardNode>, options?: { undoable?: boolean }) =>
     update((x) => splitScene(x, side, cardId, recipe(composeScene(x, side, cardId))), options)
 
@@ -185,6 +186,20 @@ export default function View({ documentId, active }: PanelProps) {
     const count = scene.nodes.filter((n) => n.layerId === l.id && onEveryCard(d, side, n.id)).length
     if (count && !(await confirmDialog({ title: `Take “${l.name}” off every card?`, message: `Every card gets its own copy of the ${count} item(s) on this layer, to change for itself. Nothing on it is on every card any more. You can undo this with Ctrl+Z.`, confirmLabel: 'Each card its own' }))) return
     update((x) => setLayerOnEveryCard(x, l.id, false, cardIds))
+  }
+  /** + under the layers: a text box, a field with its text box, a picture field, an image or a shape on the active layer. */
+  const addToLayer = (what: AddKind) => {
+    if (what === 'image') return void addFixedImage()
+    if (what === 'picture') return addPictureField()
+    if (what === 'rect' || what === 'ellipse' || what === 'line') return apiRef.current?.setTool(what)
+    const field = what === 'text' ? null : { id: newId(), kind: what === 'number' ? ('number' as const) : ('text' as const), name: `${what === 'number' ? 'Stat' : 'Field'} ${d.fields.length + 1}` }
+    const node: CardTextNode = { id: newId(), kind: 'card-text', layerId: activeLayerId, x: (d.widthMm * MM - 300) / 2, y: (d.heightMm * MM - 60) / 2, width: 300, height: 60, text: field ? `{${field.name}}` : 'Text', fontSize: 32, fontFamily: DEFAULT_FONT, textColor: '#1c1d22' }
+    update((x) => {
+      const y = field ? { ...x, fields: [...x.fields, field] } : x
+      const s = composeScene(y, side, cardId)
+      return splitScene(y, side, cardId, { ...s, nodes: [...s.nodes, node] })
+    })
+    canvas.setSelection([node.id])
   }
   const toggleItemEveryCard = (n: CardNode) => {
     if (!cardId) return
@@ -338,7 +353,7 @@ export default function View({ documentId, active }: PanelProps) {
                 <>
                   {n.kind === 'card-text'
                     ? layerButton(
-                        sameText(n) ? 'Same text on every card. Click to let this box have its own text.' : every ? 'Each card types its own text in this box. Click to use the same text on every card.' : 'This box has its own text. Click to share it with the copies of this box on every card.',
+                        sameText(n) ? 'Its text goes with it: every card that has this box shows the same text. Click to give each card its own text.' : 'Own text: on other cards this box starts empty. Click to show the same text on every card.',
                         false,
                         <Type size={14} className={sameText(n) ? 'cd-every-icon' : ''} />,
                         () => toggleOwnText(n),
@@ -369,12 +384,49 @@ export default function View({ documentId, active }: PanelProps) {
               </>
             )}
           />
-        ) : (
+        ) : null}
+        {showLayers ? <AddMenu onAdd={addToLayer} /> : (
           <button className="btn btn-ghost cd-show-layers" onClick={() => setShowLayers(true)}>
             <LayersIcon size={14} /> Show layers
           </button>
         )}
       </aside>
+    </div>
+  )
+}
+
+type AddKind = 'text' | 'field' | 'number' | 'picture' | 'image' | 'rect' | 'ellipse' | 'line'
+const ADD_ITEMS: { kind: AddKind; label: string }[] = [
+  { kind: 'text', label: 'Text box' },
+  { kind: 'field', label: 'Text field (a new field + its box)' },
+  { kind: 'number', label: 'Number field (a new stat + its box)' },
+  { kind: 'picture', label: 'Picture field (each card’s picture)' },
+  { kind: 'image', label: 'Image (the same on every card)' },
+  { kind: 'rect', label: 'Rectangle' },
+  { kind: 'ellipse', label: 'Ellipse' },
+  { kind: 'line', label: 'Line' },
+]
+
+/** The + under the layers: add something to the active layer. */
+function AddMenu({ onAdd }: { onAdd(kind: AddKind): void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="cd-add">
+      <button className="btn cd-add-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Plus size={14} /> Add to layer
+      </button>
+      {open ? (
+        <>
+          <div className="menu-backdrop" onClick={() => setOpen(false)} />
+          <div className="cd-add-menu" role="menu">
+            {ADD_ITEMS.map((i) => (
+              <button key={i.kind} role="menuitem" className="cd-add-item" onClick={() => (setOpen(false), onAdd(i.kind))}>
+                {i.label}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
     </div>
   )
 }
