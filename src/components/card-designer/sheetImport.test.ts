@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseCSV, toCSV } from '@/shared/csv'
-import { composeScene, createCardDoc, setLayerOnEveryCard, type CardDoc, type CardTextNode } from './model'
+import { cardsFromSheet, composeScene, createCardDoc, setLayerOnEveryCard, type CardDoc, type CardTextNode } from './model'
 import { applyImport, deckRows, guessTargets, missingPictures, ownTextBoxes, sheetRows } from './sheetImport'
 
 describe('fill cards from a spreadsheet', () => {
@@ -69,5 +69,22 @@ describe('fill cards from a spreadsheet', () => {
       ['Name', '', 'Cost'],
       ['Bolt'],
     ])
+  })
+})
+
+describe('fields the sheet has no column for', () => {
+  const base = createCardDoc()
+  const [name, cost, type] = base.fields
+  const doc: CardDoc = { ...base, cards: [{ id: 'a', copies: 1, values: { [name.id]: 'Bolt', [cost.id]: '2', [type.id]: 'HP: 10' } }] }
+  const rows = parseCSV('Name,Cost\nWolf,1\n')
+
+  it('new cards take them from the open card', () => {
+    const r = applyImport(doc, rows, guessTargets(doc, rows), 'a', new Map())
+    expect(r.doc.cards[1].values).toEqual({ [name.id]: 'Wolf', [cost.id]: '1', [type.id]: 'HP: 10' })
+  })
+
+  it('a linked sheet takes them from the first card of the list', () => {
+    const sheet = { id: 's', name: 'S', cells: { A1: { v: 'Name' }, A2: { v: 'Wolf' } } }
+    expect(cardsFromSheet(sheet, doc.fields, [], doc.cards[0].values)[0].values).toMatchObject({ [name.id]: 'Wolf', [cost.id]: '2', [type.id]: 'HP: 10' })
   })
 })

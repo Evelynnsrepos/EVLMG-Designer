@@ -121,6 +121,9 @@ export function applyImport(doc: CardDoc, rows: string[][], targets: Target[], f
     if (k) waiting.set(k, [...(waiting.get(k) ?? []), card])
   }
 
+  // New cards take fields the sheet has no column for (like a fixed HP) from the open card.
+  const from = doc.cards.find((c) => c.id === fromId) ?? doc.cards[0]
+  const unmapped = Object.fromEntries(Object.entries(from?.values ?? {}).filter(([f]) => !colField.includes(f)))
   const cards = [...doc.cards]
   const created: Id[] = []
   let updated = 0
@@ -130,7 +133,7 @@ export function applyImport(doc: CardDoc, rows: string[][], targets: Target[], f
     const at = `Row ${r + 1}`
     const name = nameCol >= 0 ? (row[nameCol] ?? '').trim().toLowerCase() : ''
     const old = name ? waiting.get(name)?.shift() : undefined
-    const card: Card = old ? { ...old, values: { ...old.values } } : { id: newId(), copies: 1, values: {} }
+    const card: Card = old ? { ...old, values: { ...old.values } } : { id: newId(), copies: 1, values: { ...unmapped } }
     targets.forEach((t, c) => {
       const v = (row[c] ?? '').trim()
       if (!v) return

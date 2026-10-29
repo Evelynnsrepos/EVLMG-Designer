@@ -330,7 +330,7 @@ export default function View({ documentId, active }: PanelProps) {
 
   return (
     <div className="cd-root">
-      {d.sheet ? <LinkedSheet link={d.sheet} fields={d.fields} variants={d.variants} onCards={setSheetCards} /> : null}
+      {d.sheet ? <LinkedSheet link={d.sheet} fields={d.fields} variants={d.variants} defaults={d.cards[0]?.values} onCards={setSheetCards} /> : null}
       <aside className="cd-left" aria-label="Deck">
         <details className="cd-section">
           <summary>Colours</summary>

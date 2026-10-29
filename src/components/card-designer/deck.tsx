@@ -324,10 +324,10 @@ export function CardPicker({ d, cards, current, onPick }: { d: CardDoc; cards: C
 }
 
 /** Reads a linked Spreadsheet sheet and hands its rows up as cards. Mounted only while a sheet is linked. */
-export function LinkedSheet({ link, fields, variants, onCards }: { link: NonNullable<CardDoc['sheet']>; fields: Field[]; variants: CardDoc['variants']; onCards(c: Card[] | null): void }) {
+export function LinkedSheet({ link, fields, variants, defaults, onCards }: { link: NonNullable<CardDoc['sheet']>; fields: Field[]; variants: CardDoc['variants']; defaults?: Card['values']; onCards(c: Card[] | null): void }) {
   const wb = useDocument<{ sheets: SheetLike[] }>('spreadsheet', link.documentId, () => ({ sheets: [] })).data
   const sheet = wb?.sheets.find((s) => s.id === link.sheetId) ?? wb?.sheets[0]
-  const cards = useMemo(() => (sheet && wb ? cardsFromSheet(evaluatedSheet(wb.sheets, sheet), fields, variants) : null), [wb, sheet, fields, variants])
+  const cards = useMemo(() => (sheet && wb ? cardsFromSheet(evaluatedSheet(wb.sheets, sheet), fields, variants, defaults) : null), [wb, sheet, fields, variants, defaults])
   useEffect(() => {
     onCards(cards)
     return () => onCards(null)

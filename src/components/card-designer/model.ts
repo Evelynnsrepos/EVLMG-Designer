@@ -607,9 +607,10 @@ const colName = (col: number) => {
 /**
  * Cards from a sheet: row 1 holds field names, every following row with any value is a card.
  * Columns named "Copies" (or "Count") and "Variant" set those; other names match fields (ignoring case).
+ * Fields without a column take `defaults` (the first card of the deck's own list).
  * Formulas should already be results here (`evaluatedSheet`).
  */
-export function cardsFromSheet(sheet: SheetLike, fields: Field[], variants: Variant[]): Card[] {
+export function cardsFromSheet(sheet: SheetLike, fields: Field[], variants: Variant[], defaults: Record<Id, string> = {}): Card[] {
   const cell = (c: number, r: number) => (sheet.cells[`${colName(c)}${r + 1}`]?.v ?? '').trim()
   let lastCol = -1
   let lastRow = 0
@@ -626,7 +627,7 @@ export function cardsFromSheet(sheet: SheetLike, fields: Field[], variants: Vari
   for (let r = 1; r <= lastRow; r++) {
     const row = heads.map((_, c) => cell(c, r))
     if (!row.some(Boolean)) continue
-    const values: Record<Id, string> = {}
+    const values: Record<Id, string> = { ...defaults }
     let copies = 1
     let variantId: Id | undefined
     heads.forEach((h, c) => {
