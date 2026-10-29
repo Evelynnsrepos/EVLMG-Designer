@@ -3,6 +3,7 @@ use tauri::Manager;
 mod collab;
 mod collab_commands;
 mod git;
+mod graphics;
 mod llm;
 mod plugins;
 mod server_link;
@@ -10,6 +11,7 @@ mod spell;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  graphics::apply_env();
   tauri::Builder::default()
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_dialog::init())
@@ -22,6 +24,8 @@ pub fn run() {
       spell::spell_suggest,
       git::git_run,
       git::git_version,
+      graphics::graphics_mode_get,
+      graphics::graphics_mode_set,
       llm::llm_status,
       llm::llm_install,
       llm::llm_remove,
@@ -45,6 +49,8 @@ pub fn run() {
         // Display name, not productName: productName stays so installers upgrade in place.
         let title = format!("Eve.Lopment Games Designer {}", app.package_info().version);
         let _ = window.set_title(&title);
+        #[cfg(target_os = "linux")]
+        graphics::apply_webview(&window);
       }
       // btop/top show the process name (15 bytes at most): put the version there too.
       #[cfg(target_os = "linux")]
