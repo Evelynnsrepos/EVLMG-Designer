@@ -1,7 +1,7 @@
 import { Bold, Italic } from 'lucide-react'
 import { zipSync } from 'fflate'
 import { useState } from 'react'
-import { assetUrl } from '@/core/assets'
+import { assetBlobUrl } from '@/core/assets'
 import { saveBinaryFile, saveTextFile, safeFileName } from '@/core/export'
 import type { Id } from '@/core/model'
 import { updateNodes } from '@/shared/canvas'
@@ -188,7 +188,7 @@ export function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: stri
       ...allNodes(d).flatMap((n) => (n.kind === 'image' ? [n.src] : [])),
       ...(d.icons ?? []).map((i) => i.src),
     ]
-    const resolve = await preloadImages(paths, (p) => (root ? assetUrl(root, p) : Promise.resolve(null)))
+    const resolve = await preloadImages(paths, (p) => (root ? assetBlobUrl(root, p) : Promise.resolve(null)))
     const fronts = new Map<Id, HTMLCanvasElement>()
     const backsMap = new Map<Id, HTMLCanvasElement>()
     for (const c of cards) {
