@@ -60,6 +60,8 @@ export interface UndoStep {
   bytes: number
   /** v0.17: a change to the layer list that goes with this step (merge, delete), so undo brings layers back. */
   meta?: unknown
+  /** The selection before and after this step (masks are never changed in place), so undo brings it back. */
+  sel?: { before: HTMLCanvasElement | null; after: HTMLCanvasElement | null }
 }
 
 function same(a: ImageData, b: ImageData) {
@@ -104,6 +106,22 @@ export class TileHistory {
   tagLast(meta: unknown) {
     const s = this.undoStack.at(-1)
     if (s) s.meta = meta
+  }
+
+  /** The newest step (to tie a selection to it). */
+  get last(): UndoStep | undefined {
+    return this.undoStack.at(-1)
+  }
+
+  /** A step that only changes the selection; layerId is '' (no layer). */
+  pushSelection(before: HTMLCanvasElement | null, after: HTMLCanvasElement | null) {
+    const bytes = after ? after.width * after.height * 4 : 0
+    this.pushes++
+    this.undoStack.push({ layerId: '', tiles: [], bytes, sel: { before, after } })
+    this.bytes += bytes
+    for (const s of this.redoStack) this.bytes -= s.bytes
+    this.redoStack = []
+    while (this.undoStack.length > 1 && (this.undoStack.length > this.maxSteps || this.bytes > this.budget)) this.bytes -= this.undoStack.shift()!.bytes
   }
 
   /** A step that only changes the layer list (no pixels changed). */

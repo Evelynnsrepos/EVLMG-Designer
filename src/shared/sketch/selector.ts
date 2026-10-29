@@ -21,6 +21,8 @@ export class Selector {
   mode: SelMode = 'replace'
   threshold = 0.12
   featherRadius = 8
+  /** Rounded corners of rectangle selections, in canvas pixels (fill one for a rounded box). */
+  cornerRadius = 0
   showMask = false
   /** Edges of the selection (SVG path data in canvas pixels). */
   edges = ''
@@ -41,7 +43,7 @@ export class Selector {
   selectionTool = false
 
   /** Change settings (from the bar) and redraw. */
-  patch(p: Partial<Pick<Selector, 'shape' | 'mode' | 'threshold' | 'featherRadius' | 'showMask' | 'offset'>>) {
+  patch(p: Partial<Pick<Selector, 'shape' | 'mode' | 'threshold' | 'featherRadius' | 'cornerRadius' | 'showMask' | 'offset'>>) {
     if (p.shape && p.shape !== this.shape) this.cancelDraft()
     if (p.shape && this.selectionTool) this.selectionShape = p.shape
     Object.assign(this, p)
@@ -85,10 +87,21 @@ export class Selector {
     this.set(out)
   }
 
-  private set(mask: HTMLCanvasElement | null) {
+  private set(mask: HTMLCanvasElement | null, withLast = false) {
+    const before = this.engine.selectionMask
     this.edges = mask ? edgePath(mask) : ''
     // An empty selection is no selection.
     this.engine.selectionMask = this.edges ? mask : null
+    this.engine.selectionChanged(before, withLast)
+    this.offset = { x: 0, y: 0 }
+    this.changed()
+  }
+
+  /** Pick up the selection undo or redo put back on the engine. */
+  sync() {
+    if (!this.engine.selectionRestored) return
+    const mask = this.engine.selectionMask
+    this.edges = mask ? edgePath(mask) : ''
     this.offset = { x: 0, y: 0 }
     this.changed()
   }
@@ -134,13 +147,13 @@ export class Selector {
     if (!cur || (!dx && !dy)) return
     const c = this.blank()
     c.ctx.drawImage(cur, dx, dy)
-    this.set(c.canvas)
+    this.set(c.canvas, true)
   }
 
   /** Replace the mask by a transformed copy (Transform). */
   transformed(fn: (mask: HTMLCanvasElement) => HTMLCanvasElement) {
     const cur = this.engine.selectionMask
-    if (cur) this.set(fn(cur))
+    if (cur) this.set(fn(cur), true)
   }
 
   // ---- Drawing a selection --------------------------------------------------
@@ -244,7 +257,9 @@ export class Selector {
     ctx.beginPath()
     if (kind === 'rect') {
       const [a, b] = pts
-      ctx.rect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y))
+      const w = Math.abs(b.x - a.x)
+      const h = Math.abs(b.y - a.y)
+      ctx.roundRect(Math.min(a.x, b.x), Math.min(a.y, b.y), w, h, Math.min(this.cornerRadius, w / 2, h / 2))
     } else if (kind === 'ellipse') {
       const [a, b] = pts
       ctx.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, Math.abs(b.x - a.x) / 2, Math.abs(b.y - a.y) / 2, 0, 0, Math.PI * 2)

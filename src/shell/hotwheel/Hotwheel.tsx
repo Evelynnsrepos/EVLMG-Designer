@@ -93,9 +93,12 @@ export function innerActions(panel: Panel | null): HotAction[] {
   const type = panel?.type
   const tool = type ? (getManifest(type)?.name ?? type) : 'this tool'
   const scale = (d: number) => type && setScale(type, (useSettings.getState().toolScale[type] ?? 100) + d)
+  const size = panel ? hotwheelSources.get(panel.id)?.size : undefined
   return [
     { id: 'close', label: `Close ${tool}`, icon: X, run: () => panel && void closePanel(panel.id) },
-    { id: 'scale', label: 'Size', icon: Scaling, halves: [{ label: 'Smaller', run: () => scale(-10) }, { label: 'Bigger', run: () => scale(10) }] },
+    size
+      ? { id: 'scale', label: size.label, icon: Scaling, halves: [{ label: 'Smaller', run: () => size.smaller() }, { label: 'Bigger', run: () => size.bigger() }] }
+      : { id: 'scale', label: 'Size', icon: Scaling, halves: [{ label: 'Smaller', run: () => scale(-10) }, { label: 'Bigger', run: () => scale(10) }] },
     { id: 'jump', label: 'Add a jump point', icon: Waypoints, run: () => panel && void addJumpHere(panel.type, panel.documentId) },
     { id: 'layout', label: 'Layout Mode (Esc)', icon: LayoutPanelLeft, run: () => useAppStore.getState().setLayoutMode(!useAppStore.getState().layoutMode) },
     { id: 'undo', label: 'Undo / Redo', icon: Undo2, halves: [{ label: 'Undo', run: () => pressKeys(el, keysOf('app.undo')[0]) }, { label: 'Redo', run: () => pressKeys(el, keysOf('app.redo')[0]) }] },

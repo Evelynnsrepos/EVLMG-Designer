@@ -93,6 +93,9 @@ export interface PenEventLike {
 /** Set once any pen reports a real pressure value; pens without pressure send only 0.5 (or 0/1). */
 let pressureSeen = false
 
+/** A pen with real pressure was seen: the pen's own lift thins the stroke end, so brushes skip their end taper. */
+export const hasRealPressure = () => pressureSeen
+
 /** For tests. */
 export function resetPressureDetection() {
   pressureSeen = false
@@ -119,8 +122,25 @@ export function tiltToAngles(tiltX: number, tiltY: number): { altitude: number; 
   return { altitude: Math.atan(1 / Math.hypot(tx, ty)), azimuth }
 }
 
+/**
+ * Linux: the web engine passes a pen on as a mouse, so the app reads pressure and tilt from GTK
+ * (graphics.rs `forward_pen`) into `window.__nativePen`, sent just before the pointer event.
+ */
+export function withNativePen(e: PenEventLike): PenEventLike {
+  const n = (globalThis as { __nativePen?: { pressure: number; tiltX: number; tiltY: number; t: number } }).__nativePen
+  if (!n || e.pointerType === 'touch' || performance.now() - n.t > 100) return e
+  // As the pen lifts, GTK reports pressure 0 while the page still sees the tip down: keep the last real pressure,
+  // or every stroke ends in a sudden hair-thin tail.
+  if (e.buttons && n.pressure > 0) lastDownPressure = n.pressure
+  const pressure = e.buttons && n.pressure === 0 ? lastDownPressure : n.pressure
+  if (!e.buttons) lastDownPressure = 0
+  return { pointerType: 'pen', pressure, tiltX: n.tiltX, tiltY: n.tiltY, button: e.button, buttons: e.buttons }
+}
+let lastDownPressure = 0
+
 /** Pressure, tilt and twist of an event (tilt only for pens). */
-export function penData(e: PenEventLike, curve: readonly CurvePoint[] = LINEAR): Omit<PenPoint, 'x' | 'y'> {
+export function penData(event: PenEventLike, curve: readonly CurvePoint[] = LINEAR): Omit<PenPoint, 'x' | 'y'> {
+  const e = withNativePen(event)
   const pressure = pressureOf(e, curve)
   if (e.pointerType !== 'pen') return { pressure }
   const tiltX = e.tiltX ?? 0

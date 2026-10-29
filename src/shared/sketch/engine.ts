@@ -42,6 +42,9 @@ export interface StrokeOptions {
 
 type LayerStack = Pick<SketchDoc, 'layers' | 'backgroundColor'>
 
+/** What a layer-list or document step remembers (`doc`: other document fields that changed). */
+export type DocMeta = { before: unknown[]; after: unknown[]; doc?: { before: object; after: object } }
+
 export class SketchEngine {
   readonly width: number
   readonly height: number
@@ -333,8 +336,55 @@ export class SketchEngine {
     const rects = tilesIn(area ?? { x: 0, y: 0, w: this.width, h: this.height }, this.width, this.height)
     const before = this.snapshot(layerId, rects)
     fn()
-    this.history.push(layerId, rects, before, this.snapshot(layerId, rects))
+    this.pushTiles(layerId, rects, before)
     this.touched(layerId)
+  }
+
+  /** Record a pixel step; it remembers the selection, so undoing the edit brings that selection back. */
+  private pushTiles(layerId: Id, rects: Rect[], before: ImageData[]) {
+    if (!this.history.push(layerId, rects, before, this.snapshot(layerId, rects))) return
+    this.history.last!.sel = { before: this.selectionMask, after: this.selectionMask }
+    this.freshPush = true
+    queueMicrotask(() => (this.freshPush = false))
+  }
+  /** A pixel step was made in the code running right now (so a layer-list change from the same action joins it). */
+  private freshPush = false
+  private lastLayerStep: { meta: DocMeta; at: number; tweak: boolean } | null = null
+
+  /**
+   * Any other change to the layer list (add, rename, reorder, opacity, blend, visibility, lock, text...) or to `doc`
+   * fields (background, guides) as an undo step: joined to the pixel step the same action just made, and quick
+   * repeats of the same kind of change (a slider drag, typing) stay one step.
+   */
+  layersChanged<L extends { id: Id }>(before: L[], after: L[], doc?: { before: object; after: object }) {
+    const last = this.history.last
+    if (this.freshPush && last?.tiles.length && !last.meta) {
+      last.meta = { before, after, doc } satisfies DocMeta
+      return
+    }
+    const now = performance.now()
+    const prev = this.lastLayerStep
+    const sameIds = before.length === after.length && before.every((l, i) => l.id === after[i].id)
+    if (prev?.tweak && last?.meta === prev.meta && prev.meta.after === before && sameIds && now - prev.at < 800) {
+      prev.meta.after = after
+      if (doc) prev.meta.doc = { before: prev.meta.doc?.before ?? doc.before, after: doc.after }
+      prev.at = now
+      return
+    }
+    const meta: DocMeta = { before, after, doc }
+    this.history.pushMeta('', meta)
+    this.lastLayerStep = { meta, at: now, tweak: sameIds }
+  }
+
+  /**
+   * The Selector changed the selection: a step of its own, or (`withLast`) part of the step just made,
+   * e.g. the selection following pixels a transform moved.
+   */
+  selectionChanged(before: HTMLCanvasElement | null, withLast = false) {
+    const after = this.selectionMask
+    const last = this.history.last
+    if (withLast && last?.sel) last.sel.after = after
+    else if (before !== after) this.history.pushSelection(before, after)
   }
 
   /** Run a pixel edit on a layer with undo, e.g. clear or fill. */
@@ -419,7 +469,7 @@ export class SketchEngine {
     }
     if (f.view) layer.ctx.drawImage(f.view, 0, 0)
     else layer.ctx.drawImage(f.piece.canvas, Math.round(f.dx), Math.round(f.dy))
-    this.history.push(f.layerId, f.rects, f.before, this.snapshot(f.layerId, f.rects))
+    this.pushTiles(f.layerId, f.rects, f.before)
     this.touched(f.layerId)
     return f.layerId
   }
@@ -535,9 +585,14 @@ export class SketchEngine {
     else this.history.pushMeta(layerId, meta)
   }
 
+  /** True when the step undone or redone last set the selection; the Selector then picks it up. */
+  selectionRestored = false
+
   private replay(step: ReturnType<TileHistory['undo']>, which: 'before' | 'after'): Id | null {
     this.lastMeta = step?.meta ? { meta: step.meta, which } : null
-    if (!step) return null
+    this.selectionRestored = !!step?.sel
+    if (step?.sel) this.selectionMask = step.sel[which]
+    if (!step?.layerId) return null
     const { ctx } = this.ensure(step.layerId)
     for (const t of step.tiles) ctx.putImageData(t[which], t.rect.x, t.rect.y)
     this.touched(step.layerId)

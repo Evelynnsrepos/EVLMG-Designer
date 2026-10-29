@@ -62,6 +62,7 @@ import { keyHint } from '@/shared/hotkeyHints'
 import { actionLabel, keysFor, matchShortcut, PAIRS, toolOf, type ActionId } from './actions'
 import { TouchGestures } from './gestures'
 import { activeGuide, assistFor, normalizeGuide, symmetryMirror, type DrawingGuide } from './guides'
+import { hexToRgb } from './color'
 import { BrushCursor, GuideOverlay, ShapeNodes } from './GuideOverlay'
 import { GuidePanel } from './GuidePanel'
 import { InputSettingsDialog } from './InputSettingsDialog'
@@ -214,7 +215,7 @@ function CardGuides({ g, width, height, scale }: { g: NonNullable<SketchDoc['car
   )
 }
 
-export function SketchEditor({ doc, update, active, title, actions, swatches = SWATCHES, panel, editorRef }: SketchEditorProps) {
+export function SketchEditor({ doc, update: save, active, title, actions, swatches = SWATCHES, panel, editorRef }: SketchEditorProps) {
   const root = useProjectStore((s) => s.root)
   const engineRef = useRef<SketchEngine | null>(null)
   const colorSpace = doc.colorSpace ?? 'srgb'
@@ -224,6 +225,15 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   }
   // oxlint-disable-next-line react/refs
   const engine = engineRef.current
+  /** Changes to the document; a change to the layer list becomes an undo step. */
+  const update = (fn: (d: SketchDoc) => SketchDoc) =>
+    save((d) => {
+      const next = fn(d)
+      const docChanged = next.guide !== d.guide || next.backgroundColor !== d.backgroundColor
+      const doc = docChanged ? { before: { guide: d.guide, backgroundColor: d.backgroundColor }, after: { guide: next.guide, backgroundColor: next.backgroundColor } } : undefined
+      if (next.layers !== d.layers || doc) engine.layersChanged(d.layers, next.layers, doc)
+      return next
+    })
   const docRef = useRef(doc)
   useEffect(() => {
     docRef.current = doc
@@ -245,6 +255,8 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   const [activeLayerId, setActiveLayerId] = useState<Id>([...doc.layers].reverse().find((l) => !l.kind)?.id ?? doc.layers[doc.layers.length - 1]?.id ?? '')
   const [, setVersion] = useState(0)
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null)
+  /** The brush outline turns dark over light parts of the picture, so it shows on a white canvas. */
+  const [cursorOnLight, setCursorOnLight] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   // Layers: in the side panel, floating over the canvas, or hidden behind the Layers button.
   const [layersMode, setLayersModeState] = useState<'docked' | 'floating'>(() => {
@@ -400,7 +412,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
     // The sticker: the whole picture without background.
     const sticker = await importAssetFromBlob(root, await engine.flattenedPng({ ...docRef.current, layers: exportLayers(docRef.current.layers) }, false), 'image', 'sticker.png')
     if (docRef.current.sticker) old.push(docRef.current.sticker)
-    update((d) => ({ ...d, sticker: sticker?.path ?? null, layers: d.layers.map((l) => (saved.has(l.id) ? { ...l, image: saved.get(l.id)! } : l)) }))
+    save((d) => ({ ...d, sticker: sticker?.path ?? null, layers: d.layers.map((l) => (saved.has(l.id) ? { ...l, image: saved.get(l.id)! } : l)) }))
     // Each save writes a new PNG (assets are write-once); remove the ones this editor replaced.
     for (const p of old) void resolveAssetPath(root, p).then((abs) => getFs().remove(abs).catch(() => {}))
     setSaving(false)
@@ -589,7 +601,8 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
       setVersion(engine.version)
     } else if (t === 'lasso' || t === 'rect') {
       gesture.current = { kind: 'select', pts: [p], rect: t === 'rect' }
-      const ref = doc.layers.find((l) => l.reference && !isGroup(l))
+      // The wand only looks at the active layer (or the reference layer, when one is set), never at the others.
+      const ref = doc.layers.find((l) => l.reference && !isGroup(l)) ?? (activeLayer && hasPixels(activeLayer) ? activeLayer : null)
       sel.down(p, e, () => engine.pixels(doc, ref?.id ?? null))
     } else if (t === 'move') {
       if (!activeLayer.visible || !hasPixels(activeLayer) || lockedInTree(doc.layers, activeLayer.id)) return
@@ -626,6 +639,13 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
     if (!view) return
     const p = toDoc(e)
     setCursor(p)
+    if (!gesture.current && (tool === 'brush' || tool === 'eraser' || tool === 'smudge')) {
+      const under = engine.pickColor(doc, p.x, p.y)
+      if (under) {
+        const [r, g, b] = hexToRgb(under)
+        setCursorOnLight(0.299 * r + 0.587 * g + 0.114 * b > 140)
+      }
+    }
     lastPointer.current = pointIn(viewCanvas.current!, e)
     if (isEraserEnd(e) !== hoverEraser) setHoverEraser(!hoverEraser)
     if (e.pointerType === 'touch' && touchMove(e)) return
@@ -731,18 +751,22 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   const applyMeta = () => {
     const m = engine.lastMeta
     if (!m) return
-    const { before, after } = m.meta as { before: SketchLayer[]; after: SketchLayer[] }
-    const layers = m.which === 'before' ? before : after
-    update((d) => ({ ...d, layers }))
+    const { before, after, doc: fields } = m.meta as { before: SketchLayer[]; after: SketchLayer[]; doc?: { before: Partial<SketchDoc>; after: Partial<SketchDoc> } }
+    // Keep where each layer's pixels are saved now; the step only knows the paths from back then.
+    const saved = new Map(doc.layers.map((l) => [l.id, l.image]))
+    const layers = (m.which === 'before' ? before : after).map((l) => (saved.has(l.id) ? { ...l, image: saved.get(l.id)! } : l))
+    save((d) => ({ ...d, ...fields?.[m.which], layers }))
     if (activeLayer && !layers.some((l) => l.id === activeLayer.id)) setActiveLayerId(layers.filter((l) => l.kind !== 'group').at(-1)?.id ?? layers[0].id)
   }
   const undo = () => {
     markDirty(engine.undo())
     applyMeta()
+    sel.sync()
   }
   const redo = () => {
     markDirty(engine.redo())
     applyMeta()
+    sel.sync()
   }
 
   const layerLimit = maxLayers(doc.width, doc.height)
@@ -759,7 +783,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
     discard: () => {},
     restructure: (layers, layerId, pushesBefore) => {
       engine.structure(layerId, { before: doc.layers, after: layers }, pushesBefore)
-      update((d) => ({ ...d, layers }))
+      save((d) => ({ ...d, layers }))
     },
     limit: layerLimit,
     title,
@@ -977,7 +1001,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
         : { id, label, on: toolOf(id) === tool, run: () => actionsRef.current(id) }
     }
     return profile.slots.filter((id): id is ActionId => !!id).map(one)
-  }, true)
+  }, true, { label: 'Brush size', smaller: () => actionsRef.current('sizeDown'), bigger: () => actionsRef.current('sizeUp') })
   useEffect(() => {
     drawShapeRef.current = drawShape
     moveRef.current = moveNow
@@ -1151,7 +1175,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
                     <circle cx={tether.tip.x} cy={tether.tip.y} r={4 / view.scale} />
                   </g>
                 )}
-                {showBrushCursor && cursor && <BrushCursor at={cursor} brush={cursorBrush} scale={view.scale} erase={tool === 'eraser' || hoverEraser} />}
+                {showBrushCursor && cursor && <BrushCursor at={cursor} brush={cursorBrush} scale={view.scale} erase={tool === 'eraser' || hoverEraser} onLight={cursorOnLight} />}
               </g>
             </svg>
           )}

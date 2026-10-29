@@ -50,6 +50,35 @@ pub fn apply_webview(window: &tauri::WebviewWindow) {
   });
 }
 
+/// WebKitGTK hands a pen to the page as a mouse (pressure 0 or 0.5, no tilt). Read pressure and tilt from GTK and
+/// put them on `window.__nativePen`, where Draw picks them up for the pointer event that follows.
+#[cfg(target_os = "linux")]
+pub fn forward_pen(window: &tauri::WebviewWindow) {
+  let _ = window.with_webview(|w| {
+    use gtk::{gdk, glib, prelude::*};
+    use webkit2gtk::WebViewExt;
+    fn send(view: &webkit2gtk::WebView, e: &gdk::Event) {
+      let pen = e.source_device().map(|d| matches!(d.source(), gdk::InputSource::Pen | gdk::InputSource::Eraser)).unwrap_or(false);
+      let Some(pressure) = e.axis(gdk::AxisUse::Pressure).filter(|_| pen) else { return };
+      // GTK gives tilt as -1..1 on some backends and in degrees on others.
+      let deg = |t: f64| if t.abs() <= 1.0 { t * 90.0 } else { t };
+      let tx = deg(e.axis(gdk::AxisUse::Xtilt).unwrap_or(0.0));
+      let ty = deg(e.axis(gdk::AxisUse::Ytilt).unwrap_or(0.0));
+      let js = format!("window.__nativePen={{pressure:{pressure},tiltX:{tx},tiltY:{ty},t:performance.now()}}");
+      view.evaluate_javascript(&js, None, None, None::<&gtk::gio::Cancellable>, |_| {});
+    }
+    let view = w.inner();
+    view.connect_motion_notify_event(|v, e| {
+      send(v, e);
+      glib::Propagation::Proceed
+    });
+    view.connect_button_press_event(|v, e| {
+      send(v, e);
+      glib::Propagation::Proceed
+    });
+  });
+}
+
 #[tauri::command]
 pub fn graphics_mode_get() -> String {
   read_mode()

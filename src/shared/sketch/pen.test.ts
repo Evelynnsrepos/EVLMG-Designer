@@ -147,3 +147,26 @@ describe('smoothing', () => {
     expect(a.push({ x: 20, y: 0, pressure: 1 }, 16)).toEqual(b.push({ x: 20, y: 0, pressure: 1 }, 16))
   })
 })
+
+describe('pen read from GTK (Linux)', () => {
+  it('turns a mouse event into a pen with the fresh native pressure and tilt', () => {
+    const g = globalThis as { __nativePen?: unknown }
+    g.__nativePen = { pressure: 0.3, tiltX: 20, tiltY: -10, t: performance.now() }
+    const d = penData({ pointerType: 'mouse', pressure: 0.5, button: 0, buttons: 1 })
+    expect(d.tiltX).toBe(20)
+    expect(d.tiltY).toBe(-10)
+    g.__nativePen = { pressure: 0.3, tiltX: 20, tiltY: -10, t: performance.now() - 1000 }
+    expect(penData({ pointerType: 'mouse', pressure: 0.5, button: 0, buttons: 1 }).tiltX).toBeUndefined()
+    delete g.__nativePen
+  })
+
+  it('keeps the last pressure when the pen reports 0 while lifting', () => {
+    const g = globalThis as { __nativePen?: unknown }
+    resetPressureDetection()
+    g.__nativePen = { pressure: 0.6, tiltX: 0, tiltY: 0, t: performance.now() }
+    expect(penData({ pointerType: 'mouse', pressure: 0.5, button: 0, buttons: 1 }).pressure).toBeCloseTo(0.6)
+    g.__nativePen = { pressure: 0, tiltX: 0, tiltY: 0, t: performance.now() }
+    expect(penData({ pointerType: 'mouse', pressure: 0.5, button: 0, buttons: 1 }).pressure).toBeCloseTo(0.6)
+    delete g.__nativePen
+  })
+})

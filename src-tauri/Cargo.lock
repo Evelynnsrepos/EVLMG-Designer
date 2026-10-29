@@ -1344,6 +1344,7 @@ version = "0.24.0"
 dependencies = [
  "anyhow",
  "futures-util",
+ "gtk",
  "iroh",
  "log",
  "rustls",

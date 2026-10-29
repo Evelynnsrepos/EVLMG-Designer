@@ -4,7 +4,7 @@ import { Modal } from '../ui'
 import { ACTIONS, actionLabel, comboOf, conflicts, formatCombo, keysFor, QUICK_SLOTS, type ActionId } from './actions'
 import { CurveEditor } from './CurveEditor'
 import { useInputSettings } from './inputSettings'
-import { applyCurve, LINEAR, PEN_BITS, tiltToAngles, type CurvePoint } from './pen'
+import { applyCurve, LINEAR, PEN_BITS, tiltToAngles, withNativePen, type CurvePoint } from './pen'
 import './input.css'
 
 const SECTIONS = ['Pressure', 'Smoothing', 'Test your pen', 'Shortcuts', 'Pen buttons', 'Hotwheel', 'Touch'] as const
@@ -197,9 +197,12 @@ function TabletTest({ curve }: { curve: CurvePoint[] }) {
   const [r, setR] = useState<Reading | null>(null)
   const [pressureSeen, setPressureSeen] = useState(false)
 
-  const read = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const n = e.nativeEvent
-    const angles = typeof n.altitudeAngle === 'number' ? { altitude: n.altitudeAngle, azimuth: n.azimuthAngle } : tiltToAngles(e.tiltX, e.tiltY)
+  const read = (ev: React.PointerEvent<HTMLCanvasElement>) => {
+    const n = ev.nativeEvent
+    const native = withNativePen(n)
+    // On Linux the pen comes from GTK (withNativePen); the event itself then only says "mouse".
+    const e = { ...ev, ...native, tiltX: native.tiltX ?? 0, tiltY: native.tiltY ?? 0, clientX: ev.clientX, clientY: ev.clientY, twist: ev.twist }
+    const angles = native === n && typeof n.altitudeAngle === 'number' ? { altitude: n.altitudeAngle, azimuth: n.azimuthAngle } : tiltToAngles(e.tiltX, e.tiltY)
     const reading = { type: e.pointerType, pressure: e.pressure, tiltX: e.tiltX, tiltY: e.tiltY, ...angles, twist: e.twist, buttons: e.buttons, hovering: e.buttons === 0 }
     setR(reading)
     if (e.pointerType === 'pen' && e.pressure > 0 && e.pressure !== 0.5 && e.pressure !== 1) setPressureSeen(true)

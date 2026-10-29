@@ -51,6 +51,8 @@ pub fn run() {
         let _ = window.set_title(&title);
         #[cfg(target_os = "linux")]
         graphics::apply_webview(&window);
+        #[cfg(target_os = "linux")]
+        graphics::forward_pen(&window);
       }
       // btop/top show the process name (15 bytes at most): put the version there too.
       #[cfg(target_os = "linux")]

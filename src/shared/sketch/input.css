@@ -203,6 +203,12 @@
   vector-effect: non-scaling-stroke;
   filter: drop-shadow(0 0 1px #000);
 }
+.brush-cursor.is-on-light ellipse,
+.brush-cursor.is-on-light rect,
+.brush-cursor.is-on-light line {
+  stroke: #000;
+  filter: drop-shadow(0 0 1px #fff);
+}
 .brush-cursor.is-eraser ellipse,
 .brush-cursor.is-eraser rect {
   stroke-dasharray: 3 2;
