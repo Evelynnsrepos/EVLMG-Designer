@@ -119,8 +119,19 @@ export function tiltToAngles(tiltX: number, tiltY: number): { altitude: number; 
   return { altitude: Math.atan(1 / Math.hypot(tx, ty)), azimuth }
 }
 
+/**
+ * Linux: the web engine passes a pen on as a mouse, so the app reads pressure and tilt from GTK
+ * (graphics.rs `forward_pen`) into `window.__nativePen`, sent just before the pointer event.
+ */
+export function withNativePen(e: PenEventLike): PenEventLike {
+  const n = (globalThis as { __nativePen?: { pressure: number; tiltX: number; tiltY: number; t: number } }).__nativePen
+  if (!n || e.pointerType === 'touch' || performance.now() - n.t > 100) return e
+  return { pointerType: 'pen', pressure: n.pressure, tiltX: n.tiltX, tiltY: n.tiltY, button: e.button, buttons: e.buttons }
+}
+
 /** Pressure, tilt and twist of an event (tilt only for pens). */
-export function penData(e: PenEventLike, curve: readonly CurvePoint[] = LINEAR): Omit<PenPoint, 'x' | 'y'> {
+export function penData(event: PenEventLike, curve: readonly CurvePoint[] = LINEAR): Omit<PenPoint, 'x' | 'y'> {
+  const e = withNativePen(event)
   const pressure = pressureOf(e, curve)
   if (e.pointerType !== 'pen') return { pressure }
   const tiltX = e.tiltX ?? 0
