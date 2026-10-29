@@ -3,12 +3,14 @@ import { zipSync } from 'fflate'
 import { useState } from 'react'
 import { assetBlobUrl } from '@/core/assets'
 import { saveBinaryFile, saveTextFile, safeFileName } from '@/core/export'
+import { toCSV } from '@/shared/csv'
 import type { Id } from '@/core/model'
 import { updateNodes } from '@/shared/canvas'
 import { confirmDialog } from '@/shared/dialogs'
 import { cssFamily, systemFonts } from '@/shared/fontList'
 import { canvasBytes, drawSheets, PAGE_SIZES, sheetLayout, sheetsToPdf } from '@/shared/print'
 import { CARD_SIZES, composeScene, deckJson, expandCopies, resizeDesign, slotColors, ttsSheets, type Card, type CardDoc, type CardImageNode, type CardNode, type CardTextNode, type SlotKeys } from './model'
+import { deckRows } from './sheetImport'
 import { cardNodeTypes } from './nodeTypes'
 import { loadSceneFonts, preloadImages, renderCard } from './render'
 import { allNodes, cardLabel, ownIcons, TEXT, type OnScene, type Update } from './ui'
@@ -306,6 +308,7 @@ export function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: stri
     if (!uniqueBacks) files[`${name} back.png`] = await canvasBytes(backSides[0])
     await saveBinaryFile({ title: 'Export for Tabletop Simulator', defaultName: `${name} Tabletop Simulator.zip`, bytes: zipSync(files, { level: 0 }), filter: { name: 'Zip', extensions: ['zip'] } })
   })
+  const csv = run('Deck spreadsheet', () => saveTextFile({ title: 'Export deck as spreadsheet', defaultName: `${name}.csv`, text: toCSV(deckRows(d, cards)), filter: { name: 'CSV', extensions: ['csv'] } }))
   const json = run('Deck JSON', () => saveTextFile({ title: 'Export deck', defaultName: `${name}.json`, text: JSON.stringify(deckJson(title, d, cards), null, 2), filter: { name: 'JSON', extensions: ['json'] } }))
 
   const confirmBig = async (job: () => Promise<void>) => {
@@ -360,6 +363,9 @@ export function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: stri
       </button>
       <button className="btn" disabled={!!busy} onClick={() => void json()}>
         Deck JSON
+      </button>
+      <button className="btn" disabled={!!busy} title="One row per card: open it in a spreadsheet program, change it, and fill the cards from it again" onClick={() => void csv()}>
+        Deck spreadsheet (CSV)
       </button>
       <button className="btn" disabled={!!busy} onClick={() => void tts()}>
         Tabletop Simulator (ZIP)

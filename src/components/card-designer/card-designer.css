@@ -452,3 +452,12 @@
   min-width: 200px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
 }
+.cd-import-map select {
+  min-width: 220px;
+}
+.cd-import-problems ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  max-height: 180px;
+  overflow-y: auto;
+}

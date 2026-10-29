@@ -32,6 +32,7 @@ import {
   legacyPerCardLayers,
   onEveryCard,
   repairFieldLinks,
+  seedMissing,
   setLayerOnEveryCard,
   setOnEveryCard,
   snapToGuides,
@@ -134,6 +135,13 @@ export default function View({ documentId, active }: PanelProps) {
   useEffect(() => {
     if (repair) doc.update((x) => repairFieldLinks(x, cards.map((c) => c.id)), { undoable: false })
   }, [repair]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cards from a linked Spreadsheet get the items of layers that are not on every card, like new cards do.
+  const rowIds = d?.sheet && sheetCards ? sheetCards.map((c) => c.id) : []
+  const unseeded = !!d && rowIds.length > 0 && seedMissing(d, rowIds, Object.keys(d.overrides ?? {})) !== d
+  useEffect(() => {
+    if (unseeded) doc.update((x) => seedMissing(x, rowIds, Object.keys(x.overrides ?? {})), { undoable: false })
+  }, [unseeded, rowIds.join()]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const flipSide = () => (setSide((s) => (s === 'front' ? 'back' : 'front')), canvas.setSelection([]), canvas.setActiveLayerId(null))
   useHotwheel(() => {

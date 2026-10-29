@@ -400,6 +400,20 @@ export function seedNewCard(doc: CardDoc, cardId: Id, fromId: Id | null | undefi
   return Object.keys(nodes).length ? setOverride(doc, cardId, (o) => ({ ...o, nodes: { ...o.nodes, ...nodes } })) : doc
 }
 
+/** Cards with nothing on a layer that is not on every card get the items of the first card that has some (from `from`). */
+export function seedMissing(doc: CardDoc, cardIds: Id[], from: Id[] = cardIds): CardDoc {
+  let out = doc
+  for (const l of doc.perCardLayers ?? []) {
+    const src = from.find((c) => doc.overrides?.[c]?.nodes?.[l]?.length)
+    if (!src) continue
+    for (const c of cardIds) {
+      const o = doc.overrides?.[c]
+      if (!o?.nodes?.[l]?.length && !o?.hidden?.includes(l)) out = seedNewCard(out, c, src, [l])
+    }
+  }
+  return out
+}
+
 /**
  * Once per deck from before 0.24.5: cards made after a layer went off every card got nothing on it (they get
  * the first set-up card's items now), and boxes with each card's own text went empty on other cards (they show
@@ -407,15 +421,7 @@ export function seedNewCard(doc: CardDoc, cardId: Id, fromId: Id | null | undefi
  */
 export function repairFieldLinks(doc: CardDoc, cardIds: Id[]): CardDoc {
   if (doc.fieldLinks) return doc
-  let out: CardDoc = { ...doc, fieldLinks: true }
-  for (const l of doc.perCardLayers ?? []) {
-    const from = cardIds.find((c) => doc.overrides?.[c]?.nodes?.[l]?.length)
-    if (!from) continue
-    for (const c of cardIds) {
-      const o = doc.overrides?.[c]
-      if (!o?.nodes?.[l]?.length && !o?.hidden?.includes(l)) out = seedNewCard(out, c, from, [l])
-    }
-  }
+  let out: CardDoc = seedMissing({ ...doc, fieldLinks: true }, cardIds)
   for (const side of ['front', 'back'] as const) {
     const nodes = out[side].nodes.map((n) => {
       if (n.kind !== 'card-text' || !n.ownText || n.text) return n

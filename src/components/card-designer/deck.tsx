@@ -1,10 +1,11 @@
-import { ChevronDown, ChevronRight, Copy, Search, Trash } from 'lucide-react'
+import { ChevronDown, ChevronRight, Copy, Search, Sheet, Trash } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { pickAndImportAssets } from '@/core/assets'
 import { newId, type Id } from '@/core/model'
 import { useDocument, useProjectStore } from '@/core/state'
 import { promptDialog } from '@/shared/dialogs'
 import { BUILTIN_ICONS } from './icons'
+import { ImportDialog } from './importDialog'
 import { cardsFromSheet, renameFieldEverywhere, type Card, type CardDoc, type Field, type SheetLike } from './model'
 import { evaluatedSheet } from './sheetValues'
 import { addCard, cardLabel, TEXT, type Update } from './ui'
@@ -181,6 +182,7 @@ function Icons({ d, update }: { d: CardDoc; update: Update }) {
 /** The deck's cards, always visible: number, small picture, short name and copies. */
 export function CardList({ d, cards, currentId, onPick, update, previews }: { d: CardDoc; cards: Card[]; currentId: Id | null; onPick(id: Id): void; update: Update; previews: Map<Id, string> }) {
   const [q, setQ] = useState('')
+  const [importing, setImporting] = useState(false)
   const spreadsheets = (useProjectStore((s) => s.meta?.documents) ?? []).filter((x) => x.type === 'spreadsheet')
   const linked = !!d.sheet
   const query = q.trim().toLowerCase()
@@ -250,6 +252,10 @@ export function CardList({ d, cards, currentId, onPick, update, previews }: { d:
         )}
       </ol>
       <p className="cd-muted">{total} {total === 1 ? 'card' : 'cards'} to print.</p>
+      <button className="btn" disabled={linked} title={linked ? 'Cards come from the linked Spreadsheet: pick “This list” to fill them once instead' : 'Fill or update the cards from a CSV file or a Spreadsheet, one row per card'} onClick={() => setImporting(true)}>
+        <Sheet size={14} /> Fill from spreadsheet…
+      </button>
+      {importing ? <ImportDialog d={d} cardId={currentId} update={update} onClose={() => setImporting(false)} /> : null}
       <label className="cd-row">
         <span className="cd-label">Cards from</span>
         <select className="input" value={d.sheet?.documentId ?? ''} onChange={(e) => update((x) => ({ ...x, sheet: e.target.value ? { documentId: e.target.value, sheetId: '' } : undefined }))}>
