@@ -333,8 +333,24 @@ export class SketchEngine {
     const rects = tilesIn(area ?? { x: 0, y: 0, w: this.width, h: this.height }, this.width, this.height)
     const before = this.snapshot(layerId, rects)
     fn()
-    this.history.push(layerId, rects, before, this.snapshot(layerId, rects))
+    this.pushTiles(layerId, rects, before)
     this.touched(layerId)
+  }
+
+  /** Record a pixel step; it remembers the selection, so undoing the edit brings that selection back. */
+  private pushTiles(layerId: Id, rects: Rect[], before: ImageData[]) {
+    if (this.history.push(layerId, rects, before, this.snapshot(layerId, rects))) this.history.last!.sel = { before: this.selectionMask, after: this.selectionMask }
+  }
+
+  /**
+   * The Selector changed the selection: a step of its own, or (`withLast`) part of the step just made,
+   * e.g. the selection following pixels a transform moved.
+   */
+  selectionChanged(before: HTMLCanvasElement | null, withLast = false) {
+    const after = this.selectionMask
+    const last = this.history.last
+    if (withLast && last?.sel) last.sel.after = after
+    else if (before !== after) this.history.pushSelection(before, after)
   }
 
   /** Run a pixel edit on a layer with undo, e.g. clear or fill. */
@@ -419,7 +435,7 @@ export class SketchEngine {
     }
     if (f.view) layer.ctx.drawImage(f.view, 0, 0)
     else layer.ctx.drawImage(f.piece.canvas, Math.round(f.dx), Math.round(f.dy))
-    this.history.push(f.layerId, f.rects, f.before, this.snapshot(f.layerId, f.rects))
+    this.pushTiles(f.layerId, f.rects, f.before)
     this.touched(f.layerId)
     return f.layerId
   }
@@ -535,9 +551,14 @@ export class SketchEngine {
     else this.history.pushMeta(layerId, meta)
   }
 
+  /** True when the step undone or redone last set the selection; the Selector then picks it up. */
+  selectionRestored = false
+
   private replay(step: ReturnType<TileHistory['undo']>, which: 'before' | 'after'): Id | null {
     this.lastMeta = step?.meta ? { meta: step.meta, which } : null
-    if (!step) return null
+    this.selectionRestored = !!step?.sel
+    if (step?.sel) this.selectionMask = step.sel[which]
+    if (!step?.layerId) return null
     const { ctx } = this.ensure(step.layerId)
     for (const t of step.tiles) ctx.putImageData(t[which], t.rect.x, t.rect.y)
     this.touched(step.layerId)

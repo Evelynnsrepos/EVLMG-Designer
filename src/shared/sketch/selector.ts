@@ -85,10 +85,21 @@ export class Selector {
     this.set(out)
   }
 
-  private set(mask: HTMLCanvasElement | null) {
+  private set(mask: HTMLCanvasElement | null, withLast = false) {
+    const before = this.engine.selectionMask
     this.edges = mask ? edgePath(mask) : ''
     // An empty selection is no selection.
     this.engine.selectionMask = this.edges ? mask : null
+    this.engine.selectionChanged(before, withLast)
+    this.offset = { x: 0, y: 0 }
+    this.changed()
+  }
+
+  /** Pick up the selection undo or redo put back on the engine. */
+  sync() {
+    if (!this.engine.selectionRestored) return
+    const mask = this.engine.selectionMask
+    this.edges = mask ? edgePath(mask) : ''
     this.offset = { x: 0, y: 0 }
     this.changed()
   }
@@ -134,13 +145,13 @@ export class Selector {
     if (!cur || (!dx && !dy)) return
     const c = this.blank()
     c.ctx.drawImage(cur, dx, dy)
-    this.set(c.canvas)
+    this.set(c.canvas, true)
   }
 
   /** Replace the mask by a transformed copy (Transform). */
   transformed(fn: (mask: HTMLCanvasElement) => HTMLCanvasElement) {
     const cur = this.engine.selectionMask
-    if (cur) this.set(fn(cur))
+    if (cur) this.set(fn(cur), true)
   }
 
   // ---- Drawing a selection --------------------------------------------------

@@ -589,7 +589,8 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
       setVersion(engine.version)
     } else if (t === 'lasso' || t === 'rect') {
       gesture.current = { kind: 'select', pts: [p], rect: t === 'rect' }
-      const ref = doc.layers.find((l) => l.reference && !isGroup(l))
+      // The wand only looks at the active layer (or the reference layer, when one is set), never at the others.
+      const ref = doc.layers.find((l) => l.reference && !isGroup(l)) ?? (activeLayer && hasPixels(activeLayer) ? activeLayer : null)
       sel.down(p, e, () => engine.pixels(doc, ref?.id ?? null))
     } else if (t === 'move') {
       if (!activeLayer.visible || !hasPixels(activeLayer) || lockedInTree(doc.layers, activeLayer.id)) return
@@ -739,10 +740,12 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   const undo = () => {
     markDirty(engine.undo())
     applyMeta()
+    sel.sync()
   }
   const redo = () => {
     markDirty(engine.redo())
     applyMeta()
+    sel.sync()
   }
 
   const layerLimit = maxLayers(doc.width, doc.height)
