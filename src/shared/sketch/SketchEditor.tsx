@@ -72,7 +72,7 @@ import { flipAbout, pinch, rotateAbout, toDocPoint, viewMatrix, zoomAbout, type 
 // Sketch Pro: canvas, time-lapse and files.
 import { useSketchFiles } from './files/SketchFiles'
 // Sketch Pro: text layers (feat/sketch-text)
-import { Keyboard, Layers as LayersIcon, PanelRightClose, PictureInPicture2, Type } from 'lucide-react'
+import { Keyboard, Layers as LayersIcon, LocateFixed, PanelRightClose, PictureInPicture2, Type } from 'lucide-react'
 import { useImportedFonts } from './fonts'
 import { TextBoxes, TextPanel } from './TextPanel'
 import { useTextLayers, useTextTool } from './textLayers'
@@ -98,6 +98,9 @@ const UI_PRO = {
   hideLayers: 'Hide the layers',
   floatLayers: 'Float the layers over the canvas',
   dockLayers: 'Put the layers back in the side panel',
+  bringBack: 'Bring back lost panels',
+  bringFloating: 'Layers, floating at the top right',
+  bringDocked: 'Layers, in the side panel',
   editShape: 'Edit shape',
   done: 'Done',
 }
@@ -289,8 +292,17 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       // Only a convenience.
     }
   }
-  const [layersSpot, setLayersSpot] = useSpot('egd.sketch.layersSpot', () => ({ x: window.innerWidth - 640, y: 110 }))
-  const [textSpot, setTextSpot] = useSpot('egd.sketch.textSpot', () => ({ x: 340, y: 110 }))
+  const layersStart = () => ({ x: window.innerWidth - 640, y: 110 })
+  const textStart = () => ({ x: 340, y: 110 })
+  const [layersSpot, setLayersSpot] = useSpot('egd.sketch.layersSpot', layersStart)
+  const [textSpot, setTextSpot] = useSpot('egd.sketch.textSpot', textStart)
+  /** Show the layers again, wherever they went; floating panels go back to where they start. */
+  const bringBack = (mode: 'docked' | 'floating') => {
+    setLayersMode(mode)
+    setLayersShown(true)
+    setLayersSpot(layersStart())
+    setTextSpot(textStart())
+  }
   /** The stabilization string from the brush tip to the pen while drawing. */
   const [tether, setTether] = useState<{ tip: { x: number; y: number }; pen: { x: number; y: number } } | null>(null)
   const [saving, setSaving] = useState(false)
@@ -1090,6 +1102,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         <ToolButton icon={FlipHorizontal} label={UI_PRO.flipView} active={!!view?.flip} onClick={() => runAction('flipView')} />
         <ToolButton icon={Settings2} label={UI_PRO.input} onClick={() => setInputOpen(true)} />
         <ToolButton icon={LayersIcon} label={layersShown ? UI_PRO.hideLayers : UI_PRO.showLayers} active={layersShown} onClick={() => setLayersShown(!layersShown)} />
+        <BringBackMenu onPick={bringBack} />
         <ToolButton icon={ImageIcon} label={UI.insertImage} onClick={() => void insertFromFile()} />
         <ToolButton icon={ImagePlus} label={UI.reference} onClick={() => setPickingRef(true)} />
         {files.buttons}
@@ -1388,4 +1401,38 @@ function BrushPreview({ brush, color }: { brush: Parameters<typeof drawPreview>[
     if (ref.current) drawPreview(ref.current, brush, color)
   }, [brush, color])
   return <canvas ref={ref} width={200} height={40} className="sketch-brush-preview" />
+}
+
+/** v0.24.2: a dropdown that brings the layers back when they got lost (closed, or floated out of sight). */
+function BringBackMenu({ onPick }: { onPick(mode: 'docked' | 'floating'): void }) {
+  const [open, setOpen] = useState(false)
+  const wrap = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (e: PointerEvent) => !wrap.current?.contains(e.target as Node) && setOpen(false)
+    window.addEventListener('pointerdown', away)
+    return () => window.removeEventListener('pointerdown', away)
+  }, [open])
+  const pick = (mode: 'docked' | 'floating') => {
+    setOpen(false)
+    onPick(mode)
+  }
+  return (
+    <div className="adjust-menu-wrap" ref={wrap}>
+      <button className={`icon-btn sketch-tool${open ? ' is-active' : ''}`} title={UI_PRO.bringBack} aria-label={UI_PRO.bringBack} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <LocateFixed size={16} />
+      </button>
+      {open && (
+        <div className="adjust-menu" role="menu">
+          <h5>{UI_PRO.bringBack}</h5>
+          <button role="menuitem" onClick={() => pick('floating')}>
+            <PictureInPicture2 size={14} /> {UI_PRO.bringFloating}
+          </button>
+          <button role="menuitem" onClick={() => pick('docked')}>
+            <PanelRightClose size={14} /> {UI_PRO.bringDocked}
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }

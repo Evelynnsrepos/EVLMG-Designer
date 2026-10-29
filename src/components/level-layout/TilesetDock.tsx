@@ -53,7 +53,8 @@ export function TilesetDock(p: Props) {
     if (!floating || (e.target as HTMLElement).closest('button, input, select')) return
     const z = zoomOf(e.currentTarget)
     const start = { x: e.clientX / z - pos.x, y: e.clientY / z - pos.y }
-    const onMove = (ev: PointerEvent) => setPos({ x: Math.max(0, ev.clientX / z - start.x), y: Math.max(0, ev.clientY / z - start.y) })
+    // Keep the header inside the window so the panel can't get lost.
+    const onMove = (ev: PointerEvent) => setPos({ x: Math.max(0, Math.min(window.innerWidth / z - 120, ev.clientX / z - start.x)), y: Math.max(0, Math.min(window.innerHeight / z - 40, ev.clientY / z - start.y)) })
     const onUp = () => (window.removeEventListener('pointermove', onMove), window.removeEventListener('pointerup', onUp))
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
