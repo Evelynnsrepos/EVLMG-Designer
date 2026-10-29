@@ -45,7 +45,7 @@ When you work together, your teammates receive a full copy of the shared project
 
 ## Downloading the app
 
-The app is downloaded from GitHub Releases (or a package source such as the AUR). GitHub, Inc. processes the usual connection data for that download under its own privacy statement: https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement
+The app is downloaded from GitHub Releases. GitHub, Inc. processes the usual connection data for that download under its own privacy statement: https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement
 
 ## Contacting us
 

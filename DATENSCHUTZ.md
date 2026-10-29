@@ -45,7 +45,7 @@ Wenn ihr zusammenarbeitet, erhalten deine Mitwirkenden eine vollständige Kopie 
 
 ## Download der App
 
-Die App wird über GitHub Releases (oder eine Paketquelle wie das AUR) geladen. Dabei verarbeitet GitHub, Inc. die üblichen Verbindungsdaten nach der eigenen Datenschutzerklärung: https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement
+Die App wird über GitHub Releases geladen. Dabei verarbeitet GitHub, Inc. die üblichen Verbindungsdaten nach der eigenen Datenschutzerklärung: https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement
 
 ## Kontakt mit uns
 
