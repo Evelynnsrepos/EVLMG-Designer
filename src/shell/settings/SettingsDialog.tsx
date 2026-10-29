@@ -12,6 +12,7 @@ import { ShortcutTable } from './ShortcutTable'
 import { HotwheelSection } from '../hotwheel/HotwheelSettings'
 import { GitSettingsSection } from './GitSettingsSection'
 import { PresetsSection } from './PresetsSection'
+import { DrawingSection } from './DrawingSection'
 
 const UI = {
   title: 'Settings',
@@ -239,6 +240,9 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
             </label>
             <p className="muted settings-hint">{UI.sharpHint}</p>
           </section>
+          </div>
+          <div data-tab="general">
+          <DrawingSection />
           </div>
           <div data-tab="general">
           <section data-section="hints">
