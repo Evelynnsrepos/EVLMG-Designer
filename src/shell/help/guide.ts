@@ -164,6 +164,9 @@ export const BASICS: Record<string, GuideTopic> = {
     title: 'Settings and your own presets',
     body: [
       'Settings opens from the gear on the start screen or at the bottom of the sidebar. Its tabs are General, Writing, Keys & Hotwheel, Project presets, Git and Plugins. The search box next to the tabs looks through all of them at once, so you can type "spell" or "pixel" instead of hunting.',
+      '## Drawing speed',
+      'Settings, General, Drawing speed shows which graphics card draws your pictures. If it says it draws without the graphics card, big pictures will be slow. Run drawing test paints the same stroke on three test pictures and times every pen move; Copy results puts the numbers on the clipboard, handy for a bug report. Nothing is saved or sent.',
+      'On Linux you can also pick how the app uses the graphics card: Use the graphics card (the normal choice), Older screen handover (try it if the window stays blank or drawing is very slow on your graphics driver) or No graphics card (slowest, only for broken drivers). Restart the app after changing it.',
       '## Your own project presets',
       'When you make a new project, the last step lists presets like RPG or Worldbuilding. Pick your tools and click Save as preset… to keep them as your own preset. It shows up next to the built-in ones from then on, with a dashed border. The search box on that step finds presets and tools by name.',
       'In Settings, Project presets you can rename a preset, change its tools, add first tasks for the task board (one per line) or delete it. Projects made with a preset stay as they are.',

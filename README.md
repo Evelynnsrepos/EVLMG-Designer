@@ -151,6 +151,8 @@ Grab the file for your system from the
 
 **Flatpak:** `flatpak install Evelopment.Games.Designer_<version>_x86_64.flatpak`.
 On NixOS, turn Flatpak on first with `services.flatpak.enable = true;` in your system configuration.
+Drawing slow or the window blank? Settings, General, Drawing speed shows if the graphics card is used and has a
+drawing test, plus a graphics mode switch for drivers that don't work well.
 
 **Arch Linux:** `makepkg` builds and installs it as a normal package, with a menu entry and
 `pacman -R evelopment-games-designer` to uninstall:
