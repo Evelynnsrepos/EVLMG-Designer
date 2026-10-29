@@ -2,7 +2,7 @@ import { ArrowLeft, ArrowRight, BookOpen, FolderClosed, FolderOpen, Search, Star
 import { useState } from 'react'
 import { newId, type ComponentType, type Id, type SidebarFolder } from '@/core/model'
 import { allManifests, getManifest, type ComponentManifest } from '@/core/registry'
-import { useProjectStore, useSettings } from '@/core/state'
+import { copyDocument, flushDocument, useProjectStore, useSettings } from '@/core/state'
 import { shownTool } from './optionalTools'
 import { confirmDialog, promptDialog } from '@/shared/dialogs'
 import { backToProjects, closePanel, DRAG_MIME, newDocument, openComponent, replaceWithComponent, type DragPayload } from './actions'
@@ -40,7 +40,7 @@ export function Sidebar() {
   const [search, setSearch] = useState('')
   const [dropOn, setDropOn] = useState<string | null>(null)
   const [folderMenu, setFolderMenu] = useState<{ id: Id; x: number; y: number } | null>(null)
-  const [docMenu, setDocMenu] = useState<{ id: Id; title: string; x: number; y: number } | null>(null)
+  const [docMenu, setDocMenu] = useState<{ id: Id; type: ComponentType; title: string; x: number; y: number } | null>(null)
   const [moreOpen, setMoreOpen] = useState(() => {
     try {
       return localStorage.getItem('egd.sidebar.more') !== '0'
@@ -215,9 +215,9 @@ export function Sidebar() {
                         onClick={(e) => (e.shiftKey ? openComponent(m.type, d.id) : void replaceWithComponent(m.type, d.id))}
                         onContextMenu={(e) => {
                           e.preventDefault()
-                          setDocMenu({ id: d.id, title: d.title, x: e.clientX, y: e.clientY })
+                          setDocMenu({ id: d.id, type: m.type, title: d.title, x: e.clientX, y: e.clientY })
                         }}
-                        title={`${d.title} (right-click to rename or delete, Shift-click to open next to the others)`}
+                        title={`${d.title} (right-click to rename, duplicate or delete, Shift-click to open next to the others)`}
                         {...dragProps(m.type, d.id)}
                       >
                         <span>{d.title}</span>
@@ -369,6 +369,18 @@ export function Sidebar() {
                 }}
               >
                 Rename
+              </button>
+              <button
+                onClick={async () => {
+                  const d = docMenu
+                  setDocMenu(null)
+                  await flushDocument(d.type, d.id)
+                  const copy = useProjectStore.getState().addDocument(d.type, `${d.title} (copy)`)
+                  await copyDocument(d.type, d.id, copy.id)
+                  void replaceWithComponent(d.type, copy.id)
+                }}
+              >
+                Duplicate
               </button>
               <button
                 className="danger"

@@ -154,6 +154,17 @@ export function peekDocument<T>(root: string, type: ComponentType, id: Id): T | 
   return useDocs.getState().docs[keyOf(root, type, id)] as T | undefined
 }
 
+/** v0.24.3: give document `toId` a copy of `fromId`'s content (Duplicate in the sidebar). */
+export async function copyDocument(type: ComponentType, fromId: Id, toId: Id) {
+  const root = useProjectStore.getState().root
+  if (!root) return
+  const data = peekDocument(root, type, fromId) ?? (await loadDocument<unknown>(root, type, fromId, () => undefined))
+  if (data === undefined) return // never saved: the copy starts empty like a new document
+  const copy = structuredClone(data)
+  documentBinding(root, type)?.importDocument(collabNames.document(type, toId), copy)
+  setDoc(root, type, toId, copy)
+}
+
 /** Save a document now (ED-8: closing a component saves it). */
 export async function flushDocument(type: ComponentType, id: Id) {
   const root = useProjectStore.getState().root
