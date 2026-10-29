@@ -379,8 +379,13 @@ export function setLayerOnEveryCard(doc: CardDoc, layerId: Id, every: boolean, c
   return out
 }
 
-/** What other cards show in a box with each card's own text: the text if it shows fields (`{Name}`), else nothing. */
-const fieldLinksOnly = (text: string) => (/\{[^{}]+\}/.test(text) ? text : '')
+/** What other cards show in a box with each card's own text: only its field links (`{Name}`), line by line; the rest goes. */
+const fieldLinksOnly = (text: string) =>
+  text
+    .split('\n')
+    .map((line) => (line.match(/\{[^{}]+\}/g) ?? []).join(' '))
+    .filter(Boolean)
+    .join('\n')
 
 /** A new card's items on the layers that are not on every card: a copy of `fromId`'s, so its {Field} boxes come along. */
 export function seedNewCard(doc: CardDoc, cardId: Id, fromId: Id | null | undefined, layers = doc.perCardLayers ?? []): CardDoc {
@@ -414,7 +419,7 @@ export function repairFieldLinks(doc: CardDoc, cardIds: Id[]): CardDoc {
     const nodes = out[side].nodes.map((n) => {
       if (n.kind !== 'card-text' || !n.ownText || n.text) return n
       const typed = cardIds.map((c) => doc.overrides?.[c]?.texts?.[n.id] ?? '').find((t) => fieldLinksOnly(t))
-      return typed ? { ...n, text: typed } : n
+      return typed ? { ...n, text: fieldLinksOnly(typed) } : n
     })
     out = { ...out, [side]: { ...out[side], nodes } }
   }
