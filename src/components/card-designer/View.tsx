@@ -1,6 +1,6 @@
 import { Ban, ChevronLeft, ChevronRight, Circle, CopyPlus, FlipHorizontal, ImageUp, Layers as LayersIcon, Link2, Lock, Magnet, Minus, Plus, Shapes, Sparkles, Square, SquareUser, Type, Unlink2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { assetUrl, dragHasFiles, importAssetsFromDataTransfer, pickAndImportAssets, useAssetUrls, type ImportedAsset } from '@/core/assets'
+import { assetBlobUrl, assetUrl, dragHasFiles, importAssetsFromDataTransfer, pickAndImportAssets, useAssetUrls, type ImportedAsset } from '@/core/assets'
 import { pointIn } from '@/shared/zoom'
 import { newId, type Id } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
@@ -574,7 +574,7 @@ function useThumbs(d: CardDoc | null | undefined, cards: Card[], cardId: Id | nu
     if (!d || d.started === false) return
     let stop = false
     const t = setTimeout(async () => {
-      const resolve = await preloadImages(picturePaths(d, cards), (p) => (root ? assetUrl(root, p) : Promise.resolve(null)))
+      const resolve = await preloadImages(picturePaths(d, cards), (p) => (root ? assetBlobUrl(root, p) : Promise.resolve(null)))
       if (stop) return
       const draw = (c: Card | undefined, scene: Scene<CardNode>) =>
         renderCard(d, scene, cardNodeTypes({ colors: slotColors(d, c?.variantId, c?.id), fields: d.fields, values: c?.values ?? null, print: true, icons: ownIcons(d) }), resolve, THUMB_DPI, false).toDataURL()

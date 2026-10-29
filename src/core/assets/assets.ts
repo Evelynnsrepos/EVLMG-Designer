@@ -200,6 +200,18 @@ export async function assetUrl(root: string, path: AssetPath | null | undefined)
   const abs = await resolveAssetPath(root, path)
   // Missing files (e.g. still arriving from a teammate) show the placeholder until bumpAssets().
   if (fs.kind === 'tauri') return (await fs.exists(abs)) ? convertFileSrc(abs) : null
+  return assetBlobUrl(root, path)
+}
+
+/**
+ * v0.24.3: a blob URL for a canvas that gets read back (exports, thumbnails).
+ * Pictures from Tauri's asset protocol count as another site, so a canvas that
+ * draws them can't be saved ("The operation is insecure").
+ */
+export async function assetBlobUrl(root: string, path: AssetPath | null | undefined): Promise<string | null> {
+  if (!path) return null
+  const fs = getFs()
+  const abs = await resolveAssetPath(root, path)
   const cached = blobUrls.get(abs)
   if (cached) return cached
   if (!(await fs.exists(abs))) return null
