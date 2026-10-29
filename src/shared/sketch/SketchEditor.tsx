@@ -535,6 +535,8 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   const effectiveTool = (): Tool => (spaceDown.current ? 'hand' : altDown.current && (tool === 'brush' || tool === 'eraser') ? 'eyedropper' : tool)
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Moves from before the press belong to the hover, not to the new stroke.
+    flushMove()
     if (!view || !activeLayer) return
     if (shapeOffer) {
       // Any tap on the canvas ends Edit Shape (or drops the offer).
@@ -599,7 +601,28 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
     }
   }
 
+  // WebKitGTK (the Linux app) sends every pen move, many per frame, and each one re-rendered the editor.
+  // Moves are handled once per frame instead (Chromium does that by itself); a stroke still gets every point.
+  const pendingMove = useRef<{ e: React.PointerEvent<HTMLCanvasElement>; events: PointerEvent[]; raf: number } | null>(null)
+  const flushMove = () => {
+    const q = pendingMove.current
+    if (!q) return
+    cancelAnimationFrame(q.raf)
+    pendingMove.current = null
+    moveRef.current(q.e, q.events)
+  }
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Pinch and pan with fingers need every finger's moves in order.
+    if (e.pointerType === 'touch') return moveNow(e)
+    // The coalesced list is read now, while the event is being handled.
+    const got = e.nativeEvent.getCoalescedEvents?.() ?? []
+    const q = (pendingMove.current ??= { e, events: [], raf: requestAnimationFrame(flushMove) })
+    q.e = e
+    q.events.push(...(got.length ? got : [e.nativeEvent]))
+  }
+  useEffect(() => () => cancelAnimationFrame(pendingMove.current?.raf ?? 0), [])
+
+  const moveNow = (e: React.PointerEvent<HTMLCanvasElement>, queued?: PointerEvent[]) => {
     if (!view) return
     const p = toDoc(e)
     setCursor(p)
@@ -618,7 +641,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
         drawShape(g, p)
         return
       }
-      const events = e.nativeEvent.getCoalescedEvents?.() ?? [e.nativeEvent]
+      const events = queued ?? e.nativeEvent.getCoalescedEvents?.() ?? [e.nativeEvent]
       for (const ev of events.length ? events : [e.nativeEvent]) {
         for (const q of g.pipeline.push({ ...toDoc(ev, g.rect), ...penData(ev, input.pressureCurve) }, ev.timeStamp)) {
           engine.strokeTo(q)
@@ -648,6 +671,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   }
 
   const onPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    flushMove()
     if (e.pointerType === 'touch' && touchUp(e)) return
     textTool.up()
     const g = gesture.current
@@ -937,6 +961,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   // ---- Keyboard -------------------------------------------------------------
 
   const drawShapeRef = useRef(drawShape)
+  const moveRef = useRef(moveNow)
   const cursorRef = useRef<{ x: number; y: number } | null>(null)
   const actionsRef = useRef(runAction)
   useHotwheel(() => {
@@ -955,6 +980,7 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
   }, true)
   useEffect(() => {
     drawShapeRef.current = drawShape
+    moveRef.current = moveNow
     cursorRef.current = cursor
     actionsRef.current = runAction
   })
@@ -1067,12 +1093,13 @@ export function SketchEditor({ doc, update, active, title, actions, swatches = S
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={() => {
+              flushMove()
               touch.reset()
               engine.cancelStroke()
               xf.up()
               gesture.current = null
             }}
-            onPointerLeave={() => setCursor(null)}
+            onPointerLeave={() => (flushMove(), setCursor(null))}
             onContextMenu={(e) => e.preventDefault()}
           />
           {view && <SelectionMaskView sel={sel} engine={engine} view={view} />}
