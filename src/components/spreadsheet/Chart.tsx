@@ -123,11 +123,11 @@ export function ChartBox({ chart, data, onChange, onRemove, onRename }: { chart:
       if (liveRef.current) changeRef.current(liveRef.current)
       setLive(null)
     }
-    window.addEventListener('mousemove', move)
-    window.addEventListener('mouseup', up)
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
     return () => {
-      window.removeEventListener('mousemove', move)
-      window.removeEventListener('mouseup', up)
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
     }
   }, [drag])
 

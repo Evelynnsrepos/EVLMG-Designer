@@ -197,23 +197,39 @@
   background: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .ss-colhead .ss-head::after,
-.ss-rowhead .ss-head::after {
+.ss-rowhead .ss-head::after,
+.ss-colhead .ss-head:not(:first-child)::before,
+.ss-rowhead .ss-head:not(:first-child)::before {
   content: "";
   position: absolute;
 }
-.ss-colhead .ss-head::after {
-  right: 0;
+.ss-colhead .ss-head::after,
+.ss-colhead .ss-head:not(:first-child)::before {
   top: 0;
-  width: 5px;
   height: 100%;
   cursor: col-resize;
 }
-.ss-rowhead .ss-head::after {
-  bottom: 0;
+.ss-colhead .ss-head::after {
+  right: 0;
+  width: 6px;
+}
+.ss-colhead .ss-head:not(:first-child)::before {
+  left: 0;
+  width: 4px;
+}
+.ss-rowhead .ss-head::after,
+.ss-rowhead .ss-head:not(:first-child)::before {
   left: 0;
   width: 100%;
-  height: 4px;
   cursor: row-resize;
+}
+.ss-rowhead .ss-head::after {
+  bottom: 0;
+  height: 5px;
+}
+.ss-rowhead .ss-head:not(:first-child)::before {
+  top: 0;
+  height: 3px;
 }
 .ss-gridwrap {
   position: absolute;

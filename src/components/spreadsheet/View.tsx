@@ -39,7 +39,7 @@ import { parseRange } from './range'
 import { saveTextFile, safeFileName } from '@/core/export'
 import { newId } from '@/core/model'
 import './spreadsheet.css'
-import { pointIn } from '@/shared/zoom'
+import { pointIn, zoomOf } from '@/shared/zoom'
 
 const HEAD_W = 46
 const HEAD_H = 24
@@ -344,9 +344,9 @@ export default function View({ documentId, active }: PanelProps) {
 
   useEffect(() => {
     if (!drag) return
-    const move = (e: MouseEvent) => {
+    const move = (e: PointerEvent) => {
       if (drag.kind === 'resize') {
-        const size = Math.max(drag.axis === 'col' ? 24 : 16, drag.size + (drag.axis === 'col' ? e.clientX : e.clientY) - drag.from)
+        const size = Math.max(drag.axis === 'col' ? 24 : 16, drag.size + ((drag.axis === 'col' ? e.clientX : e.clientY) - drag.from) / zoomOf(body.current))
         updateSheetLive(drag.axis, drag.index, size)
         return
       }
@@ -366,11 +366,14 @@ export default function View({ documentId, active }: PanelProps) {
       if (drag.kind === 'resize') commitResize()
       setDrag(null)
     }
-    window.addEventListener('mousemove', move)
-    window.addEventListener('mouseup', up)
+    // Pointer events, not mouse events: a pen on Linux (WebKitGTK) may not send mouse moves while it touches.
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
     return () => {
-      window.removeEventListener('mousemove', move)
-      window.removeEventListener('mouseup', up)
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
     }
   })
 
@@ -716,10 +719,12 @@ export default function View({ documentId, active }: PanelProps) {
                 style={{ left: c < fc ? colX(c) + view.left : colX(c), width: colW(c) }}
                 onMouseDown={(e) => {
                   if (e.button !== 0) return
-                  const edge = e.clientX > (e.currentTarget.getBoundingClientRect().right - 5)
-                  if (edge) {
+                  // The border between two columns resizes the left one, grabbed from either side.
+                  const b = e.currentTarget.getBoundingClientRect()
+                  const edge = e.clientX > b.right - 6 ? c : c > 0 && e.clientX < b.left + 4 ? c - 1 : -1
+                  if (edge >= 0) {
                     e.stopPropagation()
-                    setDrag({ kind: 'resize', axis: 'col', index: c, from: e.clientX, size: colW(c) })
+                    setDrag({ kind: 'resize', axis: 'col', index: edge, from: e.clientX, size: colW(edge) })
                     return
                   }
                   if (editing && canInsertRef()) return insertRef(`${colName(c)}:${colName(c)}`)
@@ -754,9 +759,11 @@ export default function View({ documentId, active }: PanelProps) {
                 style={{ top: r < fr ? rowY(r) + view.top : rowY(r), height: rowH(r), width: HEAD_W }}
                 onMouseDown={(e) => {
                   if (e.button !== 0) return
-                  if (e.clientY > e.currentTarget.getBoundingClientRect().bottom - 4) {
+                  const b = e.currentTarget.getBoundingClientRect()
+                  const edge = e.clientY > b.bottom - 5 ? r : r > 0 && e.clientY < b.top + 3 ? r - 1 : -1
+                  if (edge >= 0) {
                     e.stopPropagation()
-                    setDrag({ kind: 'resize', axis: 'row', index: r, from: e.clientY, size: rowH(r) })
+                    setDrag({ kind: 'resize', axis: 'row', index: edge, from: e.clientY, size: rowH(edge) })
                     return
                   }
                   if (editing && canInsertRef()) return insertRef(`${r + 1}:${r + 1}`)
