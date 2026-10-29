@@ -42,6 +42,9 @@ export interface StrokeOptions {
 
 type LayerStack = Pick<SketchDoc, 'layers' | 'backgroundColor'>
 
+/** What a layer-list or document step remembers (`doc`: other document fields that changed). */
+export type DocMeta = { before: unknown[]; after: unknown[]; doc?: { before: object; after: object } }
+
 export class SketchEngine {
   readonly width: number
   readonly height: number
@@ -346,17 +349,17 @@ export class SketchEngine {
   }
   /** A pixel step was made in the code running right now (so a layer-list change from the same action joins it). */
   private freshPush = false
-  private lastLayerStep: { meta: { before: unknown[]; after: unknown[] }; at: number; tweak: boolean } | null = null
+  private lastLayerStep: { meta: DocMeta; at: number; tweak: boolean } | null = null
 
   /**
-   * Any other change to the layer list (add, rename, reorder, opacity, blend, visibility, lock, text...) as an undo step:
-   * joined to the pixel step the same action just made, and quick repeats of the same kind of change (a slider drag,
-   * typing) stay one step.
+   * Any other change to the layer list (add, rename, reorder, opacity, blend, visibility, lock, text...) or to `doc`
+   * fields (background, guides) as an undo step: joined to the pixel step the same action just made, and quick
+   * repeats of the same kind of change (a slider drag, typing) stay one step.
    */
-  layersChanged<L extends { id: Id }>(before: L[], after: L[]) {
+  layersChanged<L extends { id: Id }>(before: L[], after: L[], doc?: { before: object; after: object }) {
     const last = this.history.last
     if (this.freshPush && last?.tiles.length && !last.meta) {
-      last.meta = { before, after }
+      last.meta = { before, after, doc } satisfies DocMeta
       return
     }
     const now = performance.now()
@@ -364,10 +367,11 @@ export class SketchEngine {
     const sameIds = before.length === after.length && before.every((l, i) => l.id === after[i].id)
     if (prev?.tweak && last?.meta === prev.meta && prev.meta.after === before && sameIds && now - prev.at < 800) {
       prev.meta.after = after
+      if (doc) prev.meta.doc = { before: prev.meta.doc?.before ?? doc.before, after: doc.after }
       prev.at = now
       return
     }
-    const meta = { before, after }
+    const meta: DocMeta = { before, after, doc }
     this.history.pushMeta('', meta)
     this.lastLayerStep = { meta, at: now, tweak: sameIds }
   }

@@ -229,7 +229,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const update = (fn: (d: SketchDoc) => SketchDoc) =>
     save((d) => {
       const next = fn(d)
-      if (next.layers !== d.layers) engine.layersChanged(d.layers, next.layers)
+      const docChanged = next.guide !== d.guide || next.backgroundColor !== d.backgroundColor
+      const doc = docChanged ? { before: { guide: d.guide, backgroundColor: d.backgroundColor }, after: { guide: next.guide, backgroundColor: next.backgroundColor } } : undefined
+      if (next.layers !== d.layers || doc) engine.layersChanged(d.layers, next.layers, doc)
       return next
     })
   const docRef = useRef(doc)
@@ -749,11 +751,11 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const applyMeta = () => {
     const m = engine.lastMeta
     if (!m) return
-    const { before, after } = m.meta as { before: SketchLayer[]; after: SketchLayer[] }
+    const { before, after, doc: fields } = m.meta as { before: SketchLayer[]; after: SketchLayer[]; doc?: { before: Partial<SketchDoc>; after: Partial<SketchDoc> } }
     // Keep where each layer's pixels are saved now; the step only knows the paths from back then.
     const saved = new Map(doc.layers.map((l) => [l.id, l.image]))
     const layers = (m.which === 'before' ? before : after).map((l) => (saved.has(l.id) ? { ...l, image: saved.get(l.id)! } : l))
-    save((d) => ({ ...d, layers }))
+    save((d) => ({ ...d, ...fields?.[m.which], layers }))
     if (activeLayer && !layers.some((l) => l.id === activeLayer.id)) setActiveLayerId(layers.filter((l) => l.kind !== 'group').at(-1)?.id ?? layers[0].id)
   }
   const undo = () => {
