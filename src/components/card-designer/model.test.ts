@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applySlots, cardsFromSheet, createCardDoc, deckJson, expandCopies, fillText, renameFieldInScene, slotColors, type CardNode } from './model'
+import { applySlots, cardsFromSheet, createCardDoc, deckJson, expandCopies, fillText, renameFieldInScene, slotColors, ttsSheets, type CardNode } from './model'
 
 describe('card designer model', () => {
   const doc = createCardDoc()
@@ -49,5 +49,17 @@ describe('card designer model', () => {
     expect(j.format).toBe('evlmg-deck')
     expect(j.cards[0].values.Name).toBe('Fire Bolt')
     expect(j.card).toEqual({ widthMm: 63, heightMm: 88, bleedMm: 3, cornerMm: 3 })
+  })
+
+  it('splits a deck into Tabletop Simulator sheets of at most 10 x 7, at least 2 x 2, last cell free', () => {
+    expect(ttsSheets(0)).toEqual([])
+    expect(ttsSheets(1)).toEqual([{ cols: 2, rows: 2, count: 1 }])
+    expect(ttsSheets(7)).toEqual([{ cols: 7, rows: 2, count: 7 }])
+    expect(ttsSheets(23)).toEqual([{ cols: 10, rows: 3, count: 23 }])
+    expect(ttsSheets(20)).toEqual([{ cols: 10, rows: 3, count: 20 }])
+    expect(ttsSheets(75)).toEqual([
+      { cols: 10, rows: 7, count: 69 },
+      { cols: 6, rows: 2, count: 6 },
+    ])
   })
 })

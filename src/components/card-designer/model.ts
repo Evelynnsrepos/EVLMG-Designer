@@ -587,6 +587,20 @@ export function cardsFromSheet(sheet: SheetLike, fields: Field[], variants: Vari
 /** Every printed card in deck order (copies repeated). */
 export const expandCopies = (cards: Card[]) => cards.flatMap((c) => Array.from({ length: Math.max(0, c.copies) }, () => c))
 
+/**
+ * Tabletop Simulator deck sheets: a grid of up to 10 x 7, at least 2 x 2 (what its Custom Deck import takes),
+ * with the last cell always free: Tabletop Simulator shows that cell as the hidden side, so the back goes there.
+ */
+export function ttsSheets(count: number): { cols: number; rows: number; count: number }[] {
+  const out = []
+  for (let left = count; left > 0; left -= 69) {
+    const n = Math.min(69, left)
+    const cols = Math.max(2, Math.min(10, n))
+    out.push({ cols, rows: Math.max(2, Math.ceil((n + 1) / cols)), count: n })
+  }
+  return out
+}
+
 /** The deck as JSON for game engines and other tools (format "evlmg-deck", version 1). */
 export function deckJson(name: string, doc: CardDoc, cards: Card[], images?: Map<Id, string>) {
   return {

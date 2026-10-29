@@ -8,7 +8,7 @@ import { updateNodes } from '@/shared/canvas'
 import { confirmDialog } from '@/shared/dialogs'
 import { cssFamily, systemFonts } from '@/shared/fontList'
 import { canvasBytes, drawSheets, PAGE_SIZES, sheetLayout, sheetsToPdf } from '@/shared/print'
-import { CARD_SIZES, composeScene, deckJson, expandCopies, resizeDesign, slotColors, type Card, type CardDoc, type CardImageNode, type CardNode, type CardTextNode, type SlotKeys } from './model'
+import { CARD_SIZES, composeScene, deckJson, expandCopies, resizeDesign, slotColors, ttsSheets, type Card, type CardDoc, type CardImageNode, type CardNode, type CardTextNode, type SlotKeys } from './model'
 import { cardNodeTypes } from './nodeTypes'
 import { loadSceneFonts, preloadImages, renderCard } from './render'
 import { allNodes, cardLabel, ownIcons, TEXT, type OnScene, type Update } from './ui'
@@ -275,6 +275,37 @@ export function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: stri
     files['deck.json'] = new TextEncoder().encode(JSON.stringify(deckJson(title, d, cards, images), null, 2))
     await saveBinaryFile({ title: 'Export cards', defaultName: `${name} cards.zip`, bytes: zipSync(files, { level: 0 }), filter: { name: 'Zip', extensions: ['zip'] } })
   })
+  const tts = run('Tabletop Simulator', async () => {
+    const deck = expandCopies(cards)
+    const plan = ttsSheets(deck.length)
+    if (!plan.length) throw new Error('The deck has no cards.')
+    // Keep each sheet within 4096 px, the size Tabletop Simulator loads quickly.
+    const res = Math.min(200, Math.floor((4096 * 25.4) / Math.max(...plan.map((p) => Math.max(p.cols * d.widthMm, p.rows * d.heightMm)))))
+    const r = await renderAll(false, res)
+    const backSides = deck.map((c) => r.backs.get(c.id)!)
+    const uniqueBacks = new Set(cards.map((c) => r.backs.get(c.id)!.toDataURL())).size > 1
+    const files: Record<string, Uint8Array> = {}
+    const sheet = (sides: HTMLCanvasElement[], cols: number, rows: number) => {
+      const out = document.createElement('canvas')
+      out.width = cols * sides[0].width
+      out.height = rows * sides[0].height
+      const g = out.getContext('2d')!
+      sides.forEach((c, i) => g.drawImage(c, (i % cols) * c.width, Math.floor(i / cols) * c.height))
+      // The last cell is what Tabletop Simulator shows for a hidden card.
+      g.drawImage(backSides[0], (cols - 1) * backSides[0].width, (rows - 1) * backSides[0].height)
+      return canvasBytes(out)
+    }
+    let start = 0
+    for (const [i, p] of plan.entries()) {
+      const part = plan.length > 1 ? ` ${i + 1}` : ''
+      const grid = `${p.cols}x${p.rows} - ${p.count} cards`
+      files[`${name} faces${part} - ${grid}.png`] = await sheet(deck.slice(start, start + p.count).map((c) => r.fronts.get(c.id)!), p.cols, p.rows)
+      if (uniqueBacks) files[`${name} backs${part} - ${grid}.png`] = await sheet(backSides.slice(start, start + p.count), p.cols, p.rows)
+      start += p.count
+    }
+    if (!uniqueBacks) files[`${name} back.png`] = await canvasBytes(backSides[0])
+    await saveBinaryFile({ title: 'Export for Tabletop Simulator', defaultName: `${name} Tabletop Simulator.zip`, bytes: zipSync(files, { level: 0 }), filter: { name: 'Zip', extensions: ['zip'] } })
+  })
   const json = run('Deck JSON', () => saveTextFile({ title: 'Export deck', defaultName: `${name}.json`, text: JSON.stringify(deckJson(title, d, cards), null, 2), filter: { name: 'JSON', extensions: ['json'] } }))
 
   const confirmBig = async (job: () => Promise<void>) => {
@@ -330,6 +361,10 @@ export function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: stri
       <button className="btn" disabled={!!busy} onClick={() => void json()}>
         Deck JSON
       </button>
+      <button className="btn" disabled={!!busy} onClick={() => void tts()}>
+        Tabletop Simulator (ZIP)
+      </button>
+      <p className="cd-muted">{TEXT.ttsHint}</p>
       {busy ? <p className="cd-muted" role="status">Exporting {busy}…</p> : null}
       {error ? (
         <p className="cd-error" role="alert">
