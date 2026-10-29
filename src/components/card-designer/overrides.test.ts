@@ -178,6 +178,17 @@ describe('text boxes keep their {Field} links on new cards', () => {
     expect(texts(out, 'new')).toContain('{Name}')
   })
 
+  it('T on for a box on a layer off every card keeps the text this card typed, on new cards too', () => {
+    let per = setLayerOnEveryCard(doc, text.layerId, false, ['a', 'b'])
+    const id = composeScene(per, 'front', 'a').nodes.find((n) => n.kind === 'card-text')!.id
+    per = toggleSameText(per, 'front', 'a', id)
+    const s = composeScene(per, 'front', 'a')
+    per = splitScene(per, 'front', 'a', { ...s, nodes: s.nodes.map((n) => (n.id === id ? ({ ...n, text: 'HP' } as typeof n) : n)) })
+    per = toggleSameText(per, 'front', 'a', id)
+    expect(texts(per, 'a')).toContain('HP')
+    expect(texts(seedNewCard(per, 'c', 'a'), 'c')).toContain('HP')
+  })
+
   it('repairs older decks once: empty per-card layers and emptied own-text boxes', () => {
     const per = setLayerOnEveryCard(doc, text.layerId, false, ['a'])
     const broken: CardDoc = { ...per, fieldLinks: undefined, cards: [...per.cards, { id: 'c', copies: 1, values: {} }] }

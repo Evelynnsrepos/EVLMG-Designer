@@ -265,7 +265,8 @@ export function toggleSameText(doc: CardDoc, side: 'front' | 'back', cardId: Id 
   if (!cardId) return doc
   const key = shown.textKey ?? id
   const next: CardNode = same ? { ...shown, ownText: true } : { ...shown, ownText: undefined, textKey: key }
-  const out: CardDoc = same || doc.sharedTexts?.[key] !== undefined ? doc : { ...doc, sharedTexts: { ...doc.sharedTexts, [key]: shown.text } }
+  // On: this card's text becomes the text every copy shares (like a box on every card).
+  const out: CardDoc = same ? doc : { ...doc, sharedTexts: { ...doc.sharedTexts, [key]: shown.text } }
   return setOverride(out, cardId, (o) => ({ ...o, nodes: { ...o.nodes, [shown.layerId]: (o.nodes?.[shown.layerId] ?? []).map((n) => (n.id === id ? next : n)) } }))
 }
 
