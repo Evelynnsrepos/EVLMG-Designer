@@ -101,6 +101,8 @@ export interface CardDoc {
   snap?: boolean
   /** Text shared by cards' own text boxes, by `textKey`. */
   sharedTexts?: Record<Id, string>
+  /** 0.24.5: cards made before it got the {Field} boxes they had lost (see repairFieldLinks). */
+  fieldLinks?: true
 }
 
 export interface CardOverride {
@@ -168,7 +170,7 @@ export function createCardDoc(): CardDoc {
   const cards: Card[] = [
     { id: newId(), copies: 1, values: { [fields[0].id]: 'Fire Bolt', [fields[1].id]: '2', [fields[2].id]: 'Spell', [fields[3].id]: 'Deal 3 damage to one enemy.' } },
   ]
-  return { widthMm: 63, heightMm: 88, bleedMm: 3, cornerMm: 3, front: s, back, slots, variants: [], fields, cards, started: false }
+  return { widthMm: 63, heightMm: 88, bleedMm: 3, cornerMm: 3, front: s, back, slots, variants: [], fields, cards, started: false, fieldLinks: true }
 }
 
 /** Slot colours for a card: the base colours, its variant's colours on top, then the card's own unlinked colours. */
@@ -249,8 +251,8 @@ export function toggleSameText(doc: CardDoc, side: 'front' | 'back', cardId: Id 
   if (shown?.kind !== 'card-text') return doc
   const same = sameTextEverywhere(doc, side, shown)
   if (onEveryCard(doc, side, id)) {
-    // Off: this card keeps its text, the box goes empty on every other card. On: this card's text goes to all cards.
-    const nodes = doc[side].nodes.map((n) => (n.id === id ? { ...n, ownText: same || undefined, text: same ? '' : shown.text } : n))
+    // Off: this card keeps its text, other cards keep its {Field} links (or go empty). On: this card's text goes to all cards.
+    const nodes = doc[side].nodes.map((n) => (n.id === id ? { ...n, ownText: same || undefined, text: same ? fieldLinksOnly(shown.text) : shown.text } : n))
     const out: CardDoc = { ...doc, [side]: { ...doc[side], nodes } }
     if (same) return cardId ? setOverride(out, cardId, (o) => ({ ...o, texts: { ...o.texts, [id]: shown.text } })) : out
     return Object.keys(doc.overrides ?? {}).reduce(
@@ -336,7 +338,7 @@ export function setOnEveryCard(doc: CardDoc, side: 'front' | 'back', cardId: Id,
   // Keep the stack order the card shows.
   const nodes = composeScene(doc, side, cardId).nodes.flatMap((n) => {
     const m = placed.get(n.id)
-    if (m) return [m.kind === 'card-text' && m.ownText ? { ...m, text: '' } : m]
+    if (m) return [m.kind === 'card-text' && m.ownText ? { ...m, text: fieldLinksOnly(m.text) } : m]
     return tplById.has(n.id) ? [tplById.get(n.id)!] : []
   })
   const out: CardDoc = {
@@ -371,6 +373,48 @@ export function setLayerOnEveryCard(doc: CardDoc, layerId: Id, every: boolean, c
     const shown = composeScene(doc, side, c).nodes.filter((n) => tplItems.some((t) => t.id === n.id))
     const copies = shown.map((n): CardNode => ({ ...n, id: newId(), ...(n.kind === 'card-text' ? { textKey: n.id } : {}) }))
     out = setOverride(out, c, (o) => ({ ...o, nodes: { ...o.nodes, [layerId]: [...(o.nodes?.[layerId] ?? []), ...copies] } }))
+  }
+  return out
+}
+
+/** What other cards show in a box with each card's own text: the text if it shows fields (`{Name}`), else nothing. */
+const fieldLinksOnly = (text: string) => (/\{[^{}]+\}/.test(text) ? text : '')
+
+/** A new card's items on the layers that are not on every card: a copy of `fromId`'s, so its {Field} boxes come along. */
+export function seedNewCard(doc: CardDoc, cardId: Id, fromId: Id | null | undefined, layers = doc.perCardLayers ?? []): CardDoc {
+  const from = fromId ? doc.overrides?.[fromId] : undefined
+  const per = new Set(layers)
+  const nodes = Object.fromEntries(
+    Object.entries(from?.nodes ?? {})
+      .filter(([l]) => per.has(l))
+      .map(([l, ns]) => [l, ns.map((n): CardNode => ({ ...n, id: newId(), ...(n.kind === 'card-text' && n.ownText ? { text: fieldLinksOnly(n.text) } : {}) }))]),
+  )
+  return Object.keys(nodes).length ? setOverride(doc, cardId, (o) => ({ ...o, nodes: { ...o.nodes, ...nodes } })) : doc
+}
+
+/**
+ * Once per deck from before 0.24.5: cards made after a layer went off every card got nothing on it (they get
+ * the first set-up card's items now), and boxes with each card's own text went empty on other cards (they show
+ * the {Field} text a card typed in them again).
+ */
+export function repairFieldLinks(doc: CardDoc, cardIds: Id[]): CardDoc {
+  if (doc.fieldLinks) return doc
+  let out: CardDoc = { ...doc, fieldLinks: true }
+  for (const l of doc.perCardLayers ?? []) {
+    const from = cardIds.find((c) => doc.overrides?.[c]?.nodes?.[l]?.length)
+    if (!from) continue
+    for (const c of cardIds) {
+      const o = doc.overrides?.[c]
+      if (!o?.nodes?.[l]?.length && !o?.hidden?.includes(l)) out = seedNewCard(out, c, from, [l])
+    }
+  }
+  for (const side of ['front', 'back'] as const) {
+    const nodes = out[side].nodes.map((n) => {
+      if (n.kind !== 'card-text' || !n.ownText || n.text) return n
+      const typed = cardIds.map((c) => doc.overrides?.[c]?.texts?.[n.id] ?? '').find((t) => fieldLinksOnly(t))
+      return typed ? { ...n, text: typed } : n
+    })
+    out = { ...out, [side]: { ...out[side], nodes } }
   }
   return out
 }

@@ -1,6 +1,6 @@
 import { newId, type Id } from '@/core/model'
 import type { Scene } from '@/shared/canvas'
-import type { Card, CardDoc, CardNode } from './model'
+import { seedNewCard, type Card, type CardDoc, type CardNode } from './model'
 
 /** Texts shared by the Card Designer's panels. */
 export const TEXT = {
@@ -31,11 +31,12 @@ export function cardLabel(d: CardDoc, c: Card): string {
   return (first && c.values[first.id]) || 'Card'
 }
 
-/** Adds an empty card named "Card N" and returns its id. */
-export function addCard(d: CardDoc, update: Update): Id {
+/** Adds an empty card named "Card N", laid out like card `fromId` (the open one), and returns its id. */
+export function addCard(d: CardDoc, update: Update, fromId?: Id | null): Id {
   const id = newId()
   const name = d.fields.find((f) => f.kind === 'text')
-  update((x) => ({ ...x, cards: [...x.cards, { id, copies: 1, values: name ? { [name.id]: `Card ${x.cards.length + 1}` } : {} }] }))
+  const from = fromId ?? d.cards[0]?.id
+  update((x) => seedNewCard({ ...x, cards: [...x.cards, { id, copies: 1, values: name ? { [name.id]: `Card ${x.cards.length + 1}` } : {} }] }, id, from))
   return id
 }
 

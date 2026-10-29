@@ -31,6 +31,7 @@ import {
   composeScene,
   legacyPerCardLayers,
   onEveryCard,
+  repairFieldLinks,
   setLayerOnEveryCard,
   setOnEveryCard,
   snapToGuides,
@@ -128,6 +129,11 @@ export default function View({ documentId, active }: PanelProps) {
   useEffect(() => {
     if (legacy.length) doc.update((x) => legacy.reduce((y, l) => setLayerOnEveryCard(y, l, false, cards.map((c) => c.id)), x), { undoable: false })
   }, [legacy.join()]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Decks from before 0.24.5: give cards back the {Field} boxes they lost (see repairFieldLinks).
+  const repair = !!d && !d.fieldLinks && !legacy.length && cards.length > 0
+  useEffect(() => {
+    if (repair) doc.update((x) => repairFieldLinks(x, cards.map((c) => c.id)), { undoable: false })
+  }, [repair]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const flipSide = () => (setSide((s) => (s === 'front' ? 'back' : 'front')), canvas.setSelection([]), canvas.setActiveLayerId(null))
   useHotwheel(() => {
@@ -136,7 +142,7 @@ export default function View({ documentId, active }: PanelProps) {
     return [
       { id: 'cards-step', label: 'Card', halves: [{ label: 'Previous', run: () => step(-1) }, { label: 'Next', run: () => step(1) }] },
       { id: 'cards-side', label: side === 'front' ? 'Show back' : 'Show front', icon: FlipHorizontal, run: flipSide },
-      { id: 'cards-add', label: 'New card', icon: CopyPlus, run: () => !d.sheet && setPreviewId(addCard(d, doc.update)) },
+      { id: 'cards-add', label: 'New card', icon: CopyPlus, run: () => !d.sheet && setPreviewId(addCard(d, doc.update, cardId)) },
       { id: 'cards-text', label: 'Text', icon: Type, run: () => apiRef.current?.setTool('card-text') },
       { id: 'cards-shapes', label: 'Rectangle', icon: Square, run: () => apiRef.current?.setTool('rect') },
       { id: 'cards-foil', label: 'Foil', icon: Sparkles, on: !!selectedFoil(), run: () => toggleSelectedFoil() },
@@ -346,7 +352,7 @@ export default function View({ documentId, active }: PanelProps) {
             <button className="btn btn-ghost" title="Next card (Page Down)" aria-label="Next card" disabled={cards.length < 2} onClick={() => step(1)}>
               <ChevronRight size={16} />
             </button>
-            <button className="btn" disabled={!!d.sheet} title={d.sheet ? 'Cards come from the linked Spreadsheet: add a row there' : 'Add a card and open it'} onClick={() => setPreviewId(addCard(d, update))}>
+            <button className="btn" disabled={!!d.sheet} title={d.sheet ? 'Cards come from the linked Spreadsheet: add a row there' : 'Add a card and open it'} onClick={() => setPreviewId(addCard(d, update, cardId))}>
               <Plus size={14} /> Card
             </button>
           </span>

@@ -163,7 +163,7 @@ export function CardList({ d, cards, currentId, onPick, update, previews }: { d:
       <div className="cd-row">
         <Search size={14} aria-hidden />
         <input className="input" value={q} placeholder="Search cards" aria-label="Search cards" onChange={(e) => setQ(e.target.value)} />
-        <button className="btn" disabled={linked} title={linked ? 'Cards come from the linked Spreadsheet: add a row there' : 'Add a card and open it'} onClick={() => onPick(addCard(d, update))}>
+        <button className="btn" disabled={linked} title={linked ? 'Cards come from the linked Spreadsheet: add a row there' : 'Add a card and open it'} onClick={() => onPick(addCard(d, update, currentId))}>
           + Card
         </button>
       </div>

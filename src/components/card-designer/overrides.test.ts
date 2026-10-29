@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { composeScene, createCardDoc, legacyPerCardLayers, onEveryCard, sameTextEverywhere, toggleSameText, resizeDesign, setLayerOnEveryCard, setOnEveryCard, setOverride, slotColors, splitScene, renameFieldEverywhere, snapToGuides, fitTo, cardArea, withTokenFields, type CardDoc } from './model'
+import { composeScene, createCardDoc, legacyPerCardLayers, onEveryCard, sameTextEverywhere, toggleSameText, resizeDesign, setLayerOnEveryCard, setOnEveryCard, setOverride, slotColors, splitScene, renameFieldEverywhere, snapToGuides, fitTo, cardArea, withTokenFields, seedNewCard, repairFieldLinks, type CardDoc } from './model'
 
 describe('what is on every card', () => {
   const base = createCardDoc()
@@ -66,12 +66,12 @@ describe('what is on every card', () => {
     expect(composeScene(own, 'front', 'b').nodes.find((n) => (n as { textKey?: string }).textKey === text.id)).toMatchObject({ text: 'Both' })
   })
 
-  it('puts a box on every card with its text, or empty when it keeps its own text', () => {
+  it('puts a box on every card with its text, or only its {Field} links when it keeps its own text', () => {
     const own = setOnEveryCard(doc, 'front', 'a', [text.id], false)
     const withText = setOnEveryCard(own, 'front', 'a', [text.id], true)
     expect(find(withText, 'b', text.id)).toMatchObject({ text: (text as { text: string }).text })
     const empty = setOnEveryCard(toggleSameText(own, 'front', 'a', text.id), 'front', 'a', [text.id], true)
-    expect(find(empty, 'b', text.id)).toMatchObject({ text: '' })
+    expect(find(empty, 'b', text.id)).toMatchObject({ text: (text as { text: string }).text })
     expect(find(empty, 'a', text.id)).toMatchObject({ text: (text as { text: string }).text })
   })
 
@@ -124,11 +124,13 @@ describe('what is on every card', () => {
     expect(setOnEveryCard(moved, 'front', 'a', [frame.id], true).front.nodes.map((n) => n.id)).toEqual(doc.front.nodes.map((n) => n.id))
   })
 
-  it('T off empties a box on the other cards, T on gives every card this card’s text', () => {
+  it('T off keeps {Field} text on the other cards (plain text goes empty), T on gives every card this card’s text', () => {
     const t0 = (text as { text: string }).text
     const off = toggleSameText(doc, 'front', 'a', text.id)
     expect(find(off, 'a', text.id)).toMatchObject({ text: t0 })
-    expect(find(off, 'b', text.id)).toMatchObject({ text: '' })
+    expect(find(off, 'b', text.id)).toMatchObject({ text: t0 })
+    const plain = toggleSameText(edit(doc, 'a', text.id, { text: 'Plain' }), 'front', 'a', text.id)
+    expect(find(plain, 'b', text.id)).toMatchObject({ text: '' })
     const typed = edit(off, 'b', text.id, { text: 'B' })
     const on = toggleSameText(typed, 'front', 'b', text.id)
     expect(find(on, 'a', text.id)).toMatchObject({ text: 'B' })
@@ -151,5 +153,36 @@ describe('what is on every card', () => {
     const out = renameFieldEverywhere(own, name.id, 'Title')
     expect(out.fields[0].name).toBe('Title')
     expect(find(out, 'a', text.id)).toMatchObject({ text: '{Title} rules' })
+  })
+})
+
+describe('text boxes keep their {Field} links on new cards', () => {
+  const base = createCardDoc()
+  const text = base.front.nodes.find((n) => n.kind === 'card-text')!
+  const doc: CardDoc = { ...base, cards: [{ id: 'a', copies: 1, values: {} }, { id: 'b', copies: 1, values: {} }] }
+  const texts = (d: CardDoc, c: string) => composeScene(d, 'front', c).nodes.flatMap((n) => (n.kind === 'card-text' ? [n.text] : []))
+
+  it('copies the open card\'s boxes on a layer off every card to a new card', () => {
+    const per = setLayerOnEveryCard(doc, text.layerId, false, ['a', 'b'])
+    const out = seedNewCard({ ...per, cards: [...per.cards, { id: 'c', copies: 1, values: {} }] }, 'c', 'a')
+    expect(texts(out, 'c')).toEqual(texts(out, 'a'))
+    expect(texts(out, 'c')).toContain('{Name}')
+  })
+
+  it('keeps {Field} text on other cards when a box gets each card its own text', () => {
+    const out = toggleSameText(doc, 'front', 'a', text.id)
+    expect(texts(out, 'b')).toContain('{Name}')
+    expect(texts(out, 'new')).toContain('{Name}')
+  })
+
+  it('repairs older decks once: empty per-card layers and emptied own-text boxes', () => {
+    const per = setLayerOnEveryCard(doc, text.layerId, false, ['a'])
+    const broken: CardDoc = { ...per, fieldLinks: undefined, cards: [...per.cards, { id: 'c', copies: 1, values: {} }] }
+    expect(texts(broken, 'c')).toEqual([])
+    const fixed = repairFieldLinks(broken, ['a', 'b', 'c'])
+    expect(texts(fixed, 'c')).toEqual(texts(fixed, 'a'))
+    expect(repairFieldLinks(fixed, ['a', 'b', 'c'])).toBe(fixed)
+    const own = { ...doc, fieldLinks: undefined, front: { ...doc.front, nodes: doc.front.nodes.map((n) => (n.id === text.id ? { ...n, ownText: true, text: '' } : n)) }, overrides: { a: { texts: { [text.id]: '{Name}' } } } }
+    expect(texts(repairFieldLinks(own as CardDoc, ['a', 'b']), 'b')).toContain('{Name}')
   })
 })
