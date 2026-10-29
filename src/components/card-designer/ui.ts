@@ -14,7 +14,7 @@ export const TEXT = {
   noSelection: 'Select something on the card to style it. Only the active layer can be selected; Alt+click picks an item on another layer.',
   sheetHint: 'Row 1 holds the field names. Columns named Copies and Variant set those.',
   exportHint: 'Print at "actual size" (100 %), not "fit to page". For double-sided printing, flip on the long edge.',
-  ttsHint: 'Card sheets for Objects > Components > Custom Deck. Each file name says the grid (width x height) and number of cards to type in. Tick "Back is hidden"; tick "Unique backs" when the ZIP has backs sheets.',
+  ttsHint: 'Ready deck: save it in Tabletop Simulator\'s Saved Objects folder (the dialog starts there) and it shows up under Objects > Saved Objects. It works on this computer only; for online games use the ZIP and upload the sheets. ZIP: sheets for Objects > Components > Custom Deck, each file name says the grid and number of cards.',
 }
 
 export type Side = 'front' | 'back'

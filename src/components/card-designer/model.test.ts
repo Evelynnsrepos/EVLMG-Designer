@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applySlots, cardsFromSheet, createCardDoc, deckJson, expandCopies, fillText, renameFieldInScene, slotColors, ttsSheets, type CardNode } from './model'
+import { applySlots, cardsFromSheet, createCardDoc, deckJson, expandCopies, fillText, renameFieldInScene, slotColors, ttsFileUrl, ttsSavedObject, ttsSheets, type CardNode } from './model'
 
 describe('card designer model', () => {
   const doc = createCardDoc()
@@ -49,6 +49,24 @@ describe('card designer model', () => {
     expect(j.format).toBe('evlmg-deck')
     expect(j.cards[0].values.Name).toBe('Fire Bolt')
     expect(j.card).toEqual({ widthMm: 63, heightMm: 88, bleedMm: 3, cornerMm: 3 })
+  })
+
+  it('writes local paths as Tabletop Simulator file URLs', () => {
+    expect(ttsFileUrl('C:\\Users\\Eve\\My Games\\a.png')).toBe('file:///C:/Users/Eve/My Games/a.png')
+    expect(ttsFileUrl('/home/eve/a.png')).toBe('file:///home/eve/a.png')
+  })
+
+  it('builds a Tabletop Simulator deck over several sheets, one card alone as a card', () => {
+    const sheet = (face: string, names: string[]) => ({ face, back: 'b', cols: 10, rows: 7, cards: names.map((name) => ({ name, description: '' })) })
+    const o = ttsSavedObject('Deck', [sheet('f1', ['A', 'B']), sheet('f2', ['C'])], false, false).ObjectStates[0] as Record<string, any>
+    expect(o.Name).toBe('Deck')
+    expect(o.DeckIDs).toEqual([100, 101, 200])
+    expect(Object.keys(o.CustomDeck)).toEqual(['1', '2'])
+    expect(o.CustomDeck['2']).toMatchObject({ FaceURL: 'f2', BackURL: 'b', NumWidth: 10, NumHeight: 7, BackIsHidden: true, Type: 0 })
+    expect(o.ContainedObjects.map((c: any) => [c.Nickname, c.CardID, Object.keys(c.CustomDeck)[0]])).toEqual([['A', 100, '1'], ['B', 101, '1'], ['C', 200, '2']])
+    expect(new Set([o.GUID, ...o.ContainedObjects.map((c: any) => c.GUID)]).size).toBe(4)
+    const one = ttsSavedObject('Deck', [sheet('f1', ['A'])], false, false).ObjectStates[0] as Record<string, any>
+    expect([one.Name, one.CardID, one.Nickname]).toEqual(['Card', 100, 'A'])
   })
 
   it('splits a deck into Tabletop Simulator sheets of at most 10 x 7, at least 2 x 2, last cell free', () => {

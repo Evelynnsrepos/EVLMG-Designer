@@ -659,6 +659,45 @@ export function ttsSheets(count: number): { cols: number; rows: number; count: n
   return out
 }
 
+/** A local file as the URL Tabletop Simulator stores for it: file:/// and forward slashes on every system. */
+export const ttsFileUrl = (path: string) => `file:///${path.replace(/\\/g, '/').replace(/^\/+/, '')}`
+
+export interface TtsSheet {
+  face: string
+  back: string
+  cols: number
+  rows: number
+  cards: { name: string; description: string }[]
+}
+
+/**
+ * A Tabletop Simulator saved object (the JSON in Saves/Saved Objects): one deck made of the sheets,
+ * the way its own Custom Deck import saves one. A single card is saved as a card, not a deck.
+ */
+export function ttsSavedObject(name: string, sheets: TtsSheet[], uniqueBack: boolean, sideways: boolean) {
+  const transform = { posX: 0, posY: 1, posZ: 0, rotX: 0, rotY: 180, rotZ: 180, scaleX: 1, scaleY: 1, scaleZ: 1 }
+  const decks = sheets.map((s) => ({ FaceURL: s.face, BackURL: s.back, NumWidth: s.cols, NumHeight: s.rows, BackIsHidden: true, UniqueBack: uniqueBack, Type: 0 }))
+  // Tabletop Simulator replaces GUIDs that clash when it spawns the object.
+  let n = 0
+  const guid = () => (0xe00000 + n++).toString(16)
+  const cards = sheets.flatMap((s, i) =>
+    s.cards.map((c, j) => ({
+      GUID: guid(), Name: 'Card', Transform: transform, Nickname: c.name, Description: c.description,
+      CardID: (i + 1) * 100 + j, CustomDeck: { [i + 1]: decks[i] }, SidewaysCard: sideways, HideWhenFaceDown: true,
+      Locked: false, Grid: true, Snap: true, Autoraise: true, Sticky: true, Tooltip: true,
+    })),
+  )
+  const object = cards.length === 1 ? cards[0] : {
+    GUID: guid(), Name: 'Deck', Transform: transform, Nickname: name, Description: '', SidewaysCard: sideways, HideWhenFaceDown: true,
+    Locked: false, Grid: true, Snap: true, Autoraise: true, Sticky: true, Tooltip: true,
+    DeckIDs: cards.map((c) => c.CardID), CustomDeck: Object.fromEntries(decks.map((d, i) => [String(i + 1), d])), ContainedObjects: cards,
+  }
+  return {
+    SaveName: '', Date: '', VersionNumber: '', GameMode: '', GameType: '', GameComplexity: '', Tags: [], Gravity: 0.5, PlayArea: 0.5,
+    Table: '', Sky: '', Note: '', TabStates: {}, LuaScript: '', LuaScriptState: '', XmlUI: '', ObjectStates: [object],
+  }
+}
+
 /** The deck as JSON for game engines and other tools (format "evlmg-deck", version 1). */
 export function deckJson(name: string, doc: CardDoc, cards: Card[], images?: Map<Id, string>) {
   return {

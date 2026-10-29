@@ -3,13 +3,14 @@ import { zipSync } from 'fflate'
 import { useState } from 'react'
 import { assetBlobUrl } from '@/core/assets'
 import { saveBinaryFile, saveTextFile, safeFileName } from '@/core/export'
+import { getFs, isTauri } from '@/core/fs'
 import { toCSV } from '@/shared/csv'
 import type { Id } from '@/core/model'
 import { updateNodes } from '@/shared/canvas'
 import { confirmDialog } from '@/shared/dialogs'
 import { cssFamily, systemFonts } from '@/shared/fontList'
 import { canvasBytes, drawSheets, PAGE_SIZES, sheetLayout, sheetsToPdf } from '@/shared/print'
-import { CARD_SIZES, composeScene, deckJson, expandCopies, resizeDesign, slotColors, ttsSheets, type Card, type CardDoc, type CardImageNode, type CardNode, type CardTextNode, type SlotKeys } from './model'
+import { CARD_SIZES, composeScene, deckJson, expandCopies, resizeDesign, slotColors, ttsFileUrl, ttsSavedObject, ttsSheets, type Card, type CardDoc, type CardImageNode, type CardNode, type CardTextNode, type SlotKeys } from './model'
 import { deckRows } from './sheetImport'
 import { cardNodeTypes } from './nodeTypes'
 import { loadSceneFonts, preloadImages, renderCard } from './render'
@@ -277,7 +278,8 @@ export function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: stri
     files['deck.json'] = new TextEncoder().encode(JSON.stringify(deckJson(title, d, cards, images), null, 2))
     await saveBinaryFile({ title: 'Export cards', defaultName: `${name} cards.zip`, bytes: zipSync(files, { level: 0 }), filter: { name: 'Zip', extensions: ['zip'] } })
   })
-  const tts = run('Tabletop Simulator', async () => {
+  /** Tabletop Simulator sheet pictures by file name, and what each sheet holds. */
+  const ttsFiles = async (base: string) => {
     const deck = expandCopies(cards)
     const plan = ttsSheets(deck.length)
     if (!plan.length) throw new Error('The deck has no cards.')
@@ -287,6 +289,7 @@ export function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: stri
     const backSides = deck.map((c) => r.backs.get(c.id)!)
     const uniqueBacks = new Set(cards.map((c) => r.backs.get(c.id)!.toDataURL())).size > 1
     const files: Record<string, Uint8Array> = {}
+    const sheets: { face: string; back: string; cols: number; rows: number; cards: Card[] }[] = []
     const sheet = (sides: HTMLCanvasElement[], cols: number, rows: number) => {
       const out = document.createElement('canvas')
       out.width = cols * sides[0].width
@@ -301,12 +304,34 @@ export function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: stri
     for (const [i, p] of plan.entries()) {
       const part = plan.length > 1 ? ` ${i + 1}` : ''
       const grid = `${p.cols}x${p.rows} - ${p.count} cards`
-      files[`${name} faces${part} - ${grid}.png`] = await sheet(deck.slice(start, start + p.count).map((c) => r.fronts.get(c.id)!), p.cols, p.rows)
-      if (uniqueBacks) files[`${name} backs${part} - ${grid}.png`] = await sheet(backSides.slice(start, start + p.count), p.cols, p.rows)
+      const face = `${base} faces${part} - ${grid}.png`
+      const back = uniqueBacks ? `${base} backs${part} - ${grid}.png` : `${base} back.png`
+      files[face] = await sheet(deck.slice(start, start + p.count).map((c) => r.fronts.get(c.id)!), p.cols, p.rows)
+      if (uniqueBacks) files[back] = await sheet(backSides.slice(start, start + p.count), p.cols, p.rows)
+      sheets.push({ face, back, cols: p.cols, rows: p.rows, cards: deck.slice(start, start + p.count) })
       start += p.count
     }
-    if (!uniqueBacks) files[`${name} back.png`] = await canvasBytes(backSides[0])
+    if (!uniqueBacks) files[`${base} back.png`] = await canvasBytes(backSides[0])
+    return { files, sheets, uniqueBacks, thumbnail: await canvasBytes(r.fronts.get(deck[0].id)!) }
+  }
+  const tts = run('Tabletop Simulator', async () => {
+    const { files } = await ttsFiles(name)
     await saveBinaryFile({ title: 'Export for Tabletop Simulator', defaultName: `${name} Tabletop Simulator.zip`, bytes: zipSync(files, { level: 0 }), filter: { name: 'Zip', extensions: ['zip'] } })
+  })
+  const ttsDeck = run('Tabletop Simulator deck', async () => {
+    const fs = getFs()
+    const [{ save }, path] = await Promise.all([import('@tauri-apps/plugin-dialog'), import('@tauri-apps/api/path')])
+    const file = await save({ title: 'Save deck for Tabletop Simulator', defaultPath: await fs.join(await ttsSavedObjectsDir(), `${name}.json`), filters: [{ name: 'Tabletop Simulator deck', extensions: ['json'] }] })
+    if (!file) return
+    const dir = await path.dirname(file)
+    const base = (await path.basename(file)).replace(/\.json$/i, '')
+    const t = await ttsFiles(base)
+    // The pictures go beside the JSON, which points at them by their full path: they only load on this computer.
+    for (const [f, bytes] of Object.entries(t.files)) await fs.writeBinaryAtomic(await fs.join(dir, f), bytes)
+    await fs.writeBinaryAtomic(await fs.join(dir, `${base}.png`), t.thumbnail)
+    const url = async (f: string) => ttsFileUrl(await fs.join(dir, f))
+    const sheets = await Promise.all(t.sheets.map(async (s) => ({ ...s, face: await url(s.face), back: await url(s.back), cards: s.cards.map((c) => ({ name: cardLabel(d, c), description: ttsDescription(d, c) })) })))
+    await fs.writeTextAtomic(await fs.join(dir, `${base}.json`), JSON.stringify(ttsSavedObject(title, sheets, t.uniqueBacks, d.widthMm > d.heightMm), null, 2))
   })
   const csv = run('Deck spreadsheet', () => saveTextFile({ title: 'Export deck as spreadsheet', defaultName: `${name}.csv`, text: toCSV(deckRows(d, cards)), filter: { name: 'CSV', extensions: ['csv'] } }))
   const json = run('Deck JSON', () => saveTextFile({ title: 'Export deck', defaultName: `${name}.json`, text: JSON.stringify(deckJson(title, d, cards), null, 2), filter: { name: 'JSON', extensions: ['json'] } }))
@@ -367,6 +392,11 @@ export function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: stri
       <button className="btn" disabled={!!busy} title="One row per card: open it in a spreadsheet program, change it, and fill the cards from it again" onClick={() => void csv()}>
         Deck spreadsheet (CSV)
       </button>
+      {isTauri() ? (
+        <button className="btn" disabled={!!busy} onClick={() => void ttsDeck()}>
+          Tabletop Simulator (ready deck)
+        </button>
+      ) : null}
       <button className="btn" disabled={!!busy} onClick={() => void tts()}>
         Tabletop Simulator (ZIP)
       </button>
@@ -381,3 +411,27 @@ export function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: stri
   )
 }
 
+
+/** Where Tabletop Simulator keeps saved objects (Windows, Linux, Mac), so the save dialog starts there; else Downloads. */
+async function ttsSavedObjectsDir() {
+  const fs = getFs()
+  const { homeDir, downloadDir } = await import('@tauri-apps/api/path')
+  const home = await homeDir()
+  for (const dir of [
+    await fs.join(await fs.documentDir(), 'My Games', 'Tabletop Simulator', 'Saves', 'Saved Objects'),
+    await fs.join(home, '.local', 'share', 'Tabletop Simulator', 'Saves', 'Saved Objects'),
+    await fs.join(home, 'Library', 'Tabletop Simulator', 'Saves', 'Saved Objects'),
+  ]) {
+    if (await fs.exists(dir).catch(() => false)) return dir
+  }
+  return downloadDir()
+}
+
+/** The card's other fields as "Field: value" lines, for the description Tabletop Simulator shows on hover. */
+function ttsDescription(d: CardDoc, c: Card) {
+  const name = d.fields.find((f) => f.kind === 'text')
+  return d.fields
+    .filter((f) => f !== name && f.kind !== 'image' && c.values[f.id])
+    .map((f) => `${f.name}: ${c.values[f.id]}`)
+    .join('\n')
+}
