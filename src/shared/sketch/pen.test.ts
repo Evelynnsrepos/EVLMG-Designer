@@ -159,4 +159,14 @@ describe('pen read from GTK (Linux)', () => {
     expect(penData({ pointerType: 'mouse', pressure: 0.5, button: 0, buttons: 1 }).tiltX).toBeUndefined()
     delete g.__nativePen
   })
+
+  it('keeps the last pressure when the pen reports 0 while lifting', () => {
+    const g = globalThis as { __nativePen?: unknown }
+    resetPressureDetection()
+    g.__nativePen = { pressure: 0.6, tiltX: 0, tiltY: 0, t: performance.now() }
+    expect(penData({ pointerType: 'mouse', pressure: 0.5, button: 0, buttons: 1 }).pressure).toBeCloseTo(0.6)
+    g.__nativePen = { pressure: 0, tiltX: 0, tiltY: 0, t: performance.now() }
+    expect(penData({ pointerType: 'mouse', pressure: 0.5, button: 0, buttons: 1 }).pressure).toBeCloseTo(0.6)
+    delete g.__nativePen
+  })
 })

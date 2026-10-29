@@ -126,8 +126,14 @@ export function tiltToAngles(tiltX: number, tiltY: number): { altitude: number; 
 export function withNativePen(e: PenEventLike): PenEventLike {
   const n = (globalThis as { __nativePen?: { pressure: number; tiltX: number; tiltY: number; t: number } }).__nativePen
   if (!n || e.pointerType === 'touch' || performance.now() - n.t > 100) return e
-  return { pointerType: 'pen', pressure: n.pressure, tiltX: n.tiltX, tiltY: n.tiltY, button: e.button, buttons: e.buttons }
+  // As the pen lifts, GTK reports pressure 0 while the page still sees the tip down: keep the last real pressure,
+  // or every stroke ends in a sudden hair-thin tail.
+  if (e.buttons && n.pressure > 0) lastDownPressure = n.pressure
+  const pressure = e.buttons && n.pressure === 0 ? lastDownPressure : n.pressure
+  if (!e.buttons) lastDownPressure = 0
+  return { pointerType: 'pen', pressure, tiltX: n.tiltX, tiltY: n.tiltY, button: e.button, buttons: e.buttons }
 }
+let lastDownPressure = 0
 
 /** Pressure, tilt and twist of an event (tilt only for pens). */
 export function penData(event: PenEventLike, curve: readonly CurvePoint[] = LINEAR): Omit<PenPoint, 'x' | 'y'> {
