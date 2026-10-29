@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { composeScene, createCardDoc, legacyPerCardLayers, onEveryCard, sameTextEverywhere, toggleSameText, resizeDesign, setLayerOnEveryCard, setOnEveryCard, setOverride, slotColors, splitScene, withTokenFields, type CardDoc } from './model'
+import { composeScene, createCardDoc, legacyPerCardLayers, onEveryCard, sameTextEverywhere, toggleSameText, resizeDesign, setLayerOnEveryCard, setOnEveryCard, setOverride, slotColors, splitScene, snapToGuides, fitTo, cardArea, withTokenFields, type CardDoc } from './model'
 
 describe('what is on every card', () => {
   const base = createCardDoc()
@@ -133,5 +133,14 @@ describe('what is on every card', () => {
     const on = toggleSameText(typed, 'front', 'b', text.id)
     expect(find(on, 'a', text.id)).toMatchObject({ text: 'B' })
     expect(on.overrides?.a?.texts?.[text.id]).toBeUndefined()
+  })
+
+  it('snaps a moved item to the cut line and fits one to the bleed', () => {
+    const s = composeScene(doc, 'front', 'a')
+    const moved = { ...s, nodes: s.nodes.map((n) => (n.id === art.id ? { ...n, x: 7, y: art.y } : n)) }
+    expect(snapToGuides(doc, s, moved).nodes.find((n) => n.id === art.id)!.x).toBe(0)
+    const far = { ...s, nodes: s.nodes.map((n) => (n.id === art.id ? { ...n, x: 200 } : n)) }
+    expect(snapToGuides(doc, s, far)).toBe(far)
+    expect(fitTo(doc, art, 'bleed')).toMatchObject(cardArea(doc, 'bleed'))
   })
 })

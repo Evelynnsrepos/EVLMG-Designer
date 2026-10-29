@@ -100,6 +100,7 @@ export interface LayersPanelProps {
   itemActions?(node: MoodNode): ReactNode
   /** Shown under a layer's items (the Card Designer's + to add something to that layer). */
   layerFooter?(layer: Layer): ReactNode
+  onItemContextMenu?(node: MoodNode, e: React.MouseEvent): void
 }
 
 type DragData = { kind: 'node'; id: Id } | { kind: 'layer'; id: Id }
@@ -254,6 +255,7 @@ export function LayersPanel(p: LayersPanelProps) {
                     tabIndex={0}
                     onClick={(e) => p.onSelect([n.id], e.shiftKey || e.ctrlKey || e.metaKey ? 'toggle' : 'replace')}
                     onDoubleClick={() => renameItem(n)}
+                    onContextMenu={p.onItemContextMenu && ((e) => p.onItemContextMenu!(n, e))}
                     onKeyDown={(e) => {
                       if (e.target !== e.currentTarget) return
                       if (e.key === 'Enter' || e.key === ' ') p.onSelect([n.id], e.shiftKey ? 'toggle' : 'replace')

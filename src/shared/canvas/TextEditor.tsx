@@ -51,6 +51,7 @@ export function TextEditor({ node, type, theme, viewport, getBounds, onDone }: P
   const sx = node.scaleX ?? 1
   const sy = node.scaleY ?? 1
   const fontSize = spec.fontSize(node)
+  const font = spec.font?.(node)
 
   return (
     <textarea
@@ -77,6 +78,10 @@ export function TextEditor({ node, type, theme, viewport, getBounds, onDone }: P
         fontSize,
         lineHeight: TEXT_LINE_HEIGHT,
         color: spec.color?.(node, theme) ?? theme.text,
+        fontFamily: font?.family,
+        fontWeight: font?.bold ? 'bold' : undefined,
+        fontStyle: font?.italic ? 'italic' : undefined,
+        textAlign: font?.align,
         // Same order as Konva: rotate, then scale, then the local offset.
         transform: `rotate(${node.rotation ?? 0}deg) scale(${s * sx}, ${s * sy}) translate(${b.x + pad}px, ${b.y + pad}px)`,
       }}

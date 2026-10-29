@@ -191,6 +191,8 @@ export interface TextEditSpec<N extends NodeBase> {
   /** Inner padding in world units. */
   padding?: number
   color?(node: N, theme: CanvasTheme): string
+  /** Font family, weight, style and alignment of the editor, so typing looks like the result. */
+  font?(node: N): { family?: string; bold?: boolean; italic?: boolean; align?: 'left' | 'center' | 'right' }
   /** Remove the node when the edit leaves it empty (default false). */
   deleteIfEmpty?: boolean
   /** The editor grows with the typed text instead of wrapping (auto-width text). */

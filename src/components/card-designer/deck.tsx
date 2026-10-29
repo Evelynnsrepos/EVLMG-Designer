@@ -18,7 +18,8 @@ const matches = (d: CardDoc, c: Card, q: string) => !q || Object.values(c.values
  * Fields (0.23.3): every field with the shown card's value. Open a field to rename it, change its type,
  * delete it or put the shown card's value on every card at once.
  */
-export function FieldsSection({ d, card, update }: { d: CardDoc; card: Card | null; update: Update }) {
+/** `onAdd` makes a new field and puts its box on the active layer, so it shows on the cards right away. */
+export function FieldsSection({ d, card, update, onAdd }: { d: CardDoc; card: Card | null; update: Update; onAdd(kind: Field['kind']): void }) {
   const [open, setOpen] = useState<Id | null>(null)
   const root = useProjectStore((s) => s.root)
   const linked = !!d.sheet
@@ -39,7 +40,6 @@ export function FieldsSection({ d, card, update }: { d: CardDoc; card: Card | nu
     const v = card?.values[f.id] ?? ''
     update((x) => ({ ...x, cards: x.cards.map((c) => ({ ...c, values: { ...c.values, [f.id]: v } })) }))
   }
-  const addField = (kind: Field['kind'], name: string) => update((x) => ({ ...x, fields: [...x.fields, { id: newId(), name: `${name} ${x.fields.length + 1}`, kind }] }))
 
   return (
     <div className="cd-panel">
@@ -94,13 +94,13 @@ export function FieldsSection({ d, card, update }: { d: CardDoc; card: Card | nu
         )
       })}
       <div className="cd-row cd-wrap">
-        <button className="btn" onClick={() => addField('text', 'Field')}>
+        <button className="btn" onClick={() => onAdd('text')}>
           + Text
         </button>
-        <button className="btn" onClick={() => addField('number', 'Stat')}>
+        <button className="btn" onClick={() => onAdd('number')}>
           + Number
         </button>
-        <button className="btn" onClick={() => addField('image', 'Picture')}>
+        <button className="btn" onClick={() => onAdd('image')}>
           + Picture
         </button>
       </div>

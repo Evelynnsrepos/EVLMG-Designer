@@ -125,7 +125,8 @@ export function cardNodeTypes(b: CardBinding): NodeTypes {
       get: (n) => n.text,
       set: (n, text) => ({ ...n, text }),
       fontSize: (n) => n.fontSize,
-      color: (n) => n.textColor ?? '#1c1d22',
+      color: (n) => (applySlots(n, b.colors) as CardTextNode).textColor ?? '#1c1d22',
+      font: (n) => ({ family: cssFamily(n.fontFamily), bold: n.bold, italic: n.italic, align: n.align }),
     },
   }
   const imageType: NodeType<CardImageNode> = {

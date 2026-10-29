@@ -97,6 +97,8 @@ export interface CardDoc {
   perCardLayers?: Id[]
   /** What one card changes for itself, by card id (also works for cards from a Spreadsheet row). */
   overrides?: Record<Id, CardOverride>
+  /** Moving and resizing snaps to the card's guide lines. */
+  snap?: boolean
   /** Text shared by cards' own text boxes, by `textKey`. */
   sharedTexts?: Record<Id, string>
 }
@@ -395,6 +397,71 @@ export function resizeDesign(doc: CardDoc, widthMm: number, heightMm: number): C
   )
   return { ...doc, widthMm, heightMm, front: side(doc.front), back: side(doc.back), overrides }
 }
+
+/** The safe margin inside the cut line (the blue line). */
+export const SAFE_MM = 3
+
+type Box = { x: number; y: number; width: number; height: number }
+const isBox = (n: CardNode): n is CardNode & Box => typeof (n as Partial<Box>).width === 'number' && typeof (n as Partial<Box>).height === 'number' && !n.rotation
+
+/** The full card with bleed, the card itself (cut line) or the safe area, in world units. */
+export function cardArea(d: Pick<CardDoc, 'widthMm' | 'heightMm' | 'bleedMm'>, area: 'bleed' | 'card' | 'safe'): Box {
+  const m = area === 'bleed' ? -d.bleedMm * MM : area === 'safe' ? SAFE_MM * MM : 0
+  return { x: m, y: m, width: d.widthMm * MM - 2 * m, height: d.heightMm * MM - 2 * m }
+}
+
+/** Guide lines items snap to: bleed edge, cut line, safe line and the centre, per axis. */
+function guides(d: CardDoc) {
+  const b = cardArea(d, 'bleed')
+  const c = cardArea(d, 'card')
+  const s = cardArea(d, 'safe')
+  const lines = (k: 'x' | 'y', size: 'width' | 'height') => [...[b, c, s].flatMap((r) => [r[k], r[k] + r[size]]), c[k] + c[size] / 2]
+  return { x: lines('x', 'width'), y: lines('y', 'height') }
+}
+
+/** Nearest guide to any of `edges`, within `tol`: the shift to apply, or 0. */
+function nearest(edges: number[], lines: number[], tol: number): number {
+  let best = 0
+  let dist = tol
+  for (const e of edges) for (const l of lines) if (Math.abs(l - e) <= dist) ((dist = Math.abs(l - e)), (best = l - e))
+  return best
+}
+
+/**
+ * After a move or resize, snap the items that changed to the card's guide lines (within 1.5 mm): a moved
+ * item by its edges or centre, a resized one by the edges that changed. Rotated items are left alone.
+ */
+export function snapToGuides(d: CardDoc, before: Scene<CardNode>, next: Scene<CardNode>, tol = 1.5 * MM): Scene<CardNode> {
+  const g = guides(d)
+  const old = new Map(before.nodes.map((n) => [n.id, n]))
+  let changed = false
+  const nodes = next.nodes.map((n) => {
+    const o = old.get(n.id)
+    if (!o || o === n || !isBox(n) || !isBox(o)) return n
+    const moved = n.x !== o.x || n.y !== o.y
+    const sized = n.width !== o.width || n.height !== o.height
+    if (!moved && !sized) return n
+    const m = { ...n }
+    for (const [k, size, lines] of [['x', 'width', g.x], ['y', 'height', g.y]] as const) {
+      const lo = n[k]
+      const hi = n[k] + n[size]
+      if (!sized) m[k] += nearest([lo, (lo + hi) / 2, hi], lines, tol)
+      else {
+        const dl = lo !== o[k] ? nearest([lo], lines, tol) : 0
+        const dh = hi !== o[k] + o[size] ? nearest([hi], lines, tol) : 0
+        m[k] = lo + dl
+        m[size] = hi + dh - m[k]
+      }
+    }
+    if (m.x === n.x && m.y === n.y && m.width === n.width && m.height === n.height) return n
+    changed = true
+    return m
+  })
+  return changed ? { ...next, nodes } : next
+}
+
+/** Stretch boxes to exactly fill an area of the card (e.g. a card back drawn elsewhere onto the bleed). */
+export const fitTo = (d: CardDoc, n: CardNode, area: 'bleed' | 'card' | 'safe'): CardNode => (isBox(n) ? { ...n, ...cardArea(d, area) } : n)
 
 /** Add a text field for every `{Name}` in a text box that no field has yet (so Fields follow the layers). */
 export function withTokenFields(doc: CardDoc): CardDoc {

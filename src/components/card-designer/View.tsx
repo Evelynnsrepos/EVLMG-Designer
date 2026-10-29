@@ -1,6 +1,7 @@
-import { Ban, ChevronLeft, ChevronRight, Circle, CopyPlus, FlipHorizontal, Image as ImageIcon, Layers as LayersIcon, Link2, Lock, Minus, Plus, Shapes, Sparkles, Square, Type, Unlink2 } from 'lucide-react'
+import { Ban, ChevronLeft, ChevronRight, Circle, CopyPlus, FlipHorizontal, ImageUp, Layers as LayersIcon, Link2, Lock, Magnet, Minus, Plus, Shapes, Sparkles, Square, SquareUser, Type, Unlink2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { assetUrl, pickAndImportAssets, useAssetUrls } from '@/core/assets'
+import { assetUrl, dragHasFiles, importAssetsFromDataTransfer, pickAndImportAssets, useAssetUrls, type ImportedAsset } from '@/core/assets'
+import { pointIn } from '@/shared/zoom'
 import { newId, type Id } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
 import { useDocument, useProjectStore } from '@/core/state'
@@ -32,6 +33,8 @@ import {
   onEveryCard,
   setLayerOnEveryCard,
   setOnEveryCard,
+  snapToGuides,
+  fitTo,
   withTokenFields,
   sameTextEverywhere,
   toggleSameText,
@@ -68,6 +71,7 @@ export default function View({ documentId, active }: PanelProps) {
   const apiRef = useRef<CanvasApi<CardNode> | null>(null)
   const [side, setSide] = useState<Side>('front')
   const [showLayers, setShowLayers] = useState(true)
+  const [imageMenu, setImageMenu] = useState<{ x: number; y: number; id: Id } | null>(null)
   const [previewId, setPreviewId] = useState<Id | null>(null)
   const [sheetCards, setSheetCards] = useState<Card[] | null>(null)
   const [fontsReady, setFontsReady] = useState(0)
@@ -145,7 +149,11 @@ export default function View({ documentId, active }: PanelProps) {
 
   const update = (recipe: (x: CardDoc) => CardDoc, options?: { undoable?: boolean }) => doc.update((x) => withTokenFields(recipe(x)), options)
   const onScene = (recipe: (s: Scene<CardNode>) => Scene<CardNode>, options?: { undoable?: boolean }) =>
-    update((x) => splitScene(x, side, cardId, recipe(composeScene(x, side, cardId))), options)
+    update((x) => {
+      const before = composeScene(x, side, cardId)
+      const next = recipe(before)
+      return splitScene(x, side, cardId, x.snap ? snapToGuides(x, before, next) : next)
+    }, options)
 
   const activeLayerId = resolveActiveLayer(scene, canvas.activeLayerId)
   const selected = scene.nodes.filter((n) => canvas.selection.includes(n.id))
@@ -159,24 +167,67 @@ export default function View({ documentId, active }: PanelProps) {
   const perCard = new Set(d.perCardLayers ?? [])
   const offHere = new Set((cardId && d.overrides?.[cardId]?.hidden) || [])
 
-  const addPictureField = (layerId = activeLayerId) => {
-    const f = d.fields.find((x) => x.kind === 'image')
+  const addPictureField = (layerId = activeLayerId, fresh = false) => {
+    const f = fresh ? undefined : d.fields.find((x) => x.kind === 'image')
     const fieldId = f?.id ?? newId()
     const node: CardImageNode = { id: newId(), kind: 'card-image', layerId, x: 60, y: 120, width: d.widthMm * MM - 120, height: 300, fieldId }
     update((x) => {
-      const y = f ? x : { ...x, fields: [...x.fields, { id: fieldId, name: 'Art', kind: 'image' as const }] }
+      const y = f ? x : { ...x, fields: [...x.fields, { id: fieldId, name: fresh ? `Picture ${x.fields.length + 1}` : 'Art', kind: 'image' as const }] }
       const s = composeScene(y, side, cardId)
       return splitScene(y, side, cardId, { ...s, nodes: [...s.nodes, node] })
     })
     canvas.setSelection([node.id])
   }
-  const addFixedImage = async (layerId = activeLayerId) => {
-    if (!root) return
-    const picked = await pickAndImportAssets(root, 'image')
-    if (!picked.length) return
-    const nodes: CardNode[] = picked.map((a, i) => ({ id: newId(), kind: 'image', layerId, x: 40 + i * 20, y: 40 + i * 20, width: 200, height: 200, src: a.path, name: a.name }))
+  const placeImages = async (picked: ImportedAsset[], layerId: Id, at = { x: 40, y: 40 }) => {
+    if (!picked.length || !root) return
+    // Keep each picture's own shape, at most the card's size.
+    const sizes = await Promise.all(picked.map(async (a) => imageSize(await assetUrl(root, a.path))))
+    const nodes: CardNode[] = picked.map((a, i) => {
+      const { w, h } = sizes[i] ?? { w: 1, h: 1 }
+      const k = Math.min((d.widthMm * MM) / w, (d.heightMm * MM) / h, 1)
+      return { id: newId(), kind: 'image', layerId, x: at.x + i * 20, y: at.y + i * 20, width: w * k, height: h * k, src: a.path, name: a.name }
+    })
     onScene((s) => ({ ...s, nodes: [...s.nodes, ...nodes] }))
     canvas.setSelection(nodes.map((n) => n.id))
+  }
+  const addFixedImage = async (layerId = activeLayerId) => {
+    if (root) await placeImages(await pickAndImportAssets(root, 'image'), layerId)
+  }
+  // Right-click an image (on the card or in the layers) to swap its picture, keeping its place and size.
+  const isImage = (n?: CardNode) => n?.kind === 'image' || n?.kind === 'card-image'
+  const replaceImage = async (id: Id) => {
+    setImageMenu(null)
+    const n = scene.nodes.find((x) => x.id === id)
+    if (!root || !n) return
+    const [a] = await pickAndImportAssets(root, 'image')
+    if (!a) return
+    if (n.kind === 'card-image') {
+      // A picture field: the shown card gets the new picture.
+      if (cardId) update((x) => ({ ...x, cards: x.cards.map((c) => (c.id === cardId ? { ...c, values: { ...c.values, [n.fieldId]: a.path } } : c)) }))
+    } else onScene((s) => ({ ...s, nodes: s.nodes.map((m) => (m.id === id ? ({ ...m, src: a.path, name: a.name } as CardNode) : m)) }))
+  }
+  const fitImage = (id: Id, area: 'bleed' | 'card' | 'safe') => {
+    setImageMenu(null)
+    onScene((s) => ({ ...s, nodes: s.nodes.map((n) => (n.id === id ? fitTo(d, n, area) : n)) }))
+  }
+  const onCanvasMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    const api = apiRef.current
+    if (!api || !(e.target instanceof HTMLCanvasElement)) return
+    const w = api.screenToWorld(pointIn(e.currentTarget, e))
+    const hidden = new Set(scene.layers.filter((l) => l.hidden).map((l) => l.id))
+    const hit = [...scene.nodes].reverse().find((n) => {
+      const b = !hidden.has(n.layerId) && !n.hidden && isImage(n) ? api.getWorldBounds(n.id) : null
+      return b && w.x >= b.x && w.x <= b.x + b.width && w.y >= b.y && w.y <= b.y + b.height
+    })
+    if (hit) setImageMenu({ x: e.clientX, y: e.clientY, id: hit.id })
+  }
+
+  // Image files dropped on the card go on the active layer where they were dropped.
+  const onDropImages = async (e: React.DragEvent<HTMLDivElement>) => {
+    if (!root || !dragHasFiles(e.dataTransfer)) return
+    e.preventDefault()
+    const at = apiRef.current?.screenToWorld(pointIn(e.currentTarget, e))
+    await placeImages(await importAssetsFromDataTransfer(root, e.dataTransfer, 'image'), activeLayerId, at)
   }
 
   const cardIds = cards.map((c) => c.id)
@@ -236,11 +287,20 @@ export default function View({ documentId, active }: PanelProps) {
   const toolbarExtra = (
     <>
       <ShapesButton toolId={canvas.toolId} onTool={(id) => apiRef.current?.setTool(id)} />
-      <button className="canvas-toolbar-btn" title={TEXT.addPicture} aria-label={TEXT.addPicture} onClick={() => addPictureField()}>
-        <ImageIcon size={17} strokeWidth={1.8} />
+      <button
+        className={'canvas-toolbar-btn' + (d.snap ? ' is-active' : '')}
+        title={d.snap ? 'Snapping on: moved and resized items snap to the bleed, cut and safe lines and the centre. Click to turn it off.' : 'Snap to the card’s guide lines'}
+        aria-label="Snap to guide lines"
+        aria-pressed={!!d.snap}
+        onClick={() => update((x) => ({ ...x, snap: !x.snap || undefined }))}
+      >
+        <Magnet size={17} strokeWidth={1.8} />
       </button>
       <button className="canvas-toolbar-btn" title={TEXT.addImage} aria-label={TEXT.addImage} onClick={() => void addFixedImage()}>
-        <Plus size={17} strokeWidth={1.8} />
+        <ImageUp size={17} strokeWidth={1.8} />
+      </button>
+      <button className="canvas-toolbar-btn" title={TEXT.addPicture} aria-label={TEXT.addPicture} onClick={() => addPictureField()}>
+        <SquareUser size={17} strokeWidth={1.8} />
       </button>
     </>
   )
@@ -264,14 +324,14 @@ export default function View({ documentId, active }: PanelProps) {
         </details>
         <details className="cd-section" open>
           <summary>Fields</summary>
-          <FieldsSection d={d} card={preview} update={update} />
+          <FieldsSection d={d} card={preview} update={update} onAdd={(k) => (k === 'image' ? addPictureField(activeLayerId, true) : addToLayer(k === 'number' ? 'number' : 'field', activeLayerId))} />
         </details>
         <section className="cd-section cd-section-cards">
           <h3>Cards</h3>
           <CardList d={d} cards={cards} currentId={cardId} onPick={setPreviewId} update={update} previews={cardThumbs} />
         </section>
       </aside>
-      <div className="cd-canvas">
+      <div className="cd-canvas" onDragOver={(e) => dragHasFiles(e.dataTransfer) && e.preventDefault()} onDrop={(e) => void onDropImages(e)} onContextMenu={onCanvasMenu}>
         <div className="cd-sides" role="tablist">
           {(['front', 'back'] as const).map((s) => (
             <button key={s} role="tab" aria-selected={side === s} className={'btn btn-ghost' + (side === s ? ' is-on' : '')} onClick={() => (setSide(s), canvas.setSelection([]), canvas.setActiveLayerId(null))}>
@@ -330,6 +390,11 @@ export default function View({ documentId, active }: PanelProps) {
             onActiveLayer={(id) => (canvas.setActiveLayerId(id), canvas.setSelection([]))}
             onClose={() => setShowLayers(false)}
             layerPreview={(l) => (layerThumbs.get(l.id) ? <img className="cd-layer-thumb" src={layerThumbs.get(l.id)} alt="" /> : <span className="cd-layer-thumb" />)}
+            onItemContextMenu={(m, e) => {
+              if (!isImage(m as unknown as CardNode)) return
+              e.preventDefault()
+              setImageMenu({ x: e.clientX, y: e.clientY, id: m.id })
+            }}
             layerFooter={(l) => (l.locked ? null : <AddMenu onAdd={(k) => addToLayer(k, l.id)} />)}
             layerClass={(l) => (perCard.has(l.id) ? '' : ' cd-every-card')}
             itemClass={(n) => (onEveryCard(d, side, n.id) ? ' cd-every-card' : '')}
@@ -392,8 +457,36 @@ export default function View({ documentId, active }: PanelProps) {
           </details>
         </div>
       </aside>
+      {imageMenu ? (
+        <>
+          <div className="menu-backdrop" onClick={() => setImageMenu(null)} onContextMenu={(e) => (e.preventDefault(), setImageMenu(null))} />
+          <div className="cd-add-menu cd-context-menu" role="menu" style={{ left: imageMenu.x, top: imageMenu.y }}>
+            <button role="menuitem" className="cd-add-item" onClick={() => void replaceImage(imageMenu.id)}>
+              {scene.nodes.find((n) => n.id === imageMenu.id)?.kind === 'card-image' ? 'Replace this card’s picture…' : 'Replace image…'}
+            </button>
+            {(['bleed', 'card', 'safe'] as const).map((a) => (
+              <button key={a} role="menuitem" className="cd-add-item" onClick={() => fitImage(imageMenu.id, a)}>
+                {FIT_LABEL[a]}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
     </div>
   )
+}
+
+export const FIT_LABEL = { bleed: 'Fill the whole card (to the bleed line)', card: 'Fit to the cut line', safe: 'Fit inside the safe line' }
+
+/** A picture's natural size in pixels (null if it can't load). */
+function imageSize(url: string | null): Promise<{ w: number; h: number } | null> {
+  if (!url) return Promise.resolve(null)
+  return new Promise((done) => {
+    const img = new Image()
+    img.onload = () => done(img.naturalWidth && img.naturalHeight ? { w: img.naturalWidth, h: img.naturalHeight } : null)
+    img.onerror = () => done(null)
+    img.src = url
+  })
 }
 
 type AddKind = 'text' | 'field' | 'number' | 'picture' | 'image' | 'rect' | 'ellipse' | 'line'
