@@ -93,6 +93,9 @@ export interface PenEventLike {
 /** Set once any pen reports a real pressure value; pens without pressure send only 0.5 (or 0/1). */
 let pressureSeen = false
 
+/** A pen with real pressure was seen: the pen's own lift thins the stroke end, so brushes skip their end taper. */
+export const hasRealPressure = () => pressureSeen
+
 /** For tests. */
 export function resetPressureDetection() {
   pressureSeen = false

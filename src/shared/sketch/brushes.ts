@@ -2,7 +2,7 @@ import { newId, type Id } from '@/core/model'
 import { CANVAS_BLENDS, type BlendMode } from './blend'
 import { shiftColor } from './brushColor'
 import { PathSmoother } from './brushPath'
-import { applyCurve, type CurvePoint } from './pen'
+import { applyCurve, hasRealPressure, type CurvePoint } from './pen'
 import { GRAINS, grainCanvas, imageTip, seeded, SHAPES, tipImage, type BrushGrain, type BrushShape } from './brushTextures'
 
 /**
@@ -669,7 +669,7 @@ export class StrokeStamper {
 
   private endTaper() {
     const pen = this.points[0]?.pen !== false
-    return pen ? this.brush.taperEnd : this.brush.touchTaperEnd
+    return pen ? (hasRealPressure() ? 0 : this.brush.taperEnd) : this.brush.touchTaperEnd
   }
 
   /** Start over before a full redraw. */
@@ -786,7 +786,7 @@ export class StrokeStamper {
     const b = this.brush
     const pen = this.points[0]?.pen !== false
     const start = pen ? b.taperStart : b.touchTaperStart
-    const end = pen ? b.taperEnd : b.touchTaperEnd
+    const end = this.endTaper()
     let k = 1
     if (start > 0) k = Math.min(k, at / start)
     if (end > 0 && Number.isFinite(total)) k = Math.min(k, Math.max(0, total - at) / end)
