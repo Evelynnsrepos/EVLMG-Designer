@@ -500,8 +500,37 @@ export function applySlots<N extends CardNode>(n: N, colors: Map<Id, string>): N
 
 /** Renaming a field keeps the template's `{Old}` text working. */
 export function renameFieldInScene(scene: Scene<CardNode>, oldName: string, newName: string): Scene<CardNode> {
-  const re = new RegExp(`\\{\\s*${oldName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\}`, 'gi')
-  return { ...scene, nodes: scene.nodes.map((n) => (n.kind === 'card-text' ? { ...n, text: n.text.replace(re, `{${newName}}`) } : n)) }
+  return { ...scene, nodes: renameInNodes(scene.nodes, oldName, newName) }
+}
+
+const tokenOf = (name: string) => new RegExp(`\\{\\s*${name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\}`, 'gi')
+const renameInNodes = (nodes: CardNode[], oldName: string, newName: string) => {
+  const re = tokenOf(oldName)
+  return nodes.map((n) => (n.kind === 'card-text' ? { ...n, text: n.text.replace(re, `{${newName}}`) } : n))
+}
+
+/** Rename a field and its `{Name}` in every text box: the design, cards' own boxes and their own texts. */
+export function renameFieldEverywhere(doc: CardDoc, fieldId: Id, name: string): CardDoc {
+  const old = doc.fields.find((f) => f.id === fieldId)?.name
+  if (!old) return doc
+  const re = tokenOf(old)
+  const swap = (t: string) => t.replace(re, `{${name}}`)
+  const swapAll = (r?: Record<Id, string>) => r && Object.fromEntries(Object.entries(r).map(([k, v]) => [k, swap(v)]))
+  return {
+    ...doc,
+    fields: doc.fields.map((f) => (f.id === fieldId ? { ...f, name } : f)),
+    front: renameFieldInScene(doc.front, old, name),
+    back: renameFieldInScene(doc.back, old, name),
+    sharedTexts: swapAll(doc.sharedTexts),
+    overrides:
+      doc.overrides &&
+      Object.fromEntries(
+        Object.entries(doc.overrides).map(([id, o]) => [
+          id,
+          { ...o, texts: swapAll(o.texts), nodes: o.nodes && Object.fromEntries(Object.entries(o.nodes).map(([l, ns]) => [l, renameInNodes(ns, old, name)])) },
+        ]),
+      ),
+  }
 }
 
 /** Minimal shape of a Spreadsheet document (read only here). */

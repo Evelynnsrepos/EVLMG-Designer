@@ -42,6 +42,7 @@ const LAYER_TEXT = {
   kinds: {
     image: 'Image',
     emptyText: 'Text (empty)',
+    'card-image': 'Picture field',
     cutout: 'Image cutout',
     rect: 'Rectangle',
     ellipse: 'Ellipse',

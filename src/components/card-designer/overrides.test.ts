@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { composeScene, createCardDoc, legacyPerCardLayers, onEveryCard, sameTextEverywhere, toggleSameText, resizeDesign, setLayerOnEveryCard, setOnEveryCard, setOverride, slotColors, splitScene, snapToGuides, fitTo, cardArea, withTokenFields, type CardDoc } from './model'
+import { composeScene, createCardDoc, legacyPerCardLayers, onEveryCard, sameTextEverywhere, toggleSameText, resizeDesign, setLayerOnEveryCard, setOnEveryCard, setOverride, slotColors, splitScene, renameFieldEverywhere, snapToGuides, fitTo, cardArea, withTokenFields, type CardDoc } from './model'
 
 describe('what is on every card', () => {
   const base = createCardDoc()
@@ -142,5 +142,14 @@ describe('what is on every card', () => {
     const far = { ...s, nodes: s.nodes.map((n) => (n.id === art.id ? { ...n, x: 200 } : n)) }
     expect(snapToGuides(doc, s, far)).toBe(far)
     expect(fitTo(doc, art, 'bleed')).toMatchObject(cardArea(doc, 'bleed'))
+  })
+
+  it('renames a field in every text box, also cards’ own boxes', () => {
+    const name = doc.fields[0]
+    const d0 = { ...doc, front: { ...doc.front, nodes: doc.front.nodes.map((n) => (n.id === text.id ? { ...n, text: `{${name.name}} rules` } : n)) } }
+    const own = setOnEveryCard(d0, 'front', 'a', [text.id], false)
+    const out = renameFieldEverywhere(own, name.id, 'Title')
+    expect(out.fields[0].name).toBe('Title')
+    expect(find(out, 'a', text.id)).toMatchObject({ text: '{Title} rules' })
   })
 })

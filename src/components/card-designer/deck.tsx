@@ -5,7 +5,7 @@ import { newId, type Id } from '@/core/model'
 import { useDocument, useProjectStore } from '@/core/state'
 import { promptDialog } from '@/shared/dialogs'
 import { BUILTIN_ICONS } from './icons'
-import { cardsFromSheet, renameFieldInScene, type Card, type CardDoc, type Field, type SheetLike } from './model'
+import { cardsFromSheet, renameFieldEverywhere, type Card, type CardDoc, type Field, type SheetLike } from './model'
 import { evaluatedSheet } from './sheetValues'
 import { addCard, cardLabel, TEXT, type Update } from './ui'
 
@@ -29,13 +29,10 @@ export function FieldsSection({ d, card, update, onAdd }: { d: CardDoc; card: Ca
     const [a] = await pickAndImportAssets(root, 'image')
     if (a) setValue(f.id, a.path)
   }
-  const renameField = (f: Field, name: string) =>
-    update((x) => ({
-      ...x,
-      fields: x.fields.map((y) => (y.id === f.id ? { ...y, name } : y)),
-      front: renameFieldInScene(x.front, f.name, name),
-      back: renameFieldInScene(x.back, f.name, name),
-    }))
+  const renameField = (f: Field, name: string) => {
+    if (!name.trim() || name === f.name) return
+    update((x) => renameFieldEverywhere(x, f.id, name.trim()))
+  }
   const toAll = (f: Field) => {
     const v = card?.values[f.id] ?? ''
     update((x) => ({ ...x, cards: x.cards.map((c) => ({ ...c, values: { ...c.values, [f.id]: v } })) }))
@@ -75,7 +72,15 @@ export function FieldsSection({ d, card, update, onAdd }: { d: CardDoc; card: Ca
             {isOpen ? (
               <div className="cd-field-more">
                 <div className="cd-row">
-                  <input className="input" value={f.name} aria-label="Field name" onChange={(e) => renameField(f, e.target.value)} />
+                  <input
+                    key={f.name}
+                    className="input"
+                    defaultValue={f.name}
+                    aria-label="Field name"
+                    title="Renames {Name} in every text box too"
+                    onBlur={(e) => renameField(f, e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                  />
                   <select className="input cd-kind" value={f.kind} aria-label="Field type" onChange={(e) => update((x) => ({ ...x, fields: x.fields.map((y) => (y.id === f.id ? { ...y, kind: e.target.value as Field['kind'] } : y)) }))}>
                     <option value="text">Text</option>
                     <option value="number">Number</option>
