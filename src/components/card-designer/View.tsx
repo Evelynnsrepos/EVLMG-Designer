@@ -313,20 +313,6 @@ export default function View({ documentId, active }: PanelProps) {
         />
       </div>
       <aside className="cd-right">
-        <div className="cd-right-top">
-          <details className="cd-section" open>
-            <summary>Style</summary>
-            <StylePanel d={d} selected={selected} onScene={onScene} />
-          </details>
-          <details className="cd-section">
-            <summary>Card size</summary>
-            <CardPanel d={d} update={update} />
-          </details>
-          <details className="cd-section">
-            <summary>Export</summary>
-            <ExportPanel d={d} title={title} cards={cards} root={root} />
-          </details>
-        </div>
         {showLayers ? (
           <LayersPanel
             doc={{ scene: scene as unknown as Scene<MoodNode> }}
@@ -391,6 +377,20 @@ export default function View({ documentId, active }: PanelProps) {
             <LayersIcon size={14} /> Show layers
           </button>
         )}
+        <div className="cd-right-bottom">
+          <details className="cd-section" open>
+            <summary>Style</summary>
+            <StylePanel d={d} selected={selected} onScene={onScene} />
+          </details>
+          <details className="cd-section">
+            <summary>Card size</summary>
+            <CardPanel d={d} update={update} />
+          </details>
+          <details className="cd-section">
+            <summary>Export</summary>
+            <ExportPanel d={d} title={title} cards={cards} root={root} />
+          </details>
+        </div>
       </aside>
     </div>
   )
