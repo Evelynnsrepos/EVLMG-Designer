@@ -1001,7 +1001,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         : { id, label, on: toolOf(id) === tool, run: () => actionsRef.current(id) }
     }
     return profile.slots.filter((id): id is ActionId => !!id).map(one)
-  }, true)
+  }, true, { label: 'Brush size', smaller: () => actionsRef.current('sizeDown'), bigger: () => actionsRef.current('sizeUp') })
   useEffect(() => {
     drawShapeRef.current = drawShape
     moveRef.current = moveNow

@@ -22,21 +22,31 @@ export interface HotwheelSource {
   actions(): HotAction[]
   /** The tool orders its own ring (Draw: its QuickMenu profiles), so the shortcuts window doesn't. */
   ownOrder?: boolean
+  /** The inner ring's Smaller | Bigger slice changes this instead of the tool's interface size (Draw: brush size). */
+  size?: { label: string; smaller(): void; bigger(): void }
 }
 
 /** Panel id -> what its tool offers. Read when the wheel opens, so the actions are always current. */
 export const hotwheelSources = new Map<string, HotwheelSource>()
 
 /** Give the Hotwheel this tool's actions (its outer ring). */
-export function useHotwheel(actions: () => HotAction[], ownOrder = false) {
+export function useHotwheel(actions: () => HotAction[], ownOrder = false, size?: HotwheelSource['size']) {
   const panel = usePanelContext()
   const ref = useRef(actions)
+  const sizeRef = useRef(size)
   useEffect(() => {
     ref.current = actions
+    sizeRef.current = size
   })
   useEffect(() => {
     if (!panel) return
-    hotwheelSources.set(panel.id, { actions: () => ref.current(), ownOrder })
+    hotwheelSources.set(panel.id, {
+      actions: () => ref.current(),
+      ownOrder,
+      get size() {
+        return sizeRef.current
+      },
+    })
     return () => void hotwheelSources.delete(panel.id)
   }, [panel, ownOrder])
 }
