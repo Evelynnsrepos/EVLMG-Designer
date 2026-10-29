@@ -123,4 +123,15 @@ describe('what is on every card', () => {
     expect(ids(moved, 'a')).toEqual(ids(doc, 'a'))
     expect(setOnEveryCard(moved, 'front', 'a', [frame.id], true).front.nodes.map((n) => n.id)).toEqual(doc.front.nodes.map((n) => n.id))
   })
+
+  it('T off empties a box on the other cards, T on gives every card this card’s text', () => {
+    const t0 = (text as { text: string }).text
+    const off = toggleSameText(doc, 'front', 'a', text.id)
+    expect(find(off, 'a', text.id)).toMatchObject({ text: t0 })
+    expect(find(off, 'b', text.id)).toMatchObject({ text: '' })
+    const typed = edit(off, 'b', text.id, { text: 'B' })
+    const on = toggleSameText(typed, 'front', 'b', text.id)
+    expect(find(on, 'a', text.id)).toMatchObject({ text: 'B' })
+    expect(on.overrides?.a?.texts?.[text.id]).toBeUndefined()
+  })
 })

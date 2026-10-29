@@ -41,6 +41,7 @@ const LAYER_TEXT = {
   }),
   kinds: {
     image: 'Image',
+    emptyText: 'Text (empty)',
     cutout: 'Image cutout',
     rect: 'Rectangle',
     ellipse: 'Ellipse',
@@ -75,7 +76,8 @@ function itemLabel(n: MoodNode): string {
     default: {
       // Other tools' kinds (0.22 Card Designer) are named by their text when they have one.
       const text = (n as { text?: unknown }).text
-      return (typeof text === 'string' && text.trim().split('\n')[0].slice(0, 40)) || (k[n.kind as keyof typeof k] ?? n.kind)
+      if (typeof text === 'string') return text.trim().split('\n')[0].slice(0, 40) || k.emptyText
+      return k[n.kind as keyof typeof k] ?? n.kind
     }
   }
 }

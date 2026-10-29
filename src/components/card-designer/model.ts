@@ -246,7 +246,16 @@ export function toggleSameText(doc: CardDoc, side: 'front' | 'back', cardId: Id 
   const shown = composeScene(doc, side, cardId).nodes.find((n) => n.id === id)
   if (shown?.kind !== 'card-text') return doc
   const same = sameTextEverywhere(doc, side, shown)
-  if (onEveryCard(doc, side, id)) return { ...doc, [side]: { ...doc[side], nodes: doc[side].nodes.map((n) => (n.id === id ? { ...n, ownText: same || undefined } : n)) } }
+  if (onEveryCard(doc, side, id)) {
+    // Off: this card keeps its text, the box goes empty on every other card. On: this card's text goes to all cards.
+    const nodes = doc[side].nodes.map((n) => (n.id === id ? { ...n, ownText: same || undefined, text: same ? '' : shown.text } : n))
+    const out: CardDoc = { ...doc, [side]: { ...doc[side], nodes } }
+    if (same) return cardId ? setOverride(out, cardId, (o) => ({ ...o, texts: { ...o.texts, [id]: shown.text } })) : out
+    return Object.keys(doc.overrides ?? {}).reduce(
+      (d, c) => (d.overrides?.[c]?.texts?.[id] === undefined ? d : setOverride(d, c, (o) => ({ ...o, texts: Object.fromEntries(Object.entries(o.texts ?? {}).filter(([k]) => k !== id)) }))),
+      out,
+    )
+  }
   if (!cardId) return doc
   const key = shown.textKey ?? id
   const next: CardNode = same ? { ...shown, ownText: true } : { ...shown, ownText: undefined, textKey: key }
