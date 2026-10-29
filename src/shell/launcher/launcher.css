@@ -324,3 +324,8 @@
 .launcher-recent .project-card {
   flex: 0 0 260px;
 }
+.launcher-version {
+  font-size: 13px;
+  font-weight: 400;
+  margin-left: 6px;
+}

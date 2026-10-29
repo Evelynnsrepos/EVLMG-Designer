@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronRight, CircleHelp, FileArchive, FolderOpen, FolderPlus, GitBranch, Image, MoreHorizontal, Moon, Plus, Search, Settings, Sun, Type, Users } from 'lucide-react'
+import { getVersion } from '@tauri-apps/api/app'
 import { useCallback, useEffect, useState } from 'react'
 import { saveBinaryFile, safeFileName } from '@/core/export'
 import { getFs, isTauri } from '@/core/fs'
@@ -37,6 +38,11 @@ export function Launcher() {
   const [projects, setProjects] = useState<RecentProject[] | null>(null)
   const [missing, setMissing] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
+  const [version, setVersion] = useState('')
+  // No window title bar on some Linux setups, so the start screen shows the version itself.
+  useEffect(() => {
+    if (isTauri()) getVersion().then(setVersion, () => {})
+  }, [])
   const [joinOpen, setJoinOpen] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -169,7 +175,9 @@ export function Launcher() {
         <div className="launcher-brand">
           <img src="/favicon.png" alt="" className="launcher-logo" />
           <div>
-            <h1>Eve.Lopment Games Designer</h1>
+            <h1>
+              Eve.Lopment Games Designer {version && <span className="launcher-version muted">v{version}</span>}
+            </h1>
             <div className="muted">Your game projects</div>
           </div>
         </div>
