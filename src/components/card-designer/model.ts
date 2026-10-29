@@ -64,8 +64,10 @@ export interface Variant {
 export interface Field {
   id: Id
   name: string
-  /** 'number' only takes numbers (stats like Attack, Health, Cost). */
-  kind: 'text' | 'number' | 'image'
+  /** 'number' only takes numbers (stats like Attack, Health, Cost); 'choice' picks one of `choices` from a list. */
+  kind: 'text' | 'number' | 'image' | 'choice'
+  /** The values a 'choice' field offers (e.g. Starter, Tank, Bruiser). */
+  choices?: string[]
 }
 
 export interface Card {

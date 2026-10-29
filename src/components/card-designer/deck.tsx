@@ -33,6 +33,10 @@ export function FieldsSection({ d, card, update, onAdd }: { d: CardDoc; card: Ca
     if (!name.trim() || name === f.name) return
     update((x) => renameFieldEverywhere(x, f.id, name.trim()))
   }
+  const setChoices = (f: Field, raw: string) => {
+    const choices = [...new Set(raw.split(',').map((c) => c.trim()).filter(Boolean))]
+    update((x) => ({ ...x, fields: x.fields.map((y) => (y.id === f.id ? { ...y, choices } : y)) }))
+  }
   const toAll = (f: Field) => {
     const v = card?.values[f.id] ?? ''
     update((x) => ({ ...x, cards: x.cards.map((c) => ({ ...c, values: { ...c.values, [f.id]: v } })) }))
@@ -57,6 +61,16 @@ export function FieldsSection({ d, card, update, onAdd }: { d: CardDoc; card: Ca
                 <button className="btn cd-field-value" disabled={linked || !card} title={v || 'Pick a picture'} onClick={() => void pickImage(f)}>
                   {v ? '🖼 ' + v.split('/').pop() : '+ Picture'}
                 </button>
+              ) : f.kind === 'choice' && !linked ? (
+                <select className="input cd-field-value" disabled={!card} value={v} aria-label={f.name} onChange={(e) => setValue(f.id, e.target.value)}>
+                  <option value="">—</option>
+                  {/* A value typed before the list had it stays pickable. */}
+                  {[...new Set([...(f.choices ?? []), ...(v ? [v] : [])])].map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
               ) : (
                 <input
                   className={'input cd-field-value' + (f.kind === 'number' ? ' cd-num' : '')}
@@ -85,11 +99,24 @@ export function FieldsSection({ d, card, update, onAdd }: { d: CardDoc; card: Ca
                     <option value="text">Text</option>
                     <option value="number">Number</option>
                     <option value="image">Picture</option>
+                    <option value="choice">Choice list</option>
                   </select>
                   <button className="btn btn-ghost" title="Delete field" aria-label="Delete field" onClick={() => update((x) => ({ ...x, fields: x.fields.filter((y) => y.id !== f.id) }))}>
                     <Trash size={14} />
                   </button>
                 </div>
+                {f.kind === 'choice' ? (
+                  <input
+                    key={(f.choices ?? []).join()}
+                    className="input"
+                    defaultValue={(f.choices ?? []).join(', ')}
+                    placeholder="Starter, Tank, Bruiser"
+                    aria-label="Choices"
+                    title="The values every card picks from, separated by commas"
+                    onBlur={(e) => setChoices(f, e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                  />
+                ) : null}
                 <button className="btn" disabled={linked || !card} title="Puts this card’s value into the same field of every card" onClick={() => toAll(f)}>
                   Apply “{short(f.kind === 'image' ? v.split('/').pop() || '' : v) || 'empty'}” to all cards
                 </button>
