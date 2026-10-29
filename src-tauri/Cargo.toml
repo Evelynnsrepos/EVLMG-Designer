@@ -34,3 +34,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rustls-platform-verifier = "0.7"
 sha2 = "0.10"
 futures-util = "0.3"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Already in the build through wry; used to turn the webview's graphics card use on for good (graphics.rs).
+webkit2gtk = "2.0"
