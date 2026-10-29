@@ -73,7 +73,8 @@ The whole app in five minutes.
    ones already open, or **drag** it onto the screen to split it. Need another tool? **Add tool** at the bottom of the
    sidebar has a search.
 3. **Organize the sidebar.** Search it, star favorites so they stay on top, drag tools into your own order, and
-   right-click a tool for colors, folders and closing it.
+   right-click a tool for colors, folders and closing it. Right-click a document under a tool (a deck, a board, a
+   drawing) to rename, duplicate or delete it.
 4. **Rearrange with `Esc`.** Layout Mode shows big, easy targets to close, swap or move tool windows.
 5. **Hold `Q` for the Hotwheel.** A round menu under your pointer or pen: program actions inside, the current tool's
    actions outside. Point and let go. Every tool's header also has its shortcuts and a size button for tablets.
