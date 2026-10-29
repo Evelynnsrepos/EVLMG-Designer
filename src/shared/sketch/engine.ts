@@ -339,7 +339,37 @@ export class SketchEngine {
 
   /** Record a pixel step; it remembers the selection, so undoing the edit brings that selection back. */
   private pushTiles(layerId: Id, rects: Rect[], before: ImageData[]) {
-    if (this.history.push(layerId, rects, before, this.snapshot(layerId, rects))) this.history.last!.sel = { before: this.selectionMask, after: this.selectionMask }
+    if (!this.history.push(layerId, rects, before, this.snapshot(layerId, rects))) return
+    this.history.last!.sel = { before: this.selectionMask, after: this.selectionMask }
+    this.freshPush = true
+    queueMicrotask(() => (this.freshPush = false))
+  }
+  /** A pixel step was made in the code running right now (so a layer-list change from the same action joins it). */
+  private freshPush = false
+  private lastLayerStep: { meta: { before: unknown[]; after: unknown[] }; at: number; tweak: boolean } | null = null
+
+  /**
+   * Any other change to the layer list (add, rename, reorder, opacity, blend, visibility, lock, text...) as an undo step:
+   * joined to the pixel step the same action just made, and quick repeats of the same kind of change (a slider drag,
+   * typing) stay one step.
+   */
+  layersChanged<L extends { id: Id }>(before: L[], after: L[]) {
+    const last = this.history.last
+    if (this.freshPush && last?.tiles.length && !last.meta) {
+      last.meta = { before, after }
+      return
+    }
+    const now = performance.now()
+    const prev = this.lastLayerStep
+    const sameIds = before.length === after.length && before.every((l, i) => l.id === after[i].id)
+    if (prev?.tweak && last?.meta === prev.meta && prev.meta.after === before && sameIds && now - prev.at < 800) {
+      prev.meta.after = after
+      prev.at = now
+      return
+    }
+    const meta = { before, after }
+    this.history.pushMeta('', meta)
+    this.lastLayerStep = { meta, at: now, tweak: sameIds }
   }
 
   /**

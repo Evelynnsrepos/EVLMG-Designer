@@ -52,13 +52,13 @@ export function GuideOverlay({ guide, width, height, scale, editing, toDoc, onCh
 }
 
 /** Brush outline under a hovering pen or the mouse: size, roundness and angle of the tip. */
-export function BrushCursor({ at, brush, scale, erase }: { at: Pt; brush: Pick<BrushSettings, 'size' | 'roundness' | 'rotation' | 'shape'>; scale: number; erase: boolean }) {
+export function BrushCursor({ at, brush, scale, erase, onLight }: { at: Pt; brush: Pick<BrushSettings, 'size' | 'roundness' | 'rotation' | 'shape'>; scale: number; erase: boolean; onLight?: boolean }) {
   const r = Math.max(1.5 / scale, brush.size / 2)
   const ry = Math.max(1.5 / scale, r * brush.roundness)
   const angle = typeof brush.rotation === 'number' ? brush.rotation : 0
   const cross = 4 / scale
   return (
-    <g transform={`translate(${at.x} ${at.y}) rotate(${angle})`} className={`brush-cursor${erase ? ' is-eraser' : ''}`}>
+    <g transform={`translate(${at.x} ${at.y}) rotate(${angle})`} className={`brush-cursor${erase ? ' is-eraser' : ''}${onLight ? ' is-on-light' : ''}`}>
       {brush.shape === 'square' ? <rect x={-r} y={-ry} width={r * 2} height={ry * 2} /> : <ellipse rx={r} ry={ry} />}
       {brush.size * scale < 8 && (
         <>

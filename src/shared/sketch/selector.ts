@@ -21,6 +21,8 @@ export class Selector {
   mode: SelMode = 'replace'
   threshold = 0.12
   featherRadius = 8
+  /** Rounded corners of rectangle selections, in canvas pixels (fill one for a rounded box). */
+  cornerRadius = 0
   showMask = false
   /** Edges of the selection (SVG path data in canvas pixels). */
   edges = ''
@@ -41,7 +43,7 @@ export class Selector {
   selectionTool = false
 
   /** Change settings (from the bar) and redraw. */
-  patch(p: Partial<Pick<Selector, 'shape' | 'mode' | 'threshold' | 'featherRadius' | 'showMask' | 'offset'>>) {
+  patch(p: Partial<Pick<Selector, 'shape' | 'mode' | 'threshold' | 'featherRadius' | 'cornerRadius' | 'showMask' | 'offset'>>) {
     if (p.shape && p.shape !== this.shape) this.cancelDraft()
     if (p.shape && this.selectionTool) this.selectionShape = p.shape
     Object.assign(this, p)
@@ -255,7 +257,9 @@ export class Selector {
     ctx.beginPath()
     if (kind === 'rect') {
       const [a, b] = pts
-      ctx.rect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y))
+      const w = Math.abs(b.x - a.x)
+      const h = Math.abs(b.y - a.y)
+      ctx.roundRect(Math.min(a.x, b.x), Math.min(a.y, b.y), w, h, Math.min(this.cornerRadius, w / 2, h / 2))
     } else if (kind === 'ellipse') {
       const [a, b] = pts
       ctx.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, Math.abs(b.x - a.x) / 2, Math.abs(b.y - a.y) / 2, 0, 0, Math.PI * 2)

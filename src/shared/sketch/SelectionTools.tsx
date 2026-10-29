@@ -30,6 +30,7 @@ const UI = {
   deselect: 'Deselect (Ctrl+D)',
   deselectShort: 'Deselect',
   threshold: 'Threshold',
+  corners: 'Rounded corners',
   remove: 'Remove',
   usesReference: 'Uses the reference layer',
 }
@@ -52,7 +53,7 @@ export function SelectionOutline({ sel }: { sel: Selector }) {
         </>
       )}
       {d?.kind === 'rect' && (
-        <rect x={Math.min(d.pts[0].x, d.pts[1].x)} y={Math.min(d.pts[0].y, d.pts[1].y)} width={Math.abs(d.pts[1].x - d.pts[0].x)} height={Math.abs(d.pts[1].y - d.pts[0].y)} className="sketch-selection" />
+        <rect x={Math.min(d.pts[0].x, d.pts[1].x)} y={Math.min(d.pts[0].y, d.pts[1].y)} width={Math.abs(d.pts[1].x - d.pts[0].x)} height={Math.abs(d.pts[1].y - d.pts[0].y)} rx={sel.cornerRadius} className="sketch-selection" />
       )}
       {d?.kind === 'ellipse' && (
         <ellipse cx={(d.pts[0].x + d.pts[1].x) / 2} cy={(d.pts[0].y + d.pts[1].y) / 2} rx={Math.abs(d.pts[1].x - d.pts[0].x) / 2} ry={Math.abs(d.pts[1].y - d.pts[0].y) / 2} className="sketch-selection" />
@@ -135,6 +136,13 @@ export function SelectionBar(p: SelectionBarProps) {
           <button className={`btn btn-ghost sketch-small${sel.mode === 'subtract' ? ' is-active' : ''}`} title={UI.subtractHint} onClick={() => sel.patch({ mode: sel.mode === 'subtract' ? 'replace' : 'subtract' })}>
             − {UI.subtract}
           </button>
+          {sel.shape === 'rect' && (
+            <label className="sketch-selbar-slider">
+              {UI.corners}
+              <input type="range" min={0} max={500} value={sel.cornerRadius} onChange={(e) => sel.patch({ cornerRadius: Number(e.target.value) })} />
+              <span>{sel.cornerRadius}px</span>
+            </label>
+          )}
           {sel.shape === 'wand' && (
             <label className="sketch-selbar-slider" title={p.usesReference ? UI.usesReference : undefined}>
               {UI.threshold}
