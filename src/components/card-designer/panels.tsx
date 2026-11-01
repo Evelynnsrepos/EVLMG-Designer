@@ -181,6 +181,10 @@ export function CardPanel({ d, update }: { d: CardDoc; update: Update }) {
         <span className="cd-label">Bleed</span>
         <BleedInput mm={d.bleedMm} unit={d.bleedUnit} onChange={(mm, unit) => update((x) => ({ ...setBleed(x, mm), bleedUnit: unit }))} />
       </div>
+      <label className="cd-row" title="Off: the bleed prints exactly what you design there (draw or place art out to the red dashed line)">
+        <input type="checkbox" checked={d.bleedStretch !== false} onChange={(e) => update((x) => ({ ...x, bleedStretch: e.target.checked }))} />
+        Fill empty bleed from the card's edge
+      </label>
       {num('Corner', d.cornerMm, (v) => update((x) => ({ ...x, cornerMm: v })))}
       <p className="cd-muted">
         Changing the size scales the whole design. The solid line is where the card is cut. Art should reach the red dashed bleed line, so no white edge shows if the cut is a little off; every print export adds the bleed around the card (pixels count at 300 DPI). Keep text inside the blue safe line.

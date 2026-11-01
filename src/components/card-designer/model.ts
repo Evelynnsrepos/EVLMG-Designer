@@ -84,6 +84,8 @@ export interface CardDoc {
   /** Always stored in mm; `bleedUnit` is only how it's typed and shown (pixels at 300 DPI). */
   bleedMm: number
   bleedUnit?: 'mm' | 'px'
+  /** false: export the bleed exactly as designed; otherwise empty bleed is filled by stretching the card's edge. */
+  bleedStretch?: boolean
   cornerMm: number
   front: Scene<CardNode>
   back: Scene<CardNode>

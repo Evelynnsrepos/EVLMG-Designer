@@ -64,7 +64,7 @@ export function renderCard(doc: CardDoc, scene: Scene<CardNode>, types: NodeType
     out.height = size.height
     const g = out.getContext('2d')!
     g.drawImage(drawn, 0, 0, size.width, size.height)
-    if (size.bleed > 0) {
+    if (size.bleed > 0 && doc.bleedStretch !== false) {
       const img = g.getImageData(0, 0, size.width, size.height)
       extendIntoBleed(img.data, size.width, size.height, size.bleed)
       g.putImageData(img, 0, 0)
