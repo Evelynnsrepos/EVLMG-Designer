@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applySlots, cardsFromSheet, createCardDoc, deckJson, expandCopies, fillText, renameFieldInScene, slotColors, ttsFileUrl, ttsSavedObject, ttsSheets, type CardNode } from './model'
+import { MM, applySlots, cardsFromSheet, createCardDoc, deckJson, expandCopies, fillText, renameFieldInScene, setBleed, slotColors, ttsFileUrl, ttsSavedObject, ttsSheets, type CardNode } from './model'
 
 describe('card designer model', () => {
   const doc = createCardDoc()
@@ -79,5 +79,17 @@ describe('card designer model', () => {
       { cols: 10, rows: 7, count: 69 },
       { cols: 6, rows: 2, count: 6 },
     ])
+  })
+})
+
+describe('bleed', () => {
+  it('grows the background to a bigger bleed and leaves the rest alone', () => {
+    const d = setBleed(createCardDoc(), 5)
+    const bg = d.front.nodes.find((n) => n.name === 'Background') as CardNode & { width: number; height: number }
+    expect([bg.x, bg.y, bg.width, bg.height]).toEqual([-5 * MM, -5 * MM, (63 + 10) * MM, (88 + 10) * MM])
+    const back = d.back.nodes.find((n) => n.name === 'Background') as CardNode & { width: number }
+    expect(back.width).toBe((63 + 10) * MM)
+    expect(d.front.nodes.find((n) => n.name === 'Frame')).toMatchObject({ x: 25, y: 25 })
+    expect(setBleed(d, 2).bleedMm).toBe(2)
   })
 })

@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { Group, Layer, Stage } from 'react-konva'
 import { preloadImage, renderOrder, type CanvasTheme, type NodeTypes, type RenderContext, type Scene } from '@/shared/canvas'
 import { cssFamily } from '@/shared/fontList'
-import { mmToPx } from '@/shared/print'
+import { cardPixels, extendIntoBleed } from '@/shared/print'
 import { MM, type CardDoc, type CardNode } from './model'
 
 /** Wait until the fonts a scene uses are loaded, so canvas text isn't drawn in a fallback font. */
@@ -15,8 +15,9 @@ export async function loadSceneFonts(scenes: Scene<CardNode>[]) {
 }
 
 /**
- * Draw one card side, bleed included, at a print resolution, off screen. Images must be preloaded
- * (`preloadImages`) so the first draw already shows them.
+ * Draw one card side, bleed included, at a print resolution, off screen. The picture is the card plus the
+ * bleed on every side; art that stops at the cut line is stretched out into the bleed. Images must be
+ * preloaded (`preloadImages`) so the first draw already shows them.
  */
 export function renderCard(doc: CardDoc, scene: Scene<CardNode>, types: NodeTypes, resolveImageSrc: (p: string) => string, dpi: number, withBleed = true): HTMLCanvasElement {
   const b = withBleed ? doc.bleedMm : 0
@@ -56,8 +57,19 @@ export function renderCard(doc: CardDoc, scene: Scene<CardNode>, types: NodeType
       ),
     )
     if (!stage) throw new Error('Could not draw the card.')
-    const px = mmToPx(wMm, dpi)
-    return (stage as Konva.Stage).toCanvas({ pixelRatio: px / (wMm * MM) })
+    const size = cardPixels({ w: doc.widthMm, h: doc.heightMm }, b, dpi)
+    const drawn = (stage as Konva.Stage).toCanvas({ pixelRatio: size.width / (wMm * MM) })
+    const out = document.createElement('canvas')
+    out.width = size.width
+    out.height = size.height
+    const g = out.getContext('2d')!
+    g.drawImage(drawn, 0, 0, size.width, size.height)
+    if (size.bleed > 0) {
+      const img = g.getImageData(0, 0, size.width, size.height)
+      extendIntoBleed(img.data, size.width, size.height, size.bleed)
+      g.putImageData(img, 0, 0)
+    }
+    return out
   } finally {
     root.unmount()
     host.remove()

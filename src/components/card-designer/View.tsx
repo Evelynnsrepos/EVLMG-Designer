@@ -44,6 +44,7 @@ import {
   DEFAULT_FONT,
   MM,
   resizeDesign,
+  setBleed,
   setOverride,
   slotColors,
   splitScene,
@@ -54,7 +55,7 @@ import {
   type CardTextNode,
 } from './model'
 import { cardNodeTypes } from './nodeTypes'
-import { CardPanel, ExportPanel, StylePanel } from './panels'
+import { BleedInput, CardPanel, ExportPanel, StylePanel } from './panels'
 import { loadSceneFonts, preloadImages, renderCard } from './render'
 import { addCard, allNodes, ownIcons, sideScene, TEXT, type Side } from './ui'
 import '@/components/sketch/sketch-tool.css'
@@ -159,7 +160,7 @@ export default function View({ documentId, active }: PanelProps) {
   })
 
   if (!d || !scene) return null
-  if (d.started === false) return <SizePicker onStart={(w, h, bleed) => doc.update((x) => ({ ...resizeDesign(x, w, h), bleedMm: bleed, started: true }), { undoable: false })} />
+  if (d.started === false) return <SizePicker onStart={(w, h, bleed, bleedUnit) => doc.update((x) => ({ ...setBleed(resizeDesign(x, w, h), bleed), bleedUnit, started: true }), { undoable: false })} />
 
   const update = (recipe: (x: CardDoc) => CardDoc, options?: { undoable?: boolean }) => doc.update((x) => withTokenFields(recipe(x)), options)
   const onScene = (recipe: (s: Scene<CardNode>) => Scene<CardNode>, options?: { undoable?: boolean }) =>
@@ -606,10 +607,11 @@ function useThumbs(d: CardDoc | null | undefined, cards: Card[], cardId: Id | nu
 }
 
 /** A new deck starts here: pick the card size, like the canvas size in Draw. */
-function SizePicker({ onStart }: { onStart(w: number, h: number, bleed: number): void }) {
+function SizePicker({ onStart }: { onStart(w: number, h: number, bleed: number, unit: 'mm' | 'px'): void }) {
   const [w, setW] = useState(63)
   const [h, setH] = useState(88)
-  const [bleed, setBleed] = useState(3)
+  const [bleed, setBleedMm] = useState(3)
+  const [unit, setUnit] = useState<'mm' | 'px'>('mm')
   const num = (v: number) => Math.max(10, Math.min(400, Number(v) || 10))
   return (
     <div className="sketch-start cd-start">
@@ -633,11 +635,13 @@ function SizePicker({ onStart }: { onStart(w: number, h: number, bleed: number):
           <input className="input" type="number" min={10} max={400} value={h} onChange={(e) => setH(Number(e.target.value))} />
         </label>
         <label>
-          Bleed (mm)
-          <input className="input" type="number" min={0} max={10} step={0.5} value={bleed} onChange={(e) => setBleed(Number(e.target.value))} />
+          Bleed
+          <span className="cd-row">
+            <BleedInput mm={bleed} unit={unit} onChange={(mm, u) => (setBleedMm(mm), setUnit(u))} />
+          </span>
         </label>
       </div>
-      <button className="btn btn-primary" onClick={() => onStart(num(w), num(h), Math.max(0, Math.min(10, Number(bleed) || 0)))}>
+      <button className="btn btn-primary" onClick={() => onStart(num(w), num(h), Math.max(0, Math.min(10, Number(bleed) || 0)), unit)}>
         Start designing
       </button>
     </div>

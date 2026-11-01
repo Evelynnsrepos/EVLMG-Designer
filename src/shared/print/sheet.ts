@@ -47,3 +47,10 @@ export async function sheetsToPdf(layout: SheetLayout, pages: HTMLCanvasElement[
   for (const p of pages) out.push({ widthMm: layout.page.w, heightMm: layout.page.h, jpeg: await canvasBytes(p, 'image/jpeg'), pxWidth: p.width, pxHeight: p.height })
   return makePdf(out)
 }
+
+/** One card per page: every page is the card plus its bleed, no crop marks (print shops cut at the trim size). */
+export async function cardsToPdf(sides: HTMLCanvasElement[], widthMm: number, heightMm: number): Promise<Uint8Array> {
+  const out = []
+  for (const c of sides) out.push({ widthMm, heightMm, jpeg: await canvasBytes(c, 'image/jpeg'), pxWidth: c.width, pxHeight: c.height })
+  return makePdf(out)
+}

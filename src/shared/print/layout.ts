@@ -98,3 +98,45 @@ export const CARD_SIZES: { id: string; name: string; w: number; h: number }[] = 
   { id: 'business', name: 'Business card (85 × 55 mm)', w: 85, h: 55 },
   { id: 'token', name: 'Token (25 × 25 mm)', w: 25, h: 25 },
 ]
+
+/** Bleed is typed in mm or in pixels; pixels are counted at 300 DPI, the print resolution cards are made for. */
+export const BLEED_DPI = 300
+export const bleedPxToMm = (px: number) => (px * MM_PER_INCH) / BLEED_DPI
+export const bleedMmToPx = (mm: number) => Math.round((mm / MM_PER_INCH) * BLEED_DPI)
+
+/** Pixel size of one exported card side: the card plus the bleed on every side. */
+export function cardPixels(card: Size, bleedMm: number, dpi: number) {
+  const bleed = mmToPx(bleedMm, dpi)
+  return { width: mmToPx(card.w, dpi) + 2 * bleed, height: mmToPx(card.h, dpi) + 2 * bleed, bleed }
+}
+
+/**
+ * Fill the bleed of an RGBA picture (`b` pixels on each side): where the art doesn't cover it, the card's
+ * outermost row/column of pixels is stretched outwards, so a slightly off cut never shows a white edge.
+ * Art that already reaches into the bleed stays on top.
+ */
+export function extendIntoBleed(px: Uint8ClampedArray, w: number, h: number, bleed: number) {
+  // The card's outermost pixels are often half covered (the cut line falls between pixels), so stretch from two further in.
+  const b = bleed + 2
+  if (bleed <= 0 || w <= 2 * b || h <= 2 * b) return
+  const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v)
+  for (let y = 0; y < h; y++) {
+    const inY = y >= b && y < h - b
+    for (let x = 0; x < w; x++) {
+      if (inY && x >= b && x < w - b) {
+        x = w - b - 1 // skip the card itself
+        continue
+      }
+      const i = (y * w + x) * 4
+      const a = px[i + 3] / 255
+      if (a === 1) continue
+      const j = (clamp(y, b, h - b - 1) * w + clamp(x, b, w - b - 1)) * 4
+      // Art over the stretched edge ("source over").
+      const ea = px[j + 3] / 255
+      const oa = a + ea * (1 - a)
+      if (oa === 0) continue
+      for (let k = 0; k < 3; k++) px[i + k] = Math.round((px[i + k] * a + px[j + k] * ea * (1 - a)) / oa)
+      px[i + 3] = Math.round(oa * 255)
+    }
+  }
+}

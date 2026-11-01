@@ -7,10 +7,10 @@ import { getFs, isTauri } from '@/core/fs'
 import { toCSV } from '@/shared/csv'
 import type { Id } from '@/core/model'
 import { updateNodes } from '@/shared/canvas'
-import { confirmDialog } from '@/shared/dialogs'
+import { choiceDialog, confirmDialog } from '@/shared/dialogs'
 import { cssFamily, systemFonts } from '@/shared/fontList'
-import { canvasBytes, drawSheets, PAGE_SIZES, sheetLayout, sheetsToPdf } from '@/shared/print'
-import { CARD_SIZES, composeScene, deckJson, expandCopies, resizeDesign, slotColors, ttsFileUrl, ttsSavedObject, ttsSheets, type Card, type CardDoc, type CardImageNode, type CardNode, type CardTextNode, type SlotKeys } from './model'
+import { bleedMmToPx, bleedPxToMm, canvasBytes, cardsToPdf, drawSheets, PAGE_SIZES, sheetLayout, sheetsToPdf } from '@/shared/print'
+import { CARD_SIZES, composeScene, deckJson, expandCopies, resizeDesign, setBleed, slotColors, ttsFileUrl, ttsSavedObject, ttsSheets, type Card, type CardDoc, type CardImageNode, type CardNode, type CardTextNode, type SlotKeys } from './model'
 import { deckRows } from './sheetImport'
 import { cardNodeTypes } from './nodeTypes'
 import { loadSceneFonts, preloadImages, renderCard } from './render'
@@ -123,6 +123,30 @@ export function StylePanel({ d, selected, onScene }: { d: CardDoc; selected: Car
   )
 }
 
+/** The bleed typed in mm or in pixels (counted at 300 DPI); it's always stored in mm. */
+export function BleedInput({ mm, unit = 'mm', onChange }: { mm: number; unit?: 'mm' | 'px'; onChange(mm: number, unit: 'mm' | 'px'): void }) {
+  const px = unit === 'px'
+  return (
+    <>
+      <input
+        className="input cd-num"
+        type="number"
+        min={0}
+        step={px ? 1 : 0.5}
+        aria-label={`Bleed in ${px ? 'pixels' : 'millimetres'}`}
+        value={px ? bleedMmToPx(mm) : Math.round(mm * 1000) / 1000}
+        onChange={(e) => {
+          const v = Math.max(0, Number(e.target.value) || 0)
+          onChange(px ? bleedPxToMm(v) : v, unit)
+        }}
+      />
+      <select className="input cd-num" value={unit} aria-label="Bleed unit" title="Pixels are counted at 300 DPI, the print resolution" onChange={(e) => onChange(mm, e.target.value as 'mm' | 'px')}>
+        <option value="mm">mm</option>
+        <option value="px">px</option>
+      </select>
+    </>
+  )
+}
 
 export function CardPanel({ d, update }: { d: CardDoc; update: Update }) {
   const preset = CARD_SIZES.find((s) => s.w === d.widthMm && s.h === d.heightMm)?.id ?? ''
@@ -153,10 +177,13 @@ export function CardPanel({ d, update }: { d: CardDoc; update: Update }) {
       </select>
       {num('Width', d.widthMm, (v) => update((x) => resizeDesign(x, v, x.heightMm)), 10)}
       {num('Height', d.heightMm, (v) => update((x) => resizeDesign(x, x.widthMm, v)), 10)}
-      {num('Bleed', d.bleedMm, (v) => update((x) => ({ ...x, bleedMm: v })))}
+      <div className="cd-row">
+        <span className="cd-label">Bleed</span>
+        <BleedInput mm={d.bleedMm} unit={d.bleedUnit} onChange={(mm, unit) => update((x) => ({ ...setBleed(x, mm), bleedUnit: unit }))} />
+      </div>
       {num('Corner', d.cornerMm, (v) => update((x) => ({ ...x, cornerMm: v })))}
       <p className="cd-muted">
-        Changing the size scales the whole design. The solid line is where the card is cut. Art should reach the red dashed bleed line, so no white edge shows if the cut is a little off. Keep text inside the blue safe line.
+        Changing the size scales the whole design. The solid line is where the card is cut. Art should reach the red dashed bleed line, so no white edge shows if the cut is a little off; every print export adds the bleed around the card (pixels count at 300 DPI). Keep text inside the blue safe line.
       </p>
     </div>
   )
@@ -225,14 +252,32 @@ export function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: stri
     return { layout, pages: drawSheets(layout, deck.map((c) => r.fronts.get(c.id)!), dpi, d.bleedMm, backs ? deck.map((c) => r.backs.get(c.id)!) : undefined) }
   }
 
-  const pdf = run('Print sheets (PDF)', async () => {
-    const { layout, pages } = await sheets()
-    await saveBinaryFile({ title: 'Export print sheets', defaultName: `${name} print.pdf`, bytes: await sheetsToPdf(layout, pages), filter: { name: 'PDF', extensions: ['pdf'] } })
-  })
-  const foilPdf = run('Foil mask sheets', async () => {
-    const { layout, pages } = await sheets(true)
-    await saveBinaryFile({ title: 'Export foil mask sheets', defaultName: `${name} foil mask.pdf`, bytes: await sheetsToPdf(layout, pages), filter: { name: 'PDF', extensions: ['pdf'] } })
-  })
+  /** PDF: asks for the layout first. One card per page is the card plus its bleed (what print shops want); many per page are the print sheets with crop marks. */
+  const pdf = (mask: boolean) => async () => {
+    const what = mask ? 'foil mask' : 'print'
+    const pick = await choiceDialog({
+      title: 'PDF layout',
+      message: 'One card per page: every page is one card with its bleed, the size print shops ask for.\nMany cards per page: as many cards as fit on the paper, with crop marks, to print at home.',
+      choices: ['One card per page', 'Many cards per page'],
+    })
+    if (pick === null) return
+    await confirmBig(
+      run(mask ? 'Foil mask sheets' : 'Print sheets (PDF)', async () => {
+        let bytes: Uint8Array
+        if (pick === 1) {
+          const { layout, pages } = await sheets(mask)
+          bytes = await sheetsToPdf(layout, pages)
+        } else {
+          const r = await renderAll(true, dpi, mask)
+          const sides = expandCopies(cards).flatMap((c) => (backs ? [r.fronts.get(c.id)!, r.backs.get(c.id)!] : [r.fronts.get(c.id)!]))
+          if (!sides.length) throw new Error('The deck has no cards.')
+          bytes = await cardsToPdf(mask ? sides.map(onWhite) : sides, d.widthMm + 2 * d.bleedMm, d.heightMm + 2 * d.bleedMm)
+        }
+        const defaultName = `${name} ${what}${pick === 0 ? ' cards' : ''}.pdf`
+        await saveBinaryFile({ title: mask ? 'Export foil masks' : 'Export PDF', defaultName, bytes, filter: { name: 'PDF', extensions: ['pdf'] } })
+      }),
+    )
+  }
   const png = run('Print sheets (PNG)', async () => {
     const { pages } = await sheets()
     if (pages.length === 1) return saveBinaryFile({ title: 'Export print sheet', defaultName: `${name} print.png`, bytes: await canvasBytes(pages[0]), filter: { name: 'PNG', extensions: ['png'] } })
@@ -255,7 +300,8 @@ export function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: stri
     await saveBinaryFile({ title: 'Export deck image', defaultName: `${name} deck.png`, bytes: await canvasBytes(out), filter: { name: 'PNG', extensions: ['png'] } })
   })
   const zip = run('Card images + JSON', async () => {
-    const r = await renderAll(false, dpi)
+    // With bleed: these are the files print shops take one card at a time.
+    const r = await renderAll(true, dpi)
     const files: Record<string, Uint8Array> = {}
     const images = new Map<Id, string>()
     const used = new Set<string>()
@@ -268,7 +314,7 @@ export function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: stri
       files[`cards/${base} back.png`] = await canvasBytes(r.backs.get(c.id)!)
     }
     if (hasFoil) {
-      const m = await renderAll(false, dpi, true)
+      const m = await renderAll(true, dpi, true)
       for (const c of cards) {
         const base = images.get(c.id)!.replace(/\.png$/, '')
         files[`${base} foil.png`] = await canvasBytes(onWhite(m.fronts.get(c.id)!))
@@ -365,18 +411,18 @@ export function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: stri
         Backs on every other page (double-sided)
       </label>
       <p className="cd-muted">{TEXT.exportHint}</p>
-      <button className="btn btn-primary" disabled={!!busy} onClick={() => void confirmBig(pdf)}>
-        Print sheets (PDF)
+      <button className="btn btn-primary" disabled={!!busy} onClick={() => void pdf(false)()}>
+        PDF…
       </button>
       <button className="btn" disabled={!!busy} onClick={() => void confirmBig(png)}>
         Print sheets (PNG)
       </button>
       {hasFoil ? (
         <>
-          <button className="btn" disabled={!!busy} onClick={() => void confirmBig(foilPdf)}>
-            Foil mask sheets (PDF)
+          <button className="btn" disabled={!!busy} onClick={() => void pdf(true)()}>
+            Foil masks (PDF)…
           </button>
-          <p className="cd-muted">Black where the foil goes, laid out like the print sheets. Print shops use it as the foil layer.</p>
+          <p className="cd-muted">Black where the foil goes, laid out like the PDF. Print shops use it as the foil layer.</p>
         </>
       ) : null}
       <h4>Images and data</h4>

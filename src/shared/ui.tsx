@@ -34,7 +34,7 @@ export function PlaceholderImage({ src, alt, size = 64 }: { src?: string | null;
 export function DialogHost() {
   const { current, seq } = useDialogs()
   if (!current) return null
-  const close = (result: boolean | string | null) => {
+  const close = (result: boolean | string | number | null) => {
     useDialogs.setState({ current: null })
     ;(current.resolve as (v: unknown) => void)(result)
   }
@@ -51,6 +51,24 @@ export function DialogHost() {
           <button className={current.danger ? 'btn btn-danger' : 'btn btn-primary'} onClick={() => close(true)} autoFocus>
             {current.confirmLabel}
           </button>
+        </div>
+      </Modal>
+    )
+  }
+  if (current.kind === 'choice') {
+    return (
+      <Modal onClose={() => close(null)}>
+        <h3>{current.title}</h3>
+        <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text-muted)' }}>{current.message}</div>
+        <div className="modal-actions">
+          <button className="btn" onClick={() => close(null)}>
+            Cancel
+          </button>
+          {current.choices.map((c, i) => (
+            <button key={c} className={i === 0 ? 'btn btn-primary' : 'btn'} onClick={() => close(i)} autoFocus={i === 0}>
+              {c}
+            </button>
+          ))}
         </div>
       </Modal>
     )

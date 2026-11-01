@@ -81,7 +81,9 @@ export interface Card {
 export interface CardDoc {
   widthMm: number
   heightMm: number
+  /** Always stored in mm; `bleedUnit` is only how it's typed and shown (pixels at 300 DPI). */
   bleedMm: number
+  bleedUnit?: 'mm' | 'px'
   cornerMm: number
   front: Scene<CardNode>
   back: Scene<CardNode>
@@ -454,6 +456,33 @@ export function resizeDesign(doc: CardDoc, widthMm: number, heightMm: number): C
     Object.entries(doc.overrides ?? {}).map(([id, o]) => [id, o.nodes ? { ...o, nodes: Object.fromEntries(Object.entries(o.nodes).map(([l, ns]) => [l, ns.map(scale)])) } : o]),
   )
   return { ...doc, widthMm, heightMm, front: side(doc.front), back: side(doc.back), overrides }
+}
+
+/**
+ * Change the bleed. Shapes that reached the old bleed line (like the background) grow to the new one, so the
+ * art still fills it; pictures are left alone, export stretches the card's edge into any bleed left empty.
+ */
+export function setBleed(doc: CardDoc, bleedMm: number): CardDoc {
+  const ob = doc.bleedMm * MM
+  const nb = bleedMm * MM
+  if (nb <= ob) return { ...doc, bleedMm }
+  const W = doc.widthMm * MM
+  const H = doc.heightMm * MM
+  const near = 0.5
+  const grow = (n: CardNode): CardNode => {
+    if (n.kind !== 'rect' || !isBox(n)) return n
+    let { x, y, width, height } = n
+    if (x <= -ob + near) (width += x + nb), (x = -nb)
+    if (y <= -ob + near) (height += y + nb), (y = -nb)
+    if (x + width >= W + ob - near) width = W + nb - x
+    if (y + height >= H + ob - near) height = H + nb - y
+    return { ...n, x, y, width, height }
+  }
+  const side = (s: Scene<CardNode>) => ({ ...s, nodes: s.nodes.map(grow) })
+  const overrides = Object.fromEntries(
+    Object.entries(doc.overrides ?? {}).map(([id, o]) => [id, o.nodes ? { ...o, nodes: Object.fromEntries(Object.entries(o.nodes).map(([l, ns]) => [l, ns.map(grow)])) } : o]),
+  )
+  return { ...doc, bleedMm, front: side(doc.front), back: side(doc.back), overrides }
 }
 
 /** The safe margin inside the cut line (the blue line). */
