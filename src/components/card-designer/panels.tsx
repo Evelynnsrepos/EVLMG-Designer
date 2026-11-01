@@ -10,7 +10,7 @@ import { updateNodes } from '@/shared/canvas'
 import { choiceDialog, confirmDialog } from '@/shared/dialogs'
 import { cssFamily, systemFonts } from '@/shared/fontList'
 import { bleedMmToPx, bleedPxToMm, canvasBytes, cardsToPdf, drawSheets, PAGE_SIZES, sheetLayout, sheetsToPdf } from '@/shared/print'
-import { CARD_SIZES, composeScene, deckJson, expandCopies, resizeDesign, setBleed, slotColors, ttsFileUrl, ttsSavedObject, ttsSheets, type Card, type CardDoc, type CardImageNode, type CardNode, type CardTextNode, type SlotKeys } from './model'
+import { CARD_SIZES, composeScene, deckJson, expandCopies, resizeDesign, scaleBleed, setBleed, slotColors, ttsFileUrl, ttsSavedObject, ttsSheets, type Card, type CardDoc, type CardImageNode, type CardNode, type CardTextNode, type SlotKeys } from './model'
 import { deckRows } from './sheetImport'
 import { cardNodeTypes } from './nodeTypes'
 import { loadSceneFonts, preloadImages, renderCard } from './render'
@@ -179,11 +179,15 @@ export function CardPanel({ d, update }: { d: CardDoc; update: Update }) {
       {num('Height', d.heightMm, (v) => update((x) => resizeDesign(x, x.widthMm, v)), 10)}
       <div className="cd-row">
         <span className="cd-label">Bleed</span>
-        <BleedInput mm={d.bleedMm} unit={d.bleedUnit} onChange={(mm, unit) => update((x) => ({ ...setBleed(x, mm), bleedUnit: unit }))} />
+        <BleedInput mm={d.bleedMm} unit={d.bleedUnit} onChange={(mm, unit) => update((x) => ({ ...(x.bleedScales ? scaleBleed(x, mm) : setBleed(x, mm)), bleedUnit: unit }))} />
       </div>
       <label className="cd-row" title="Off: the bleed prints exactly what you design there (draw or place art out to the red dashed line)">
         <input type="checkbox" checked={d.bleedStretch !== false} onChange={(e) => update((x) => ({ ...x, bleedStretch: e.target.checked }))} />
         Fill empty bleed from the card's edge
+      </label>
+      <label className="cd-row" title="On: a bigger bleed makes the whole design bigger, so your art covers the new bleed line. Text moves out too, so check the blue safe line.">
+        <input type="checkbox" checked={!!d.bleedScales} onChange={(e) => update((x) => ({ ...x, bleedScales: e.target.checked }))} />
+        Scale the design with the bleed
       </label>
       {num('Corner', d.cornerMm, (v) => update((x) => ({ ...x, cornerMm: v })))}
       <p className="cd-muted">

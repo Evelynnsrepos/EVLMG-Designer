@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MM, applySlots, cardsFromSheet, createCardDoc, deckJson, expandCopies, fillText, renameFieldInScene, setBleed, slotColors, ttsFileUrl, ttsSavedObject, ttsSheets, type CardNode } from './model'
+import { MM, applySlots, cardsFromSheet, createCardDoc, deckJson, expandCopies, fillText, renameFieldInScene, scaleBleed, setBleed, slotColors, ttsFileUrl, ttsSavedObject, ttsSheets, type CardNode } from './model'
 
 describe('card designer model', () => {
   const doc = createCardDoc()
@@ -91,5 +91,21 @@ describe('bleed', () => {
     expect(back.width).toBe((63 + 10) * MM)
     expect(d.front.nodes.find((n) => n.name === 'Frame')).toMatchObject({ x: 25, y: 25 })
     expect(setBleed(d, 2).bleedMm).toBe(2)
+  })
+
+  it('scales the whole design so the old bleed box fills the new one', () => {
+    const d = scaleBleed(createCardDoc(), 5)
+    const bg = d.front.nodes.find((n) => n.name === 'Background') as CardNode & { width: number; height: number }
+    const near = (a: number, b: number) => expect(a).toBeCloseTo(b, 6)
+    near(bg.x, -50)
+    near(bg.y, -50)
+    near(bg.width, 730)
+    near(bg.height, 980)
+    // The middle of the card stays put.
+    const frame = d.front.nodes.find((n) => n.name === 'Frame') as CardNode & { width: number; height: number }
+    near(frame.x + frame.width / 2, 315)
+    near(frame.y + frame.height / 2, 440)
+    expect(frame.width).toBeGreaterThan(630 - 50)
+    expect(d.widthMm).toBe(63)
   })
 })

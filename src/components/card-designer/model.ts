@@ -86,6 +86,8 @@ export interface CardDoc {
   bleedUnit?: 'mm' | 'px'
   /** false: export the bleed exactly as designed; otherwise empty bleed is filled by stretching the card's edge. */
   bleedStretch?: boolean
+  /** true: changing the bleed scales the whole design with it (`scaleBleed`) instead of only growing the background. */
+  bleedScales?: boolean
   cornerMm: number
   front: Scene<CardNode>
   back: Scene<CardNode>
@@ -440,13 +442,10 @@ export function repairFieldLinks(doc: CardDoc, cardIds: Id[]): CardDoc {
 /** Per-card layers that still hold template items (decks from 0.23.3). */
 export const legacyPerCardLayers = (doc: CardDoc) => (doc.perCardLayers ?? []).filter((l) => doc.front.nodes.some((n) => n.layerId === l) || doc.back.nodes.some((n) => n.layerId === l))
 
-/** Scale the whole design (both sides and every card's own items) to a new card size. */
-export function resizeDesign(doc: CardDoc, widthMm: number, heightMm: number): CardDoc {
-  const sx = widthMm / doc.widthMm
-  const sy = heightMm / doc.heightMm
-  if (sx === 1 && sy === 1) return doc
+/** Scale (and shift) every item: both sides and every card's own items; x → x·sx + ox. */
+function mapDesign(doc: CardDoc, sx: number, sy: number, ox = 0, oy = 0): Pick<CardDoc, 'front' | 'back' | 'overrides'> {
   const scale = (n: CardNode): CardNode => {
-    const m = { ...n, x: n.x * sx, y: n.y * sy } as CardNode & { width?: number; height?: number; fontSize?: number; points?: number[] }
+    const m = { ...n, x: n.x * sx + ox, y: n.y * sy + oy } as CardNode & { width?: number; height?: number; fontSize?: number; points?: number[] }
     if (m.width !== undefined) m.width *= sx
     if (m.height !== undefined) m.height *= sy
     if (m.fontSize !== undefined) m.fontSize *= Math.min(sx, sy)
@@ -457,7 +456,27 @@ export function resizeDesign(doc: CardDoc, widthMm: number, heightMm: number): C
   const overrides = Object.fromEntries(
     Object.entries(doc.overrides ?? {}).map(([id, o]) => [id, o.nodes ? { ...o, nodes: Object.fromEntries(Object.entries(o.nodes).map(([l, ns]) => [l, ns.map(scale)])) } : o]),
   )
-  return { ...doc, widthMm, heightMm, front: side(doc.front), back: side(doc.back), overrides }
+  return { front: side(doc.front), back: side(doc.back), overrides }
+}
+
+/** Scale the whole design (both sides and every card's own items) to a new card size. */
+export function resizeDesign(doc: CardDoc, widthMm: number, heightMm: number): CardDoc {
+  const sx = widthMm / doc.widthMm
+  const sy = heightMm / doc.heightMm
+  if (sx === 1 && sy === 1) return doc
+  return { ...doc, widthMm, heightMm, ...mapDesign(doc, sx, sy) }
+}
+
+/**
+ * Change the bleed and scale the whole design with it: what reached the old bleed line reaches the new one
+ * (`CardDoc.bleedScales`). The card size stays; everything moves out from (or in towards) the middle.
+ */
+export function scaleBleed(doc: CardDoc, bleedMm: number): CardDoc {
+  const ob = doc.bleedMm * MM
+  const nb = bleedMm * MM
+  const sx = (doc.widthMm * MM + 2 * nb) / (doc.widthMm * MM + 2 * ob)
+  const sy = (doc.heightMm * MM + 2 * nb) / (doc.heightMm * MM + 2 * ob)
+  return { ...doc, bleedMm, ...mapDesign(doc, sx, sy, ob * sx - nb, ob * sy - nb) }
 }
 
 /**
