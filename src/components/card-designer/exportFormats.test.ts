@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { atlasGrid, DEFAULT_EXPORT, exportBleed, godotAtlasTexture, godotFolder, homePaper, nearestShopSize, shopById, shopSize } from './exportFormats'
+import { atlasGrid, DEFAULT_EXPORT, exportBleed, exportKey, godotAtlasTexture, godotFolder, homePaper, logExport, nearestShopSize, recordCard, sameExport, settingLines, settingsFrom, shopById, shopSize } from './exportFormats'
 import { createCardDoc } from './model'
 
 describe('print shop presets', () => {
@@ -47,5 +47,37 @@ describe('Godot', () => {
     expect(godotFolder('')).toBe('res://')
     expect(atlasGrid(10)).toEqual({ cols: 4, rows: 3 })
     expect(atlasGrid(1)).toEqual({ cols: 1, rows: 1 })
+  })
+})
+
+describe('export memory', () => {
+  const deck = (bleedMm: number) => ({ ...createCardDoc(), widthMm: 63, heightMm: 88, bleedMm })
+
+  it('keeps the last export of each kind, newest first', () => {
+    let d = deck(3)
+    d = logExport(d, { ...DEFAULT_EXPORT, target: 'shop', shop: 'mpc' }, 5, 'a')
+    d = logExport(d, { ...DEFAULT_EXPORT, target: 'shop', shop: 'tgc' }, 5, 'b')
+    d = logExport(d, { ...DEFAULT_EXPORT, target: 'shop', shop: 'mpc', dpi: 600 }, 4, 'c')
+    expect(d.exportLog!.map((r) => [r.key, r.at])).toEqual([['shop:mpc', 'c'], ['shop:tgc', 'b']])
+    expect(exportKey({ ...DEFAULT_EXPORT, target: 'photo' })).toBe('photo')
+  })
+
+  it('makes another deck come out the same, even with a different card bleed', () => {
+    const s = { ...DEFAULT_EXPORT, target: 'photo' as const, addBleedMm: 1, fill: 'mirror' as const, photo: '13x18' }
+    const a = logExport(deck(3), s, 10)
+    const r = a.exportLog![0]
+    const b = deck(2)
+    const cur = { ...DEFAULT_EXPORT, cards: 'this' as const, matchDeck: 'x' }
+    const next = settingsFrom(r, b, cur)
+    expect(next).toMatchObject({ target: 'photo', photo: '13x18', fill: 'mirror', addBleedMm: 2, cards: 'this', matchDeck: 'x' })
+    expect(exportBleed(b, next).totalMm).toBe(4)
+    expect(sameExport(next, b, r.settings, recordCard(r))).toBe(true)
+    expect(sameExport({ ...next, photo: '10x15' }, b, r.settings, recordCard(r))).toBe(false)
+    // Same card bleed: the fill counts too.
+    expect(sameExport({ ...s, fill: 'edge' }, a, r.settings, recordCard(r))).toBe(false)
+    expect(settingLines(s, a)).toContain('Bleed 4 mm in total')
+    // A print shop sets its own bleed: the added bleed carried over stays what it was.
+    const shop = logExport(a, { ...DEFAULT_EXPORT, target: 'shop', shop: 'mpc' }, 10).exportLog![0]
+    expect(settingsFrom(shop, deck(3), cur).addBleedMm).toBe(0)
   })
 })

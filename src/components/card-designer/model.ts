@@ -95,6 +95,11 @@ export interface CardDoc {
   cornerMm: number
   /** The export window's choices, kept with the deck (never part of the design or of undo). */
   exportSettings?: Partial<ExportSettings>
+  /**
+   * The last export of each kind (newest first), so the next one, or another deck, can come out the same.
+   * shortcut: its setting strings count in the project word count (at most ~10 kinds, ~15 words each); skip it there if anyone notices.
+   */
+  exportLog?: ExportRecord[]
   front: Scene<CardNode>
   back: Scene<CardNode>
   slots: ColorSlot[]
@@ -790,6 +795,19 @@ export interface ExportSettings {
   godotNoText: boolean
   godotFolder: string
   data: 'json' | 'csv'
+  /** Another Card Designer deck (document id) whose exports this one should match. */
+  matchDeck: string
+}
+
+/** What one export used (see `exportKey`): the settings plus the card it was made from. */
+export interface ExportRecord {
+  key: string
+  at: string
+  settings: ExportSettings
+  widthMm: number
+  heightMm: number
+  cardBleedMm: number
+  cards: number
 }
 
 /** The deck as JSON for game engines and other tools (format "evlmg-deck", version 1). */

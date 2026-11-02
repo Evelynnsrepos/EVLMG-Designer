@@ -7,7 +7,7 @@ import { NumberInput } from '@/shared/calculators'
 import { bleedMmToPx, bleedPxToMm } from '@/shared/print'
 import { CARD_SIZES, resizeDesign, setBleed, type Card, type CardDoc, type CardImageNode, type CardNode, type CardTextNode, type SlotKeys } from './model'
 import { confirmBig, ExportDialog, exportCards, targetLabel } from './ExportDialog'
-import { exportSettings } from './exportFormats'
+import { exportSettings, logExport } from './exportFormats'
 import { runExport } from './exporting'
 import { TEXT, type OnScene, type Update } from './ui'
 
@@ -207,7 +207,7 @@ export function CardPanel({ d, update }: { d: CardDoc; update: Update }) {
 }
 
 /** The Export section: opens the export window, or repeats the last export with its saved choices. */
-export function ExportPanel({ d, title, cards, root, currentId, update }: { d: CardDoc; title: string; cards: Card[]; root: string | null; currentId: Id | null; update: Update }) {
+export function ExportPanel({ d, deckId, title, cards, root, currentId, update }: { d: CardDoc; deckId: Id; title: string; cards: Card[]; root: string | null; currentId: Id | null; update: Update }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -217,7 +217,8 @@ export function ExportPanel({ d, title, cards, root, currentId, update }: { d: C
     setBusy(true)
     setError(null)
     try {
-      await runExport({ d, title, cards: exportCards(s, cards, currentId), root }, s)
+      const chosen = exportCards(s, cards, currentId)
+      if (await runExport({ d, title, cards: chosen, root }, s)) update((x) => logExport(x, s, chosen.length), { undoable: false })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -240,7 +241,7 @@ export function ExportPanel({ d, title, cards, root, currentId, update }: { d: C
           {error}
         </p>
       ) : null}
-      {open ? <ExportDialog d={d} title={title} cards={cards} root={root} currentId={currentId} update={update} onClose={() => setOpen(false)} /> : null}
+      {open ? <ExportDialog d={d} deckId={deckId} title={title} cards={cards} root={root} currentId={currentId} update={update} onClose={() => setOpen(false)} /> : null}
     </div>
   )
 }

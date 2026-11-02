@@ -1,14 +1,15 @@
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { isTauri } from '@/core/fs'
+import { loadDocumentNow, useProjectStore } from '@/core/state'
 import type { Id } from '@/core/model'
 import { NumberInput } from '@/shared/calculators'
 import { confirmDialog } from '@/shared/dialogs'
 import { MM_PER_INCH, mmToPx, PAGE_SIZES, sheetLayout } from '@/shared/print'
 import { Modal } from '@/shared/ui'
-import { exportBleed, exportSettings, homePaper, nearestShopSize, PHOTO_SIZES, PRINT_SHOPS, shopById, shopSize } from './exportFormats'
-import { cardPainter, foldPair, gameSide, preflight, printSide, runExport, type Paint, type Warning } from './exporting'
-import { expandCopies, SAFE_MM, type Card, type CardDoc, type ExportSettings } from './model'
+import { exportBleed, exportKey, exportSettings, homePaper, logExport, nearestShopSize, PHOTO_SIZES, PRINT_SHOPS, recordCard, sameExport, settingLines, settingsFrom, shopById, shopSize } from './exportFormats'
+import { cardPainter, foldPair, foldPairSize, gameSide, preflight, printSide, runExport, type Paint, type Warning } from './exporting'
+import { createCardDoc, expandCopies, SAFE_MM, type Card, type CardDoc, type ExportRecord, type ExportSettings } from './model'
 import { allNodes, cardLabel, TEXT, type Update } from './ui'
 
 type Target = ExportSettings['target']
@@ -48,7 +49,7 @@ export const confirmBig = async (s: ExportSettings) =>
  * exactly what the file gets, and the bleed added on export. Nothing here changes the design; the choices are kept
  * with the deck.
  */
-export function ExportDialog({ d, title, cards, root, currentId, update, onClose }: { d: CardDoc; title: string; cards: Card[]; root: string | null; currentId: Id | null; update: Update; onClose(): void }) {
+export function ExportDialog({ d, deckId, title, cards, root, currentId, update, onClose }: { d: CardDoc; deckId: Id; title: string; cards: Card[]; root: string | null; currentId: Id | null; update: Update; onClose(): void }) {
   const [s, setS] = useState(() => exportSettings(d))
   const set = (patch: Partial<ExportSettings>) => {
     const next = { ...s, ...patch }
@@ -94,7 +95,7 @@ export function ExportDialog({ d, title, cards, root, currentId, update, onClose
         const dpi = Math.min(150, (420 * MM_PER_INCH) / (d.heightMm + 2 * bleed.totalMm))
         const fold = s.target === 'photo' && s.photoBacks === 'fold'
         const pic = fold
-          ? foldPair(printSide(painter.paint, d, s, shown, 'front', dpi), printSide(painter.paint, d, s, shown, 'back', dpi), mmToPx(bleed.totalMm, dpi))
+          ? foldPair(printSide(painter.paint, d, s, shown, 'front', dpi), printSide(painter.paint, d, s, shown, 'back', dpi))
           : print
             ? printSide(painter.paint, d, s, shown, side, dpi)
             : s.target === 'godot' ? gameSide(painter.paint, d, s, shown, side) : painter.paint(shown, side, dpi)
@@ -110,11 +111,13 @@ export function ExportDialog({ d, title, cards, root, currentId, update, onClose
           for (let y = 0; y < c.height && !empty; y++) for (let x = 0; x < c.width; x++) if ((x < b || y < b || x >= c.width - b || y >= c.height - b) && px[(y * c.width + x) * 4 + 3] < 250) { empty = true; break }
           if (lines) {
             const k = dpi / MM_PER_INCH
+            // A fold pair is two whole cards side by side: draw the lines on each.
+            const w = fold ? c.width / 2 : c.width
             const box = (inset: number, colour: string, dash: number[]) => {
               g.strokeStyle = colour
               g.setLineDash(dash)
               g.lineWidth = 1.5
-              g.strokeRect(inset * k, inset * k, c.width - 2 * inset * k, c.height - 2 * inset * k)
+              for (const x of fold ? [0, w] : [0]) g.strokeRect(x + inset * k, inset * k, w - 2 * inset * k, c.height - 2 * inset * k)
             }
             if (Math.abs(bleed.addedMm) > 0.01) box(bleed.addedMm, '#e5484d', [6, 4])
             box(bleed.totalMm, '#1c1d22', [])
@@ -142,7 +145,8 @@ export function ExportDialog({ d, title, cards, root, currentId, update, onClose
     setBusy(mask ? 'foil masks' : targetLabel(s))
     setError(null)
     try {
-      await runExport({ d, title, cards: chosen, root }, s, mask)
+      // Only real exports are remembered (not foil masks, not a cancelled save).
+      if ((await runExport({ d, title, cards: chosen, root }, s, mask)) && !mask) update((x) => logExport(x, s, chosen.length), { undoable: false })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -160,7 +164,7 @@ export function ExportDialog({ d, title, cards, root, currentId, update, onClose
     const deckSize = expandCopies(chosen).length
     if (s.target === 'home' || s.target === 'photo') {
       const photo = s.target === 'photo'
-      const l = sheetLayout(homePaper(s), { w: (photo && s.photoBacks === 'fold' ? 2 : 1) * d.widthMm, h: d.heightMm }, bleed.totalMm)
+      const l = sheetLayout(homePaper(s), photo && s.photoBacks === 'fold' ? foldPairSize(d, bleed.totalMm) : { w: d.widthMm, h: d.heightMm }, bleed.totalMm)
       if (!l.slots.length) return photo ? 'The card is bigger than the photo: pick a bigger photo size.' : 'The card is bigger than the paper.'
       const pages = Math.ceil(deckSize / l.slots.length) * ((photo ? s.photoBacks === 'photos' : s.backs) ? 2 : 1)
       if (s.target === 'photo') return `${l.slots.length} card${l.slots.length === 1 ? '' : 's'} per photo, ${pages} photo${pages === 1 ? '' : 's'} for ${deckSize} card${deckSize === 1 ? '' : 's'}.`
@@ -434,6 +438,7 @@ export function ExportDialog({ d, title, cards, root, currentId, update, onClose
                 </ul>
               ) : null}
           </div>
+          <ExportMemory d={d} deckId={deckId} root={root} s={s} apply={set} />
         </nav>
         <section className="cd-export-preview" aria-label="Preview">
           {s.target === 'data' ? (
@@ -507,6 +512,124 @@ export function ExportDialog({ d, title, cards, root, currentId, update, onClose
 }
 
 const round = (v: number) => Math.round(v * 100) / 100
+
+const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+
+/** Lines of an export; the ones `other` does not have are marked. */
+function Lines({ lines, other }: { lines: string[]; other?: string[] }) {
+  return (
+    <ul className="cd-export-lines">
+      {lines.map((l) => (
+        <li key={l} className={other && !other.includes(l) ? 'cd-diff' : undefined}>
+          {l}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/**
+ * What was exported last and how, for this kind of export, and how it compares with another deck, so two decks (for
+ * example two versions of a set) come out the same at every print shop.
+ */
+function ExportMemory({ d, deckId, root, s, apply }: { d: CardDoc; deckId: Id; root: string | null; s: ExportSettings; apply(next: ExportSettings): void }) {
+  const docs = useProjectStore((x) => x.meta?.documents)
+  const decks = (docs ?? []).filter((m) => m.type === 'card-designer' && m.id !== deckId)
+  const matchName = decks.find((m) => m.id === s.matchDeck)?.title
+  const [loaded, setLoaded] = useState<{ id: Id; doc: CardDoc } | null>(null)
+  useEffect(() => {
+    if (!root || matchName === undefined) return
+    let live = true
+    const id = s.matchDeck
+    void loadDocumentNow<CardDoc>(root, 'card-designer', id, createCardDoc).then((doc) => live && setLoaded({ id, doc }))
+    return () => void (live = false)
+  }, [root, s.matchDeck, matchName])
+  const other = loaded?.id === s.matchDeck ? loaded.doc : null
+
+  const key = exportKey(s)
+  const mine = d.exportLog?.find((r) => r.key === key)
+  const theirs = other?.exportLog?.find((r) => r.key === key)
+  const now = settingLines(s, d)
+  const sameAsNow = (r: ExportRecord) => sameExport(s, d, r.settings, recordCard(r))
+  const status = (r: ExportRecord) => {
+    const here = d.exportLog?.find((x) => x.key === r.key)
+    if (!here) return 'not exported here yet'
+    return sameExport(here.settings, recordCard(here), r.settings, recordCard(r)) ? '✓ same' : '✗ different'
+  }
+  return (
+    <div className="cd-export-memory">
+      <strong>Last export like this</strong>
+      {mine ? (
+        <>
+          <span className="cd-muted">
+            {when(mine.at)}, {mine.cards} card{mine.cards === 1 ? '' : 's'}
+            {sameAsNow(mine) ? ', same settings as now' : ''}
+          </span>
+          <Lines lines={settingLines(mine.settings, recordCard(mine))} other={now} />
+          {sameAsNow(mine) ? null : (
+            <button className="btn" onClick={() => apply(settingsFrom(mine, d, s))}>
+              Use these settings again
+            </button>
+          )}
+        </>
+      ) : (
+        <span className="cd-muted">Not exported like this yet.</span>
+      )}
+      {decks.length ? (
+        <label className="cd-row">
+          <span className="cd-label">Match deck</span>
+          <select className="input" value={matchName === undefined ? '' : s.matchDeck} onChange={(e) => apply({ ...s, matchDeck: e.target.value })} aria-label="Another deck to come out the same as">
+            <option value="">None</option>
+            {decks.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.title}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      {other && matchName !== undefined ? (
+        <>
+          {other.widthMm !== d.widthMm || other.heightMm !== d.heightMm ? (
+            <p className="cd-warning">
+              {matchName} has {round(other.widthMm)} × {round(other.heightMm)} mm cards, this deck {round(d.widthMm)} × {round(d.heightMm)} mm: they can only come out the same when the card sizes match.
+            </p>
+          ) : null}
+          {theirs ? (
+            <>
+              <span className={sameAsNow(theirs) ? 'cd-ok' : 'cd-muted'}>{sameAsNow(theirs) ? `✓ Comes out like ${matchName} (${when(theirs.at)})` : `${matchName} was exported like this (${when(theirs.at)}):`}</span>
+              {sameAsNow(theirs) ? null : (
+                <>
+                  <Lines lines={settingLines(theirs.settings, recordCard(theirs), Math.abs(theirs.cardBleedMm - d.bleedMm) < 0.001)} other={settingLines(s, d, Math.abs(theirs.cardBleedMm - d.bleedMm) < 0.001)} />
+                  <button className="btn" onClick={() => apply(settingsFrom(theirs, d, s))}>
+                    Use the same settings
+                  </button>
+                </>
+              )}
+            </>
+          ) : (
+            <span className="cd-muted">{matchName} was not exported like this yet.</span>
+          )}
+          {other.exportLog?.length ? (
+            <>
+              <span className="cd-muted">All exports of {matchName} (click one to set it up here):</span>
+              <ul className="cd-export-lines">
+                {other.exportLog.map((r) => (
+                  <li key={r.key}>
+                    <button className="cd-link" onClick={() => apply(settingsFrom(r, d, s))}>
+                      {targetLabel(r.settings)}
+                    </button>{' '}
+                    <span className="cd-muted">{status(r)}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  )
+}
 
 function NoShopSize({ d, shopId }: { d: CardDoc; shopId: string }) {
   const shop = shopById(shopId)

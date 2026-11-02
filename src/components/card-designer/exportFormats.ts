@@ -1,5 +1,5 @@
 import { MM_PER_INCH, PAGE_SIZES, type Size } from '@/shared/print'
-import type { CardDoc, ExportSettings } from './model'
+import type { CardDoc, ExportRecord, ExportSettings } from './model'
 
 /** What the export window starts with; a deck keeps the user's changes in `CardDoc.exportSettings`. */
 export const DEFAULT_EXPORT: ExportSettings = {
@@ -30,6 +30,7 @@ export const DEFAULT_EXPORT: ExportSettings = {
   godotNoText: false,
   godotFolder: 'res://cards/',
   data: 'json',
+  matchDeck: '',
 }
 
 export const exportSettings = (d: CardDoc): ExportSettings => ({ ...DEFAULT_EXPORT, ...d.exportSettings })
@@ -145,7 +146,7 @@ export function godotFolder(f: string) {
 }
 
 /** The bleed an export uses: the card's own bleed plus what the export adds (a shop preset sets the total). */
-export function exportBleed(d: CardDoc, s: ExportSettings) {
+export function exportBleed(d: Pick<CardDoc, 'bleedMm'>, s: ExportSettings) {
   const shop = s.target === 'shop' ? shopById(s.shop) : null
   const totalMm = shop && shop.id !== 'other' ? shop.bleedIn * MM_PER_INCH : Math.max(0, d.bleedMm + s.addBleedMm)
   return { cardMm: d.bleedMm, totalMm, addedMm: totalMm - d.bleedMm }
@@ -159,4 +160,69 @@ export function homePaper(s: ExportSettings): Size {
   }
   const p = PAGE_SIZES.find((x) => x.id === s.paper)
   return p ? { w: p.w, h: p.h } : { w: Math.max(50, s.paperW), h: Math.max(50, s.paperH) }
+}
+
+/** Exports of the same kind replace each other in the log: one per target, and per shop for print shops. */
+export const exportKey = (s: ExportSettings) => (s.target === 'shop' ? `shop:${s.shop}` : s.target)
+
+const TARGET_NAMES: Record<ExportSettings['target'], string> = { home: 'Print at home', shop: 'Print shop', photo: 'Photo station (janky)', tts: 'Tabletop Simulator', godot: 'Godot', data: 'Data' }
+const FILL_NAMES: Record<ExportSettings['fill'], string> = { edge: 'stretch the edge', mirror: 'mirror the edge', scale: 'scale the art', colour: 'one colour' }
+const mm = (v: number) => `${Math.round(v * 100) / 100} mm`
+
+/**
+ * Everything that decides how an export comes out, as lines a person can read. Two exports with the same lines
+ * come out the same (for the same card design), so this is also how the window tells whether two decks match.
+ */
+type CardSize = { widthMm: number; heightMm: number; bleedMm: number }
+
+/** `detail` adds how the bleed is made up (card bleed + added, fill), which only compares between decks with the same card bleed. */
+export function settingLines(s: ExportSettings, card: CardSize, detail = true): string[] {
+  const lines = [`${TARGET_NAMES[s.target]}${s.target === 'shop' ? `: ${shopById(s.shop).name}` : ''}`, `Card ${mm(card.widthMm)} × ${mm(card.heightMm)}`]
+  if (s.target === 'home' || s.target === 'shop' || s.target === 'photo') {
+    const b = exportBleed(card, s)
+    lines.push(`Bleed ${mm(b.totalMm)} in total`)
+    if (detail) lines.push(`Card bleed ${mm(b.cardMm)} + added ${mm(b.addedMm)}${b.addedMm > 0.001 ? `, ${FILL_NAMES[s.fill]}${s.fill === 'colour' ? ` ${s.fillColour}` : ''}` : ''}`)
+  }
+  const shopPdf = s.target === 'shop' && (s.shop === 'other' ? s.shopFormat : shopById(s.shop).format) === 'pdf'
+  if (s.target === 'home') {
+    const paper = homePaper(s)
+    lines.push(`${PAGE_SIZES.find((p) => p.id === s.paper)?.name ?? `${mm(paper.w)} × ${mm(paper.h)}`}, ${s.homeFormat.toUpperCase()}, ${s.dpi} DPI${s.lossless && s.homeFormat === 'pdf' ? ', lossless' : ''}`)
+    lines.push(s.backs ? `Backs on every other page, moved ${mm(s.backX)} → ${mm(s.backY)} ↓` : 'No backs')
+  }
+  if (s.target === 'shop') {
+    if (s.shop === 'other') lines.push(s.shopFormat === 'pdf' ? 'PDF, one card per page' : 'PNG for every card side')
+    if (!shopById(s.shop).sizes.length) lines.push(`${s.dpi} DPI`)
+    if (shopPdf) lines.push(`${s.backs ? 'With backs' : 'No backs'}${s.lossless ? ', lossless' : ''}`)
+  }
+  if (s.target === 'photo') {
+    lines.push(`${PHOTO_SIZES.find((p) => p.id === s.photo)?.name ?? s.photo} photos`)
+    lines.push(`Backs: ${s.photoBacks === 'fold' ? 'next to the front, to fold' : s.photoBacks === 'photos' ? 'on extra photos' : 'none'}${s.photoMeasuredMm > 0 ? `, scaled for a measured ${mm(s.photoMeasuredMm)}` : ''}`)
+  }
+  if (s.target === 'tts') lines.push(s.tts === 'ready' ? 'Ready deck' : 'Card sheets (ZIP)')
+  if (s.target === 'godot') lines.push(`${s.godotWidth} px wide, ${s.godotSheet ? 'one sprite sheet + .tres' : 'a PNG per card'}${s.godotRound ? ', round corners' : ''}${s.godotNoText ? ', without text' : ''}, ${godotFolder(s.godotFolder)}`)
+  if (s.target === 'data') lines.push(s.data === 'csv' ? 'Spreadsheet (CSV)' : 'Deck JSON')
+  return lines
+}
+
+export const recordCard = (r: ExportRecord): CardSize => ({ widthMm: r.widthMm, heightMm: r.heightMm, bleedMm: r.cardBleedMm })
+
+/** Whether two exports come out the same. Decks with different card bleeds still match when the total bleed does. */
+export function sameExport(a: ExportSettings, ac: CardSize, b: ExportSettings, bc: CardSize) {
+  const detail = Math.abs(ac.bleedMm - bc.bleedMm) < 0.001
+  return settingLines(a, ac, detail).join('\n') === settingLines(b, bc, detail).join('\n')
+}
+
+/** The deck with this export at the top of its log (replacing the last one of the same kind). */
+export function logExport(d: CardDoc, s: ExportSettings, cards: number, at = new Date().toISOString()): CardDoc {
+  const r: ExportRecord = { key: exportKey(s), at, settings: { ...s, picked: [] }, widthMm: d.widthMm, heightMm: d.heightMm, cardBleedMm: d.bleedMm, cards }
+  return { ...d, exportLog: [r, ...(d.exportLog ?? []).filter((x) => x.key !== r.key)].slice(0, 30) }
+}
+
+/**
+ * Settings that make this deck come out like record `r`: the same choices and the same total bleed (the added bleed
+ * makes up for a different card bleed). Which cards to export and the deck to match stay this deck's own.
+ */
+export function settingsFrom(r: ExportRecord, d: Pick<CardDoc, 'bleedMm'>, cur: ExportSettings): ExportSettings {
+  const addBleedMm = Math.round((r.settings.addBleedMm + r.cardBleedMm - d.bleedMm) * 1000) / 1000
+  return { ...DEFAULT_EXPORT, ...r.settings, cards: cur.cards, picked: cur.picked, matchDeck: cur.matchDeck, addBleedMm }
 }

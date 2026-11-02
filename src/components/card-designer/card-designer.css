@@ -591,3 +591,25 @@
   border-radius: var(--radius);
   font-size: 12px;
 }
+
+.cd-export-memory {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.cd-export-lines {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+}
+.cd-export-lines .cd-diff {
+  color: #e5a000;
+  font-weight: 600;
+}
+.cd-ok {
+  color: #2f9e44;
+  font-weight: 600;
+}

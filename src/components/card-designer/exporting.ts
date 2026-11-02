@@ -119,13 +119,13 @@ const sameAll = (sides: HTMLCanvasElement[]) => new Set(sides.map((c) => c.toDat
 const zip = (files: Record<string, Uint8Array>) => zipSync(files, { level: 0 })
 const text = (s: string) => new TextEncoder().encode(s)
 
-/** Run an export with the window's settings. `mask` exports the foil masks of a print export instead. */
-export async function runExport({ d, title, cards, root }: ExportDeck, s: ExportSettings, mask = false): Promise<void> {
+/** Run an export with the window's settings. `mask` exports the foil masks of a print export instead. False when the save was cancelled. */
+export async function runExport({ d, title, cards, root }: ExportDeck, s: ExportSettings, mask = false): Promise<boolean> {
   if (!cards.length) throw new Error('No cards to export.')
   const name = safeFileName(title)
   if (s.target === 'data') {
-    if (s.data === 'csv') return void (await saveTextFile({ title: 'Export deck as spreadsheet', defaultName: `${name}.csv`, text: toCSV(deckRows(d, cards)), filter: { name: 'CSV', extensions: ['csv'] } }))
-    return void (await saveTextFile({ title: 'Export deck', defaultName: `${name}.json`, text: JSON.stringify(deckJson(title, d, cards), null, 2), filter: { name: 'JSON', extensions: ['json'] } }))
+    if (s.data === 'csv') return (await saveTextFile({ title: 'Export deck as spreadsheet', defaultName: `${name}.csv`, text: toCSV(deckRows(d, cards)), filter: { name: 'CSV', extensions: ['csv'] } }))
+    return (await saveTextFile({ title: 'Export deck', defaultName: `${name}.json`, text: JSON.stringify(deckJson(title, d, cards), null, 2), filter: { name: 'JSON', extensions: ['json'] } }))
   }
   const { paint } = await cardPainter(d, cards, root)
   // The ready deck needs the desktop app (it writes beside Tabletop Simulator's saves); a browser gets the ZIP.
@@ -144,9 +144,9 @@ export async function runExport({ d, title, cards, root }: ExportDeck, s: Export
     if (photo) {
       const fold = s.photoBacks === 'fold'
       // Fold: back and front side by side as one wide "card", folded (or cut and glued) along the middle.
-      const layout = sheetLayout(homePaper(s), { w: (fold ? 2 : 1) * d.widthMm, h: d.heightMm }, totalMm)
+      const layout = sheetLayout(homePaper(s), fold ? foldPairSize(d, totalMm) : { w: d.widthMm, h: d.heightMm }, totalMm)
       if (!layout.slots.length) throw new Error('The card is bigger than the photo: pick a bigger photo size.')
-      const fronts = deck.map((c) => (fold ? foldPair(side(c, 'front'), side(c, 'back'), mmToPx(totalMm, dpi)) : side(c, 'front')))
+      const fronts = deck.map((c) => (fold ? foldPair(side(c, 'front'), side(c, 'back')) : side(c, 'front')))
       const pages = drawSheets(layout, fronts, dpi, totalMm, s.photoBacks === 'photos' ? deck.map((c) => side(c, 'back')) : undefined)
       if (fold) for (const p of pages) foldMarks(p, layout, totalMm, d.widthMm, dpi)
       return photoZip(name, pages.map((p) => scaled(p, s.photoMeasuredMm > 0 ? d.widthMm / s.photoMeasuredMm : 1)), s.photoBacks === 'photos')
@@ -154,11 +154,11 @@ export async function runExport({ d, title, cards, root }: ExportDeck, s: Export
     const layout = sheetLayout(homePaper(s), { w: d.widthMm, h: d.heightMm }, totalMm)
     if (!layout.slots.length) throw new Error('The card is bigger than the paper.')
     const pages = drawSheets(layout, deck.map((c) => side(c, 'front')), dpi, totalMm, s.backs ? deck.map((c) => side(c, 'back')) : undefined, { x: s.backX, y: s.backY }).map(finish)
-    if (s.homeFormat === 'pdf') return void (await saveBinaryFile({ title: 'Export PDF', defaultName: `${name} ${what}.pdf`, bytes: await sheetsToPdf(layout, pages, s.lossless), filter: { name: 'PDF', extensions: ['pdf'] } }))
-    if (pages.length === 1) return void (await saveBinaryFile({ title: 'Export print sheet', defaultName: `${name} ${what}.png`, bytes: await canvasBytes(pages[0]), filter: { name: 'PNG', extensions: ['png'] } }))
+    if (s.homeFormat === 'pdf') return (await saveBinaryFile({ title: 'Export PDF', defaultName: `${name} ${what}.pdf`, bytes: await sheetsToPdf(layout, pages, s.lossless), filter: { name: 'PDF', extensions: ['pdf'] } }))
+    if (pages.length === 1) return (await saveBinaryFile({ title: 'Export print sheet', defaultName: `${name} ${what}.png`, bytes: await canvasBytes(pages[0]), filter: { name: 'PNG', extensions: ['png'] } }))
     const files: Record<string, Uint8Array> = {}
     for (let i = 0; i < pages.length; i++) files[`page ${String(i + 1).padStart(2, '0')}.png`] = await canvasBytes(pages[i])
-    return void (await saveBinaryFile({ title: 'Export print sheets', defaultName: `${name} ${what} pages.zip`, bytes: zip(files), filter: { name: 'Zip', extensions: ['zip'] } }))
+    return (await saveBinaryFile({ title: 'Export print sheets', defaultName: `${name} ${what} pages.zip`, bytes: zip(files), filter: { name: 'Zip', extensions: ['zip'] } }))
   }
 
   // Print shop.
@@ -182,7 +182,7 @@ export async function runExport({ d, title, cards, root }: ExportDeck, s: Export
     const sides = new Map<Id, [HTMLCanvasElement, HTMLCanvasElement]>(cards.map((c) => [c.id, [draw(c, 'front'), draw(c, 'back')]]))
     const pages = deck.flatMap((c) => (s.backs ? sides.get(c.id)! : [sides.get(c.id)![0]]))
     const bytes = await cardsToPdf(pages, d.widthMm + 2 * totalMm, d.heightMm + 2 * totalMm, totalMm, s.lossless)
-    return void (await saveBinaryFile({ title: 'Export PDF', defaultName: `${name} ${what} cards.pdf`, bytes, filter: { name: 'PDF', extensions: ['pdf'] } }))
+    return (await saveBinaryFile({ title: 'Export PDF', defaultName: `${name} ${what} cards.pdf`, bytes, filter: { name: 'PDF', extensions: ['pdf'] } }))
   }
   const names = cardFileNames(d, cards)
   const files: Record<string, Uint8Array> = {}
@@ -194,7 +194,7 @@ export async function runExport({ d, title, cards, root }: ExportDeck, s: Export
   }
   if (oneBack) files['back.png'] = await canvasBytes(backs[0])
   files['copies.txt'] = text(`${cards.map((c) => `${c.copies} × ${names.get(c.id)}`).join('\n')}\n\n${deck.length} cards in total.\n`)
-  await saveBinaryFile({ title: 'Export cards', defaultName: `${name} ${what} cards.zip`, bytes: zip(files), filter: { name: 'Zip', extensions: ['zip'] } })
+  return saveBinaryFile({ title: 'Export cards', defaultName: `${name} ${what} cards.zip`, bytes: zip(files), filter: { name: 'Zip', extensions: ['zip'] } })
 }
 
 /** A page drawn bigger or smaller around its middle on white (to make up for a photo station that prints off-size). */
@@ -211,35 +211,40 @@ function scaled(page: HTMLCanvasElement, k: number) {
 }
 
 /**
- * Back on the left, front on the right, meeting at their cut lines: fold backwards along the middle (or cut both
- * out and glue them) and the back reads the right way round behind the front. Bleed only on the outer edges.
+ * Back on the left, front on the right, each with its whole bleed, so the middle has bleed too. Fold backwards
+ * along the middle and glue: the two inner cut lines land on each other, and cutting all four sides through both
+ * layers gives an even card with the back the right way round.
  */
-export function foldPair(front: HTMLCanvasElement, back: HTMLCanvasElement, b: number) {
-  const w = front.width - 2 * b
+export function foldPair(front: HTMLCanvasElement, back: HTMLCanvasElement) {
   const out = document.createElement('canvas')
-  out.width = 2 * w + 2 * b
+  out.width = 2 * front.width
   out.height = front.height
   const g = out.getContext('2d')!
-  g.drawImage(back, 0, 0, b + w, back.height, 0, 0, b + w, back.height)
-  g.drawImage(front, b, 0, w + b, front.height, b + w, 0, w + b, front.height)
+  g.drawImage(back, 0, 0)
+  g.drawImage(front, front.width, 0)
   return out
 }
 
-/** Dashed fold marks in the top and bottom margin, above and below the middle of every fold pair. */
+/** The size a fold pair takes on the photo, minus its outer bleed (what `sheetLayout` calls the card). */
+export const foldPairSize = (d: CardDoc, bleedMm: number) => ({ w: 2 * (d.widthMm + bleedMm), h: d.heightMm })
+
+/** Marks in the top and bottom margin of every fold pair: both inner cut lines (solid) and the fold (dashed). */
 function foldMarks(page: HTMLCanvasElement, layout: SheetLayout, bleed: number, cardW: number, dpi: number) {
   if (!layout.slots.length) return
   const g = page.getContext('2d')!
   const top = layout.slots[0].y + bleed - 1
   const bottom = layout.slots[layout.slots.length - 1].y + layout.cell.h - bleed + 1
   g.strokeStyle = '#000'
-  g.lineWidth = 1
-  g.setLineDash([mmToPx(1, dpi), mmToPx(1, dpi)])
-  for (const x of new Set(layout.slots.map((s) => s.x + bleed + cardW))) {
-    for (const [y1, y2] of [[0, top], [bottom, layout.page.h]]) {
-      g.beginPath()
-      g.moveTo(mmToPx(x, dpi), mmToPx(y1, dpi))
-      g.lineTo(mmToPx(x, dpi), mmToPx(y2, dpi))
-      g.stroke()
+  g.lineWidth = Math.max(1, dpi / 300)
+  for (const s of layout.slots) {
+    for (const [x, dashed] of [[s.x + bleed + cardW, false], [s.x + 2 * bleed + cardW, true], [s.x + 3 * bleed + cardW, false]] as const) {
+      g.setLineDash(dashed ? [mmToPx(1, dpi), mmToPx(1, dpi)] : [])
+      for (const [y1, y2] of [[0, top], [bottom, layout.page.h]]) {
+        g.beginPath()
+        g.moveTo(mmToPx(x, dpi), mmToPx(y1, dpi))
+        g.lineTo(mmToPx(x, dpi), mmToPx(y2, dpi))
+        g.stroke()
+      }
     }
   }
   g.setLineDash([])
@@ -254,7 +259,7 @@ async function photoZip(name: string, pages: HTMLCanvasElement[], backs: boolean
     files[`photo ${n}${backs ? ' front' : ''}.jpg`] = await canvasBytes(pages[i], 'image/jpeg')
     if (backs) files[`photo ${n} back.jpg`] = await canvasBytes(pages[i + 1], 'image/jpeg')
   }
-  await saveBinaryFile({ title: 'Export photos', defaultName: `${name} photos.zip`, bytes: zip(files), filter: { name: 'Zip', extensions: ['zip'] } })
+  return saveBinaryFile({ title: 'Export photos', defaultName: `${name} photos.zip`, bytes: zip(files), filter: { name: 'Zip', extensions: ['zip'] } })
 }
 
 /** Godot: card pictures (or one sprite sheet with an AtlasTexture .tres per card) and deck.json with res:// paths. */
@@ -291,7 +296,7 @@ async function godotZip(d: CardDoc, s: ExportSettings, title: string, name: stri
   const images = new Map(cards.map((c) => [c.id, `${folder}${names.get(c.id)}.${ext}`]))
   const backPaths = new Map(cards.map((c) => [c.id, `${folder}${oneBack ? 'back' : `${names.get(c.id)} back`}.${ext}`]))
   files['deck.json'] = text(JSON.stringify(deckJson(title, d, cards, images, backPaths), null, 2))
-  await saveBinaryFile({ title: 'Export for Godot', defaultName: `${name} Godot.zip`, bytes: zip(files), filter: { name: 'Zip', extensions: ['zip'] } })
+  return saveBinaryFile({ title: 'Export for Godot', defaultName: `${name} Godot.zip`, bytes: zip(files), filter: { name: 'Zip', extensions: ['zip'] } })
 }
 
 /** Tabletop Simulator sheet pictures by file name, and what each sheet holds. */
@@ -334,14 +339,14 @@ async function ttsFiles(d: CardDoc, cards: Card[], paint: Paint, base: string) {
 
 async function ttsZip(d: CardDoc, name: string, cards: Card[], paint: Paint) {
   const { files } = await ttsFiles(d, cards, paint, name)
-  await saveBinaryFile({ title: 'Export for Tabletop Simulator', defaultName: `${name} Tabletop Simulator.zip`, bytes: zip(files), filter: { name: 'Zip', extensions: ['zip'] } })
+  return saveBinaryFile({ title: 'Export for Tabletop Simulator', defaultName: `${name} Tabletop Simulator.zip`, bytes: zip(files), filter: { name: 'Zip', extensions: ['zip'] } })
 }
 
 async function ttsReadyDeck(d: CardDoc, title: string, name: string, cards: Card[], paint: Paint) {
   const fs = getFs()
   const [{ save }, path] = await Promise.all([import('@tauri-apps/plugin-dialog'), import('@tauri-apps/api/path')])
   const file = await save({ title: 'Save deck for Tabletop Simulator', defaultPath: await fs.join(await ttsSavedObjectsDir(), `${name}.json`), filters: [{ name: 'Tabletop Simulator deck', extensions: ['json'] }] })
-  if (!file) return
+  if (!file) return false
   const dir = await path.dirname(file)
   const base = (await path.basename(file)).replace(/\.json$/i, '')
   const t = await ttsFiles(d, cards, paint, base)
@@ -351,6 +356,7 @@ async function ttsReadyDeck(d: CardDoc, title: string, name: string, cards: Card
   const url = async (f: string) => ttsFileUrl(await fs.join(dir, f))
   const sheets = await Promise.all(t.sheets.map(async (s) => ({ ...s, face: await url(s.face), back: await url(s.back), cards: s.cards.map((c) => ({ name: cardLabel(d, c), description: ttsDescription(d, c) })) })))
   await fs.writeTextAtomic(await fs.join(dir, `${base}.json`), JSON.stringify(ttsSavedObject(title, sheets, t.uniqueBacks, d.widthMm > d.heightMm), null, 2))
+  return true
 }
 
 /** Where Tabletop Simulator keeps saved objects (Windows, Linux, Mac), so the save dialog starts there; else Downloads. */
