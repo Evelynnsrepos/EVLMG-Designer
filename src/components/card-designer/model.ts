@@ -86,6 +86,8 @@ export interface CardDoc {
   bleedUnit?: 'mm' | 'px'
   /** false: export the bleed exactly as designed; otherwise empty bleed is filled by stretching the card's edge. */
   bleedStretch?: boolean
+  /** true: the card's outermost pixels are stretched over the whole bleed, covering whatever is designed there. */
+  bleedEdge?: boolean
   /** true: changing the bleed scales the whole design with it (`scaleBleed`) instead of only growing the background. */
   bleedScales?: boolean
   cornerMm: number

@@ -110,4 +110,14 @@ describe('bleed', () => {
     // Every pixel is filled now.
     for (let i = 3; i < px.length; i += 4) expect(px[i]).toBe(255)
   })
+
+  it('stretches the card edge over art in the bleed when asked to', () => {
+    const w = 10
+    const h = 10
+    const px = new Uint8ClampedArray(w * h * 4)
+    for (let y = 2; y < 8; y++) for (let x = 2; x < 8; x++) px.set([100 + x * 10 + y, 0, 0, 255], (y * w + x) * 4)
+    px.set([7, 0, 0, 255], 0) // art in the bleed gets covered
+    extendIntoBleed(px, w, h, 2, true)
+    expect([px[0], px[3]]).toEqual([100 + 40 + 4, 255])
+  })
 })

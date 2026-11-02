@@ -113,9 +113,9 @@ export function cardPixels(card: Size, bleedMm: number, dpi: number) {
 /**
  * Fill the bleed of an RGBA picture (`b` pixels on each side): where the art doesn't cover it, the card's
  * outermost row/column of pixels is stretched outwards, so a slightly off cut never shows a white edge.
- * Art that already reaches into the bleed stays on top.
+ * Art that already reaches into the bleed stays on top, unless `over`: then the edge covers the whole bleed.
  */
-export function extendIntoBleed(px: Uint8ClampedArray, w: number, h: number, bleed: number) {
+export function extendIntoBleed(px: Uint8ClampedArray, w: number, h: number, bleed: number, over = false) {
   // The card's outermost pixels are often half covered (the cut line falls between pixels), so stretch from two further in.
   const b = bleed + 2
   if (bleed <= 0 || w <= 2 * b || h <= 2 * b) return
@@ -128,7 +128,7 @@ export function extendIntoBleed(px: Uint8ClampedArray, w: number, h: number, ble
         continue
       }
       const i = (y * w + x) * 4
-      const a = px[i + 3] / 255
+      const a = over ? 0 : px[i + 3] / 255
       if (a === 1) continue
       const j = (clamp(y, b, h - b - 1) * w + clamp(x, b, w - b - 1)) * 4
       // Art over the stretched edge ("source over").

@@ -185,6 +185,10 @@ export function CardPanel({ d, update }: { d: CardDoc; update: Update }) {
         <input type="checkbox" checked={d.bleedStretch !== false} onChange={(e) => update((x) => ({ ...x, bleedStretch: e.target.checked }))} />
         Fill empty bleed from the card's edge
       </label>
+      <label className="cd-row" title="On: the outermost pixels of the card (at the cut line) are stretched over the whole bleed in every print export, even where you placed art in the bleed">
+        <input type="checkbox" checked={!!d.bleedEdge} onChange={(e) => update((x) => ({ ...x, bleedEdge: e.target.checked || undefined }))} />
+        Stretch the card's edge over the whole bleed
+      </label>
       <label className="cd-row" title="On: a bigger bleed makes the whole design bigger, so your art covers the new bleed line. Text moves out too, so check the blue safe line.">
         <input type="checkbox" checked={!!d.bleedScales} onChange={(e) => update((x) => ({ ...x, bleedScales: e.target.checked }))} />
         Scale the design with the bleed
