@@ -9,6 +9,7 @@ import type { Id } from '@/core/model'
 import { updateNodes } from '@/shared/canvas'
 import { choiceDialog, confirmDialog } from '@/shared/dialogs'
 import { cssFamily, systemFonts } from '@/shared/fontList'
+import { NumberInput } from '@/shared/calculators'
 import { bleedMmToPx, bleedPxToMm, canvasBytes, cardsToPdf, drawSheets, PAGE_SIZES, sheetLayout, sheetsToPdf } from '@/shared/print'
 import { CARD_SIZES, composeScene, deckJson, expandCopies, resizeDesign, scaleBleed, setBleed, slotColors, ttsFileUrl, ttsSavedObject, ttsSheets, type Card, type CardDoc, type CardImageNode, type CardNode, type CardTextNode, type SlotKeys } from './model'
 import { deckRows } from './sheetImport'
@@ -128,15 +129,14 @@ export function BleedInput({ mm, unit = 'mm', onChange }: { mm: number; unit?: '
   const px = unit === 'px'
   return (
     <>
-      <input
+      <NumberInput
         className="input cd-num"
-        type="number"
         min={0}
         step={px ? 1 : 0.5}
         aria-label={`Bleed in ${px ? 'pixels' : 'millimetres'}`}
         value={px ? bleedMmToPx(mm) : Math.round(mm * 1000) / 1000}
-        onChange={(e) => {
-          const v = Math.max(0, Number(e.target.value) || 0)
+        onChange={(n) => {
+          const v = Math.max(0, n)
           onChange(px ? bleedPxToMm(v) : v, unit)
         }}
       />
@@ -153,7 +153,7 @@ export function CardPanel({ d, update }: { d: CardDoc; update: Update }) {
   const num = (label: string, value: number, set: (v: number) => void, min = 0) => (
     <label className="cd-row">
       <span className="cd-label">{label}</span>
-      <input className="input cd-num" type="number" min={min} step={0.5} value={value} onChange={(e) => set(Math.max(min, Number(e.target.value) || 0))} />
+      <NumberInput className="input cd-num" min={min} step={0.5} value={value} onChange={(v) => set(Math.max(min, v))} />
       mm
     </label>
   )
