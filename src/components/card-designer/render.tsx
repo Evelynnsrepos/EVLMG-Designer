@@ -5,7 +5,7 @@ import { Group, Layer, Stage } from 'react-konva'
 import { preloadImage, renderOrder, type CanvasTheme, type NodeTypes, type RenderContext, type Scene } from '@/shared/canvas'
 import { cssFamily } from '@/shared/fontList'
 import { cardPixels, extendIntoBleed } from '@/shared/print'
-import { MM, type CardDoc, type CardNode } from './model'
+import { bleedScale, MM, type CardDoc, type CardNode } from './model'
 
 /** Wait until the fonts a scene uses are loaded, so canvas text isn't drawn in a fallback font. */
 export async function loadSceneFonts(scenes: Scene<CardNode>[]) {
@@ -21,6 +21,7 @@ export async function loadSceneFonts(scenes: Scene<CardNode>[]) {
  */
 export function renderCard(doc: CardDoc, scene: Scene<CardNode>, types: NodeTypes, resolveImageSrc: (p: string) => string, dpi: number, withBleed = true): HTMLCanvasElement {
   const b = withBleed ? doc.bleedMm : 0
+  const art = withBleed ? bleedScale(doc) : null
   const wMm = doc.widthMm + 2 * b
   const hMm = doc.heightMm + 2 * b
   const host = document.createElement('div')
@@ -41,6 +42,8 @@ export function renderCard(doc: CardDoc, scene: Scene<CardNode>, types: NodeType
                   {nodes.map((n) => {
                     const t = types[n.kind]
                     if (!t || n.hidden) return null
+                    // Text stays where it was placed; only the art grows into the bleed.
+                    if (art && n.kind !== 'card-text') return <Group key={n.id} {...art}>{t.absolute ? t.render(n, ctx) : <Group x={n.x} y={n.y} rotation={n.rotation ?? 0} scaleX={n.scaleX ?? 1} scaleY={n.scaleY ?? 1}>{t.render(n, ctx)}</Group>}</Group>
                     return t.absolute ? (
                       <Group key={n.id}>{t.render(n, ctx)}</Group>
                     ) : (

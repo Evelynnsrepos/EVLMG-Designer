@@ -88,8 +88,10 @@ export interface CardDoc {
   bleedStretch?: boolean
   /** true: the card's outermost pixels are stretched over the whole bleed, covering whatever is designed there. */
   bleedEdge?: boolean
-  /** true: changing the bleed scales the whole design with it (`scaleBleed`) instead of only growing the background. */
+  /** true: exports scale the art (not the text) so what reached `bleedScaleFromMm` reaches the bleed; the design itself is never changed (`bleedScale`). */
   bleedScales?: boolean
+  /** The bleed the design was made for, kept from when `bleedScales` was turned on. */
+  bleedScaleFromMm?: number
   cornerMm: number
   front: Scene<CardNode>
   back: Scene<CardNode>
@@ -470,15 +472,14 @@ export function resizeDesign(doc: CardDoc, widthMm: number, heightMm: number): C
 }
 
 /**
- * Change the bleed and scale the whole design with it: what reached the old bleed line reaches the new one
- * (`CardDoc.bleedScales`). The card size stays; everything moves out from (or in towards) the middle.
+ * How exports scale the art for `CardDoc.bleedScales`: evenly (no stretching) around the middle of the card, so
+ * the bleed box the design was made for covers the current one. null when nothing is scaled.
  */
-export function scaleBleed(doc: CardDoc, bleedMm: number): CardDoc {
-  const ob = doc.bleedMm * MM
-  const nb = bleedMm * MM
-  const sx = (doc.widthMm * MM + 2 * nb) / (doc.widthMm * MM + 2 * ob)
-  const sy = (doc.heightMm * MM + 2 * nb) / (doc.heightMm * MM + 2 * ob)
-  return { ...doc, bleedMm, ...mapDesign(doc, sx, sy, ob * sx - nb, ob * sy - nb) }
+export function bleedScale(doc: CardDoc): { x: number; y: number; scaleX: number; scaleY: number } | null {
+  const from = doc.bleedScaleFromMm
+  if (!doc.bleedScales || from === undefined || from === doc.bleedMm) return null
+  const s = Math.max((doc.widthMm + 2 * doc.bleedMm) / (doc.widthMm + 2 * from), (doc.heightMm + 2 * doc.bleedMm) / (doc.heightMm + 2 * from))
+  return { x: (doc.widthMm * MM * (1 - s)) / 2, y: (doc.heightMm * MM * (1 - s)) / 2, scaleX: s, scaleY: s }
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MM, applySlots, cardsFromSheet, createCardDoc, deckJson, expandCopies, fillText, renameFieldInScene, scaleBleed, setBleed, slotColors, ttsFileUrl, ttsSavedObject, ttsSheets, type CardNode } from './model'
+import { MM, applySlots, cardsFromSheet, createCardDoc, deckJson, expandCopies, fillText, bleedScale, renameFieldInScene, setBleed, slotColors, ttsFileUrl, ttsSavedObject, ttsSheets, type CardNode } from './model'
 
 describe('card designer model', () => {
   const doc = createCardDoc()
@@ -93,19 +93,18 @@ describe('bleed', () => {
     expect(setBleed(d, 2).bleedMm).toBe(2)
   })
 
-  it('scales the whole design so the old bleed box fills the new one', () => {
-    const d = scaleBleed(createCardDoc(), 5)
-    const bg = d.front.nodes.find((n) => n.name === 'Background') as CardNode & { width: number; height: number }
-    const near = (a: number, b: number) => expect(a).toBeCloseTo(b, 6)
-    near(bg.x, -50)
-    near(bg.y, -50)
-    near(bg.width, 730)
-    near(bg.height, 980)
-    // The middle of the card stays put.
-    const frame = d.front.nodes.find((n) => n.name === 'Frame') as CardNode & { width: number; height: number }
-    near(frame.x + frame.width / 2, 315)
-    near(frame.y + frame.height / 2, 440)
-    expect(frame.width).toBeGreaterThan(630 - 50)
-    expect(d.widthMm).toBe(63)
+  it('scales the art evenly for exports so the old bleed box covers the new one, without touching the design', () => {
+    const doc = createCardDoc()
+    expect(bleedScale({ ...doc, bleedScales: true, bleedScaleFromMm: 3 })).toBeNull()
+    const d = { ...doc, bleedMm: 5, bleedScales: true, bleedScaleFromMm: 3 }
+    const t = bleedScale(d)!
+    expect(t.scaleX).toBe(t.scaleY)
+    // The old bleed box (-30..660 x -30..910) maps over the new one (-50..680 x -50..930).
+    expect(-30 * t.scaleX + t.x).toBeLessThanOrEqual(-50)
+    expect(660 * t.scaleX + t.x).toBeGreaterThanOrEqual(680)
+    expect(-30 * t.scaleY + t.y).toBeLessThanOrEqual(-50)
+    expect(910 * t.scaleY + t.y).toBeGreaterThanOrEqual(930)
+    expect(315 * t.scaleX + t.x).toBeCloseTo(315, 6) // the middle stays put
+    expect(bleedScale({ ...d, bleedScales: false })).toBeNull()
   })
 })
