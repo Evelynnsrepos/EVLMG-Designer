@@ -88,3 +88,39 @@ describe('fields the sheet has no column for', () => {
     expect(cardsFromSheet(sheet, doc.fields, [], doc.cards[0].values)[0].values).toMatchObject({ [name.id]: 'Wolf', [cost.id]: '2', [type.id]: 'HP: 10' })
   })
 })
+
+describe('a second, different spreadsheet', () => {
+  const base = createCardDoc()
+  const [name, cost] = base.fields
+  const doc: CardDoc = {
+    ...base,
+    cards: [
+      { id: 'a', copies: 1, values: { [name.id]: 'Bolt', [cost.id]: '2' } },
+      { id: 'b', copies: 1, values: { [name.id]: 'Heal', [cost.id]: '1' } },
+    ],
+  }
+  const fill = (csv: string) => {
+    const rows = parseCSV(csv)
+    return applyImport(doc, rows, guessTargets(doc, rows), 'a', new Map())
+  }
+  const names = (d: CardDoc) => d.cards.map((c) => c.values[name.id])
+
+  it('takes a differently named name column as the names, so rows still update their cards', () => {
+    const r = fill('Card Name,Power\nBolt,5\nWolf,3\n')
+    expect(r).toMatchObject({ updated: 1, added: 1, newFields: ['Power'] })
+    expect(r.doc.fields.map((f) => f.name)).not.toContain('Card Name')
+    expect(names(r.doc)).toEqual(['Bolt', 'Heal', 'Wolf'])
+  })
+
+  it('new cards never take the open card’s name', () => {
+    const r = fill('Power,Cost\n5,3\n')
+    expect(names(r.doc)).toEqual(['Bolt', 'Heal', undefined])
+    expect(r.doc.cards[2].values[cost.id]).toBe('3')
+  })
+
+  it('a column name used twice makes two fields with different names', () => {
+    const r = fill('Name,Notes,Notes,\nWolf,a,b,c\n')
+    expect(r.newFields).toEqual(['Notes', 'Notes 2'])
+    expect(new Set(r.doc.fields.map((f) => f.name.toLowerCase())).size).toBe(r.doc.fields.length)
+  })
+})

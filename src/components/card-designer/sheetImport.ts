@@ -48,9 +48,17 @@ export function ownTextBoxes(doc: CardDoc, cardId: Id | null): OwnBox[] {
   return out
 }
 
-/** First guess per column: same-named fields, Copies/Count and Variant, else a new field of the type the values look like. */
+/**
+ * First guess per column: same-named fields, Copies/Count and Variant, else a new field of the type the values look like.
+ * A sheet with no column named like the deck's name field takes its first "…name"/"title" column as the names,
+ * so its rows still update the cards they name instead of all becoming new cards.
+ */
 export function guessTargets(doc: CardDoc, rows: string[][]): Target[] {
-  return (rows[0] ?? []).map((h, c) => {
+  const heads = rows[0] ?? []
+  const nameField = doc.fields.find((f) => f.kind === 'text')
+  const nameCol = nameField && !heads.some((h) => same(h, nameField.name)) ? heads.findIndex((h) => /name|title|titel/i.test(h) && !doc.fields.some((f) => same(f.name, h))) : -1
+  return heads.map((h, c) => {
+    if (c === nameCol) return `field:${nameField!.id}`
     const head = h.trim().toLowerCase()
     if (!head) return 'skip'
     if (head === 'copies' || head === 'count') return 'copies'
@@ -105,9 +113,12 @@ export function applyImport(doc: CardDoc, rows: string[][], targets: Target[], f
       let f = t.startsWith('box:') ? fields.find((x) => same(x.name, name)) : undefined
       if (!f) {
         const kind = (t.startsWith('new:') ? t.slice(4) : 'text') as Field['kind']
-        f = { id: newId(), name, kind, ...(kind === 'choice' ? { choices: [] } : {}) }
+        // Two fields with one name would make {Name} ambiguous (a sheet with the same column twice, or a field it already has).
+        let unique = name
+        for (let i = 2; fields.some((x) => same(x.name, unique)); i++) unique = `${name} ${i}`
+        f = { id: newId(), name: unique, kind, ...(kind === 'choice' ? { choices: [] } : {}) }
         fields.push(f)
-        newFields.push(name)
+        newFields.push(f.name)
       }
       colField[c] = f.id
       if (t.startsWith('box:')) boxes.push({ key: t.slice(4), fieldId: f.id, name: f.name })
@@ -121,9 +132,9 @@ export function applyImport(doc: CardDoc, rows: string[][], targets: Target[], f
     if (k) waiting.set(k, [...(waiting.get(k) ?? []), card])
   }
 
-  // New cards take fields the sheet has no column for (like a fixed HP) from the open card.
+  // New cards take fields the sheet has no column for (like a fixed HP) from the open card, but never its name.
   const from = doc.cards.find((c) => c.id === fromId) ?? doc.cards[0]
-  const unmapped = Object.fromEntries(Object.entries(from?.values ?? {}).filter(([f]) => !colField.includes(f)))
+  const unmapped = Object.fromEntries(Object.entries(from?.values ?? {}).filter(([f]) => !colField.includes(f) && f !== nameField?.id))
   const cards = [...doc.cards]
   const created: Id[] = []
   let updated = 0
