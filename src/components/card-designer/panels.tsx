@@ -1,21 +1,15 @@
 import { Bold, Italic } from 'lucide-react'
-import { zipSync } from 'fflate'
 import { useState } from 'react'
-import { assetBlobUrl } from '@/core/assets'
-import { saveBinaryFile, saveTextFile, safeFileName } from '@/core/export'
-import { getFs, isTauri } from '@/core/fs'
-import { toCSV } from '@/shared/csv'
 import type { Id } from '@/core/model'
 import { updateNodes } from '@/shared/canvas'
-import { choiceDialog, confirmDialog } from '@/shared/dialogs'
 import { cssFamily, systemFonts } from '@/shared/fontList'
 import { NumberInput } from '@/shared/calculators'
-import { bleedMmToPx, bleedPxToMm, canvasBytes, cardsToPdf, drawSheets, PAGE_SIZES, sheetLayout, sheetsToPdf } from '@/shared/print'
-import { CARD_SIZES, composeScene, deckJson, expandCopies, resizeDesign, setBleed, slotColors, ttsFileUrl, ttsSavedObject, ttsSheets, type Card, type CardDoc, type CardImageNode, type CardNode, type CardTextNode, type SlotKeys } from './model'
-import { deckRows } from './sheetImport'
-import { cardNodeTypes } from './nodeTypes'
-import { loadSceneFonts, preloadImages, renderCard } from './render'
-import { allNodes, cardLabel, ownIcons, TEXT, type OnScene, type Update } from './ui'
+import { bleedMmToPx, bleedPxToMm } from '@/shared/print'
+import { CARD_SIZES, resizeDesign, setBleed, type Card, type CardDoc, type CardImageNode, type CardNode, type CardTextNode, type SlotKeys } from './model'
+import { confirmBig, ExportDialog, exportCards, targetLabel } from './ExportDialog'
+import { exportSettings } from './exportFormats'
+import { runExport } from './exporting'
+import { TEXT, type OnScene, type Update } from './ui'
 
 /** Colour of a node for the Style panel's pickers. */
 export const colorOf = (n: CardNode, key: 'fillColor' | 'strokeColor' | 'textColor') => ((n as unknown as Record<string, string | undefined>)[key] ?? '#000000').slice(0, 7)
@@ -212,295 +206,41 @@ export function CardPanel({ d, update }: { d: CardDoc; update: Update }) {
   )
 }
 
-/** Foil masks go to print shops black on white. */
-function onWhite(src: HTMLCanvasElement) {
-  const c = document.createElement('canvas')
-  c.width = src.width
-  c.height = src.height
-  const g = c.getContext('2d')!
-  g.fillStyle = '#fff'
-  g.fillRect(0, 0, c.width, c.height)
-  g.drawImage(src, 0, 0)
-  return c
-}
-
-export function ExportPanel({ d, title, cards, root }: { d: CardDoc; title: string; cards: Card[]; root: string | null }) {
-  const [paper, setPaper] = useState('a4')
-  const [dpi, setDpi] = useState(300)
-  const [backs, setBacks] = useState(true)
-  const [busy, setBusy] = useState<string | null>(null)
+/** The Export section: opens the export window, or repeats the last export with its saved choices. */
+export function ExportPanel({ d, title, cards, root, currentId, update }: { d: CardDoc; title: string; cards: Card[]; root: string | null; currentId: Id | null; update: Update }) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const name = safeFileName(title)
-
-  /** Draw every card (each card once, by id), fronts and backs. */
-  const renderAll = async (withBleed: boolean, res: number, mask = false) => {
-    await loadSceneFonts([d.front, d.back, { layers: [], nodes: allNodes(d) }])
-    const imageFields = d.fields.filter((f) => f.kind === 'image').map((f) => f.id)
-    const paths = [
-      ...cards.flatMap((c) => imageFields.map((f) => c.values[f] ?? '')),
-      ...allNodes(d).flatMap((n) => (n.kind === 'image' ? [n.src] : [])),
-      ...(d.icons ?? []).map((i) => i.src),
-    ]
-    const resolve = await preloadImages(paths, (p) => (root ? assetBlobUrl(root, p) : Promise.resolve(null)))
-    const fronts = new Map<Id, HTMLCanvasElement>()
-    const backsMap = new Map<Id, HTMLCanvasElement>()
-    for (const c of cards) {
-      const types = cardNodeTypes({ colors: slotColors(d, c.variantId, c.id), fields: d.fields, values: c.values, print: true, icons: ownIcons(d), mask })
-      fronts.set(c.id, renderCard(d, composeScene(d, 'front', c.id), types, resolve, res, withBleed))
-      backsMap.set(c.id, renderCard(d, composeScene(d, 'back', c.id), types, resolve, res, withBleed))
-    }
-    return { fronts, backs: backsMap }
-  }
-
-  const run = (label: string, job: () => Promise<unknown>) => async () => {
-    setBusy(label)
+  const s = exportSettings(d)
+  const again = async () => {
+    if (!(await confirmBig(s))) return
+    setBusy(true)
     setError(null)
     try {
-      await job()
+      await runExport({ d, title, cards: exportCards(s, cards, currentId), root }, s)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
-      setBusy(null)
+      setBusy(false)
     }
   }
-
-  const hasFoil = allNodes(d).some((n) => n.foil)
-
-  const sheets = async (mask = false) => {
-    const page = PAGE_SIZES.find((p) => p.id === paper)!
-    const layout = sheetLayout(page, { w: d.widthMm, h: d.heightMm }, d.bleedMm)
-    if (!layout.slots.length) throw new Error('The card is bigger than the paper.')
-    const r = await renderAll(true, dpi, mask)
-    const deck = expandCopies(cards)
-    return { layout, pages: drawSheets(layout, deck.map((c) => r.fronts.get(c.id)!), dpi, d.bleedMm, backs ? deck.map((c) => r.backs.get(c.id)!) : undefined) }
-  }
-
-  /** PDF: asks for the layout first. One card per page is the card plus its bleed (what print shops want); many per page are the print sheets with crop marks. */
-  const pdf = (mask: boolean) => async () => {
-    const what = mask ? 'foil mask' : 'print'
-    const pick = await choiceDialog({
-      title: 'PDF layout',
-      message: 'One card per page: every page is one card with its bleed, the size print shops ask for.\nMany cards per page: as many cards as fit on the paper, with crop marks, to print at home.',
-      choices: ['One card per page', 'Many cards per page'],
-    })
-    if (pick === null) return
-    await confirmBig(
-      run(mask ? 'Foil mask sheets' : 'Print sheets (PDF)', async () => {
-        let bytes: Uint8Array
-        if (pick === 1) {
-          const { layout, pages } = await sheets(mask)
-          bytes = await sheetsToPdf(layout, pages)
-        } else {
-          const r = await renderAll(true, dpi, mask)
-          const sides = expandCopies(cards).flatMap((c) => (backs ? [r.fronts.get(c.id)!, r.backs.get(c.id)!] : [r.fronts.get(c.id)!]))
-          if (!sides.length) throw new Error('The deck has no cards.')
-          bytes = await cardsToPdf(mask ? sides.map(onWhite) : sides, d.widthMm + 2 * d.bleedMm, d.heightMm + 2 * d.bleedMm)
-        }
-        const defaultName = `${name} ${what}${pick === 0 ? ' cards' : ''}.pdf`
-        await saveBinaryFile({ title: mask ? 'Export foil masks' : 'Export PDF', defaultName, bytes, filter: { name: 'PDF', extensions: ['pdf'] } })
-      }),
-    )
-  }
-  const png = run('Print sheets (PNG)', async () => {
-    const { pages } = await sheets()
-    if (pages.length === 1) return saveBinaryFile({ title: 'Export print sheet', defaultName: `${name} print.png`, bytes: await canvasBytes(pages[0]), filter: { name: 'PNG', extensions: ['png'] } })
-    const files: Record<string, Uint8Array> = {}
-    for (let i = 0; i < pages.length; i++) files[`page ${String(i + 1).padStart(2, '0')}.png`] = await canvasBytes(pages[i])
-    await saveBinaryFile({ title: 'Export print sheets', defaultName: `${name} print pages.zip`, bytes: zipSync(files, { level: 0 }), filter: { name: 'Zip', extensions: ['zip'] } })
-  })
-  const deckImage = run('Deck image', async () => {
-    const r = await renderAll(false, Math.min(dpi, 200))
-    const deck = expandCopies(cards).map((c) => r.fronts.get(c.id)!)
-    if (!deck.length) throw new Error('The deck has no cards.')
-    // One picture of the whole deck, 10 cards per row (the grid tabletop simulators read).
-    const cols = Math.min(10, deck.length)
-    const rows = Math.ceil(deck.length / cols)
-    const out = document.createElement('canvas')
-    out.width = cols * deck[0].width
-    out.height = rows * deck[0].height
-    const g = out.getContext('2d')!
-    deck.forEach((c, i) => g.drawImage(c, (i % cols) * c.width, Math.floor(i / cols) * c.height))
-    await saveBinaryFile({ title: 'Export deck image', defaultName: `${name} deck.png`, bytes: await canvasBytes(out), filter: { name: 'PNG', extensions: ['png'] } })
-  })
-  const zip = run('Card images + JSON', async () => {
-    // With bleed: these are the files print shops take one card at a time.
-    const r = await renderAll(true, dpi)
-    const files: Record<string, Uint8Array> = {}
-    const images = new Map<Id, string>()
-    const used = new Set<string>()
-    for (const c of cards) {
-      let base = safeFileName(cardLabel(d, c), 'card')
-      for (let n = 2; used.has(base); n++) base = `${safeFileName(cardLabel(d, c), 'card')} ${n}`
-      used.add(base)
-      images.set(c.id, `cards/${base}.png`)
-      files[`cards/${base}.png`] = await canvasBytes(r.fronts.get(c.id)!)
-      files[`cards/${base} back.png`] = await canvasBytes(r.backs.get(c.id)!)
-    }
-    if (hasFoil) {
-      const m = await renderAll(true, dpi, true)
-      for (const c of cards) {
-        const base = images.get(c.id)!.replace(/\.png$/, '')
-        files[`${base} foil.png`] = await canvasBytes(onWhite(m.fronts.get(c.id)!))
-        files[`${base} back foil.png`] = await canvasBytes(onWhite(m.backs.get(c.id)!))
-      }
-    }
-    files['deck.json'] = new TextEncoder().encode(JSON.stringify(deckJson(title, d, cards, images), null, 2))
-    await saveBinaryFile({ title: 'Export cards', defaultName: `${name} cards.zip`, bytes: zipSync(files, { level: 0 }), filter: { name: 'Zip', extensions: ['zip'] } })
-  })
-  /** Tabletop Simulator sheet pictures by file name, and what each sheet holds. */
-  const ttsFiles = async (base: string) => {
-    const deck = expandCopies(cards)
-    const plan = ttsSheets(deck.length)
-    if (!plan.length) throw new Error('The deck has no cards.')
-    // Keep each sheet within 4096 px, the size Tabletop Simulator loads quickly.
-    const res = Math.min(200, Math.floor((4096 * 25.4) / Math.max(...plan.map((p) => Math.max(p.cols * d.widthMm, p.rows * d.heightMm)))))
-    const r = await renderAll(false, res)
-    const backSides = deck.map((c) => r.backs.get(c.id)!)
-    const uniqueBacks = new Set(cards.map((c) => r.backs.get(c.id)!.toDataURL())).size > 1
-    const files: Record<string, Uint8Array> = {}
-    const sheets: { face: string; back: string; cols: number; rows: number; cards: Card[] }[] = []
-    const sheet = (sides: HTMLCanvasElement[], cols: number, rows: number) => {
-      const out = document.createElement('canvas')
-      out.width = cols * sides[0].width
-      out.height = rows * sides[0].height
-      const g = out.getContext('2d')!
-      sides.forEach((c, i) => g.drawImage(c, (i % cols) * c.width, Math.floor(i / cols) * c.height))
-      // The last cell is what Tabletop Simulator shows for a hidden card.
-      g.drawImage(backSides[0], (cols - 1) * backSides[0].width, (rows - 1) * backSides[0].height)
-      return canvasBytes(out)
-    }
-    let start = 0
-    for (const [i, p] of plan.entries()) {
-      const part = plan.length > 1 ? ` ${i + 1}` : ''
-      const grid = `${p.cols}x${p.rows} - ${p.count} cards`
-      const face = `${base} faces${part} - ${grid}.png`
-      const back = uniqueBacks ? `${base} backs${part} - ${grid}.png` : `${base} back.png`
-      files[face] = await sheet(deck.slice(start, start + p.count).map((c) => r.fronts.get(c.id)!), p.cols, p.rows)
-      if (uniqueBacks) files[back] = await sheet(backSides.slice(start, start + p.count), p.cols, p.rows)
-      sheets.push({ face, back, cols: p.cols, rows: p.rows, cards: deck.slice(start, start + p.count) })
-      start += p.count
-    }
-    if (!uniqueBacks) files[`${base} back.png`] = await canvasBytes(backSides[0])
-    return { files, sheets, uniqueBacks, thumbnail: await canvasBytes(r.fronts.get(deck[0].id)!) }
-  }
-  const tts = run('Tabletop Simulator', async () => {
-    const { files } = await ttsFiles(name)
-    await saveBinaryFile({ title: 'Export for Tabletop Simulator', defaultName: `${name} Tabletop Simulator.zip`, bytes: zipSync(files, { level: 0 }), filter: { name: 'Zip', extensions: ['zip'] } })
-  })
-  const ttsDeck = run('Tabletop Simulator deck', async () => {
-    const fs = getFs()
-    const [{ save }, path] = await Promise.all([import('@tauri-apps/plugin-dialog'), import('@tauri-apps/api/path')])
-    const file = await save({ title: 'Save deck for Tabletop Simulator', defaultPath: await fs.join(await ttsSavedObjectsDir(), `${name}.json`), filters: [{ name: 'Tabletop Simulator deck', extensions: ['json'] }] })
-    if (!file) return
-    const dir = await path.dirname(file)
-    const base = (await path.basename(file)).replace(/\.json$/i, '')
-    const t = await ttsFiles(base)
-    // The pictures go beside the JSON, which points at them by their full path: they only load on this computer.
-    for (const [f, bytes] of Object.entries(t.files)) await fs.writeBinaryAtomic(await fs.join(dir, f), bytes)
-    await fs.writeBinaryAtomic(await fs.join(dir, `${base}.png`), t.thumbnail)
-    const url = async (f: string) => ttsFileUrl(await fs.join(dir, f))
-    const sheets = await Promise.all(t.sheets.map(async (s) => ({ ...s, face: await url(s.face), back: await url(s.back), cards: s.cards.map((c) => ({ name: cardLabel(d, c), description: ttsDescription(d, c) })) })))
-    await fs.writeTextAtomic(await fs.join(dir, `${base}.json`), JSON.stringify(ttsSavedObject(title, sheets, t.uniqueBacks, d.widthMm > d.heightMm), null, 2))
-  })
-  const csv = run('Deck spreadsheet', () => saveTextFile({ title: 'Export deck as spreadsheet', defaultName: `${name}.csv`, text: toCSV(deckRows(d, cards)), filter: { name: 'CSV', extensions: ['csv'] } }))
-  const json = run('Deck JSON', () => saveTextFile({ title: 'Export deck', defaultName: `${name}.json`, text: JSON.stringify(deckJson(title, d, cards), null, 2), filter: { name: 'JSON', extensions: ['json'] } }))
-
-  const confirmBig = async (job: () => Promise<void>) => {
-    if (dpi < 600 || (await confirmDialog({ title: 'Export at 600 DPI?', message: 'Very sharp, but slow and big files. 300 DPI is what most printers need.', confirmLabel: 'Export' }))) await job()
-  }
-
   return (
     <div className="cd-panel">
-      <label className="cd-row">
-        <span className="cd-label">Paper</span>
-        <select className="input" value={paper} onChange={(e) => setPaper(e.target.value)}>
-          {PAGE_SIZES.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="cd-row">
-        <span className="cd-label">Resolution</span>
-        <select className="input" value={dpi} onChange={(e) => setDpi(Number(e.target.value))}>
-          <option value={150}>150 DPI (draft)</option>
-          <option value={300}>300 DPI (print)</option>
-          <option value={600}>600 DPI</option>
-        </select>
-      </label>
-      <label className="cd-row">
-        <input type="checkbox" checked={backs} onChange={(e) => setBacks(e.target.checked)} />
-        Backs on every other page (double-sided)
-      </label>
-      <p className="cd-muted">{TEXT.exportHint}</p>
-      <button className="btn btn-primary" disabled={!!busy} onClick={() => void pdf(false)()}>
-        PDF…
+      <button className="btn btn-primary" onClick={() => setOpen(true)}>
+        Export…
       </button>
-      <button className="btn" disabled={!!busy} onClick={() => void confirmBig(png)}>
-        Print sheets (PNG)
-      </button>
-      {hasFoil ? (
-        <>
-          <button className="btn" disabled={!!busy} onClick={() => void pdf(true)()}>
-            Foil masks (PDF)…
-          </button>
-          <p className="cd-muted">Black where the foil goes, laid out like the PDF. Print shops use it as the foil layer.</p>
-        </>
-      ) : null}
-      <h4>Images and data</h4>
-      <button className="btn" disabled={!!busy} onClick={() => void deckImage()}>
-        Deck image (all cards in one PNG)
-      </button>
-      <button className="btn" disabled={!!busy} onClick={() => void confirmBig(zip)}>
-        Card images + JSON (ZIP)
-      </button>
-      <button className="btn" disabled={!!busy} onClick={() => void json()}>
-        Deck JSON
-      </button>
-      <button className="btn" disabled={!!busy} title="One row per card: open it in a spreadsheet program, change it, and fill the cards from it again" onClick={() => void csv()}>
-        Deck spreadsheet (CSV)
-      </button>
-      {isTauri() ? (
-        <button className="btn" disabled={!!busy} onClick={() => void ttsDeck()}>
-          Tabletop Simulator (ready deck)
+      {d.exportSettings ? (
+        <button className="btn" disabled={busy} title="Export again with the same choices" onClick={() => void again()}>
+          {busy ? 'Exporting…' : `Again: ${targetLabel(s)}`}
         </button>
       ) : null}
-      <button className="btn" disabled={!!busy} onClick={() => void tts()}>
-        Tabletop Simulator (ZIP)
-      </button>
-      <p className="cd-muted">{TEXT.ttsHint}</p>
-      {busy ? <p className="cd-muted" role="status">Exporting {busy}…</p> : null}
+      <p className="cd-muted">Print at home, print shops, Tabletop Simulator, Godot or data, with a preview and the bleed added on export.</p>
       {error ? (
         <p className="cd-error" role="alert">
           {error}
         </p>
       ) : null}
+      {open ? <ExportDialog d={d} title={title} cards={cards} root={root} currentId={currentId} update={update} onClose={() => setOpen(false)} /> : null}
     </div>
   )
-}
-
-
-/** Where Tabletop Simulator keeps saved objects (Windows, Linux, Mac), so the save dialog starts there; else Downloads. */
-async function ttsSavedObjectsDir() {
-  const fs = getFs()
-  const { homeDir, downloadDir } = await import('@tauri-apps/api/path')
-  const home = await homeDir()
-  for (const dir of [
-    await fs.join(await fs.documentDir(), 'My Games', 'Tabletop Simulator', 'Saves', 'Saved Objects'),
-    await fs.join(home, '.local', 'share', 'Tabletop Simulator', 'Saves', 'Saved Objects'),
-    await fs.join(home, 'Library', 'Tabletop Simulator', 'Saves', 'Saved Objects'),
-  ]) {
-    if (await fs.exists(dir).catch(() => false)) return dir
-  }
-  return downloadDir()
-}
-
-/** The card's other fields as "Field: value" lines, for the description Tabletop Simulator shows on hover. */
-function ttsDescription(d: CardDoc, c: Card) {
-  const name = d.fields.find((f) => f.kind === 'text')
-  return d.fields
-    .filter((f) => f !== name && f.kind !== 'image' && c.values[f.id])
-    .map((f) => `${f.name}: ${c.values[f.id]}`)
-    .join('\n')
 }

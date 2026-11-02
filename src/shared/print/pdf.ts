@@ -1,11 +1,14 @@
 import { MM_PER_INCH } from './layout'
 
-/** One PDF page showing one JPEG picture edge to edge. */
+/** One PDF page showing one picture edge to edge. */
 export interface PdfPage {
   widthMm: number
   heightMm: number
-  /** JPEG file bytes. */
-  jpeg: Uint8Array
+  /** JPEG file bytes, or with `lossless` zlib-compressed RGB bytes (3 per pixel, row by row). */
+  image: Uint8Array
+  lossless?: boolean
+  /** The cut line this far (mm) inside the page edge: sets TrimBox and BleedBox, which print shops check. */
+  trimMm?: number
   /** The JPEG's size in pixels. */
   pxWidth: number
   pxHeight: number
@@ -43,11 +46,12 @@ export function makePdf(pages: PdfPage[]): Uint8Array {
     const w = pt(p.widthMm)
     const h = pt(p.heightMm)
     const content = `q ${w} 0 0 ${h} 0 0 cm /Im0 Do Q`
-    obj(n, [`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}] /Resources << /XObject << /Im0 ${n + 2} 0 R >> >> /Contents ${n + 1} 0 R >>`])
+    const t = p.trimMm ? ` /TrimBox [${pt(p.trimMm)} ${pt(p.trimMm)} ${pt(p.widthMm - p.trimMm)} ${pt(p.heightMm - p.trimMm)}] /BleedBox [0 0 ${w} ${h}]` : ''
+    obj(n, [`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}]${t} /Resources << /XObject << /Im0 ${n + 2} 0 R >> >> /Contents ${n + 1} 0 R >>`])
     obj(n + 1, [`<< /Length ${content.length} >>\nstream\n${content}\nendstream`])
     obj(n + 2, [
-      `<< /Type /XObject /Subtype /Image /Width ${p.pxWidth} /Height ${p.pxHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.jpeg.length} >>\nstream\n`,
-      p.jpeg,
+      `<< /Type /XObject /Subtype /Image /Width ${p.pxWidth} /Height ${p.pxHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /${p.lossless ? 'FlateDecode' : 'DCTDecode'} /Length ${p.image.length} >>\nstream\n`,
+      p.image,
       '\nendstream',
     ])
   })

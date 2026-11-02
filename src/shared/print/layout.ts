@@ -59,11 +59,13 @@ export function sheetLayout(pageSize: Size, card: Size, bleed: number, margin = 
 }
 
 /**
- * Slots for the backs page: mirrored left to right, so after flipping the paper on its long edge
- * (duplex printing) every back sits behind its front.
+ * Slots for the backs page, so after flipping the paper on its long edge (duplex printing) every back sits
+ * behind its front: mirrored left to right on portrait pages, top to bottom on landscape pages (the long
+ * edge is then at the top). `offset` (mm) moves the backs to make up for a printer that prints them off.
  */
-export function mirroredSlots(layout: SheetLayout): { x: number; y: number }[] {
-  return layout.slots.map((s) => ({ x: layout.page.w - s.x - layout.cell.w, y: s.y }))
+export function mirroredSlots(layout: SheetLayout, offset = { x: 0, y: 0 }): { x: number; y: number }[] {
+  const { page, cell } = layout
+  return layout.slots.map((s) => (page.w > page.h ? { x: s.x + offset.x, y: page.h - s.y - cell.h + offset.y } : { x: page.w - s.x - cell.w + offset.x, y: s.y + offset.y }))
 }
 
 /**
@@ -132,6 +134,30 @@ export function extendIntoBleed(px: Uint8ClampedArray, w: number, h: number, ble
       if (a === 1) continue
       const j = (clamp(y, b, h - b - 1) * w + clamp(x, b, w - b - 1)) * 4
       // Art over the stretched edge ("source over").
+      const ea = px[j + 3] / 255
+      const oa = a + ea * (1 - a)
+      if (oa === 0) continue
+      for (let k = 0; k < 3; k++) px[i + k] = Math.round((px[i + k] * a + px[j + k] * ea * (1 - a)) / oa)
+      px[i + 3] = Math.round(oa * 255)
+    }
+  }
+}
+
+/**
+ * Fill the outer `bleed` pixels of an RGBA picture by mirroring the picture inside them, like a reflection at
+ * the edge: textures and gradients continue instead of turning into stripes. Art already there stays on top.
+ */
+export function mirrorIntoBleed(px: Uint8ClampedArray, w: number, h: number, bleed: number) {
+  if (bleed <= 0 || w <= 3 * bleed || h <= 3 * bleed) return
+  const mirror = (v: number, n: number) => (v < bleed ? 2 * bleed - v - 1 : v >= n - bleed ? 2 * (n - bleed) - v - 1 : v)
+  for (let y = 0; y < h; y++) {
+    const inY = y >= bleed && y < h - bleed
+    for (let x = 0; x < w; x++) {
+      if (inY && x === bleed) x = w - bleed // skip the inside
+      const i = (y * w + x) * 4
+      const a = px[i + 3] / 255
+      if (a === 1) continue
+      const j = (mirror(y, h) * w + mirror(x, w)) * 4
       const ea = px[j + 3] / 255
       const oa = a + ea * (1 - a)
       if (oa === 0) continue

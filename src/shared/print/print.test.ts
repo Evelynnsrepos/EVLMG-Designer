@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bleedMmToPx, bleedPxToMm, cardPixels, cropMarks, extendIntoBleed, mirroredSlots, mmToPx, PAGE_SIZES, sheetLayout } from './layout'
+import { bleedMmToPx, bleedPxToMm, cardPixels, cropMarks, extendIntoBleed, mirroredSlots, mirrorIntoBleed, mmToPx, PAGE_SIZES, sheetLayout } from './layout'
 import { makePdf } from './pdf'
 
 const A4 = PAGE_SIZES[0]
@@ -36,6 +36,17 @@ describe('sheet layout', () => {
     const m = mirroredSlots(l)
     expect(m[0].x).toBeCloseTo(l.slots[2].x)
     expect(m[0].y).toBe(l.slots[0].y)
+    const moved = mirroredSlots(l, { x: 1, y: -0.5 })
+    expect(moved[0].x).toBeCloseTo(l.slots[2].x + 1)
+    expect(moved[0].y).toBeCloseTo(l.slots[0].y - 0.5)
+  })
+
+  it('mirrors backs top to bottom on landscape pages (the long edge is at the top)', () => {
+    const l = sheetLayout(A4, { w: 85, h: 55 }, 3) // business cards: 3 x 3 on landscape A4
+    expect(l.page.w).toBe(297)
+    const m = mirroredSlots(l)
+    expect(m[0].x).toBe(l.slots[0].x)
+    expect(m[0].y).toBeCloseTo(l.slots[l.slots.length - 1].y)
   })
 
   it('puts crop marks outside the cards only', () => {
@@ -59,13 +70,15 @@ describe('pdf', () => {
   it('writes a valid xref for each page', () => {
     const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9])
     const bytes = makePdf([
-      { widthMm: 210, heightMm: 297, jpeg, pxWidth: 1, pxHeight: 1 },
-      { widthMm: 210, heightMm: 297, jpeg, pxWidth: 1, pxHeight: 1 },
+      { widthMm: 210, heightMm: 297, image: jpeg, pxWidth: 1, pxHeight: 1 },
+      { widthMm: 210, heightMm: 297, image: jpeg, pxWidth: 1, pxHeight: 1, lossless: true, trimMm: 3 },
     ])
     const text = new TextDecoder('latin1').decode(bytes)
     expect(text.startsWith('%PDF-1.4')).toBe(true)
     expect(text).toContain('/Count 2')
     expect(text).toContain('/MediaBox [0 0 595.276 841.890]')
+    expect(text).toContain('/TrimBox [8.504 8.504 586.772 833.386] /BleedBox [0 0 595.276 841.890]')
+    expect(text).toContain('/Filter /FlateDecode')
     const start = Number(/startxref\n(\d+)/.exec(text)![1])
     expect(text.slice(start, start + 4)).toBe('xref')
     // Every xref offset points at its object.
@@ -119,5 +132,18 @@ describe('bleed', () => {
     px.set([7, 0, 0, 255], 0) // art in the bleed gets covered
     extendIntoBleed(px, w, h, 2, true)
     expect([px[0], px[3]]).toEqual([100 + 40 + 4, 255])
+  })
+
+  it('mirrors the picture into an empty bleed', () => {
+    const w = 10
+    const h = 10
+    const px = new Uint8ClampedArray(w * h * 4)
+    for (let y = 2; y < 8; y++) for (let x = 2; x < 8; x++) px.set([x * 10 + y, 0, 0, 255], (y * w + x) * 4)
+    mirrorIntoBleed(px, w, h, 2)
+    const at = (x: number, y: number) => px[(y * w + x) * 4]
+    expect(at(1, 5)).toBe(25) // next to the edge: the edge pixel
+    expect(at(0, 5)).toBe(35) // one further out: one further in
+    expect(at(9, 0)).toBe(63) // corner: mirrored both ways
+    for (let i = 3; i < px.length; i += 4) expect(px[i]).toBe(255)
   })
 })

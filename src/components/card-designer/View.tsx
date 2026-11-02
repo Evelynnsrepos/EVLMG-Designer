@@ -468,7 +468,7 @@ export default function View({ documentId, active }: PanelProps) {
           </details>
           <details className="cd-section">
             <summary>Export</summary>
-            <ExportPanel d={d} title={title} cards={cards} root={root} />
+            <ExportPanel d={d} title={title} cards={cards} root={root} currentId={cardId} update={update} />
           </details>
         </div>
       </aside>

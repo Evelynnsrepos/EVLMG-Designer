@@ -14,6 +14,8 @@ export const TEXT = {
   noSelection: 'Select something on the card to style it. Only the active layer can be selected; Alt+click picks an item on another layer.',
   sheetHint: 'Row 1 holds the field names. Columns named Copies and Variant set those. A field without a column (like a fixed HP) takes its value from the first card of This list.',
   exportHint: 'Print at "actual size" (100 %), not "fit to page". For double-sided printing, flip on the long edge.',
+  photoHint: 'Janky! For quick prototypes when nothing else works. Unzip and take the JPGs to a photo station, pick the same photo size there and turn off any cropping, zoom or "fill". Print one photo first and measure a card between the crop marks: if it is off, type what you measured below and export again. Photo paper is one-sided: with backs next to the front, cut around the pair, fold it backwards along the dashed marks and glue it shut (or put it in a sleeve).',
+  godotHint: 'Unzip into the Godot folder above. deck.json lists every card with its fields and res:// paths to its pictures; read it with JSON.parse_string and load() the pictures.',
   ttsHint: 'Ready deck: save it in Tabletop Simulator\'s Saved Objects folder (the dialog starts there) and it shows up under Objects > Saved Objects. It works on this computer only; for online games use the ZIP and upload the sheets. ZIP: sheets for Objects > Components > Custom Deck, each file name says the grid and number of cards.',
 }
 

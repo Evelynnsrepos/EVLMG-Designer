@@ -93,6 +93,8 @@ export interface CardDoc {
   /** The bleed the design was made for, kept from when `bleedScales` was turned on. */
   bleedScaleFromMm?: number
   cornerMm: number
+  /** The export window's choices, kept with the deck (never part of the design or of undo). */
+  exportSettings?: Partial<ExportSettings>
   front: Scene<CardNode>
   back: Scene<CardNode>
   slots: ColorSlot[]
@@ -752,8 +754,46 @@ export function ttsSavedObject(name: string, sheets: TtsSheet[], uniqueBack: boo
   }
 }
 
+/** Where an export goes and how; see the export window. Bleed fills only touch the bleed added on export. */
+export interface ExportSettings {
+  target: 'home' | 'shop' | 'photo' | 'tts' | 'godot' | 'data'
+  /** Which cards: all, the open card, or the picked ones. */
+  cards: 'all' | 'this' | 'picked'
+  picked: Id[]
+  /** Bleed added around the card's own bleed on export (negative crops it); home and "other" print shop. */
+  addBleedMm: number
+  /** How the added bleed is filled. */
+  fill: 'edge' | 'mirror' | 'scale' | 'colour'
+  fillColour: string
+  dpi: number
+  lossless: boolean
+  paper: string
+  paperW: number
+  paperH: number
+  homeFormat: 'pdf' | 'png'
+  backs: boolean
+  /** Moves the backs on the page (mm), for printers that print the back side off. */
+  backX: number
+  backY: number
+  shop: string
+  /** Photo station print size (`PHOTO_SIZES` id). */
+  photo: string
+  /** How wide a card came out on a test photo (mm); 0 = as designed. Exports scale to make up for it. */
+  photoMeasuredMm: number
+  /** Backs on photos: none, side by side with the front to fold, or as extra photos to glue on. */
+  photoBacks: 'none' | 'fold' | 'photos'
+  shopFormat: 'pdf' | 'png'
+  tts: 'ready' | 'zip'
+  godotWidth: number
+  godotSheet: boolean
+  godotRound: boolean
+  godotNoText: boolean
+  godotFolder: string
+  data: 'json' | 'csv'
+}
+
 /** The deck as JSON for game engines and other tools (format "evlmg-deck", version 1). */
-export function deckJson(name: string, doc: CardDoc, cards: Card[], images?: Map<Id, string>) {
+export function deckJson(name: string, doc: CardDoc, cards: Card[], images?: Map<Id, string>, backs?: Map<Id, string>) {
   return {
     format: 'evlmg-deck',
     version: 1,
@@ -768,6 +808,7 @@ export function deckJson(name: string, doc: CardDoc, cards: Card[], images?: Map
       variant: c.variantId ?? null,
       values: Object.fromEntries(doc.fields.map((f) => [f.name, jsonValue(f, c.values[f.id] ?? '')])),
       ...(images?.has(c.id) ? { image: images.get(c.id) } : {}),
+      ...(backs?.has(c.id) ? { back: backs.get(c.id) } : {}),
     })),
   }
 }

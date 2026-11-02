@@ -1,11 +1,12 @@
+import { zlibSync } from 'fflate'
 import { cropMarks, mirroredSlots, mmToPx, type SheetLayout } from './layout'
-import { makePdf } from './pdf'
+import { makePdf, type PdfPage } from './pdf'
 
 /**
  * Draw print pages: each card picture (already including its bleed) goes into a slot, crop marks on top.
- * `backs` (optional) fills a mirrored page after every fronts page, for duplex printing.
+ * `backs` (optional) fills a mirrored page after every fronts page, for duplex printing; `backOffset` (mm) moves them.
  */
-export function drawSheets(layout: SheetLayout, fronts: HTMLCanvasElement[], dpi: number, bleed: number, backs?: HTMLCanvasElement[]): HTMLCanvasElement[] {
+export function drawSheets(layout: SheetLayout, fronts: HTMLCanvasElement[], dpi: number, bleed: number, backs?: HTMLCanvasElement[], backOffset?: { x: number; y: number }): HTMLCanvasElement[] {
   const per = layout.slots.length
   if (!per) return []
   const pages: HTMLCanvasElement[] = []
@@ -29,7 +30,7 @@ export function drawSheets(layout: SheetLayout, fronts: HTMLCanvasElement[], dpi
   }
   for (let i = 0; i < fronts.length; i += per) {
     page(fronts.slice(i, i + per), layout.slots)
-    if (backs) page(backs.slice(i, i + per), mirroredSlots(layout))
+    if (backs) page(backs.slice(i, i + per), mirroredSlots(layout, backOffset))
   }
   return pages
 }
@@ -41,16 +42,29 @@ export async function canvasBytes(c: HTMLCanvasElement, type: 'image/png' | 'ima
   return new Uint8Array(await blob.arrayBuffer())
 }
 
+/** A canvas as a PDF picture: JPEG, or lossless (sharper small text, bigger file). */
+async function pdfImage(c: HTMLCanvasElement, lossless: boolean): Promise<Pick<PdfPage, 'image' | 'lossless' | 'pxWidth' | 'pxHeight'>> {
+  if (!lossless) return { image: await canvasBytes(c, 'image/jpeg'), pxWidth: c.width, pxHeight: c.height }
+  const rgba = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data
+  const rgb = new Uint8Array((rgba.length / 4) * 3)
+  // Print pages have no see-through parts: drop alpha onto white.
+  for (let i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
+    const a = rgba[i + 3] / 255
+    for (let k = 0; k < 3; k++) rgb[j + k] = Math.round(rgba[i + k] * a + 255 * (1 - a))
+  }
+  return { image: zlibSync(rgb, { level: 6 }), lossless: true, pxWidth: c.width, pxHeight: c.height }
+}
+
 /** Print pages as one PDF at the layout's paper size. */
-export async function sheetsToPdf(layout: SheetLayout, pages: HTMLCanvasElement[]): Promise<Uint8Array> {
+export async function sheetsToPdf(layout: SheetLayout, pages: HTMLCanvasElement[], lossless = false): Promise<Uint8Array> {
   const out = []
-  for (const p of pages) out.push({ widthMm: layout.page.w, heightMm: layout.page.h, jpeg: await canvasBytes(p, 'image/jpeg'), pxWidth: p.width, pxHeight: p.height })
+  for (const p of pages) out.push({ widthMm: layout.page.w, heightMm: layout.page.h, ...(await pdfImage(p, lossless)) })
   return makePdf(out)
 }
 
-/** One card per page: every page is the card plus its bleed, no crop marks (print shops cut at the trim size). */
-export async function cardsToPdf(sides: HTMLCanvasElement[], widthMm: number, heightMm: number): Promise<Uint8Array> {
+/** One card per page: every page is the card plus its bleed (`trimMm` on each side), no crop marks (print shops cut at the trim box). */
+export async function cardsToPdf(sides: HTMLCanvasElement[], widthMm: number, heightMm: number, trimMm = 0, lossless = false): Promise<Uint8Array> {
   const out = []
-  for (const c of sides) out.push({ widthMm, heightMm, jpeg: await canvasBytes(c, 'image/jpeg'), pxWidth: c.width, pxHeight: c.height })
+  for (const c of sides) out.push({ widthMm, heightMm, trimMm, ...(await pdfImage(c, lossless)) })
   return makePdf(out)
 }
