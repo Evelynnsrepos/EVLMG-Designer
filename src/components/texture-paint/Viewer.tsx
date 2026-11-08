@@ -1,10 +1,8 @@
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js'
+import { meshesOf, parseModel } from '@/shared/model3d'
 import { jumpedSeam, uvFlipped, uvToPixel } from './model'
 
 /** What the 3D view needs from the texture side. */
@@ -24,29 +22,6 @@ export interface ViewerHandle {
   uvLayout(): HTMLCanvasElement | null
   /** The model with the painted texture, as GLB bytes. */
   exportGlb(): Promise<ArrayBuffer | null>
-}
-
-/** Parse a model file; null when the format is not supported or the file is broken. */
-async function parseModel(bytes: ArrayBuffer, path: string): Promise<{ object: THREE.Object3D; original: CanvasImageSource | null }> {
-  const ext = path.split('.').pop()!.toLowerCase()
-  let object: THREE.Object3D
-  if (ext === 'glb' || ext === 'gltf') object = (await new GLTFLoader().parseAsync(bytes, '')).scene
-  else if (ext === 'obj') object = new OBJLoader().parse(new TextDecoder().decode(bytes))
-  else if (ext === 'fbx') object = new FBXLoader().parse(bytes, '')
-  else throw new Error('Unsupported model format')
-  // The model's own colour texture, so it can become the first layer.
-  let original: CanvasImageSource | null = null
-  object.traverse((o) => {
-    const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined
-    if (!original && m && !Array.isArray(m) && m.map?.image) original = m.map.image as CanvasImageSource
-  })
-  return { object, original }
-}
-
-const meshesOf = (o: THREE.Object3D) => {
-  const out: THREE.Mesh[] = []
-  o.traverse((x) => (x as THREE.Mesh).isMesh && out.push(x as THREE.Mesh))
-  return out
 }
 
 /**

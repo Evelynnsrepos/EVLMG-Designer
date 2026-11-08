@@ -23,7 +23,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from 'react'
 import { importAssetFromBlob, pickAndImportAssets, resolveAssetPath } from '@/core/assets'
 import { getFs } from '@/core/fs'
 import { newId, type Id } from '@/core/model'
@@ -72,7 +72,7 @@ import { flipAbout, pinch, rotateAbout, toDocPoint, viewMatrix, zoomAbout, type 
 // Sketch Pro: canvas, time-lapse and files.
 import { useSketchFiles } from './files/SketchFiles'
 // Sketch Pro: text layers (feat/sketch-text)
-import { Keyboard, Layers as LayersIcon, LocateFixed, PanelRightClose, PictureInPicture2, Type } from 'lucide-react'
+import { Keyboard, Lamp, Layers as LayersIcon, LocateFixed, PanelRightClose, PictureInPicture2, Type } from 'lucide-react'
 import { useImportedFonts } from './fonts'
 import { TextBoxes, TextPanel } from './TextPanel'
 import { useTextLayers, useTextTool } from './textLayers'
@@ -83,6 +83,9 @@ import { useAssist } from './assistView'
 import { AdjustMenu, AdjustStudio, type AdjustMode } from './adjust/AdjustStudio'
 import { pointIn, zoomOf } from '@/shared/zoom'
 import { openHotwheel, useHotwheel, type HotAction } from '@/shared/hotwheel'
+
+// 3D only loads when the light preview opens.
+const LightPreview = lazy(() => import('./light/LightPreview'))
 
 const UI_PRO = {
   rotateLeft: 'Turn view left (,)',
@@ -95,6 +98,8 @@ const UI_PRO = {
   layers: 'Layers',
   textOptions: 'Text',
   showLayers: 'Show the layers',
+  lightPreview: 'Light preview: lamps around 3D objects, to see where shadows fall',
+  lightPreviewTitle: 'Light preview',
   hideLayers: 'Hide the layers',
   floatLayers: 'Float the layers over the canvas',
   dockLayers: 'Put the layers back in the side panel',
@@ -296,12 +301,16 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const textStart = () => ({ x: 340, y: 110 })
   const [layersSpot, setLayersSpot] = useSpot('egd.sketch.layersSpot', layersStart)
   const [textSpot, setTextSpot] = useSpot('egd.sketch.textSpot', textStart)
+  const lightStart = () => ({ x: 340, y: 110 })
+  const [lightSpot, setLightSpot] = useSpot('egd.sketch.lightSpot', lightStart)
+  const [lightShown, setLightShown] = useState(false)
   /** Show the layers again, wherever they went; floating panels go back to where they start. */
   const bringBack = (mode: 'docked' | 'floating') => {
     setLayersMode(mode)
     setLayersShown(true)
     setLayersSpot(layersStart())
     setTextSpot(textStart())
+    setLightSpot(lightStart())
   }
   /** The stabilization string from the brush tip to the pen while drawing. */
   const [tether, setTether] = useState<{ tip: { x: number; y: number }; pen: { x: number; y: number } } | null>(null)
@@ -1103,6 +1112,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         <ToolButton icon={Settings2} label={UI_PRO.input} onClick={() => setInputOpen(true)} />
         <ToolButton icon={LayersIcon} label={layersShown ? UI_PRO.hideLayers : UI_PRO.showLayers} active={layersShown} onClick={() => setLayersShown(!layersShown)} />
         <BringBackMenu onPick={bringBack} />
+        <ToolButton icon={Lamp} label={UI_PRO.lightPreview} active={lightShown} onClick={() => setLightShown(!lightShown)} />
         <ToolButton icon={ImageIcon} label={UI.insertImage} onClick={() => void insertFromFile()} />
         <ToolButton icon={ImagePlus} label={UI.reference} onClick={() => setPickingRef(true)} />
         {files.buttons}
@@ -1285,6 +1295,13 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       {activeLayer?.text && tool === 'text' && (
         <FloatingPanel title={UI_PRO.textOptions} at={textSpot} onMove={setTextSpot} onClose={() => setTool('move')} width={290}>
           <TextPanel host={layerHost} layer={activeLayer} />
+        </FloatingPanel>
+      )}
+      {lightShown && (
+        <FloatingPanel title={UI_PRO.lightPreviewTitle} at={lightSpot} onMove={setLightSpot} onClose={() => setLightShown(false)} width={330}>
+          <Suspense fallback={null}>
+            <LightPreview />
+          </Suspense>
         </FloatingPanel>
       )}
       {files.dialogs}
