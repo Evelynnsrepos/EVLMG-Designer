@@ -1300,7 +1300,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       {lightShown && (
         <FloatingPanel title={UI_PRO.lightPreviewTitle} at={lightSpot} onMove={setLightSpot} onClose={() => setLightShown(false)} width={330}>
           <Suspense fallback={null}>
-            <LightPreview />
+            <LightPreview brushColor={color} />
           </Suspense>
         </FloatingPanel>
       )}

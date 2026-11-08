@@ -6,10 +6,10 @@
 }
 .lightp-view {
   position: relative;
-  height: 230px;
+  height: 280px;
   border-radius: var(--radius-sm);
   overflow: hidden;
-  background: #2c2c31;
+  background: #232327;
 }
 .lightp-view canvas {
   display: block;
@@ -97,4 +97,43 @@
 }
 .lightp-slider input {
   width: 100%;
+}
+.lightp-lamps {
+  gap: 2px;
+}
+.lightp-lamp {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  cursor: pointer;
+}
+.lightp-lamp.is-active {
+  border-color: currentColor;
+  box-shadow: 0 0 8px color-mix(in srgb, currentColor 60%, transparent);
+}
+.lightp-lamp.is-off {
+  opacity: 0.4;
+}
+.lightp-color {
+  width: 30px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: none;
+}
+.lightp-overlay {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.35);
+}
+.lightp-overlay .icon-btn {
+  color: #ddd;
 }

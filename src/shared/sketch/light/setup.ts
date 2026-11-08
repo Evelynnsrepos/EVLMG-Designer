@@ -45,6 +45,10 @@ export interface LightSetup {
   /** 0 = hard shadow edges, 1 = very soft. */
   softness: number
   view: LightView
+  /** Colour of every object. */
+  color: string
+  /** 0 = matte, 1 = shiny. */
+  shine: number
 }
 
 export const MAX_LAMPS = 4
@@ -59,14 +63,20 @@ export const uid = () => `lamp-${Date.now().toString(36)}-${n++}`
 
 export function defaultSetup(): LightSetup {
   return {
-    lamps: [{ id: 'key', on: true, kind: 'sun', strength: 1.6, color: '#fff4e0', azimuth: -40, elevation: 45, distance: 3 }],
+    lamps: [
+      { id: 'key', on: true, kind: 'sun', strength: 1.8, color: '#fff1dc', azimuth: -45, elevation: 45, distance: 3 },
+      // A cool light from behind gives the coloured rim painters like.
+      { id: 'rim', on: true, kind: 'sun', strength: 0.9, color: '#6fe3cf', azimuth: 135, elevation: 35, distance: 3 },
+    ],
     things: [
-      { id: 'ball', shape: 'ball', x: 0, z: 0, size: 1, turn: 0 },
-      { id: 'cube', shape: 'cube', x: 1.1, z: -0.5, size: 0.7, turn: 30 },
+      { id: 'ball', shape: 'ball', x: 0, z: 0, size: 1.2, turn: 0 },
+      { id: 'small', shape: 'ball', x: 0.85, z: 0.55, size: 0.5, turn: 0 },
     ],
     room: 0.15,
-    softness: 0.3,
+    softness: 0.35,
     view: 'clay',
+    color: '#e2785a',
+    shine: 0.35,
   }
 }
 
@@ -90,6 +100,7 @@ export function anglesAt(x: number, y: number, z: number): { azimuth: number; el
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const num = (v: unknown, lo: number, hi: number, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? clamp(v, lo, hi) : fallback)
+const hex = (v: unknown, fallback: string) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v : fallback)
 const SHAPES: Shape[] = ['ball', 'cube', 'cylinder', 'cone', 'ring', 'model']
 
 /** A setup read back from storage, made safe: bad values fixed, models that aren't loaded any more dropped. */
@@ -106,7 +117,7 @@ export function restoreSetup(raw: unknown, loadedModels: ReadonlySet<string>): L
           on: l.on !== false,
           kind: l.kind === 'bulb' ? ('bulb' as const) : ('sun' as const),
           strength: num(l.strength, 0, 3, 1),
-          color: typeof l.color === 'string' && /^#[0-9a-f]{6}$/i.test(l.color) ? l.color : '#ffffff',
+          color: hex(l.color, '#ffffff'),
           azimuth: num(l.azimuth, -360, 360, 0),
           elevation: num(l.elevation, -85, 85, 45),
           distance: num(l.distance, 1, 8, 4),
@@ -133,6 +144,8 @@ export function restoreSetup(raw: unknown, loadedModels: ReadonlySet<string>): L
     room: num(r.room, 0, 1, d.room),
     softness: num(r.softness, 0, 1, d.softness),
     view: r.view === 'three' || r.view === 'two' ? r.view : 'clay',
+    color: hex(r.color, d.color),
+    shine: num(r.shine, 0, 1, d.shine),
   }
 }
 

@@ -26,6 +26,8 @@ describe('light preview setup', () => {
         lamps: Array.from({ length: 6 }, () => ({ strength: 99, color: 'red', elevation: 200, kind: 'laser' })),
         things: [{ shape: 'ball', x: 50 }, { shape: 'model', model: 'gone' }, { shape: 'model', model: 'here', name: 'Fox.glb' }, { shape: 'teapot' }],
         room: -1,
+        color: 'blue',
+        shine: 7,
         view: 'nope',
       },
       new Set(['here']),
@@ -37,6 +39,8 @@ describe('light preview setup', () => {
     expect(s.things[1].name).toBe('Fox.glb')
     expect(s.room).toBe(0)
     expect(s.view).toBe('clay')
+    expect(s.color).toBe(defaultSetup().color)
+    expect(s.shine).toBe(1)
   })
 
   it('puts the shadow line where a surface turns away from the lamp', () => {

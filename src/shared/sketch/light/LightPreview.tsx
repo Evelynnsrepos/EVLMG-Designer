@@ -1,4 +1,4 @@
-import { Box, Circle, Cone, Cylinder, Lightbulb, Lock, LockOpen, Move, Plus, RotateCcw, Sun, Torus, Upload, X } from 'lucide-react'
+import { Box, Circle, Cone, Cylinder, Lightbulb, Lock, LockOpen, Move, Paintbrush, Plus, RotateCcw, Sun, Torus, Upload, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
@@ -29,6 +29,12 @@ const UI = {
   turn: 'Turn',
   remove: 'Remove',
   addLamp: 'Add a lamp',
+  lamp: 'Lamp',
+  removeLamp: 'Remove this lamp',
+  objectColor: 'Colour of the objects',
+  useBrush: 'Brush colour',
+  useBrushHint: 'Give the objects your current brush colour',
+  shine: 'Shine',
   lampOn: 'Lamp on or off',
   sun: 'Sun: parallel light, shadows keep their size. Click for a bulb.',
   bulb: 'Bulb: light from one point, shadows spread out. Click for a sun.',
@@ -37,7 +43,7 @@ const UI = {
   distance: 'Distance',
   room: 'Shadow brightness',
   softness: 'Shadow softness',
-  hint: 'Drag a lamp (the coloured dot) to move it around. Turn the view to reach behind the objects.',
+  hint: 'Drag a lamp’s sun to move it around the objects. Turn the view to put a lamp behind them.',
   full: 'Up to 4 lamps',
 }
 
@@ -97,6 +103,49 @@ function drop(st: Stage, group: THREE.Object3D) {
   for (const m of meshesOf(group)) if (!m.userData.model) m.geometry.dispose()
 }
 
+/** Lamp handles stay this close to the middle so they are always in view. */
+const handleRadius = (l: Lamp) => Math.min(l.distance, 1.5)
+
+const glyphs = new Map<string, THREE.Texture>()
+/** A white sun (rays) or bulb (ring with a glow) icon for lamp handles; tinted with the lamp colour. */
+function glyph(kind: Lamp['kind']): THREE.Texture {
+  let t = glyphs.get(kind)
+  if (t) return t
+  const c = document.createElement('canvas')
+  c.width = c.height = 64
+  const g = c.getContext('2d')!
+  g.translate(32, 32)
+  g.strokeStyle = g.fillStyle = '#fff'
+  g.lineCap = 'round'
+  g.shadowColor = 'rgba(0,0,0,0.6)'
+  g.shadowBlur = 4
+  if (kind === 'sun') {
+    g.beginPath()
+    g.arc(0, 0, 11, 0, Math.PI * 2)
+    g.fill()
+    g.lineWidth = 4
+    for (let i = 0; i < 8; i++) {
+      const a = (i * Math.PI) / 4
+      g.beginPath()
+      g.moveTo(Math.cos(a) * 17, Math.sin(a) * 17)
+      g.lineTo(Math.cos(a) * 27, Math.sin(a) * 27)
+      g.stroke()
+    }
+  } else {
+    g.lineWidth = 5
+    g.beginPath()
+    g.arc(0, 0, 22, 0, Math.PI * 2)
+    g.stroke()
+    g.beginPath()
+    g.arc(0, 0, 10, 0, Math.PI * 2)
+    g.fill()
+  }
+  t = new THREE.CanvasTexture(c)
+  t.colorSpace = THREE.SRGBColorSpace
+  glyphs.set(kind, t)
+  return t
+}
+
 interface Stage {
   renderer: THREE.WebGLRenderer
   scene: THREE.Scene
@@ -105,17 +154,18 @@ interface Stage {
   room: THREE.HemisphereLight
   floor: THREE.Mesh
   things: Map<string, { group: THREE.Group; key: string }>
-  lamps: Map<string, { light: THREE.DirectionalLight | THREE.PointLight; dot: THREE.Mesh; line: THREE.Line }>
+  lamps: Map<string, { light: THREE.DirectionalLight | THREE.PointLight; dot: THREE.Sprite }>
   outline: THREE.BoxHelper
   /** Materials for the current view; made again only when the view changes. */
-  look: { view: string; clay: THREE.Material; floor: THREE.Material; gradient: THREE.Texture } | null
+  look: { view: string; clay: THREE.MeshStandardMaterial | THREE.MeshToonMaterial; gradient: THREE.Texture } | null
   render(): void
 }
 
 /** The light preview (Draw): grey objects on a floor lit by up to four lamps, to see where shadows fall. */
-export default function LightPreview() {
+export default function LightPreview({ brushColor }: { brushColor?: string }) {
   const [setup, setSetupState] = useState<LightSetup>(() => restoreSetup(readStored(), new Set(models.keys())))
   const [selected, setSelected] = useState<string | null>(null)
+  const [activeLamp, setActiveLamp] = useState<string | null>(() => setup.lamps[0]?.id ?? null)
   const [moving, setMoving] = useState(false)
   const [locked, setLocked] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -127,9 +177,9 @@ export default function LightPreview() {
       store(next)
       return next
     })
-  const live = useRef({ setup, moving, set, setSelected })
+  const live = useRef({ setup, moving, set, setSelected, setActiveLamp })
   useEffect(() => {
-    live.current = { setup, moving, set, setSelected }
+    live.current = { setup, moving, set, setSelected, setActiveLamp }
   })
 
   // Renderer, camera, floor and pointer handling, once.
@@ -146,15 +196,21 @@ export default function LightPreview() {
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio))
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFShadowMap
+    // Filmic highlights roll off softly instead of clipping to white.
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.15
     el.appendChild(renderer.domElement)
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x2c2c31)
+    scene.background = new THREE.Color(0x232327)
+    // Only the floor uses fog: its far edge fades into the background, so there is no horizon line.
+    scene.fog = new THREE.Fog(0x232327, 4, 8)
     const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 100)
-    // Far enough back that lamps at their usual distance are in view.
-    camera.position.set(4.4, 3.4, 6.4)
-    const room = new THREE.HemisphereLight(0xffffff, 0x666666, 1)
+    camera.position.set(2.2, 1.5, 3.3)
+    // Warm from above, a cool bounce from below.
+    const room = new THREE.HemisphereLight(0xfff4e8, 0x2f5f5a, 1)
     scene.add(room)
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40))
+    // An invisible floor that only shows the shadows falling on it.
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial())
     floor.rotation.x = -Math.PI / 2
     floor.receiveShadow = true
     scene.add(floor)
@@ -212,7 +268,10 @@ export default function LightPreview() {
       tap = { x: e.clientX, y: e.clientY }
       const dot = ray.intersectObjects([...st.lamps.values()].map((l) => l.dot), false)[0]
       const lamp = dot && [...st.lamps].find(([, l]) => l.dot === dot.object)?.[0]
-      if (lamp) drag = { kind: 'lamp', id: lamp, dx: 0, dz: 0 }
+      if (lamp) {
+        drag = { kind: 'lamp', id: lamp, dx: 0, dz: 0 }
+        live.current.setActiveLamp(lamp)
+      }
       else if (live.current.moving) {
         const id = thingAt()
         const t = id && live.current.setup.things.find((x) => x.id === id)
@@ -236,7 +295,8 @@ export default function LightPreview() {
         if (!lamp) return
         // The lamp slides over a ball around the scene; past its edge it stays on the rim.
         const centre = new THREE.Vector3(AIM.x, AIM.y, AIM.z)
-        const p = ray.ray.intersectSphere(new THREE.Sphere(centre, lamp.distance), new THREE.Vector3()) ?? ray.ray.closestPointToPoint(centre, new THREE.Vector3()).sub(centre).setLength(lamp.distance).add(centre)
+        const r = handleRadius(lamp)
+        const p = ray.ray.intersectSphere(new THREE.Sphere(centre, r), new THREE.Vector3()) ?? ray.ray.closestPointToPoint(centre, new THREE.Vector3()).sub(centre).setLength(r).add(centre)
         const a = anglesAt(p.x, p.y, p.z)
         live.current.set((s) => ({ ...s, lamps: s.lamps.map((l) => (l.id === d.id ? { ...l, ...a } : l)) }))
       } else {
@@ -270,7 +330,8 @@ export default function LightPreview() {
         if (m.isMesh && !m.userData.model) m.geometry.dispose()
       })
       for (const l of st.lamps.values()) l.light.dispose()
-      if (st.look) for (const m of [st.look.clay, st.look.floor, st.look.gradient]) m.dispose()
+      if (st.look) for (const m of [st.look.clay, st.look.gradient]) m.dispose()
+      ;(floor.material as THREE.Material).dispose()
       renderer.dispose()
       canvas.remove()
       stage.current = null
@@ -287,11 +348,12 @@ export default function LightPreview() {
       const gradient = new THREE.DataTexture(new Uint8Array(steps.map((v) => Math.round(v * 255))), steps.length, 1, THREE.RedFormat)
       gradient.needsUpdate = true
       gradient.minFilter = gradient.magFilter = THREE.NearestFilter
-      const material = (color: number) => (setup.view === 'clay' ? new THREE.MeshStandardMaterial({ color, roughness: 0.75 }) : new THREE.MeshToonMaterial({ color, gradientMap: gradient }))
-      if (st.look) for (const m of [st.look.clay, st.look.floor, st.look.gradient]) m.dispose()
-      st.look = { view: setup.view, clay: material(0xd2d2d2), floor: material(0x9a9a9a), gradient }
-      st.floor.material = st.look.floor
+      if (st.look) for (const m of [st.look.clay, st.look.gradient]) m.dispose()
+      st.look = { view: setup.view, clay: setup.view === 'clay' ? new THREE.MeshStandardMaterial({ fog: false }) : new THREE.MeshToonMaterial({ gradientMap: gradient, fog: false }), gradient }
     }
+    st.look.clay.color.set(setup.color)
+    if (st.look.clay instanceof THREE.MeshStandardMaterial) st.look.clay.roughness = 0.95 - setup.shine * 0.8
+    ;(st.floor.material as THREE.ShadowMaterial).opacity = 0.7 - setup.room * 0.5
     const clay = st.look.clay
 
     // Objects: rebuild only when the shape or model changed, otherwise just move.
@@ -332,11 +394,12 @@ export default function LightPreview() {
     // Lamps: a light, a dot to drag and a faint line to the middle.
     for (const [id, l] of st.lamps) {
       if (setup.lamps.some((x) => x.id === id && (x.kind === 'sun') === l.light instanceof THREE.DirectionalLight)) continue
-      st.scene.remove(l.light, l.dot, l.line)
+      st.scene.remove(l.light, l.dot)
       if (l.light instanceof THREE.DirectionalLight) st.scene.remove(l.light.target)
       l.light.dispose()
       st.lamps.delete(id)
     }
+    const strongest = Math.max(0.01, ...setup.lamps.filter((l) => l.on).map((l) => l.strength))
     for (const lamp of setup.lamps) {
       let entry = st.lamps.get(lamp.id)
       if (!entry) {
@@ -358,34 +421,39 @@ export default function LightPreview() {
           light.shadow.camera.far = 30
           light.decay = 2
         }
-        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.11, 20, 12), new THREE.MeshBasicMaterial())
-        const line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ transparent: true, opacity: 0.35 }))
-        st.scene.add(light, dot, line)
-        entry = { light, dot, line }
+        const dot = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, sizeAttenuation: false }))
+        dot.scale.set(0.085, 0.085, 1)
+        dot.renderOrder = 10
+        st.scene.add(light, dot)
+        entry = { light, dot }
         st.lamps.set(lamp.id, entry)
       }
       const [x, y, z] = lampPosition(lamp)
-      const { light, dot, line } = entry
+      const { light, dot } = entry
       light.position.set(x, y, z)
       light.color.set(lamp.color)
       // A bulb gets as bright as a sun at the default distance, brighter closer up, darker further away.
       light.intensity = !lamp.on ? 0 : lamp.kind === 'sun' ? lamp.strength * 2 : lamp.strength * 2 * 16
       light.visible = lamp.on
       light.shadow.radius = 1 + setup.softness * 14
-      ;(dot.material as THREE.MeshBasicMaterial).color.set(lamp.on ? lamp.color : '#555555')
-      dot.position.set(x, y, z)
-      ;(line.material as THREE.LineBasicMaterial).color.set(lamp.color)
-      line.geometry.setFromPoints([new THREE.Vector3(x, y, z), new THREE.Vector3(AIM.x, AIM.y, AIM.z)])
+      // The floor only shows shadows, so a weak fill lamp's shadow is fainter than the main lamp's.
+      light.shadow.intensity = Math.min(1, lamp.strength / strongest)
+      dot.material.map = glyph(lamp.kind)
+      dot.material.color.set(lamp.on ? lamp.color : '#666666')
+      dot.material.opacity = lamp.id === activeLamp ? 1 : 0.75
+      dot.material.needsUpdate = true
+      // The handle sits close around the objects so it stays in view; it points where the light comes from.
+      dot.position.set(...lampPosition({ ...lamp, distance: handleRadius(lamp) }))
     }
-    st.room.intensity = 0.2 + setup.room * 2.2
+    st.room.intensity = 0.15 + setup.room * 2
     // The tone views show the shadow side at the room brightness, so bounce light stays flat there.
-    st.room.groundColor.set(setup.view === 'clay' ? 0x666666 : 0xffffff)
+    st.room.groundColor.set(setup.view === 'clay' ? 0x2f5f5a : 0xffffff)
 
     const sel = selected ? st.things.get(selected) : undefined
     st.outline.visible = !!sel
     if (sel) st.outline.setFromObject(sel.group)
     st.render()
-  }, [setup, selected])
+  }, [setup, selected, activeLamp])
 
   useEffect(() => {
     if (stage.current) stage.current.controls.enabled = !locked
@@ -419,11 +487,81 @@ export default function LightPreview() {
   const patchThing = (id: string, patch: Partial<Thing>) => set((s) => ({ ...s, things: s.things.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))
   const patchLamp = (id: string, patch: Partial<Lamp>) => set((s) => ({ ...s, lamps: s.lamps.map((l) => (l.id === id ? { ...l, ...patch } : l)) }))
   const sel = setup.things.find((t) => t.id === selected)
+  const lamp = setup.lamps.find((l) => l.id === activeLamp) ?? setup.lamps[0]
+  const addLamp = () => {
+    const id = uid()
+    set((s) => ({
+      ...s,
+      // A new lamp starts on the other side of the last one, as a fill or rim light.
+      lamps: [...s.lamps, { id, on: true, kind: 'sun', strength: 0.6, color: '#cfe0ff', azimuth: (s.lamps.at(-1)?.azimuth ?? 0) + 150, elevation: 25, distance: 3 }],
+    }))
+    setActiveLamp(id)
+  }
 
   return (
     <div className="lightp">
+      <div className="lightp-row lightp-lamps" role="tablist" aria-label={UI.lamps}>
+        {setup.lamps.map((l, i) => (
+          <button
+            key={l.id}
+            role="tab"
+            aria-selected={l.id === lamp?.id}
+            className={`lightp-lamp${l.id === lamp?.id ? ' is-active' : ''}${l.on ? '' : ' is-off'}`}
+            title={`${UI.lamp} ${i + 1}`}
+            style={{ color: l.color }}
+            onClick={() => setActiveLamp(l.id)}
+          >
+            {l.kind === 'sun' ? <Sun size={16} /> : <Lightbulb size={16} />}
+          </button>
+        ))}
+        <button className="icon-btn" title={setup.lamps.length >= MAX_LAMPS ? UI.full : UI.addLamp} aria-label={UI.addLamp} disabled={setup.lamps.length >= MAX_LAMPS} onClick={addLamp}>
+          <Plus size={15} />
+        </button>
+        <span className="fp-spacer" />
+        {lamp && (
+          <>
+            <input type="checkbox" checked={lamp.on} title={UI.lampOn} aria-label={UI.lampOn} onChange={(e) => patchLamp(lamp.id, { on: e.target.checked })} />
+            <button className="icon-btn" title={lamp.kind === 'sun' ? UI.sun : UI.bulb} aria-label={lamp.kind === 'sun' ? UI.sun : UI.bulb} onClick={() => patchLamp(lamp.id, { kind: lamp.kind === 'sun' ? 'bulb' : 'sun' })}>
+              {lamp.kind === 'sun' ? <Sun size={15} /> : <Lightbulb size={15} />}
+            </button>
+            <input type="color" className="lightp-color" value={lamp.color} title={UI.lampColor} aria-label={UI.lampColor} onChange={(e) => patchLamp(lamp.id, { color: e.target.value })} />
+            <button className="icon-btn" title={UI.removeLamp} aria-label={UI.removeLamp} onClick={() => set((s) => ({ ...s, lamps: s.lamps.filter((x) => x.id !== lamp.id) }))}>
+              <X size={14} />
+            </button>
+          </>
+        )}
+      </div>
+      {lamp && (
+        <>
+          <Slider label={UI.strength} min={0} max={3} step={0.05} value={lamp.strength} onChange={(strength) => patchLamp(lamp.id, { strength })} />
+          <Slider label={UI.distance} min={1} max={8} step={0.1} value={lamp.distance} onChange={(distance) => patchLamp(lamp.id, { distance })} />
+        </>
+      )}
+      <Slider label={UI.softness} min={0} max={1} step={0.01} value={setup.softness} onChange={(softness) => set((s) => ({ ...s, softness }))} />
+
       <div className="lightp-view" ref={box}>
         {error && <p className="lightp-error">{error}</p>}
+        <div className="lightp-overlay">
+          <button className={`icon-btn${moving ? ' is-active' : ''}`} title={UI.moveMode} aria-label={UI.moveMode} aria-pressed={moving} onClick={() => setMoving(!moving)}>
+            <Move size={15} />
+          </button>
+          <button className={`icon-btn${locked ? ' is-active' : ''}`} title={locked ? UI.unlock : UI.lock} aria-label={locked ? UI.unlock : UI.lock} aria-pressed={locked} onClick={() => setLocked(!locked)}>
+            {locked ? <Lock size={15} /> : <LockOpen size={15} />}
+          </button>
+          <button
+            className="icon-btn"
+            title={UI.reset}
+            aria-label={UI.reset}
+            onClick={() => {
+              const d = defaultSetup()
+              set(() => d)
+              setSelected(null)
+              setActiveLamp(d.lamps[0].id)
+            }}
+          >
+            <RotateCcw size={15} />
+          </button>
+        </div>
       </div>
       <div className="lightp-row">
         <span className="lightp-seg" role="group">
@@ -433,28 +571,20 @@ export default function LightPreview() {
             </button>
           ))}
         </span>
-        <span className="fp-spacer" />
-        <button className={`icon-btn${moving ? ' is-active' : ''}`} title={UI.moveMode} aria-label={UI.moveMode} aria-pressed={moving} onClick={() => setMoving(!moving)}>
-          <Move size={15} />
-        </button>
-        <button className={`icon-btn${locked ? ' is-active' : ''}`} title={locked ? UI.unlock : UI.lock} aria-label={locked ? UI.unlock : UI.lock} aria-pressed={locked} onClick={() => setLocked(!locked)}>
-          {locked ? <Lock size={15} /> : <LockOpen size={15} />}
-        </button>
-        <button
-          className="icon-btn"
-          title={UI.reset}
-          aria-label={UI.reset}
-          onClick={() => {
-            set(() => defaultSetup())
-            setSelected(null)
-          }}
-        >
-          <RotateCcw size={15} />
-        </button>
       </div>
       <p className="lightp-hint">{UI.hint}</p>
 
-      <h5>{UI.objects}</h5>
+      <div className="lightp-row">
+        <input type="color" className="lightp-color" value={setup.color} title={UI.objectColor} aria-label={UI.objectColor} onChange={(e) => set((s) => ({ ...s, color: e.target.value }))} />
+        {brushColor && /^#[0-9a-f]{6}$/i.test(brushColor) && (
+          <button className="btn btn-ghost" title={UI.useBrushHint} onClick={() => set((s) => ({ ...s, color: brushColor }))}>
+            <Paintbrush size={13} /> {UI.useBrush}
+          </button>
+        )}
+      </div>
+      <Slider label={UI.shine} min={0} max={1} step={0.01} value={setup.shine} onChange={(shine) => set((s) => ({ ...s, shine }))} />
+      <Slider label={UI.room} min={0} max={1} step={0.01} value={setup.room} onChange={(room) => set((s) => ({ ...s, room }))} />
+
       <div className="lightp-row">
         {(
           [
@@ -495,41 +625,6 @@ export default function LightPreview() {
           </button>
         </div>
       )}
-
-      <h5>{UI.lamps}</h5>
-      {setup.lamps.map((l) => (
-        <div key={l.id} className="lightp-card">
-          <div className="lightp-row">
-            <input type="checkbox" checked={l.on} title={UI.lampOn} aria-label={UI.lampOn} onChange={(e) => patchLamp(l.id, { on: e.target.checked })} />
-            <button className="icon-btn" title={l.kind === 'sun' ? UI.sun : UI.bulb} aria-label={l.kind === 'sun' ? UI.sun : UI.bulb} onClick={() => patchLamp(l.id, { kind: l.kind === 'sun' ? 'bulb' : 'sun' })}>
-              {l.kind === 'sun' ? <Sun size={15} /> : <Lightbulb size={15} />}
-            </button>
-            <input type="color" value={l.color} title={UI.lampColor} aria-label={UI.lampColor} onChange={(e) => patchLamp(l.id, { color: e.target.value })} />
-            <span className="fp-spacer" />
-            <button className="icon-btn" title={UI.remove} aria-label={UI.remove} onClick={() => set((s) => ({ ...s, lamps: s.lamps.filter((x) => x.id !== l.id) }))}>
-              <X size={14} />
-            </button>
-          </div>
-          <Slider label={UI.strength} min={0} max={3} step={0.05} value={l.strength} onChange={(strength) => patchLamp(l.id, { strength })} />
-          <Slider label={UI.distance} min={1} max={8} step={0.1} value={l.distance} onChange={(distance) => patchLamp(l.id, { distance })} />
-        </div>
-      ))}
-      <button
-        className="btn btn-ghost"
-        disabled={setup.lamps.length >= MAX_LAMPS}
-        title={setup.lamps.length >= MAX_LAMPS ? UI.full : undefined}
-        onClick={() =>
-          set((s) => ({
-            ...s,
-            // A new lamp starts on the other side of the last one, as a fill or rim light.
-            lamps: [...s.lamps, { id: uid(), on: true, kind: 'sun', strength: 0.6, color: '#cfe0ff', azimuth: (s.lamps.at(-1)?.azimuth ?? 0) + 150, elevation: 25, distance: 3 }],
-          }))
-        }
-      >
-        <Plus size={13} /> {UI.addLamp}
-      </button>
-      <Slider label={UI.room} min={0} max={1} step={0.01} value={setup.room} onChange={(room) => set((s) => ({ ...s, room }))} />
-      <Slider label={UI.softness} min={0} max={1} step={0.01} value={setup.softness} onChange={(softness) => set((s) => ({ ...s, softness }))} />
     </div>
   )
 }
