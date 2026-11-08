@@ -1300,7 +1300,18 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       {lightShown && (
         <FloatingPanel title={UI_PRO.lightPreviewTitle} at={lightSpot} onMove={setLightSpot} onClose={() => setLightShown(false)} width={330}>
           <Suspense fallback={null}>
-            <LightPreview brushColor={color} />
+            <LightPreview
+              brushColor={color}
+              onPickColor={setColor}
+              onPin={
+                root
+                  ? (png) =>
+                      void importAssetFromBlob(root, png, 'image', 'light-preview.png').then(
+                        (asset) => asset && update((d) => ({ ...d, references: [...d.references, { id: newId(), image: asset.path, x: 24, y: 24 + d.references.length * 24, width: 300 }] })),
+                      )
+                  : undefined
+              }
+            />
           </Suspense>
         </FloatingPanel>
       )}

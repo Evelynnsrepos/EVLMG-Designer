@@ -127,6 +127,7 @@
 }
 .lightp-overlay {
   position: absolute;
+  z-index: 1;
   top: 4px;
   right: 4px;
   display: flex;
@@ -136,4 +137,29 @@
 }
 .lightp-overlay .icon-btn {
   color: #ddd;
+}
+.lightp-view.is-grey canvas {
+  filter: grayscale(1);
+}
+.lightp-view.is-picking canvas {
+  cursor: crosshair;
+}
+.lightp-preset {
+  width: 100%;
+  font-size: 12px;
+}
+.lightp-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 10px;
+  font-size: 12px;
+}
+.lightp-joints summary {
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 0;
+}
+.lightp-slider select {
+  width: 100%;
 }

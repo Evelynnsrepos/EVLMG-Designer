@@ -4,7 +4,7 @@
  * device (not in the drawing), so project files don't change.
  */
 
-export type Shape = 'ball' | 'cube' | 'cylinder' | 'cone' | 'ring' | 'model'
+export type Shape = 'ball' | 'cube' | 'cylinder' | 'cone' | 'ring' | 'head' | 'figure' | 'model'
 export type LightView = 'clay' | 'three' | 'two'
 
 export interface Lamp {
@@ -35,6 +35,8 @@ export interface Thing {
   /** For shape 'model': the key of a model loaded this session, and its file name. */
   model?: string
   name?: string
+  /** For shape 'figure': joint angles in degrees (see figures.ts). */
+  pose?: Record<string, number>
 }
 
 export interface LightSetup {
@@ -49,6 +51,12 @@ export interface LightSetup {
   color: string
   /** 0 = matte, 1 = shiny. */
   shine: number
+  /** Colour of the light bouncing up from the ground. */
+  bounce: string
+  /** Show the view in grey to judge values. */
+  grey: boolean
+  /** Dark contact shadows where objects touch the floor or each other. */
+  contact: boolean
 }
 
 export const MAX_LAMPS = 4
@@ -77,6 +85,9 @@ export function defaultSetup(): LightSetup {
     view: 'clay',
     color: '#e2785a',
     shine: 0.35,
+    bounce: '#2f5f5a',
+    grey: false,
+    contact: true,
   }
 }
 
@@ -101,7 +112,14 @@ export function anglesAt(x: number, y: number, z: number): { azimuth: number; el
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 const num = (v: unknown, lo: number, hi: number, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? clamp(v, lo, hi) : fallback)
 const hex = (v: unknown, fallback: string) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v : fallback)
-const SHAPES: Shape[] = ['ball', 'cube', 'cylinder', 'cone', 'ring', 'model']
+const SHAPES: Shape[] = ['ball', 'cube', 'cylinder', 'cone', 'ring', 'head', 'figure', 'model']
+
+/** Joint angles from storage: numbers only, within -180..180. */
+export function cleanPose(raw: Record<string, unknown>): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(raw)) if (typeof v === 'number' && Number.isFinite(v)) out[k] = clamp(v, -180, 180)
+  return out
+}
 
 /** A setup read back from storage, made safe: bad values fixed, models that aren't loaded any more dropped. */
 export function restoreSetup(raw: unknown, loadedModels: ReadonlySet<string>): LightSetup {
@@ -136,6 +154,7 @@ export function restoreSetup(raw: unknown, loadedModels: ReadonlySet<string>): L
           size: num(t.size, 0.2, 3, 1),
           turn: num(t.turn, -360, 360, 0),
           ...(t.shape === 'model' ? { model: t.model as string, name: typeof t.name === 'string' ? t.name : 'Model' } : {}),
+          ...(t.shape === 'figure' && t.pose && typeof t.pose === 'object' ? { pose: cleanPose(t.pose as Record<string, unknown>) } : {}),
         }))
     : d.things
   return {
@@ -146,6 +165,9 @@ export function restoreSetup(raw: unknown, loadedModels: ReadonlySet<string>): L
     view: r.view === 'three' || r.view === 'two' ? r.view : 'clay',
     color: hex(r.color, d.color),
     shine: num(r.shine, 0, 1, d.shine),
+    bounce: hex(r.bounce, d.bounce),
+    grey: r.grey === true,
+    contact: r.contact !== false,
   }
 }
 
@@ -158,4 +180,55 @@ export function toneSteps(view: LightView): number[] {
   // Facing away = shadow side (0); just turned towards = half tone; facing it = lit.
   if (view === 'two') return [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]
   return [0, 0, 0, 0, 0, 0.45, 0.45, 1, 1, 1]
+}
+
+export type LightPresetId = 'sunny' | 'cloudy' | 'studio' | 'rim' | 'below' | 'window'
+
+type PresetLamp = Omit<Lamp, 'id' | 'on'>
+const PRESETS: Record<LightPresetId, { lamps: PresetLamp[]; room: number; softness: number; bounce: string }> = {
+  // Warm sun high up, a weak blue sky fill from the other side.
+  sunny: {
+    lamps: [
+      { kind: 'sun', strength: 2.4, color: '#fff0d6', azimuth: -40, elevation: 55, distance: 3 },
+      { kind: 'sun', strength: 0.35, color: '#9cc4ff', azimuth: 140, elevation: 60, distance: 3 },
+    ],
+    room: 0.25,
+    softness: 0.1,
+    bounce: '#6b5a3c',
+  },
+  // One very soft light from above, bright shadows.
+  cloudy: { lamps: [{ kind: 'sun', strength: 0.9, color: '#eef2f6', azimuth: -20, elevation: 80, distance: 3 }], room: 0.6, softness: 1, bounce: '#55585c' },
+  // Three-point light: key, fill and rim.
+  studio: {
+    lamps: [
+      { kind: 'sun', strength: 1.8, color: '#fff6ea', azimuth: -45, elevation: 35, distance: 3 },
+      { kind: 'sun', strength: 0.5, color: '#dfe8ff', azimuth: 50, elevation: 15, distance: 3 },
+      { kind: 'sun', strength: 1.2, color: '#ffffff', azimuth: 160, elevation: 40, distance: 3 },
+    ],
+    room: 0.12,
+    softness: 0.4,
+    bounce: '#3a3a3f',
+  },
+  // Strong light from behind for a bright outline, a faint front fill.
+  rim: {
+    lamps: [
+      { kind: 'sun', strength: 2.4, color: '#ffe2b8', azimuth: 170, elevation: 25, distance: 3 },
+      { kind: 'sun', strength: 0.3, color: '#a9c6ff', azimuth: -30, elevation: 10, distance: 3 },
+    ],
+    room: 0.08,
+    softness: 0.3,
+    bounce: '#2a2a33',
+  },
+  // A bulb low in front, pointing up: the campfire or horror look.
+  below: { lamps: [{ kind: 'bulb', strength: 2.2, color: '#ff9a4d', azimuth: 10, elevation: -35, distance: 2 }], room: 0.04, softness: 0.25, bounce: '#3a1f12' },
+  // Soft cool light from one side, the other side falls into shadow.
+  window: { lamps: [{ kind: 'sun', strength: 2, color: '#e6efff', azimuth: -90, elevation: 20, distance: 3 }], room: 0.15, softness: 0.75, bounce: '#4a4038' },
+}
+
+export const PRESET_IDS = Object.keys(PRESETS) as LightPresetId[]
+
+/** The setup with a preset's lamps and room light; objects, colour and view stay. */
+export function applyPreset(s: LightSetup, id: LightPresetId): LightSetup {
+  const p = PRESETS[id]
+  return { ...s, lamps: p.lamps.map((l) => ({ ...l, id: uid(), on: true })), room: p.room, softness: p.softness, bounce: p.bounce }
 }

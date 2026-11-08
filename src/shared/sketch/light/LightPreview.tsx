@@ -1,10 +1,15 @@
-import { Box, Circle, Cone, Cylinder, Lightbulb, Lock, LockOpen, Move, Paintbrush, Plus, RotateCcw, Sun, Torus, Upload, X } from 'lucide-react'
+import { Box, Circle, Cone, Contrast, Cylinder, Lightbulb, Lock, LockOpen, Move, Paintbrush, PersonStanding, Pin, Pipette, Plus, RotateCcw, ScanFace, Sun, Torus, Upload, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js'
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { getFs } from '@/core/fs'
 import { meshesOf, MODEL_FORMATS, parseModel } from '@/shared/model3d'
-import { AIM, anglesAt, defaultSetup, FLOOR, uid, lampPosition, MAX_LAMPS, MAX_THINGS, restoreSetup, toneSteps, type Lamp, type LightSetup, type Shape, type Thing } from './setup'
+import { applyPose, buildFigure, buildHead, JOINTS, POSES, type Joint } from './figures'
+import { AIM, anglesAt, applyPreset, defaultSetup, FLOOR, uid, lampPosition, MAX_LAMPS, MAX_THINGS, PRESET_IDS, restoreSetup, toneSteps, type Lamp, type LightPresetId, type LightSetup, type Shape, type Thing } from './setup'
 import './light.css'
 
 const UI = {
@@ -21,8 +26,37 @@ const UI = {
   reset: 'Start over with the default setup',
   objects: 'Objects',
   lamps: 'Lamps',
-  addShape: { ball: 'Add a ball', cube: 'Add a cube', cylinder: 'Add a cylinder', cone: 'Add a cone', ring: 'Add a ring', model: '' } as Record<Shape, string>,
-  shapeName: { ball: 'Ball', cube: 'Cube', cylinder: 'Cylinder', cone: 'Cone', ring: 'Ring', model: 'Model' } as Record<Shape, string>,
+  addShape: { ball: 'Add a ball', cube: 'Add a cube', cylinder: 'Add a cylinder', cone: 'Add a cone', ring: 'Add a ring', head: 'Add a head (big flat planes, like a planar study head)', figure: 'Add a posable figure', model: '' } as Record<Shape, string>,
+  shapeName: { ball: 'Ball', cube: 'Cube', cylinder: 'Cylinder', cone: 'Cone', ring: 'Ring', head: 'Head', figure: 'Figure', model: 'Model' } as Record<Shape, string>,
+  pick: 'Pick a colour: tap the view and that colour becomes your brush colour',
+  pin: 'Pin this view next to your drawing as a reference image',
+  grey: 'Greyscale: check the light and dark values',
+  contact: 'Contact shadows',
+  contactHint: 'Dark soft shadows where objects touch the floor or each other',
+  bounce: 'Bounce',
+  bounceHint: 'Colour of the light bouncing up from the ground (green grass, orange sand…)',
+  presets: { sunny: 'Sunny', cloudy: 'Cloudy', studio: 'Studio', rim: 'Rim light', below: 'From below', window: 'Window' } as Record<LightPresetId, string>,
+  presetHint: 'Replace the lamps with a ready lighting setup',
+  presetPick: 'Light setup…',
+  pose: 'Pose',
+  poses: { stand: 'Stand', walk: 'Walk', run: 'Run', sit: 'Sit', crouch: 'Crouch', reach: 'Reach up', point: 'Point' } as Record<string, string>,
+  joints: 'Joints',
+  joint: {
+    headTurn: 'Head turn',
+    headNod: 'Head nod',
+    bend: 'Bend',
+    twist: 'Twist',
+    lArmSide: 'Left arm out',
+    lArmFwd: 'Left arm forward',
+    lElbow: 'Left elbow',
+    rArmSide: 'Right arm out',
+    rArmFwd: 'Right arm forward',
+    rElbow: 'Right elbow',
+    lLeg: 'Left leg forward',
+    lKnee: 'Left knee',
+    rLeg: 'Right leg forward',
+    rKnee: 'Right knee',
+  } as Record<Joint, string>,
   loadModel: 'Add your own model (GLB, glTF, OBJ, FBX). It stays until you close the app.',
   modelFailed: 'This model file could not be read. GLB works best.',
   size: 'Size',
@@ -67,7 +101,9 @@ function store(s: LightSetup) {
 }
 
 // Every shape stands on the floor and is about one unit tall at size 1.
-function shapeMesh(shape: Exclude<Shape, 'model'>): THREE.Mesh {
+function shapeMesh(shape: Exclude<Shape, 'model'>): THREE.Object3D {
+  if (shape === 'head') return buildHead()
+  if (shape === 'figure') return buildFigure()
   const g =
     shape === 'ball'
       ? new THREE.SphereGeometry(0.5, 48, 32)
@@ -156,17 +192,22 @@ interface Stage {
   things: Map<string, { group: THREE.Group; key: string }>
   lamps: Map<string, { light: THREE.DirectionalLight | THREE.PointLight; dot: THREE.Sprite }>
   outline: THREE.BoxHelper
+  /** Lamp handles and the selection box: drawn on top, never shaded or shadowed. */
+  overlay: THREE.Scene
+  composer: EffectComposer
+  contact: boolean
   /** Materials for the current view; made again only when the view changes. */
   look: { view: string; clay: THREE.MeshStandardMaterial | THREE.MeshToonMaterial; gradient: THREE.Texture } | null
-  render(): void
+  render(withOverlay?: boolean): void
 }
 
 /** The light preview (Draw): grey objects on a floor lit by up to four lamps, to see where shadows fall. */
-export default function LightPreview({ brushColor }: { brushColor?: string }) {
+export default function LightPreview({ brushColor, onPickColor, onPin }: { brushColor?: string; onPickColor?: (hex: string) => void; onPin?: (png: Blob) => void }) {
   const [setup, setSetupState] = useState<LightSetup>(() => restoreSetup(readStored(), new Set(models.keys())))
   const [selected, setSelected] = useState<string | null>(null)
   const [activeLamp, setActiveLamp] = useState<string | null>(() => setup.lamps[0]?.id ?? null)
   const [moving, setMoving] = useState(false)
+  const [picking, setPicking] = useState(false)
   const [locked, setLocked] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const box = useRef<HTMLDivElement>(null)
@@ -177,9 +218,9 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
       store(next)
       return next
     })
-  const live = useRef({ setup, moving, set, setSelected, setActiveLamp })
+  const live = useRef({ setup, moving, picking, set, setSelected, setActiveLamp, setPicking, onPickColor })
   useEffect(() => {
-    live.current = { setup, moving, set, setSelected, setActiveLamp }
+    live.current = { setup, moving, picking, set, setSelected, setActiveLamp, setPicking, onPickColor }
   })
 
   // Renderer, camera, floor and pointer handling, once.
@@ -201,9 +242,11 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
     renderer.toneMappingExposure = 1.15
     el.appendChild(renderer.domElement)
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x232327)
+    // Everything goes through the filmic tone mapping, so this lands on the panel's #232327.
+    const back = 0x303035
+    scene.background = new THREE.Color(back)
     // Only the floor uses fog: its far edge fades into the background, so there is no horizon line.
-    scene.fog = new THREE.Fog(0x232327, 4, 8)
+    scene.fog = new THREE.Fog(back, 4, 8)
     const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 100)
     camera.position.set(2.2, 1.5, 3.3)
     // Warm from above, a cool bounce from below.
@@ -214,9 +257,18 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
     floor.rotation.x = -Math.PI / 2
     floor.receiveShadow = true
     scene.add(floor)
+    const overlay = new THREE.Scene()
     const outline = new THREE.BoxHelper(floor, 0x6aa9ff)
     outline.visible = false
-    scene.add(outline)
+    overlay.add(outline)
+    const composer = new EffectComposer(renderer)
+    composer.addPass(new RenderPass(scene, camera))
+    // Contact shadows: ambient occlusion, switched off with the checkbox.
+    const gtao = new GTAOPass(scene, camera)
+    gtao.updateGtaoMaterial({ radius: 0.35, thickness: 1, distanceFallOff: 1 })
+    gtao.blendIntensity = 0.9
+    composer.addPass(gtao)
+    composer.addPass(new OutputPass())
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.target.set(AIM.x, AIM.y, AIM.z)
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN }
@@ -224,16 +276,24 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
     controls.maxPolarAngle = Math.PI / 2 - 0.02
     controls.minDistance = 1
     controls.maxDistance = 20
-    const render = () => renderer.render(scene, camera)
-    controls.addEventListener('change', render)
+    const render = (withOverlay = true) => {
+      gtao.enabled = st.contact
+      composer.render()
+      if (!withOverlay) return
+      renderer.autoClear = false
+      renderer.render(overlay, camera)
+      renderer.autoClear = true
+    }
+    const st: Stage = { renderer, scene, camera, controls, room, floor, things: new Map(), lamps: new Map(), outline, overlay, composer, contact: true, look: null, render }
+    controls.addEventListener('change', () => render())
     controls.update()
-    const st: Stage = { renderer, scene, camera, controls, room, floor, things: new Map(), lamps: new Map(), outline, look: null, render }
     stage.current = st
 
     const size = () => {
       const w = el.clientWidth || 1
       const h = el.clientHeight || 1
       renderer.setSize(w, h)
+      composer.setSize(w, h)
       camera.aspect = w / h
       camera.updateProjectionMatrix()
       render()
@@ -265,6 +325,20 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
     const down = (e: PointerEvent) => {
       if (e.button !== 0) return
       aim(e)
+      if (live.current.picking) {
+        // Read the colour straight from the picture just drawn (without the lamp icons).
+        e.stopImmediatePropagation()
+        const r = canvas.getBoundingClientRect()
+        const pr = renderer.getPixelRatio()
+        render(false)
+        const gl = renderer.getContext()
+        const px = new Uint8Array(4)
+        gl.readPixels(Math.round((e.clientX - r.left) * pr), Math.round((r.bottom - e.clientY) * pr), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px)
+        render()
+        live.current.onPickColor?.(`#${[px[0], px[1], px[2]].map((v) => v.toString(16).padStart(2, '0')).join('')}`)
+        live.current.setPicking(false)
+        return
+      }
       tap = { x: e.clientX, y: e.clientY }
       const dot = ray.intersectObjects([...st.lamps.values()].map((l) => l.dot), false)[0]
       const lamp = dot && [...st.lamps].find(([, l]) => l.dot === dot.object)?.[0]
@@ -332,6 +406,8 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
       for (const l of st.lamps.values()) l.light.dispose()
       if (st.look) for (const m of [st.look.clay, st.look.gradient]) m.dispose()
       ;(floor.material as THREE.Material).dispose()
+      gtao.dispose()
+      composer.dispose()
       renderer.dispose()
       canvas.remove()
       stage.current = null
@@ -384,6 +460,14 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
       entry.group.position.set(t.x, 0, t.z)
       entry.group.scale.setScalar(t.size)
       entry.group.rotation.y = (t.turn * Math.PI) / 180
+      if (t.shape === 'figure') {
+        // Pose, then stand it back on the floor (sitting or crouching lowers the hips).
+        const body = entry.group.children[0]
+        applyPose(body, t.pose ?? POSES.stand)
+        body.position.y = 0
+        entry.group.updateMatrixWorld(true)
+        body.position.y = -new THREE.Box3().setFromObject(body).min.y / t.size
+      }
       for (const m of meshesOf(entry.group)) {
         m.material = clay
         m.castShadow = true
@@ -394,7 +478,8 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
     // Lamps: a light, a dot to drag and a faint line to the middle.
     for (const [id, l] of st.lamps) {
       if (setup.lamps.some((x) => x.id === id && (x.kind === 'sun') === l.light instanceof THREE.DirectionalLight)) continue
-      st.scene.remove(l.light, l.dot)
+      st.scene.remove(l.light)
+      st.overlay.remove(l.dot)
       if (l.light instanceof THREE.DirectionalLight) st.scene.remove(l.light.target)
       l.light.dispose()
       st.lamps.delete(id)
@@ -423,8 +508,9 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
         }
         const dot = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, sizeAttenuation: false }))
         dot.scale.set(0.085, 0.085, 1)
-        dot.renderOrder = 10
-        st.scene.add(light, dot)
+        dot.material.toneMapped = false
+        st.scene.add(light)
+        st.overlay.add(dot)
         entry = { light, dot }
         st.lamps.set(lamp.id, entry)
       }
@@ -447,7 +533,8 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
     }
     st.room.intensity = 0.15 + setup.room * 2
     // The tone views show the shadow side at the room brightness, so bounce light stays flat there.
-    st.room.groundColor.set(setup.view === 'clay' ? 0x2f5f5a : 0xffffff)
+    st.room.groundColor.set(setup.view === 'clay' ? setup.bounce : 0xffffff)
+    st.contact = setup.contact
 
     const sel = selected ? st.things.get(selected) : undefined
     st.outline.visible = !!sel
@@ -486,6 +573,25 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
   }
   const patchThing = (id: string, patch: Partial<Thing>) => set((s) => ({ ...s, things: s.things.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))
   const patchLamp = (id: string, patch: Partial<Lamp>) => set((s) => ({ ...s, lamps: s.lamps.map((l) => (l.id === id ? { ...l, ...patch } : l)) }))
+  const pin = () => {
+    const st = stage.current
+    if (!st || !onPin) return
+    st.render(false)
+    const src = st.renderer.domElement
+    const c = document.createElement('canvas')
+    c.width = src.width
+    c.height = src.height
+    const g = c.getContext('2d')!
+    g.drawImage(src, 0, 0)
+    st.render()
+    if (setup.grey) {
+      const img = g.getImageData(0, 0, c.width, c.height)
+      const d = img.data
+      for (let i = 0; i < d.length; i += 4) d[i] = d[i + 1] = d[i + 2] = Math.round(d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114)
+      g.putImageData(img, 0, 0)
+    }
+    c.toBlob((b) => b && onPin(b), 'image/png')
+  }
   const sel = setup.things.find((t) => t.id === selected)
   const lamp = setup.lamps.find((l) => l.id === activeLamp) ?? setup.lamps[0]
   const addLamp = () => {
@@ -531,6 +637,20 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
           </>
         )}
       </div>
+      <select className="lightp-preset" value="" title={UI.presetHint} aria-label={UI.presetHint} onChange={(e) => {
+        const id = e.target.value as LightPresetId
+        if (!id) return
+        const next = applyPreset(setup, id)
+        set(() => next)
+        setActiveLamp(next.lamps[0].id)
+      }}>
+        <option value="">{UI.presetPick}</option>
+        {PRESET_IDS.map((id) => (
+          <option key={id} value={id}>
+            {UI.presets[id]}
+          </option>
+        ))}
+      </select>
       {lamp && (
         <>
           <Slider label={UI.strength} min={0} max={3} step={0.05} value={lamp.strength} onChange={(strength) => patchLamp(lamp.id, { strength })} />
@@ -539,9 +659,22 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
       )}
       <Slider label={UI.softness} min={0} max={1} step={0.01} value={setup.softness} onChange={(softness) => set((s) => ({ ...s, softness }))} />
 
-      <div className="lightp-view" ref={box}>
+      <div className={`lightp-view${setup.grey ? ' is-grey' : ''}${picking ? ' is-picking' : ''}`} ref={box}>
         {error && <p className="lightp-error">{error}</p>}
         <div className="lightp-overlay">
+          {onPickColor && (
+            <button className={`icon-btn${picking ? ' is-active' : ''}`} title={UI.pick} aria-label={UI.pick} aria-pressed={picking} onClick={() => setPicking(!picking)}>
+              <Pipette size={15} />
+            </button>
+          )}
+          {onPin && (
+            <button className="icon-btn" title={UI.pin} aria-label={UI.pin} onClick={pin}>
+              <Pin size={15} />
+            </button>
+          )}
+          <button className={`icon-btn${setup.grey ? ' is-active' : ''}`} title={UI.grey} aria-label={UI.grey} aria-pressed={setup.grey} onClick={() => set((s) => ({ ...s, grey: !s.grey }))}>
+            <Contrast size={15} />
+          </button>
           <button className={`icon-btn${moving ? ' is-active' : ''}`} title={UI.moveMode} aria-label={UI.moveMode} aria-pressed={moving} onClick={() => setMoving(!moving)}>
             <Move size={15} />
           </button>
@@ -582,6 +715,16 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
           </button>
         )}
       </div>
+      <div className="lightp-row">
+        <label className="lightp-inline" title={UI.bounceHint}>
+          <input type="color" className="lightp-color" value={setup.bounce} aria-label={UI.bounceHint} onChange={(e) => set((s) => ({ ...s, bounce: e.target.value }))} />
+          {UI.bounce}
+        </label>
+        <label className="lightp-inline" title={UI.contactHint}>
+          <input type="checkbox" checked={setup.contact} onChange={(e) => set((s) => ({ ...s, contact: e.target.checked }))} />
+          {UI.contact}
+        </label>
+      </div>
       <Slider label={UI.shine} min={0} max={1} step={0.01} value={setup.shine} onChange={(shine) => set((s) => ({ ...s, shine }))} />
       <Slider label={UI.room} min={0} max={1} step={0.01} value={setup.room} onChange={(room) => set((s) => ({ ...s, room }))} />
 
@@ -593,6 +736,8 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
             ['cylinder', Cylinder],
             ['cone', Cone],
             ['ring', Torus],
+            ['head', ScanFace],
+            ['figure', PersonStanding],
           ] as const
         ).map(([shape, Icon]) => (
           <button key={shape} className="icon-btn" title={UI.addShape[shape]} aria-label={UI.addShape[shape]} disabled={setup.things.length >= MAX_THINGS} onClick={() => addThing(shape)}>
@@ -614,6 +759,27 @@ export default function LightPreview({ brushColor }: { brushColor?: string }) {
         <div className="lightp-card">
           <Slider label={UI.size} min={0.2} max={3} step={0.05} value={sel.size} onChange={(size) => patchThing(sel.id, { size })} />
           <Slider label={UI.turn} min={-180} max={180} step={1} value={sel.turn} onChange={(turn) => patchThing(sel.id, { turn })} />
+          {sel.shape === 'figure' && (
+            <>
+              <label className="lightp-slider">
+                <span>{UI.pose}</span>
+                <select value="" onChange={(e) => e.target.value && patchThing(sel.id, { pose: { ...POSES[e.target.value] } })}>
+                  <option value="">…</option>
+                  {Object.keys(POSES).map((k) => (
+                    <option key={k} value={k}>
+                      {UI.poses[k] ?? k}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <details className="lightp-joints">
+                <summary>{UI.joints}</summary>
+                {JOINTS.map((j) => (
+                  <Slider key={j} label={UI.joint[j]} min={-180} max={180} step={1} value={(sel.pose ?? POSES.stand)[j] ?? 0} onChange={(v) => patchThing(sel.id, { pose: { ...(sel.pose ?? POSES.stand), [j]: v } })} />
+                ))}
+              </details>
+            </>
+          )}
           <button
             className="btn btn-ghost"
             onClick={() => {
