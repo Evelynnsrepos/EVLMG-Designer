@@ -255,6 +255,7 @@ export function Sidebar() {
           {/* Arrange mode without a keyboard (same as Esc): tablets, and anyone who prefers a button. */}
           <button
             className={`sidebar-row sidebar-arrange${layoutMode ? ' on' : ''}`}
+            data-tour="arrange"
             onClick={() => useAppStore.getState().setLayoutMode(!layoutMode)}
             title={layoutMode ? 'Done arranging (Esc)' : 'Arrange tools: move, swap and close them (Esc)'}
             aria-label={layoutMode ? 'Done arranging' : 'Arrange tools'}

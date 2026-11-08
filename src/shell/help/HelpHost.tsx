@@ -10,7 +10,7 @@ import { ShortcutTable } from '../settings/ShortcutTable'
 import { KeyList, toolShortcuts } from '../workspace/ToolHelp'
 import { BASICS, COMMUNITY_LINKS, TOOL_GUIDE, type GuideTopic } from './guide'
 import type { ComponentType } from '@/core/model'
-import { placeCard, TOURS, useHelp } from './help'
+import { GUARDED_TOURS, placeCard, SKIP_PHRASE, skipPhraseOk, TOURS, useHelp } from './help'
 import { Linkified } from '@/shared/links'
 import './help.css'
 
@@ -226,6 +226,12 @@ function Tour() {
   const cardRef = useRef<HTMLDivElement>(null)
   const [rect, setRect] = useState<DOMRect | null>(null)
   const [pos, setPos] = useState({ left: -9999, top: -9999 })
+  // Skipping the basics needs a typed confirmation; other tours skip at once.
+  const [skipping, setSkipping] = useState(false)
+  const [typed, setTyped] = useState('')
+  const guarded = GUARDED_TOURS.includes(tour!)
+  const askSkip = () => (guarded ? setSkipping(true) : endTour())
+  const confirmSkip = () => skipPhraseOk(typed) && endTour()
 
   useLayoutEffect(() => {
     const measure = () => {
@@ -247,7 +253,7 @@ function Tour() {
     const observer = new ResizeObserver(place)
     observer.observe(card)
     return () => observer.disconnect()
-  }, [rect, current])
+  }, [rect, current, skipping])
 
   const last = step >= steps.length - 1
   const next = () => (last ? endTour() : setStep(step + 1))
@@ -257,8 +263,10 @@ function Tour() {
       if (e.key === 'Escape') {
         e.preventDefault() // keep Esc from toggling Layout Mode (ED-7)
         e.stopPropagation()
-        endTour()
-      } else if (e.key === 'ArrowRight' || e.key === 'Enter') next()
+        if (skipping) setSkipping(false)
+        else askSkip()
+      } else if (skipping) return
+      else if (e.key === 'ArrowRight' || e.key === 'Enter') next()
       else if (e.key === 'ArrowLeft' && step > 0) setStep(step - 1)
     }
     window.addEventListener('keydown', onKey, true)
@@ -277,22 +285,55 @@ function Tour() {
         <div className="help-tour-count">
           {step + 1} / {steps.length}
         </div>
-        <h3>{current.title}</h3>
-        <p>{current.text}</p>
-        <div className="help-tour-actions">
-          <button className="btn btn-ghost" onClick={endTour}>
-            Skip tour
-          </button>
-          <span style={{ flex: 1 }} />
-          {step > 0 && (
-            <button className="btn" onClick={() => setStep(step - 1)}>
-              Back
-            </button>
-          )}
-          <button className="btn btn-primary" autoFocus onClick={next}>
-            {last ? 'Done' : 'Next'}
-          </button>
-        </div>
+        {skipping ? (
+          <form
+            className="help-tour-skip"
+            onSubmit={(e) => {
+              e.preventDefault()
+              confirmSkip()
+            }}
+          >
+            <h3>Skip the basics?</h3>
+            <p>
+              Eve.Lopment Games Designer will be hard to use and understand without these basics: opening tools side by side, and arranging and
+              closing them with Esc or the Arrange button. You can replay the tour any time from Help.
+            </p>
+            <label>
+              <span>
+                Type <b>{SKIP_PHRASE}</b> to skip:
+              </span>
+              <input className="input" autoFocus value={typed} onChange={(e) => setTyped(e.target.value)} aria-label={`Type ${SKIP_PHRASE} to skip the tour`} />
+            </label>
+            <div className="help-tour-actions">
+              <button type="button" className="btn btn-primary" onClick={() => setSkipping(false)}>
+                Back to the tour
+              </button>
+              <span style={{ flex: 1 }} />
+              <button type="submit" className="btn btn-ghost" disabled={!skipPhraseOk(typed)}>
+                Skip tour
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <h3>{current.title}</h3>
+            <p>{current.text}</p>
+            <div className="help-tour-actions">
+              <button className="btn btn-ghost" onClick={askSkip}>
+                Skip tour
+              </button>
+              <span style={{ flex: 1 }} />
+              {step > 0 && (
+                <button className="btn" onClick={() => setStep(step - 1)}>
+                  Back
+                </button>
+              )}
+              <button className="btn btn-primary" autoFocus onClick={next}>
+                {last ? 'Done' : 'Next'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

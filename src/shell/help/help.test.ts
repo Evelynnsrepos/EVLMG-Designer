@@ -62,3 +62,16 @@ describe('placeCard', () => {
     expect(placeCard({ left: 800, top: 650, width: 150, height: 40 }, card, view).top).toBe(488)
   })
 })
+
+describe('skipping the basics tours', () => {
+  it('needs "I understand" typed in, nothing else', async () => {
+    const { skipPhraseOk, GUARDED_TOURS } = await import('./help')
+    expect(skipPhraseOk(' i UNDERSTAND ')).toBe(true)
+    expect(skipPhraseOk('')).toBe(false)
+    expect(skipPhraseOk('ok')).toBe(false)
+    expect(GUARDED_TOURS).toEqual(['launcher', 'editor'])
+  })
+  it('the editor tour shows the Arrange button', () => {
+    expect(TOURS.editor.some((s) => s.target === 'arrange')).toBe(true)
+  })
+})

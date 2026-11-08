@@ -13,7 +13,7 @@ export interface TourStep {
 
 export const TOURS: Record<TourId, TourStep[]> = {
   launcher: [
-    { title: 'Welcome to Eve.Lopment Games Designer', text: 'One program for designing your whole game. This short tour shows you around. You can skip it any time and replay it from Help.' },
+    { title: 'Welcome to Eve.Lopment Games Designer', text: 'One program for designing your whole game. This short tour shows you the basics. Please take the minute: without them the app is hard to use and understand. You can replay it any time from Help.' },
     { target: 'new-project', title: 'Start a project', text: 'Each game is a project. Create one here and pick the tools you want in it.' },
     { target: 'open-folder', title: 'Open a project folder', text: 'Projects are normal folders. Open one you copied from another computer or a backup.' },
     { target: 'theme-toggle', title: 'Light or dark', text: 'Switch between the dark and light theme.' },
@@ -22,8 +22,9 @@ export const TOURS: Record<TourId, TourStep[]> = {
   editor: [
     { title: 'Your project', text: 'This is the editor. Here is a quick look at how it works.' },
     { target: 'sidebar-list', title: 'Your tools', text: 'Click a tool to show it, Shift-click to open it next to the others. Tools with several documents list them underneath; click New to add one, right-click to rename.' },
-    { target: 'workspace', title: 'Side by side', text: 'Shift-click a tool, or drag it from the sidebar onto an open panel, to split the screen.' },
+    { target: 'workspace', title: 'Side by side', text: 'Shift-click a tool, or drag it from the sidebar onto an open panel, to split the screen. With a finger or pen: slide the tool sideways out of the sidebar and let go on the side of a panel where it should go.' },
     { target: 'workspace', title: 'Esc: arrange and close', text: 'Press Esc any time for Layout Mode: drag tools to new places, use the arrows to swap them, or the big X to close one. Press Esc again to go back to work.' },
+    { target: 'arrange', title: 'The Arrange button', text: 'No keyboard? This button next to Projects does exactly what Esc does. Tap it to arrange and close tools, and tap it again when you are done. It is lit while Layout Mode is on.' },
     { target: 'add-component', title: 'More tools', text: 'Add any tool to this project whenever you need it. Right-click a tool to close it again.' },
     { target: 'workspace', title: 'Jump points', text: 'The crossing-arrows button in every tool\'s header adds jump points: one click from here to any tool, document or entry, and it lists what points back here. On boards, the jump tool (J) places them right on the board.' },
     { target: 'project-look', title: 'Make it yours', text: 'Give this project its own accent color, background and wallpaper.' },
@@ -48,6 +49,14 @@ export function tourSeen(tour: TourId): boolean {
   } catch {
     return true // no storage: never nag
   }
+}
+
+/** The basics tours can only be skipped by typing this, so nobody misses them by accident (her rule, v0.26). */
+export const SKIP_PHRASE = 'I understand'
+export const GUARDED_TOURS: TourId[] = ['launcher', 'editor']
+
+export function skipPhraseOk(typed: string): boolean {
+  return typed.trim().toLowerCase() === SKIP_PHRASE.toLowerCase()
 }
 
 function markTourSeen(tour: TourId) {
