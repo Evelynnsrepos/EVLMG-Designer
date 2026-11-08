@@ -21,6 +21,7 @@ export const BASICS: Record<string, GuideTopic> = {
       'Shift works the same way in other places: Shift+Enter in the Ctrl+K search opens the result next to the open tools, Shift-click picks several layers in Draw, and Shift-click on Draw\'s flip buttons flips only the active layer.',
       '## Esc: Layout Mode',
       'Press Esc to turn Layout Mode on. Every panel shows big buttons: the X closes it (everything is saved), the arrows swap it with its neighbour, and you can drag a panel onto another one to move it there. Press Esc again to keep working.',
+      'No keyboard (tablet)? The Arrange button right of Projects at the top of the sidebar does the same as Esc. To open a tool next to the others with a finger or pen, slide it sideways out of the sidebar and let go on the side of a panel where it should go.',
       'When a menu, a window or the tour is open, Esc closes that first and leaves Layout Mode alone.',
       '## The buttons in every tool\'s header',
       'From left to right: the keyboard shows this tool\'s shortcuts and how to link things; the size button makes the whole tool bigger or smaller (handy with a pen or a graphics tablet); the T picks the font the tool uses; the crossing arrows are jump points; Review collects feedback; the X closes the tool.',

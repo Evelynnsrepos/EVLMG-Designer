@@ -6,6 +6,7 @@ import { Columns2, Rows2 } from 'lucide-react'
 import { getManifest } from '@/core/registry'
 import { PanelFrame } from './PanelFrame'
 import { useLayoutDrag } from './layoutDrag'
+import { ToolDragLabel, useToolDrag } from './toolDrag'
 import { dropPanel, findPanel, flipSplit, panelRects, setRatio, type NodePath } from './layoutTree'
 import './workspace.css'
 
@@ -14,11 +15,13 @@ export function Workspace() {
   const layout = useProjectStore((s) => s.meta?.layout ?? null)
   const layoutMode = useAppStore((s) => s.layoutMode)
   const [emptyDrop, setEmptyDrop] = useState(false)
+  const fingerOverEmpty = useToolDrag((s) => s.empty)
 
   if (!layout) {
     return (
       <div
-        className={`workspace workspace-empty${emptyDrop ? ' drop-target' : ''}`}
+        className={`workspace workspace-empty${emptyDrop || fingerOverEmpty ? ' drop-target' : ''}`}
+        data-tool-drop="empty"
         data-tour="workspace"
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes(DRAG_MIME)) {
@@ -36,6 +39,7 @@ export function Workspace() {
         }}
       >
         <div>Click a tool in the sidebar, or drag it here.</div>
+        <ToolDragLabel />
       </div>
     )
   }
@@ -44,6 +48,7 @@ export function Workspace() {
     <div className={`workspace${layoutMode ? ' layout-mode' : ''}`} data-tour="workspace">
       <Node node={layout} path={[]} />
       {layoutMode && <DragPreview layout={layout} />}
+      <ToolDragLabel />
     </div>
   )
 }

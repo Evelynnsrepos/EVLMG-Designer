@@ -72,6 +72,8 @@ function dismissEscHint() {
 /** v0.13: until Esc was used once, a small reminder that it rearranges and closes tools. */
 function EscHint() {
   const [shown, setShown] = useState(() => {
+    // Touch-only devices have no Esc key; they use the Arrange button next to Projects.
+    if (matchMedia('(hover: none)').matches) return false
     try {
       return localStorage.getItem(ESC_HINT) !== '1'
     } catch {
@@ -86,7 +88,7 @@ function EscHint() {
   if (!shown) return null
   return (
     <div className="esc-hint" role="note">
-      <kbd>Esc</kbd> rearranges and closes tools: drag them around, swap them with the arrows or close them with the X. Esc again to go back.
+      <kbd>Esc</kbd> (or the Arrange button next to Projects) rearranges and closes tools: drag them around, swap them with the arrows or close them with the X. Esc again to go back.
       <button className="icon-btn" aria-label="Got it" title="Got it" onClick={dismissEscHint}>
         ✕
       </button>

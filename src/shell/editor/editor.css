@@ -394,3 +394,23 @@
   background: var(--accent-text);
   transform: translateX(12px);
 }
+
+/* Projects | Arrange: two buttons in one row; stacked when the sidebar is collapsed. */
+.sidebar-top-split {
+  display: flex;
+  gap: 2px;
+}
+.sidebar.collapsed .sidebar-top-split {
+  flex-direction: column;
+}
+.sidebar-arrange {
+  flex: 0 0 auto;
+}
+.sidebar-arrange.on {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+/* A finger sliding sideways drags the tool out (shell/workspace/toolDrag); up and down still scrolls. */
+.sidebar-row {
+  touch-action: pan-y;
+}

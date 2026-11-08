@@ -8,6 +8,7 @@ import { PanelJumps } from '@/shared/jumps/Jumps'
 import { closePanel, DRAG_MIME, movePanel, openComponent, type DragPayload } from '../editor/actions'
 import { neighbor, sideFromPoint, type Direction, type DropSide } from './layoutTree'
 import { startLayoutDrag, useLayoutDrag } from './layoutDrag'
+import { useToolDrag } from './toolDrag'
 import { ToolFontButton, useToolFontStyle } from './ToolFont'
 import { ToolKeysButton, ToolScaleButton, useToolScale } from './ToolHelp'
 
@@ -19,6 +20,7 @@ export function PanelFrame({ panel }: { panel: Panel }) {
   const layoutMode = useAppStore((s) => s.layoutMode)
   const active = useAppStore((s) => s.activePanelId === panel.id)
   const [drop, setDrop] = useState<DropSide | null>(null)
+  const fingerDrop = useToolDrag((s) => (s.over === panel.id ? s.side : null))
   const dragging = useLayoutDrag((s) => s.from === panel.id)
   const fontStyle = useToolFontStyle(panel.type)
   const scale = useToolScale(panel.type)
@@ -73,7 +75,7 @@ export function PanelFrame({ panel }: { panel: Panel }) {
         </PanelErrorBoundary>
       </div>
 
-      {drop && <div className={`drop-zone drop-${drop}`} />}
+      {(drop ?? fingerDrop) && <div className={`drop-zone drop-${drop ?? fingerDrop}`} />}
 
       {layoutMode && (
         <div className="layout-overlay" title="Drag to move this tool" onPointerDown={(e) => startLayoutDrag(e, panel.id)}>

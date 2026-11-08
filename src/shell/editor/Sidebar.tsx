@@ -1,12 +1,13 @@
-import { ArrowLeft, ArrowRight, BookOpen, FolderClosed, FolderOpen, Search, Star, Boxes, ChevronDown, ChevronRight, CircleHelp, House, Keyboard, PanelLeftClose, PanelLeftOpen, Palette, Plus, Gem, Settings, Trash2, Users } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpen, FolderClosed, FolderOpen, Search, Star, Boxes, ChevronDown, ChevronRight, CircleHelp, House, LayoutDashboard, Keyboard, PanelLeftClose, PanelLeftOpen, Palette, Plus, Gem, Settings, Trash2, Users } from 'lucide-react'
 import { useState } from 'react'
 import { newId, type ComponentType, type Id, type SidebarFolder } from '@/core/model'
 import { allManifests, getManifest, type ComponentManifest } from '@/core/registry'
-import { copyDocument, flushDocument, useProjectStore, useSettings } from '@/core/state'
+import { copyDocument, flushDocument, useAppStore, useProjectStore, useSettings } from '@/core/state'
 import { shownTool } from './optionalTools'
 import { confirmDialog, promptDialog } from '@/shared/dialogs'
 import { backToProjects, closePanel, DRAG_MIME, newDocument, openComponent, replaceWithComponent, type DragPayload } from './actions'
 import { leaves } from '../workspace/layoutTree'
+import { startToolDrag } from '../workspace/toolDrag'
 import { useHelp } from '../help/help'
 import { openSettings } from '../settings/open'
 import { openDesignBook } from '../designBook/open'
@@ -33,6 +34,7 @@ const menuAt = (x: number, y: number): React.CSSProperties =>
 export function Sidebar() {
   const meta = useProjectStore((s) => s.meta)
   const updateMeta = useProjectStore((s) => s.updateMeta)
+  const layoutMode = useAppStore((s) => s.layoutMode)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [addOpen, setAddOpen] = useState<React.CSSProperties | null>(null)
   const [themeOpen, setThemeOpen] = useState(false)
@@ -155,6 +157,7 @@ export function Sidebar() {
       e.dataTransfer.effectAllowed = 'copy'
     },
     onDragEnd: () => setDropOn(null),
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => startToolDrag(e, { type, documentId }),
   })
 
   const renderTool = (m: ComponentManifest) => {
@@ -244,10 +247,22 @@ export function Sidebar() {
   return (
     <nav className={`sidebar${collapsed ? ' collapsed' : ''}`} aria-label="Components">
       <div className="sidebar-top">
-        <button className="sidebar-row" onClick={() => void backToProjects()} title="Back to projects">
-          <House size={16} />
-          {!collapsed && <span>Projects</span>}
-        </button>
+        <div className="sidebar-top-split">
+          <button className="sidebar-row" onClick={() => void backToProjects()} title="Back to projects">
+            <House size={16} />
+            {!collapsed && <span>Projects</span>}
+          </button>
+          {/* Arrange mode without a keyboard (same as Esc): tablets, and anyone who prefers a button. */}
+          <button
+            className={`sidebar-row sidebar-arrange${layoutMode ? ' on' : ''}`}
+            onClick={() => useAppStore.getState().setLayoutMode(!layoutMode)}
+            title={layoutMode ? 'Done arranging (Esc)' : 'Arrange tools: move, swap and close them (Esc)'}
+            aria-label={layoutMode ? 'Done arranging' : 'Arrange tools'}
+            aria-pressed={layoutMode}
+          >
+            <LayoutDashboard size={16} />
+          </button>
+        </div>
         <HotkeyHintSwitch collapsed={collapsed} />
         {!collapsed && <div className="sidebar-project" title={meta.name}>{meta.name}</div>}
         <JumpButtons />
