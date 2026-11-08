@@ -135,6 +135,25 @@ GitHub Releases page. Update the README feature list and the in-app user guide (
 - End commit messages with the co-author line your harness requires.
 - Do not push or open pull requests unless asked.
 
+## Mobile app: keep it compatible
+
+The iOS and Android app lives in its own repo, [EVLMG-Designer-Mobile](https://github.com/Evelynnsrepos/EVLMG-Designer-Mobile).
+It does not copy this code: it has this repo as a git submodule (`desktop/`, pinned to a release tag) and builds
+this `src/` and the Rust modules in `src-tauri/src/` (collab, server link, spell) into the phone app.
+So a change here is a change to the mobile app too. Check it against the mobile repo when you change:
+
+- **The project file format**: anything under `src/core/model`, `src/core/project`, `SCHEMA_VERSION`. Keep changes
+  additive (new optional fields), add a migration for a version bump. Projects must open both ways.
+- **The `FileSystem` interface** (`src/core/fs/types.ts`): the mobile app has its own implementation of it.
+- **Peer-to-peer collaboration**: `src/core/collab`, `src-tauri/src/collab*.rs` (protocol, commands, events).
+- **The server API**: `src/core/collab/serverTransport.ts`, `src-tauri/src/server_link.rs`, and the
+  [server repo](https://github.com/Evelynnsrepos/Evelopment-Games-Designer-Server).
+- **The plugin API** (`docs/PLUGINS.md`).
+- **New Tauri commands or plugins**: the mobile app registers commands itself (`src-tauri/src/lib.rs` there).
+
+Say in your reply when a change affects the mobile app. After a desktop release, the mobile repo moves its
+`desktop/` submodule to the new tag and runs its compatibility test (`npm test`).
+
 ## Work packages ready for parallel building
 
 Each package is one agent. "Depends on" means wait for (or coordinate with) that package.
