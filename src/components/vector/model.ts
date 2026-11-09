@@ -75,114 +75,22 @@ export interface Preset {
   hint: string
   width: number
   height: number
-  /** A small example to change, so nobody starts on an empty page. */
-  example(layerId: string): VectorNode[]
 }
 
-const text = (layerId: string, str: string, x: number, y: number, fontSize: number, textColor: string): TextNode => ({ id: newId(), kind: 'text', layerId, x, y, text: str, fontSize, width: str.length * fontSize * 0.62, textColor, autoWidth: true })
-const game = (fill: string, w = 4): Partial<ShapeNode> => ({ fillColor: fill, fill2Color: shade(fill, -0.35), strokeColor: OUTLINE_DARK, strokeWidth: w, shadow: true })
-
 export const PRESETS: Preset[] = [
-  {
-    id: 'inventory',
-    label: 'Inventory icon',
-    hint: 'Items for bags, shops and loot',
-    width: 128,
-    height: 128,
-    example: (l) => [
-      { ...makeShape(l, 'ellipse', 26, 44, 76, 72, game('#e03170')), name: 'Bottle' },
-      { ...makeShape(l, 'rect', 50, 22, 28, 30, game('#a5d8ff')), corner: 10, name: 'Neck' },
-      { ...makeShape(l, 'rect', 46, 10, 36, 16, game('#b5835a')), corner: 30, name: 'Cork' },
-      { ...makeShape(l, 'ellipse', 44, 60, 16, 22, { fillColor: '#ffffff', opacity: 0.6 }), name: 'Shine' },
-    ],
-  },
-  {
-    id: 'skill',
-    label: 'Skill icon',
-    hint: 'Abilities, spells and talents',
-    width: 128,
-    height: 128,
-    example: (l) => [
-      { ...makeShape(l, 'rect', 4, 4, 120, 120, game('#5f3dc4', 4)), corner: 24, shadow: false, name: 'Background' },
-      { ...makeShape(l, 'star', 22, 20, 84, 84, game('#ffd43b')), sides: 4, inner: 30, corner: 30, name: 'Spark' },
-    ],
-  },
-  {
-    id: 'app',
-    label: 'App / game icon',
-    hint: 'The icon people click to start your game',
-    width: 512,
-    height: 512,
-    example: (l) => [
-      { ...makeShape(l, 'rect', 16, 16, 480, 480, { fillColor: '#2f9e44', fill2Color: '#1b5e2a' }), corner: 44, name: 'Background' },
-      { ...makeShape(l, 'shield', 116, 96, 280, 320, game('#e9ecef', 14)), name: 'Shield' },
-      { ...makeShape(l, 'star', 186, 170, 140, 140, game('#fab005', 10)), name: 'Star' },
-    ],
-  },
-  {
-    id: 'logo',
-    label: 'Logo',
-    hint: 'Your studio or game name with a mark',
-    width: 1024,
-    height: 512,
-    example: (l) => [
-      { ...makeShape(l, 'gear', 60, 106, 300, 300, game('#4dabf7', 14)), name: 'Mark' },
-      text(l, 'My Game', 400, 190, 120, '#339af0'),
-    ],
-  },
-  {
-    id: 'button',
-    label: 'Button',
-    hint: 'Menu buttons like Play and Options',
-    width: 256,
-    height: 80,
-    example: (l) => [
-      { ...makeShape(l, 'rect', 6, 6, 244, 64, game('#37b24d', 4)), corner: 40, name: 'Button' },
-      text(l, 'PLAY', 92, 22, 30, '#ffffff'),
-    ],
-  },
-  {
-    id: 'bar',
-    label: 'Health bar',
-    hint: 'Health, mana or progress',
-    width: 400,
-    height: 64,
-    example: (l) => [
-      { ...makeShape(l, 'rect', 44, 14, 348, 36, { fillColor: '#343a40', strokeColor: OUTLINE_DARK, strokeWidth: 4 }), corner: 100, name: 'Bar back' },
-      { ...makeShape(l, 'rect', 48, 18, 240, 28, { fillColor: '#ff6b6b', fill2Color: '#c92a2a' }), corner: 100, name: 'Bar fill' },
-      { ...makeShape(l, 'heart', 4, 6, 52, 50, game('#fa5252', 4)), name: 'Heart' },
-    ],
-  },
-  {
-    id: 'panel',
-    label: 'Panel / window',
-    hint: 'Menus, dialogue boxes and pop-ups',
-    width: 400,
-    height: 300,
-    example: (l) => [
-      { ...makeShape(l, 'rect', 8, 8, 384, 284, { fillColor: '#f1e3c6', fill2Color: '#d9c39a', strokeColor: '#5c3d1e', strokeWidth: 8, shadow: true }), corner: 12, name: 'Panel' },
-      { ...makeShape(l, 'rect', 8, 8, 384, 56, { fillColor: '#8b5a2b', strokeColor: '#5c3d1e', strokeWidth: 8 }), corner: 30, name: 'Title bar' },
-      text(l, 'Inventory', 32, 20, 28, '#ffffff'),
-    ],
-  },
-  {
-    id: 'badge',
-    label: 'Badge / medal',
-    hint: 'Achievements, ranks and rewards',
-    width: 256,
-    height: 256,
-    example: (l) => [
-      { ...makeShape(l, 'star', 8, 8, 240, 240, game('#fab005', 8)), sides: 12, inner: 82, corner: 40, name: 'Edge' },
-      { ...makeShape(l, 'ellipse', 58, 58, 140, 140, game('#e8590c', 6)), shadow: false, name: 'Centre' },
-      { ...makeShape(l, 'star', 88, 86, 80, 80, { fillColor: '#fff3bf' }), name: 'Star' },
-    ],
-  },
-  { id: 'empty', label: 'Empty', hint: 'Choose the size yourself', width: 512, height: 512, example: () => [] },
+  { id: 'inventory', label: 'Inventory icon', hint: 'Items for bags, shops and loot', width: 128, height: 128 },
+  { id: 'skill', label: 'Skill icon', hint: 'Abilities, spells and talents', width: 128, height: 128 },
+  { id: 'app', label: 'App / game icon', hint: 'The icon people click to start your game', width: 512, height: 512 },
+  { id: 'logo', label: 'Logo', hint: 'Your studio or game name with a mark', width: 1024, height: 512 },
+  { id: 'button', label: 'Button', hint: 'Menu buttons like Play and Options', width: 256, height: 80 },
+  { id: 'bar', label: 'Health bar', hint: 'Health, mana or progress', width: 400, height: 64 },
+  { id: 'panel', label: 'Panel / window', hint: 'Menus, dialogue boxes and pop-ups', width: 400, height: 300 },
+  { id: 'badge', label: 'Badge / medal', hint: 'Achievements, ranks and rewards', width: 256, height: 256 },
+  { id: 'empty', label: 'Empty', hint: 'Any size; change it under Drawing size', width: 512, height: 512 },
 ]
 
-export function startFrom(p: Preset, d: VectorDoc, withExample = true): VectorDoc {
-  const layerId = d.scene.layers[0].id
-  return { ...d, presetId: p.id, artboard: { width: p.width, height: p.height }, scene: { ...d.scene, nodes: withExample ? p.example(layerId) : [] } }
+export function startFrom(p: Preset, d: VectorDoc): VectorDoc {
+  return { ...d, presetId: p.id, artboard: { width: p.width, height: p.height } }
 }
 
 // ---------- SVG ----------

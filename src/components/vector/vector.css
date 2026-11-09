@@ -235,11 +235,6 @@
   gap: 14px;
   margin-top: 18px;
 }
-.vec-start-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
 .vec-start-pick {
   display: flex;
   flex-direction: column;
@@ -265,9 +260,10 @@
   background: var(--bg-sunken);
   color: var(--text-muted);
 }
-.vec-start-thumb img {
-  max-width: 90%;
-  max-height: 104px;
+.vec-start-size {
+  box-sizing: border-box;
+  border: 2px dashed var(--accent);
+  border-radius: 4px;
 }
 
 /* Tablets and phones: bigger targets, panel under the drawing on narrow screens. */

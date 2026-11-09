@@ -635,10 +635,10 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     tips: ['Shortcuts: B pencil, E eraser, L line, U rectangle, O ellipse, G fill, I eyedropper, S shade, M select, Q lasso, W magic wand, V move, C curve, F lasso fill, D gradient, A spray, T text, X swap colours, [ and ] size, comma and period for frames, Enter to play, Tab for tiles and map. Change them in Settings.'],
   },
   vector: {
-    title: 'Vector',
+    title: 'Vector (experimental)',
     body: [
-      'Clean shapes for inventory icons, skill icons, app icons, logos, buttons, health bars, panels and badges. Shapes stay sharp at any size, so one drawing gives you a 16 px icon and a 1024 px one.',
-      'Start: pick what you are making. Each choice sets the right size and starts with a small example (a potion, a play button, a health bar) that you can change or delete. Start empty gives the size without the example.',
+      'Experimental: this is the first part of the Vector tool. Joining and cutting shapes, a pen for your own curves, snapping, sprite sheets and button states come later. Clean shapes for inventory icons, skill icons, app icons, logos, buttons, health bars, panels and badges. Shapes stay sharp at any size, so one drawing gives you a 16 px icon and a 1024 px one.',
+      'Start: pick what you are making (inventory icon, skill icon, app icon, logo, button, health bar, panel, badge or empty). Each choice sets the right size for it; change it later under Drawing size.',
       'Shapes: click a shape on the right (box, circle, polygon, star, ring, heart, shield, cross, gear, speech bubble) to add it in the middle of the drawing. To draw the last picked shape yourself, press S (or the shapes button under the drawing) and drag; Shift keeps it even. Shapes stay editable: select one and use its sliders, like Rounded corners, Points and Inner size for a star, or Teeth for a gear. T writes text.',
       'Look: one-click looks (Flat, Game icon, Glossy, Outline only) set the outline, shading and shadow in one go; change any part afterwards. Colour, Fade to a second colour, Outline colour and width, Shadow and See-through work on everything selected. With nothing selected they set the look of the next shape.',
       'At game size, under the drawing, shows it at 16, 32, 64 and 128 px on dark, on light and in an inventory slot, so you see right away if details get lost when it is small.',

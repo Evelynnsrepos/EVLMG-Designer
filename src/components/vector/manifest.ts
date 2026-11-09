@@ -4,7 +4,7 @@ import type { ComponentManifest } from '@/core/registry'
 
 export const manifest: ComponentManifest = {
   type: 'vector',
-  name: 'Vector',
+  name: 'Vector (experimental)',
   description: 'Clean shapes for inventory icons, skill icons, logos, buttons and other UI pieces, saved as PNG at any size or SVG.',
   icon: PenTool,
   specSection: 'v0.27',

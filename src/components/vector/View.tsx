@@ -31,8 +31,7 @@ import './vector.css'
 
 const T = {
   start: 'What are you making?',
-  startHint: 'Pick one to start with a small example you can change. You can change the size later.',
-  blank: 'Start empty',
+  startHint: 'Pick one to get the right size. You can change the size later.',
   shapes: 'Add a shape',
   look: 'Look',
   looks: 'One-click looks',
@@ -68,37 +67,28 @@ function ShapeIcon({ shapeId }: { shapeId: ShapeKind }) {
   )
 }
 
-function svgUrl(svg: string) {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
-}
-
 function dataUrlBytes(url: string) {
   return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0))
 }
 
-function StartScreen({ onPick }: { onPick(p: Preset, example: boolean): void }) {
-  const thumbs = useMemo(() => PRESETS.map((p) => svgUrl(toSvg(startFrom(p, createVectorDoc())))), [])
+function StartScreen({ onPick }: { onPick(p: Preset): void }) {
   return (
     <div className="vec-start">
       <h2>{T.start}</h2>
       <p className="vec-muted">{T.startHint}</p>
       <div className="vec-start-grid">
-        {PRESETS.map((p, i) => (
-          <div key={p.id} className="vec-start-card">
-            <button className="vec-start-pick" onClick={() => onPick(p, true)}>
-              <span className="vec-start-thumb">{p.id === 'empty' ? <Shapes size={40} strokeWidth={1.4} /> : <img src={thumbs[i]} alt="" />}</span>
-              <strong>{p.label}</strong>
-              <span className="vec-muted">{p.hint}</span>
-              <span className="vec-muted vec-small">
-                {p.width} × {p.height} px
-              </span>
-            </button>
-            {p.id !== 'empty' && (
-              <button className="vec-link" onClick={() => onPick(p, false)}>
-                {T.blank}
-              </button>
-            )}
-          </div>
+        {PRESETS.map((p) => (
+          <button key={p.id} className="vec-start-pick" onClick={() => onPick(p)}>
+            <span className="vec-start-thumb">
+              {/* The drawing's shape, so the size is easy to picture. */}
+              <span className="vec-start-size" style={{ width: p.width * Math.min(150 / p.width, 90 / p.height), height: p.height * Math.min(150 / p.width, 90 / p.height) }} />
+            </span>
+            <strong>{p.label}</strong>
+            <span className="vec-muted">{p.hint}</span>
+            <span className="vec-muted vec-small">
+              {p.width} × {p.height} px
+            </span>
+          </button>
         ))}
       </div>
     </div>
@@ -247,7 +237,7 @@ export default function View({ documentId, active }: PanelProps) {
     lastTweak.current = now
   }
 
-  if (!d.presetId) return <StartScreen onPick={(p, ex) => update((x) => startFrom(p, x, ex))} />
+  if (!d.presetId) return <StartScreen onPick={(p) => update((x) => startFrom(p, x))} />
 
   const activeLayerId = resolveActiveLayer(d.scene, canvas.activeLayerId)
   const sel = d.scene.nodes.filter((n) => canvas.selection.includes(n.id))

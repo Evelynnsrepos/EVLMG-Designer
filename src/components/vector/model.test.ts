@@ -31,13 +31,12 @@ describe('shapePath', () => {
 })
 
 describe('Vector document', () => {
-  it('starts every preset with its size and an example on the first layer', () => {
+  it('starts every preset empty at its size', () => {
     for (const p of PRESETS) {
       const d = startFrom(p, createVectorDoc())
       expect(d.presetId).toBe(p.id)
       expect(d.artboard).toEqual({ width: p.width, height: p.height })
-      expect(d.scene.nodes.every((n) => n.layerId === d.scene.layers[0].id)).toBe(true)
-      expect(startFrom(p, createVectorDoc(), false).scene.nodes).toEqual([])
+      expect(d.scene.nodes).toEqual([])
     }
   })
 
@@ -76,7 +75,8 @@ describe('toSvg', () => {
   })
 
   it('leaves out hidden layers', () => {
-    const d = startFrom(PRESETS[0], createVectorDoc())
+    const d = createVectorDoc()
+    d.scene.nodes = [makeShape(d.scene.layers[0].id, 'star', 0, 0, 10, 10)]
     d.scene.layers[0] = { ...d.scene.layers[0], hidden: true }
     expect(toSvg(d)).not.toContain('<path')
   })
