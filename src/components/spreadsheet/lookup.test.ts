@@ -18,7 +18,7 @@ describe('STAT() lookup', () => {
 describe('typing over STAT() writes back (0.28)', () => {
   it('finds the entry and converts the value', async () => {
     const { statWriteBack } = await import('./lookup')
-    const entries = [
+    const entries: import('./engine').LookupEntry[] = [
       { kind: 'item', name: 'Sword', fields: { Description: '', ATK: 5, Rarity: 'Rare' }, src: { entity: 'item' as const, id: 's' } },
       { kind: 'item', name: 'Bow', fields: { Description: '', ATK: 3, DEX: 2 }, src: { entity: 'item' as const, id: 'b' } },
       { kind: 'Vehicles', name: 'Tank', fields: { Speed: 40, Armored: true, Note: 'x' }, src: { list: 'L', id: 't' } },
