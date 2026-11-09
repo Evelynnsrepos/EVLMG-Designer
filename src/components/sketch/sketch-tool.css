@@ -32,22 +32,6 @@
 .sketch-start-size input {
   width: 100px;
 }
-.sketch-send {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.sketch-send-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.sketch-send-note {
-  font-size: 12px;
-  color: var(--accent);
-}
-
 /* Your own canvas sizes. */
 .sketch-start-mine {
   margin: 10px 0 4px;

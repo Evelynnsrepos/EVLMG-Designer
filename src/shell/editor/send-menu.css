@@ -1,0 +1,15 @@
+.sketch-send {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sketch-send-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sketch-send-note {
+  font-size: 12px;
+  color: var(--accent);
+}

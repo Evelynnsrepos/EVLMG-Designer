@@ -10,6 +10,7 @@ import { createSketchDoc, SketchEditor, type SketchEditorHandle } from '@/shared
 import { createTexturePaintDoc, MODEL_EXTENSIONS, TEXTURE_SIZES, type TexturePaintDoc } from './model'
 import { Viewer, type PaintTarget, type ViewerHandle } from './Viewer'
 import './texture-paint.css'
+import { SendMenu } from '@/shell/editor/SendMenu'
 
 const UI = {
   title: 'Paint a 3D model',
@@ -153,7 +154,7 @@ export default function View({ documentId, active }: PanelProps) {
         <p className="tp-hint">Paint on the model with the left button. Drag next to it or with the right button to turn, the middle button to move, the wheel to zoom.</p>
       </div>
       <div className="tp-right">
-        <SketchEditor editorRef={editor} doc={d} update={(fn) => doc.update((x) => ({ ...x, ...fn(x) }), { undoable: false })} active={active} title={title} />
+        <SketchEditor editorRef={editor} doc={d} update={(fn) => doc.update((x) => ({ ...x, ...fn(x) }), { undoable: false })} active={active} title={title} actions={(flatten) => <SendMenu title={title} picture={flatten} label="Send the texture to…" />} />
       </div>
     </div>
   )

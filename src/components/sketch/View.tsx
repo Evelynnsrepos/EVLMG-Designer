@@ -1,4 +1,4 @@
-import { Send, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { PanelProps } from '@/core/registry'
 import { useDocument, useProjectStore } from '@/core/state'
@@ -6,7 +6,7 @@ import { CANVAS_PRESETS, createSketchDoc, SketchEditor, type SketchDoc } from '@
 import { CARD_SIZES, mmToPx } from '@/shared/print'
 import { useInputSettings } from '@/shared/sketch/inputSettings'
 import { promptDialog } from '@/shared/dialogs'
-import { IMAGE_TARGETS, sendImageTo } from '@/shell/editor/actions'
+import { SendMenu } from '@/shell/editor/SendMenu'
 import './sketch-tool.css'
 
 const UI = {
@@ -21,8 +21,6 @@ const UI = {
   mine: 'My sizes',
   cards: 'Card sizes (300 DPI, 3 mm bleed; the guide lines show the cut and the safe area)',
   cardGuides: 'Card guide lines',
-  send: 'Send to…',
-  sent: (to: string) => `Sent to ${to}`,
 }
 
 /** A sketch document; `started` is false until the canvas size is chosen. */
@@ -53,7 +51,7 @@ export default function View({ documentId, active }: PanelProps) {
       update={(fn) => doc.update((d) => ({ ...d, ...fn(d) }), { undoable: false })}
       active={active}
       title={title}
-      actions={(flatten) => <SendMenu title={title} flatten={flatten} />}
+      actions={(flatten) => <SendMenu title={title} picture={flatten} />}
     />
   )
 }
@@ -160,35 +158,5 @@ function SizePicker({ onStart }: { onStart: (w: number, h: number, cardGuides?: 
         {UI.start}
       </button>
     </div>
-  )
-}
-
-function SendMenu({ title, flatten }: { title: string; flatten: () => Promise<Blob> }) {
-  const [open, setOpen] = useState(false)
-  const [note, setNote] = useState<string | null>(null)
-  return (
-    <span className="sketch-send">
-      <button className="btn btn-ghost sketch-send-btn" title={UI.send} onClick={() => setOpen(!open)}>
-        <Send size={15} /> {UI.send}
-      </button>
-      {open && (
-        <div className="menu" style={{ top: '100%', left: 0 }} onMouseLeave={() => setOpen(false)}>
-          {IMAGE_TARGETS.map((t) => (
-            <button
-              key={t.type}
-              onClick={async () => {
-                setOpen(false)
-                await sendImageTo(t.type, await flatten(), title)
-                setNote(UI.sent(t.label))
-                setTimeout(() => setNote(null), 3000)
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      )}
-      {note && <span className="sketch-send-note">{note}</span>}
-    </span>
   )
 }
