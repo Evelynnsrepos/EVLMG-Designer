@@ -1,0 +1,293 @@
+.vec {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+}
+.vec-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.vec-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.vec-muted {
+  color: var(--text-muted);
+}
+.vec-small {
+  font-size: 12px;
+}
+
+/* The drawing area: its background is the canvas background, placed and zoomed like the drawing (set from the view). */
+.vec-canvas .canvas-root {
+  background-color: var(--bg-sunken);
+  background-image: linear-gradient(var(--vec-bg), var(--vec-bg)) !important;
+  background-size: var(--vec-w) var(--vec-h) !important;
+  background-position: var(--vec-x) var(--vec-y) !important;
+  background-repeat: no-repeat;
+}
+.vec-artboard {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.vec-preview {
+  display: flex;
+  flex: none;
+  height: 172px;
+  box-sizing: border-box;
+  overflow-x: auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+  font-size: 12px;
+}
+.vec-preview-title {
+  color: var(--text-muted);
+}
+.vec-preview-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 156px;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+}
+.vec-preview-group img {
+  display: block;
+}
+.vec-preview-dark {
+  background: #22232a;
+}
+.vec-preview-light {
+  background: #f1f1f4;
+}
+.vec-preview-slot {
+  background: #3b2f25;
+}
+.vec-preview-slot img {
+  padding: 3px;
+  border: 2px solid #7a5c3e;
+  border-radius: 6px;
+  background: #4f3e30;
+}
+
+.vec-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 320px;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--bg-elevated);
+  font-size: 13px;
+}
+.vec-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.vec-section h3,
+.vec-section summary {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: default;
+}
+.vec-section summary {
+  cursor: pointer;
+}
+.vec-section p {
+  margin: 0;
+}
+.vec-section .moodboard-layers {
+  width: auto;
+  max-height: 320px;
+  border-left: 0;
+}
+.vec-shape-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+.vec-shape-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 10px;
+  cursor: pointer;
+}
+.vec-shape-btn:hover,
+.vec-shape-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.vec-looks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.vec-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.vec-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.vec-num {
+  width: 80px;
+}
+.vec-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.vec-slider span {
+  display: flex;
+  justify-content: space-between;
+}
+.vec-slider em {
+  color: var(--text-muted);
+  font-style: normal;
+}
+.vec-slider input {
+  width: 100%;
+}
+.vec-colour {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.vec-colour-none {
+  background: linear-gradient(135deg, transparent 45%, #e03131 45% 55%, transparent 55%), var(--bg);
+}
+.vec-colour-pop {
+  width: 280px;
+}
+.vec-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.vec-swatches .vec-colour {
+  width: 22px;
+  height: 22px;
+}
+.vec-sizes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.vec-size {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.vec-link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.vec-start {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  padding: 28px;
+  box-sizing: border-box;
+}
+.vec-start h2 {
+  margin: 0 0 4px;
+}
+.vec-start-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+.vec-start-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.vec-start-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.vec-start-pick:hover {
+  border-color: var(--accent);
+}
+.vec-start-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 120px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+}
+.vec-start-thumb img {
+  max-width: 90%;
+  max-height: 104px;
+}
+
+/* Tablets and phones: bigger targets, panel under the drawing on narrow screens. */
+@media (pointer: coarse) {
+  .vec-shape-btn {
+    padding: 10px 2px;
+  }
+  .vec-colour {
+    width: 36px;
+    height: 36px;
+  }
+}
+@media (max-width: 760px) {
+  .vec {
+    flex-direction: column;
+  }
+  .vec-side {
+    width: auto;
+    max-height: 45%;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+}
