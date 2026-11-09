@@ -33,11 +33,36 @@ export interface Sink {
 }
 
 export interface EconomyDoc {
+  /** 0.28: player profiles; missing = DEFAULT_PROFILES. */
+  profiles?: Profile[]
   currencies: Currency[]
   sources: Source[]
   sinks: Sink[]
   hours: number
 }
+
+/** 0.28: how much different players play, to turn hours of play into days. */
+export interface Profile {
+  id: Id
+  name: string
+  hoursPerDay: number
+}
+
+export const DEFAULT_PROFILES: Profile[] = [
+  { id: 'casual', name: 'Casual', hoursPerDay: 0.5 },
+  { id: 'regular', name: 'Regular', hoursPerDay: 1.5 },
+  { id: 'core', name: 'Core', hoursPerDay: 4 },
+]
+
+/** Days of real time until a player of this profile reaches an hour of play. */
+export const daysFor = (hours: number, p: Profile) => Math.max(1, Math.ceil(hours / Math.max(0.01, p.hoursPerDay)))
+
+/** Quest gold as one source spread over the hours of play: the total of every quest's gold reward. */
+export const questGoldSource = (quests: { rewardGold: number }[], d: Pick<EconomyDoc, 'hours'>, currencyId: Id): Source => ({
+  ...newSource(currencyId),
+  name: `Quest rewards (${quests.length} quests)`,
+  perHour: Math.round((quests.reduce((a, q) => a + (q.rewardGold || 0), 0) / Math.max(1, d.hours)) * 100) / 100,
+})
 
 export function createEconomyDoc(): EconomyDoc {
   const gold: Currency = { id: newId(), name: 'Gold', start: 100 }

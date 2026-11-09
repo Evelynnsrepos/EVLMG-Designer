@@ -26,3 +26,13 @@ describe('economy', () => {
     expect(r.shortfalls.length).toBeGreaterThan(0)
   })
 })
+
+describe('economy profiles and quest gold (0.28)', () => {
+  it('turns hours into days per player type and spreads quest gold over the hours', async () => {
+    const { daysFor, questGoldSource } = await import('./model')
+    expect(daysFor(10, { id: 'c', name: 'Casual', hoursPerDay: 0.5 })).toBe(20)
+    expect(daysFor(0, { id: 'c', name: 'Core', hoursPerDay: 4 })).toBe(1)
+    const s = questGoldSource([{ rewardGold: 100 }, { rewardGold: 50 }], { hours: 10 }, 'gold')
+    expect(s).toMatchObject({ currencyId: 'gold', perHour: 15, name: 'Quest rewards (2 quests)' })
+  })
+})

@@ -4,7 +4,7 @@ import type { PanelProps } from '@/core/registry'
 import { useDocument, useUndoRedoKeys } from '@/core/state'
 import { LineChart, NumberInput, PresetHeader } from '@/shared/calculators'
 import '@/shared/listDetail/listDetail.css'
-import { createEconomyDoc, newSink, newSource, simulateEconomy, type EconomyDoc, type Sink, type Source } from './model'
+import { createEconomyDoc, daysFor, DEFAULT_PROFILES, newSink, newSource, questGoldSource, simulateEconomy, type EconomyDoc, type Profile, type Sink, type Source } from './model'
 import './economy.css'
 
 const fmt = (n: number) => Math.round(n).toLocaleString()
@@ -13,10 +13,14 @@ const fmt = (n: number) => Math.round(n).toLocaleString()
 export default function View({ documentId, active }: PanelProps) {
   const doc = useDocument<EconomyDoc>('economy', documentId!, createEconomyDoc)
   useUndoRedoKeys(doc, active)
+  const quests = useDocument<{ quests: { rewardGold: number }[] }>('quests', 'quests', () => ({ quests: [] })).data?.quests ?? []
   if (!doc.data) return null
   const d = doc.data
   const set = (fn: (d: EconomyDoc) => EconomyDoc) => doc.update(fn)
   const r = simulateEconomy(d)
+  const profiles = d.profiles ?? DEFAULT_PROFILES
+  const editProfile = (id: string, patch: Partial<Profile>) => set((x) => ({ ...x, profiles: (x.profiles ?? DEFAULT_PROFILES).map((p) => (p.id === id ? { ...p, ...patch } : p)) }))
+  const days = (hours: number) => profiles.map((p) => `${p.name} ${daysFor(hours, p)} d`).join(' · ')
   const cur = (id: string) => d.currencies.find((c) => c.id === id)?.name ?? '?'
   const editSource = (id: string, patch: Partial<Source>) => set((x) => ({ ...x, sources: x.sources.map((s) => (s.id === id ? { ...s, ...patch } : s)) }))
   const editSink = (id: string, patch: Partial<Sink>) => set((x) => ({ ...x, sinks: x.sinks.map((s) => (s.id === id ? { ...s, ...patch } : s)) }))
@@ -101,6 +105,11 @@ export default function View({ documentId, active }: PanelProps) {
           <button className="btn btn-ghost eco-add" onClick={() => set((x) => ({ ...x, sources: [...x.sources, newSource(firstCurrency)] }))}>
             <Plus size={14} /> Add source
           </button>
+          {quests.length > 0 && (
+            <button className="btn btn-ghost eco-add" title="Every quest's gold reward added up and spread over the hours of play" onClick={() => set((x) => ({ ...x, sources: [...x.sources, questGoldSource(quests, x, firstCurrency)] }))}>
+              <Plus size={14} /> Add quest gold
+            </button>
+          )}
         </section>
 
         <section>
@@ -157,6 +166,15 @@ export default function View({ documentId, active }: PanelProps) {
             <NumberInput value={d.hours} min={1} max={1000} onChange={(hours) => set((x) => ({ ...x, hours: Math.max(1, hours) }))} /> hours of play
           </h3>
           <LineChart xs={r.times} series={d.currencies.map((c) => ({ name: c.name, values: r.balance[c.id] }))} xLabel="Hours played" />
+          <p className="ld-inline muted eco-profiles" title="How long players of each kind take in real days, for the times below">
+            Players:
+            {profiles.map((p) => (
+              <span key={p.id} className="ld-inline">
+                <input className="input" style={{ width: 80 }} value={p.name} onChange={(e) => editProfile(p.id, { name: e.target.value })} aria-label="Player type" />
+                <NumberInput value={p.hoursPerDay} min={0.1} max={24} onChange={(hoursPerDay) => editProfile(p.id, { hoursPerDay })} /> h/day
+              </span>
+            ))}
+          </p>
           <div className="ld-result">
             {d.currencies.map((c) => {
               const end = r.balance[c.id][r.balance[c.id].length - 1]
@@ -176,7 +194,7 @@ export default function View({ documentId, active }: PanelProps) {
             .filter((s) => s.kind === 'once')
             .map((s) => (
               <p key={s.id}>
-                {s.name} ({fmt(s.cost)} {cur(s.currencyId)}): {r.bought[s.id] === null ? <span className="eco-bad">not affordable in {d.hours} hours</span> : `affordable after ${r.bought[s.id]} hours`}
+                {s.name} ({fmt(s.cost)} {cur(s.currencyId)}): {r.bought[s.id] === null ? <span className="eco-bad">not affordable in {d.hours} hours</span> : `affordable after ${r.bought[s.id]} hours (${days(r.bought[s.id]!)})`}
               </p>
             ))}
           {r.shortfalls.map((x) => (

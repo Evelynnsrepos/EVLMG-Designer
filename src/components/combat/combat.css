@@ -77,3 +77,20 @@
 .cb-settings .calc-number {
   width: 100px;
 }
+.cb-abilities {
+  min-width: 110px;
+}
+.cb-ability {
+  display: inline-flex;
+  align-items: center;
+  margin: 1px 3px 1px 0;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.cb-abilities select {
+  width: 44px;
+  padding: 2px;
+}

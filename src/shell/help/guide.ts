@@ -714,6 +714,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     body: [
       'Model the money of your game. Add currencies like gold or gems, sources where they come from (quests, selling loot) with an amount per hour that can grow over time, and sinks where they go: steady costs, costs every few hours, or one-time purchases like a mount.',
       'The simulation plays the hours you choose and charts each currency. It shows what was earned and spent, when one-time purchases become affordable, and when the player cannot pay for something.',
+      'Players under the chart turn hours of play into real days for different kinds of players (Casual, Regular, Core by default; rename them and set their hours per day). Add quest gold makes one source from every quest\'s gold reward, spread over the hours of play.',
       'If players spend less than half of what they earn, the money piles up and loses its meaning; the simulator warns you so you can add sinks or lower income.',
     ],
   },
@@ -722,15 +723,17 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     body: [
       'Put two teams against each other. Each fighter has HP, attack, defense, attacks per second, crit chance and crit damage, and a count for groups like 5 slimes. Fighters can be taken from the Enemy List; stats named HP, ATK, DEF and SPD are read automatically.',
       'Damage uses a formula from the damage library with the attacker ATK and the target DEF, plus a random spread. Fighters attack the weakest enemy left.',
+      'Fighters can use Abilities & Spells: add them under Abilities. Whenever one is ready it is used instead of a basic attack, with its own formula (the fighter\'s ATK, the target\'s DEF) and cooldown, and its element meets the target\'s resistances. Fighters taken from the Enemy List bring their resistances and the abilities that list them as users.',
       'Simulate runs hundreds or thousands of fights and shows how often each side wins, how much HP the winners keep, how long fights take, the damage of every fighter and an example fight blow by blow.',
     ],
   },
   balance: {
     title: 'Balance Dashboard',
     body: [
-      'A live look at the numbers in your Item and Enemy Lists; there is nothing to fill in.',
+      'A live look at the numbers in your Item and Enemy Lists, abilities and Custom Lists; there is nothing to fill in.',
       'Numbers that stick out compares every stat with the other items or enemies of the same rarity and lists the ones far from the typical value, too high in red and too low in blue. Click the arrow to open the entry.',
       'Difficulty curve charts the average of an enemy stat per level and points out levels where it jumps or drops much more than usual. Gaps lists entries without numbers and enemies that drop nothing.',
+      'Numbers that stick out also checks Abilities & Spells (damage per second and value per cost, against abilities of the same kind) and every number field of your Custom Lists.',
     ],
   },
   vision: {

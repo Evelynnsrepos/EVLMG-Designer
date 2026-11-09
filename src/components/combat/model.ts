@@ -21,6 +21,20 @@ export interface Fighter {
   critDamage: number
   /** Copies of this fighter on the team. */
   count: number
+  /** 0.28: damage taken per element, like the Enemy List's resistances (1 = normal, 0.5 = half). */
+  resist?: Record<string, number>
+  /** 0.28: Abilities & Spells it uses whenever one is ready, instead of a basic attack. */
+  abilities?: Id[]
+}
+
+/** An ability as the simulator uses it, resolved from Abilities & Spells. */
+export interface SimAbility {
+  id: Id
+  name: string
+  element: string
+  cooldown: number
+  expression: string
+  values: Record<string, number>
 }
 
 export interface CombatDoc {
@@ -77,20 +91,25 @@ function rng(seed: number) {
 
 const MAX_SECONDS = 600
 
-export function simulateCombat(d: CombatDoc, seed = 1): CombatResult {
+export function simulateCombat(d: CombatDoc, seed = 1, abilities: SimAbility[] = []): CombatResult {
   const lib = getFormula(d.formulaId)
   const compiled = lib ? tryCompile(lib.expression) : null
   const empty: CombatResult = { wins: [0, 0], draws: 0, avgSeconds: 0, avgHpLeft: [0, 0], damage: {}, log: [], error: null }
   if (!lib || !compiled?.ok) return { ...empty, error: 'Pick a damage formula.' }
   const base = defaultValues(lib)
   const random = rng(seed)
+  const skills = new Map(abilities.flatMap((a) => {
+    const c = tryCompile(a.expression)
+    return c.ok ? [[a.id, { a, f: c.value }] as const] : []
+  }))
+  const resistOf = (f: Fighter, element: string) => (element ? (Object.entries(f.resist ?? {}).find(([k]) => k.toLowerCase() === element.toLowerCase())?.[1] ?? 1) : 1)
   const result = empty
   let seconds = 0
   const hpLeft: [number, number] = [0, 0]
   const runs = Math.max(1, Math.min(20000, Math.round(d.runs)))
   for (let run = 0; run < runs; run++) {
     const units = d.teams.flatMap((team, side) =>
-      team.flatMap((f) => Array.from({ length: Math.max(0, Math.round(f.count)) }, (_, i) => ({ f, side, hp: f.hp, next: random() / Math.max(0.01, f.speed), label: f.count > 1 ? `${f.name} ${i + 1}` : f.name }))),
+      team.flatMap((f) => Array.from({ length: Math.max(0, Math.round(f.count)) }, (_, i) => ({ f, side, hp: f.hp, next: random() / Math.max(0.01, f.speed), ready: {} as Record<Id, number>, label: f.count > 1 ? `${f.name} ${i + 1}` : f.name }))),
     )
     const total: [number, number] = [0, 1].map((s) => units.filter((u) => u.side === s).reduce((a, u) => a + u.hp, 0)) as [number, number]
     const log = run === 0 ? result.log : null
@@ -105,10 +124,14 @@ export function simulateCombat(d: CombatDoc, seed = 1): CombatResult {
       const target = foes.reduce((a, b) => (b.hp < a.hp ? b : a))
       const crit = random() * 100 < actor.f.crit
       const spread = 1 + ((random() * 2 - 1) * d.spread) / 100
-      const dmg = hitDamage(compiled.value, base, actor.f, target.f) * spread * (crit ? actor.f.critDamage / 100 : 1)
+      // The first ability that is ready replaces the basic attack; its formula gets this attacker's ATK and the target's DEF.
+      const skill = (actor.f.abilities ?? []).map((id) => skills.get(id)).find((x) => x && (actor.ready[x.a.id] ?? 0) <= t)
+      if (skill) actor.ready[skill.a.id] = t + Math.max(0, skill.a.cooldown)
+      const raw = skill ? hitDamage(skill.f, { ...skill.a.values }, actor.f, target.f) : hitDamage(compiled.value, base, actor.f, target.f)
+      const dmg = raw * resistOf(target.f, skill?.a.element ?? '') * spread * (crit ? actor.f.critDamage / 100 : 1)
       target.hp -= dmg
       result.damage[actor.f.id] = (result.damage[actor.f.id] ?? 0) + dmg / runs
-      if (log && log.length < 60) log.push(`${t.toFixed(1)}s ${actor.label} hits ${target.label} for ${Math.round(dmg)}${crit ? ' (crit)' : ''}${target.hp <= 0 ? `, ${target.label} falls` : ''}`)
+      if (log && log.length < 60) log.push(`${t.toFixed(1)}s ${actor.label} ${skill ? `uses ${skill.a.name} on` : 'hits'} ${target.label} for ${Math.round(dmg)}${crit ? ' (crit)' : ''}${target.hp <= 0 ? `, ${target.label} falls` : ''}`)
     }
     const left = [0, 1].map((s) => units.filter((u) => u.side === s && u.hp > 0).reduce((a, u) => a + u.hp, 0))
     if (left[0] > 0 && left[1] <= 0) {
