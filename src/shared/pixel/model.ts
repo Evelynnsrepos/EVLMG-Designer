@@ -1,4 +1,5 @@
 import { newId, type Id } from '@/core/model'
+import { outline, type Shape } from '@/shared/sketch/quickshape'
 
 /**
  * Pixel Art (v0.16): sprites, tilesets and tilemaps on exact whole pixels.
@@ -166,6 +167,18 @@ export function cleanPath(points: [number, number][]): [number, number][] {
     }
   }
   return out
+}
+
+/** A snapped QuickShape as whole pixels: level boxes and ellipses the crisp pixel way, anything tilted traced and cleaned. */
+export function shapePixels(shape: Shape): [number, number][] {
+  const p = shape.points
+  const r = Math.round
+  if ((shape.kind === 'circle' || shape.kind === 'ellipse') && !shape.angle) return ellipsePoints(r(p[0].x - p[1].x), r(p[0].y - p[1].y), r(p[0].x + p[1].x), r(p[0].y + p[1].y), false)
+  if (shape.kind === 'rectangle' && r(p[0].y) === r(p[1].y) && r(p[1].x) === r(p[2].x)) return rectPoints(r(p[0].x), r(p[0].y), r(p[2].x), r(p[2].y), false)
+  const o = outline(shape, 1)
+  const out: [number, number][] = [[r(o[0].x), r(o[0].y)]]
+  for (let i = 1; i < o.length; i++) out.push(...line(out[out.length - 1][0], out[out.length - 1][1], r(o[i].x), r(o[i].y)).slice(1))
+  return cleanPath(out)
 }
 
 /** Offsets covered by a brush of `size` pixels, square or round. */

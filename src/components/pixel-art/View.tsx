@@ -24,6 +24,7 @@ import {
   brushOffsets,
   celKey,
   cleanPath,
+  shapePixels,
   cloneImg,
   composite,
   createPixelDoc,
@@ -62,6 +63,9 @@ import {
 import { ColorsPanel, LayersPanel, PalettePanel, Preview, Timeline } from './Panels'
 import { grayHex, grayscale, nearest, paletteOf, reduce, swapColors } from '@/shared/pixel/color'
 import { bounds, combine, cut, flipImg, imgMask, lassoMask, maskImg, outline, paste, placeMask, rectMask, rotate90, rotateAny, scaleImg, wandMask, wrapShift, type Combine, type Mask } from './selection'
+import { gentle, HOLD_MS, keys as shapeKeys, PERFECT_MS, perfect, recognize, resize, type Shape } from '@/shared/sketch/quickshape'
+import { holdTolerance, useInputSettings } from '@/shared/sketch/inputSettings'
+import { MotionFilter } from '@/shared/sketch/pen'
 import './pixel-art.css'
 
 type Tool = 'pencil' | 'eraser' | 'line' | 'curve' | 'rect' | 'ellipse' | 'fill' | 'lassofill' | 'gradient' | 'spray' | 'text' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill' | 'tileRandom' | 'auto'
@@ -338,7 +342,7 @@ const MAP_TOOLS: { id: Tool; icon: typeof Brush; label: string }[] = [
   { id: 'picker', icon: Pipette, label: 'Pick a tile from the map' },
 ]
 
-type Live = { key: string; base: Img; img: Img; start: Pt; path: Pt[]; button: number; press?: number[]; ctrl?: Pt; from?: string; float?: { piece: Img; mask: Mask; x: number; y: number; rest: Img }; at?: Pt }
+type Live = { key: string; base: Img; img: Img; start: Pt; path: Pt[]; button: number; press?: number[]; ctrl?: Pt; from?: string; float?: { piece: Img; mask: Mask; x: number; y: number; rest: Img }; at?: Pt; snap?: { shape: Shape; at: Pt; perfect?: boolean } }
 
 function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<PixelDoc> & { data: PixelDoc }; documentId: string; title: string; active: boolean }) {
   const d = doc.data
@@ -407,6 +411,10 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const selecting = useRef<{ start: Pt; path: Pt[]; how: Combine; preview: Mask | null } | null>(null)
   const [, tick] = useState(0)
   const live = useRef<Live | null>(null)
+  // The app-wide pen settings (motion filtering, holding still) also apply here.
+  useEffect(() => void useInputSettings.getState().load(), [])
+  /** QuickShape: where the pointer last rested (screen px) and the snap timer. */
+  const hold = useRef<{ timer?: ReturnType<typeof setTimeout>; rest: { x: number; y: number }; filter?: MotionFilter }>({ rest: { x: 0, y: 0 } })
   const canvas = useRef<HTMLCanvasElement>(null)
   const overlay = useRef<HTMLCanvasElement>(null)
   const hover = useRef<Pt | null>(null)
@@ -705,7 +713,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   }
 
   // ---- Pointer ----
-  const pos = (e: React.PointerEvent): Pt => {
+  const pos = (e: { clientX: number; clientY: number }): Pt => {
     const r = canvas.current!.getBoundingClientRect()
     const x = Math.floor(((e.clientX - r.left) / r.width) * canvas.current!.width)
     const y = Math.floor(((e.clientY - r.top) / r.height) * canvas.current!.height)
@@ -754,7 +762,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     }
     let pts: Pt[] = []
     const freehand = tool === 'pencil' || tool === 'eraser' || tool === 'shade'
-    if (freehand) pts = clean && size === 1 && !pressure && !brushImg ? cleanPath(l.path) : l.path
+    if (freehand) pts = !l.snap && clean && size === 1 && !pressure && !brushImg ? cleanPath(l.path) : l.path
     else if (tool === 'spray') pts = l.path
     else if (tool === 'line') pts = line(l.start[0], l.start[1], end[0], end[1])
     else if (tool === 'curve') pts = cleanPath(bezier(l.start, l.ctrl ?? l.start, end))
@@ -1014,6 +1022,11 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     const c = curve.current
     // The second drag of a curve bends the line drawn by the first.
     live.current = c && tool === 'curve' ? { key: c.key, base: c.base, img: c.base, start: c.a, path: [c.b], button: e.button, ctrl: p } : { key, base, img: base, start: p, path: [p], button: e.button, from, press: [penPressure(e)] }
+    clearTimeout(hold.current.timer)
+    hold.current.rest = { x: e.clientX, y: e.clientY }
+    // Shaky hands: Motion filtering from Pen and keys also steadies the pencil.
+    hold.current.filter = new MotionFilter(useInputSettings.getState().motionFilter)
+    hold.current.filter.filter(e.clientX, e.clientY, e.timeStamp)
     if (tool === 'spray') spray(live.current, p)
     render(live.current, c && tool === 'curve' ? c.b : p)
     draw()
@@ -1057,7 +1070,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   }
 
   const onMove = (e: React.PointerEvent) => {
-    const p = pos(e)
+    let p = pos(e)
     hover.current = p
     if (draft.current) {
       setMapDraft(placeTiles(draft.current, p, (e.buttons & 2) === 2))
@@ -1083,12 +1096,32 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       renderAuto(l)
       return draw()
     }
+    if (l.snap) {
+      // Snapped: the shape follows the pointer instead of the stroke growing; wobbling near the snap keeps it still.
+      const tol = holdTolerance()
+      const px = canvas.current!.getBoundingClientRect().width / canvas.current!.width
+      reshape(l, Math.hypot(p[0] - l.snap.at[0], p[1] - l.snap.at[1]) * px <= tol ? l.snap.at : p)
+      if (Math.hypot(e.clientX - hold.current.rest.x, e.clientY - hold.current.rest.y) > tol) {
+        hold.current.rest = { x: e.clientX, y: e.clientY }
+        armPerfect(l)
+      }
+      return draw()
+    }
     if (tool === 'pencil' || tool === 'eraser' || tool === 'shade' || tool === 'lassofill') {
+      const f = hold.current.filter
+      if (f && f.amount > 0 && !inMap) {
+        const q = f.filter(e.clientX, e.clientY, e.timeStamp)
+        p = pos({ clientX: q.x, clientY: q.y })
+      }
       const last = l.path[l.path.length - 1]
       if (last[0] === p[0] && last[1] === p[1]) return
       const added = line(last[0], last[1], p[0], p[1]).slice(1)
       l.path.push(...added)
       l.press?.push(...added.map(() => penPressure(e)))
+      if (tool !== 'lassofill' && Math.hypot(e.clientX - hold.current.rest.x, e.clientY - hold.current.rest.y) > holdTolerance()) {
+        hold.current.rest = { x: e.clientX, y: e.clientY }
+        armSnap(l)
+      }
     }
     if (tool === 'spray') spray(l, p)
     if (tool === 'curve' && l.ctrl) {
@@ -1099,7 +1132,43 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     render(l, !e.shiftKey ? p : tool === 'line' || tool === 'curve' ? constrain(l.start, p) : tool === 'rect' || tool === 'ellipse' ? square(l.start, p) : p)
     draw()
   }
+  // QuickShape for the pencil, eraser and shade brush: rest at the end of a stroke and it snaps to a clean
+  // line, arc, box or ellipse in whole pixels; keep holding and it turns perfect. One undo step, like any stroke.
+  const reshape = (l: Live, to: Pt) => {
+    if (!l.snap) return
+    let shape = resize(l.snap.shape, { x: l.snap.at[0], y: l.snap.at[1] }, { x: to[0], y: to[1] })
+    shape = shapeKeys.shift || l.snap.perfect ? perfect(shape) : gentle(shape)
+    l.path = shapePixels(shape)
+    l.press = undefined
+    render(l, to)
+  }
+  const armSnap = (l: Live) => {
+    clearTimeout(hold.current.timer)
+    hold.current.timer = setTimeout(() => {
+      if (live.current !== l || l.snap) return
+      const px = canvas.current ? canvas.current.getBoundingClientRect().width / canvas.current.width : 1
+      const shape = recognize(l.path.map(([x, y]) => ({ x, y })), holdTolerance() / px)
+      if (!shape) return
+      const at = l.path[l.path.length - 1]
+      l.snap = { shape, at }
+      reshape(l, at)
+      draw()
+      armPerfect(l)
+    }, HOLD_MS)
+  }
+  const armPerfect = (l: Live) => {
+    clearTimeout(hold.current.timer)
+    if (l.snap?.perfect) return
+    hold.current.timer = setTimeout(() => {
+      if (live.current !== l || !l.snap) return
+      l.snap.perfect = true
+      reshape(l, hover.current ?? l.snap.at)
+      draw()
+    }, PERFECT_MS)
+  }
+
   const onUp = () => {
+    clearTimeout(hold.current.timer)
     if (draft.current) {
       commitMap(draft.current)
       setMapDraft(null)

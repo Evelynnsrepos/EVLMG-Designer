@@ -16,6 +16,11 @@ export interface InputSettings {
   stabilization: number
   /** 0..1, removes shaky jitter. */
   motionFilter: number
+  /**
+   * 0..1, shaky hands: how much the pen may wobble while you hold still at the end of a
+   * stroke and it still counts as holding (QuickShape snaps, then turns perfect).
+   */
+  steadyHold: number
   /** Changed shortcut keys; anything missing uses the default. */
   shortcuts: ShortcutMap
   /** What the pen's side buttons do. Tools are used while the button is held. */
@@ -39,6 +44,7 @@ export const defaultInputSettings = (): InputSettings => ({
   pressureCurve: LINEAR,
   stabilization: 0,
   motionFilter: 0,
+  steadyHold: 0.2,
   shortcuts: {},
   penButtons: { barrel: 'tool.hand', middle: 'quickMenu' },
   quickMenus: [DEFAULT_QUICK_MENU],
@@ -57,6 +63,7 @@ export function normalizeInputSettings(saved: Partial<InputSettings>): InputSett
   const quickMenus = Array.isArray(s.quickMenus) && s.quickMenus.length ? s.quickMenus.map(normalizeProfile) : d.quickMenus
   return {
     ...s,
+    steadyHold: typeof s.steadyHold === 'number' && Number.isFinite(s.steadyHold) ? Math.min(1, Math.max(0, s.steadyHold)) : d.steadyHold,
     pressureCurve: curve.length >= 2 && curve.length <= MAX_CURVE_POINTS ? curve : LINEAR,
     penButtons: { ...d.penButtons, ...s.penButtons },
     overrides: { ...d.overrides, ...s.overrides },
@@ -97,3 +104,9 @@ export const useInputSettings = create<InputState>()((set, get) => ({
     }, 400)
   },
 }))
+
+/** How far (screen px) the pen may wobble and still count as holding still: 4 px steady, up to 40 px shaky. */
+export const holdTolerance = (steadyHold = useInputSettings.getState().steadyHold) => 4 + steadyHold * 36
+
+/** One click for shaky hands or a jittery tablet: more smoothing, jitter filter, and a forgiving hold. */
+export const SHAKY_HANDS: Pick<InputSettings, 'stabilization' | 'motionFilter' | 'steadyHold'> = { stabilization: 0.45, motionFilter: 0.65, steadyHold: 0.7 }
