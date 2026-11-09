@@ -27,6 +27,8 @@ export const BASICS: Record<string, GuideTopic> = {
       'From left to right: the keyboard shows this tool\'s shortcuts and how to link things; the size button makes the whole tool bigger or smaller (handy with a pen or a graphics tablet); the T picks the font the tool uses; the crossing arrows are jump points; Review collects feedback; the X closes the tool.',
       '## Keys only work where you are',
       'Single-letter shortcuts only work in the tool you clicked last, so typing in one tool never triggers another. Inside a text field, keys just type.',
+      '## Keys on the buttons',
+      'Hotkey hint mode is on from the start: every button that has a key shows it small in its bottom-left corner. Turn it off in Settings, under General, Hotkey hint mode.',
     ],
     tips: ['Press F1 anywhere to open this guide, and the keyboard button in a tool\'s header for its shortcuts.'],
   },

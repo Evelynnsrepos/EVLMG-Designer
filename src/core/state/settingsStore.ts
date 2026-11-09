@@ -37,8 +37,10 @@ export interface AppSettings {
   writerMarkdownSyntax: boolean
   /** 0.20: the GitHub user Git saving makes repositories for; '' = GitHub not connected on this computer. */
   githubLogin: string
-  /** v0.20: Hotkey hint mode, every button with a key shows it in its corner. */
+  /** Hotkey hint mode, every button with a key shows it in its corner. On unless turned off in Settings. */
   hotkeyHints: boolean
+  /** Set once the person picks hint mode in Settings; until then hints stay on (the old default saved `false` for everyone). */
+  hotkeyHintsChosen?: boolean
   /** v0.20: the user's own project presets for the new project wizard. */
   projectPresets: ProjectPreset[]
   /** v0.20: Git sync options for other Git hosts (GitLab, Gitea, ...). */
@@ -94,7 +96,7 @@ export interface HotwheelSettings {
 export const DEFAULT_INNER = ['close', 'scale', 'jump', 'layout', 'undo', 'search']
 const hotwheelDefaults = (): HotwheelSettings => ({ inner: DEFAULT_INNER, outer: {}, size: 'M', penButton: false, rightHold: false, middle: false })
 
-const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, githubLogin: '', hotkeyHints: false, projectPresets: [], git: gitDefaults(), projectFolders: [] })
+const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, githubLogin: '', hotkeyHints: true, projectPresets: [], git: gitDefaults(), projectFolders: [] })
 
 async function settingsPath() {
   const fs = getFs()
@@ -116,7 +118,7 @@ export const useSettings = create<SettingsState>()((set, get) => ({
   async load() {
     if (get().loaded) return
     const saved = await readVersioned<Partial<AppSettings>>(await settingsPath(), defaults).catch(defaults)
-    set({ ...defaults(), ...saved, hotwheel: { ...hotwheelDefaults(), ...saved.hotwheel }, git: { ...gitDefaults(), ...saved.git }, loaded: true })
+    set({ ...defaults(), ...saved, hotwheel: { ...hotwheelDefaults(), ...saved.hotwheel }, git: { ...gitDefaults(), ...saved.git }, hotkeyHints: saved.hotkeyHintsChosen ? saved.hotkeyHints !== false : true, loaded: true })
   },
   update(patch) {
     set(patch)

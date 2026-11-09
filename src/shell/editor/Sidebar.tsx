@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, BookOpen, FolderClosed, FolderOpen, Search, Star, Boxes, ChevronDown, ChevronRight, CircleHelp, House, LayoutDashboard, Keyboard, PanelLeftClose, PanelLeftOpen, Palette, Plus, Gem, Settings, Trash2, Users } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpen, FolderClosed, FolderOpen, Search, Star, Boxes, ChevronDown, ChevronRight, CircleHelp, House, LayoutDashboard, PanelLeftClose, PanelLeftOpen, Palette, Plus, Gem, Settings, Trash2, Users } from 'lucide-react'
 import { useState } from 'react'
 import { newId, type ComponentType, type Id, type SidebarFolder } from '@/core/model'
 import { allManifests, getManifest, type ComponentManifest } from '@/core/registry'
@@ -264,7 +264,6 @@ export function Sidebar() {
             <LayoutDashboard size={16} />
           </button>
         </div>
-        <HotkeyHintSwitch collapsed={collapsed} />
         {!collapsed && <div className="sidebar-project" title={meta.name}>{meta.name}</div>}
         <JumpButtons />
       </div>
@@ -544,19 +543,3 @@ function AddToolMenu({ style, available, onAdd, onClose }: { style: React.CSSPro
   )
 }
 
-/** v0.20: Hotkey hint mode on / off; while on, every button with a key shows it in its corner. */
-function HotkeyHintSwitch({ collapsed }: { collapsed: boolean }) {
-  const on = useSettings((s) => s.hotkeyHints)
-  const label = 'Hotkey hint mode'
-  return (
-    <button className={`sidebar-row sidebar-hint-switch${on ? ' on' : ''}`} role="switch" aria-checked={on} title={`${label}: show each button's key on it`} onClick={() => useSettings.getState().update({ hotkeyHints: !on })}>
-      <Keyboard size={16} />
-      {!collapsed && (
-        <>
-          <span>{label}</span>
-          <span className="sidebar-switch" aria-hidden />
-        </>
-      )}
-    </button>
-  )
-}
