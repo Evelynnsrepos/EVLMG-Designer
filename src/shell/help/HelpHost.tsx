@@ -175,6 +175,7 @@ function GuideDialog({ topic }: { topic: string }) {
               </button>
             ))}
             <div className="help-guide-credit">Eve.Lopment Games Designer by Evelopment Games. Free and open source under the GPL-3.0.</div>
+            <div className="help-guide-credit">Light preview models: planar head "planarhead-model" by Beenga and "Mannequiny" by GDQuest (model by Luciano Muñoz), both CC BY 4.0.</div>
           </nav>
           <div className="help-guide-body" ref={bodyRef}>
             {current && (
