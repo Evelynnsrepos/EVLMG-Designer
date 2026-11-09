@@ -226,7 +226,7 @@ describe.skipIf(!hasGit)('git sync with a local repository', () => {
     await write(p, 'project.json', '{"v":3}')
     expect(await syncProjectToGit(p, 'Existing')).toBe(false)
     expect((await projectGitState(p)).state).toBe('error')
-  })
+  }, 180_000) // many real git runs; slow on Windows CI runners
 
   it('marks a synced project that allows public repositories', async () => {
     const p = path.join(home, 'Existing')
