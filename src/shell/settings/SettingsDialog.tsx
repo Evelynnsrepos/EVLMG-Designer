@@ -44,7 +44,7 @@ const UI = {
   search: 'Search settings',
   noMatch: (q: string) => `No setting matches "${q}".`,
   hints: 'Hotkey hint mode',
-  hintsOn: 'Show each button\'s key in its corner (also a switch in the sidebar)',
+  hintsOn: 'Show each button\'s key in its corner',
   keysHint: 'Click Change and press the new key. Single-letter keys only work in the tool you clicked last. The user guide (F1) has the same list as a cheatsheet.',
 }
 
@@ -248,7 +248,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
           <section data-section="hints">
             <h3>{UI.hints}</h3>
             <label className="settings-check">
-              <input type="checkbox" checked={s.hotkeyHints} onChange={(e) => s.update({ hotkeyHints: e.target.checked })} />
+              <input type="checkbox" checked={s.hotkeyHints} onChange={(e) => s.update({ hotkeyHints: e.target.checked, hotkeyHintsChosen: true })} />
               {UI.hintsOn}
             </label>
           </section>
