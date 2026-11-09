@@ -69,4 +69,9 @@ describe('light preview setup', () => {
       expect(restoreSetup(JSON.parse(JSON.stringify(s)), new Set())).toEqual(s)
     }
   })
+
+  it('keeps project models (assets/…) to load them again, drops other unloaded models', () => {
+    const s = restoreSetup({ things: [{ shape: 'model', model: 'assets/models/a.glb', name: 'Fox' }, { shape: 'model', model: 'session-key' }] }, new Set())
+    expect(s.things.map((t) => t.model)).toEqual(['assets/models/a.glb'])
+  })
 })

@@ -144,7 +144,7 @@ export function restoreSetup(raw: unknown, loadedModels: ReadonlySet<string>): L
   const things = Array.isArray(r.things)
     ? r.things
         .filter((t): t is Record<string, unknown> => !!t && typeof t === 'object' && SHAPES.includes(t.shape as Shape))
-        .filter((t) => t.shape !== 'model' || (typeof t.model === 'string' && loadedModels.has(t.model)))
+        .filter((t) => t.shape !== 'model' || (typeof t.model === 'string' && (loadedModels.has(t.model) || t.model.startsWith('assets/'))))
         .slice(0, MAX_THINGS)
         .map((t, i) => ({
           id: typeof t.id === 'string' ? t.id : `thing-${i}`,
