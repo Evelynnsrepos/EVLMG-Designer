@@ -3,7 +3,7 @@ import { getFs, MemoryFs, setFs } from '../fs'
 import { createEntity } from '../model'
 import { createProject, loadProject, saveCollection, writeDocument } from '../project'
 import { flushAll, useProjectStore } from '../state'
-import { collectProjectFiles, createBackup, installAutoBackup, listBackups, MAX_BACKUPS, restoreBackup, waitForBackups } from '.'
+import { collectProjectFiles, createBackup, fileVersions, installAutoBackup, listBackups, MAX_BACKUPS, restoreBackup, waitForBackups } from '.'
 
 describe('backups', () => {
   beforeEach(() => setFs(new MemoryFs()))
@@ -23,6 +23,20 @@ describe('backups', () => {
       'entities/towns.json',
       'project.json',
     ])
+  })
+
+  it('lists the earlier versions of one document, only where it changed (0.28)', async () => {
+    const p = await createProject({ name: 'B', description: '', components: ['quests'] })
+    const t = (n: number) => new Date(Date.UTC(2026, 0, 1, 0, n))
+    await writeDocument(p.root, 'quests', 'quests', { quests: [1] })
+    await createBackup(p.root, 'open', t(1))
+    await writeDocument(p.root, 'wiki', 'index', { other: true })
+    await createBackup(p.root, 'autosave', t(2))
+    await writeDocument(p.root, 'quests', 'quests', { quests: [1, 2] })
+    await createBackup(p.root, 'close', t(3))
+    const v = await fileVersions(p.root, 'components/quests/quests.json')
+    expect(v.map((x) => x.data)).toEqual([{ quests: [1, 2] }, { quests: [1] }])
+    expect(v[1].reason).toBe('autosave')
   })
 
   it('skips a snapshot identical to the newest one', async () => {

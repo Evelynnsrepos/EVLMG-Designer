@@ -11,6 +11,7 @@ import { startLayoutDrag, useLayoutDrag } from './layoutDrag'
 import { useToolDrag } from './toolDrag'
 import { ToolFontButton, useToolFontStyle } from './ToolFont'
 import { ToolKeysButton, ToolScaleButton, useToolScale } from './ToolHelp'
+import { VersionsButton } from './Versions'
 
 /** One tile: slim "fake" window header (ED-4), the component view, drop zones and Layout Mode overlay. */
 export function PanelFrame({ panel }: { panel: Panel }) {
@@ -59,6 +60,7 @@ export function PanelFrame({ panel }: { panel: Panel }) {
         {manifest && <ToolScaleButton type={panel.type} />}
         {manifest && <ToolFontButton type={panel.type} />}
         {manifest && <PanelJumps type={panel.type} documentId={panel.documentId} />}
+        {manifest && <VersionsButton type={panel.type} documentId={panel.documentId} />}
         {manifest && panel.type !== 'reviews' && <ReviewButton target={{ kind: 'doc', type: panel.type, id: panel.documentId }} title={title} />}
         {/* v0.14: close this tool without Layout Mode. */}
         <button className="panel-close" title="Close this tool (everything is saved)" aria-label={`Close ${title}`} onClick={() => void closePanel(panel.id)}>

@@ -114,6 +114,31 @@ export async function createBackup(root: string, reason: BackupReason, now = new
 }
 
 /**
+ * Earlier versions of one file (e.g. `components/quests/quests.json`) from the backups, newest first,
+ * each only when it differs from the next newer one (0.28). `data` is the unwrapped document.
+ */
+export async function fileVersions(root: string, rel: string): Promise<{ createdAt: string; reason: BackupReason; data: unknown }[]> {
+  const fs = getFs()
+  const dir = await projectPaths.backupsDir(root)
+  const out: { createdAt: string; reason: BackupReason; data: unknown; text: string }[] = []
+  for (const b of await listWithHash(root)) {
+    let text: string | undefined
+    try {
+      text = (await readVersioned<Snapshot>(await fs.join(dir, b.id))).files[rel]
+    } catch {
+      continue // a damaged backup is skipped, the others still count
+    }
+    if (text === undefined || out.at(-1)?.text === text) continue
+    try {
+      out.push({ createdAt: b.createdAt, reason: b.reason, data: (JSON.parse(text) as { data: unknown }).data, text })
+    } catch {
+      continue
+    }
+  }
+  return out.map(({ text: _t, ...v }) => v)
+}
+
+/**
  * Put the project back to a backup. The current state is backed up first, so
  * a restore can itself be undone. The project must not be open.
  */

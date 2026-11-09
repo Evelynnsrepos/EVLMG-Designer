@@ -376,3 +376,20 @@
   gap: 6px;
   margin: 6px 0;
 }
+.versions-list {
+  max-height: 50vh;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.versions-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.versions-list li > span:first-child {
+  flex: 1;
+}
