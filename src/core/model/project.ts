@@ -45,6 +45,8 @@ export interface ProjectMeta {
   sidebarCollapsed: boolean
   /** Per-project colors and wallpaper; missing means the app defaults. */
   theme?: ProjectTheme
+  /** v0.28: the project's own colour palette, shown as "This project" in every colour panel; it travels with the project (Git, P2P, server). */
+  palette?: { hex: string; name?: string }[]
   /** v0.12: a font per tool (family name), chosen with Aa in the tool's header; missing = the app font. */
   fonts?: Partial<Record<ComponentType, string>>
   /** v0.13: starred tools, shown at the top of the sidebar in this order. */
