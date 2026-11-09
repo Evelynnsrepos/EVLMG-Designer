@@ -644,6 +644,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'For every kind of entry the other lists do not cover: vehicles, buildings, perks, biomes, cards, spells, ships. Each Custom List is one kind; make as many as you need from the sidebar.',
       'Under Fields, name what one entry is called and add the fields it needs: text, long text, numbers with a unit, yes or no, choice lists, a picture, or links to items, characters, towns and enemies. Changing a field\'s kind converts what is already filled in where it can.',
       'Under Entries, add entries and fill them in; click a linked entry to open it. Engine export writes every Custom List into tools/custom-list.json with the field names, so your game can read them.',
+      'Entries of every Custom List can be linked with [[Name]] in the Writer, Wiki, Story Writer, Timeline and Task Board links, and found with the command palette. Clicking a link opens the list at that entry.',
       'An empty list offers ready-made templates: Controls & input (keyboard, gamepad and touch per action), Accessibility checklist (the common basics to tick off), Glossary (terms with a do-not-translate flag) and Risk register (likelihood, impact, owner, plan).',
     ],
   },

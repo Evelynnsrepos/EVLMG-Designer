@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { ENTITY_TYPES, type Category, type ComponentType, type Entity, type EntityType } from '@/core/model'
-import { allEntities, useProjectStore } from '@/core/state'
+import { ENTITY_TYPES, newId, type Category, type ComponentType, type Entity, type EntityType } from '@/core/model'
+import { allEntities, postIntent, useDocumentsOfType, useProjectStore } from '@/core/state'
 import { getManifest } from '@/core/registry'
 import { jumpTo, openEntity } from '@/shared/entityList/navigation'
 import type { RefItem, RefProvider, RefTarget } from './types'
@@ -65,6 +65,15 @@ const toItem = (e: Entity, categories: Category[] = []): RefItem => ({
 /** `[[` links to a whole tool (`tool`, id = its type) or one of its documents (`doc`, id = the document): jump points in text (v0.18). */
 export const TOOL_KIND = 'tool'
 export const DOC_KIND = 'doc'
+/** 0.28: an entry of a Custom List: kind `custom:<list document id>`, id = the entry. */
+export const CUSTOM_KIND = 'custom:'
+
+interface CustomListLite {
+  one: string
+  items: { id: string; name: string }[]
+}
+// Same default as the Custom List tool's createCustomListDoc (shared code can't import tools).
+const createCustomListLite = () => ({ one: 'entry', fields: [{ id: newId(), name: 'Description', kind: 'long' }], items: [] }) as CustomListLite
 
 /**
  * Links to items, characters, towns and enemies of the open project (clicking one opens its list),
@@ -76,8 +85,10 @@ export function useEntityRefProvider(options?: { open?: (target: RefTarget) => v
   const meta = useProjectStore((s) => s.meta)
   const open = options?.open
   const withPlaces = options?.places !== false
+  const lists = useDocumentsOfType<CustomListLite>('custom-list', createCustomListLite)
   return useMemo<RefProvider>(() => {
-    const all = allEntities(entities).map((e) => toItem(e, categories))
+    const custom: RefItem[] = lists.flatMap((l) => l.data.items.map((r) => ({ kind: CUSTOM_KIND + l.id, id: r.id, label: r.name || 'Untitled', hint: l.title })))
+    const all = [...allEntities(entities).map((e) => toItem(e, categories)), ...custom]
     const tools: RefItem[] = (meta?.enabledComponents ?? []).map((t) => ({ kind: TOOL_KIND, id: t, label: getManifest(t)?.name ?? t, hint: 'Tool' }))
     const docs: RefItem[] = (meta?.documents ?? []).map((d) => ({ kind: DOC_KIND, id: d.id, label: d.title, hint: getManifest(d.type)?.name ?? d.type }))
     const places = withPlaces ? [...tools, ...docs] : []
@@ -85,6 +96,7 @@ export function useEntityRefProvider(options?: { open?: (target: RefTarget) => v
       search: (query) => rankRefItems([...all, ...places], query),
       resolve: (target) => {
         if (target.kind === TOOL_KIND || target.kind === DOC_KIND) return places.find((p) => p.kind === target.kind && p.id === target.id)
+        if (target.kind.startsWith(CUSTOM_KIND)) return custom.find((c) => c.kind === target.kind && c.id === target.id)
         if (!isEntityType(target.kind)) return undefined
         const hit = (entities[target.kind] as Entity[]).find((e) => e.id === target.id)
         return hit && toItem(hit, categories)
@@ -93,9 +105,14 @@ export function useEntityRefProvider(options?: { open?: (target: RefTarget) => v
         if (target.kind === TOOL_KIND) return jumpTo({ kind: 'document', type: target.id as ComponentType, documentId: null })
         const doc = target.kind === DOC_KIND && meta?.documents.find((d) => d.id === target.id)
         if (doc) return jumpTo({ kind: 'document', type: doc.type, documentId: doc.id })
+        if (target.kind.startsWith(CUSTOM_KIND)) {
+          const documentId = target.kind.slice(CUSTOM_KIND.length)
+          postIntent('custom-list', { action: 'select', documentId, entryId: target.id })
+          return jumpTo({ kind: 'document', type: 'custom-list', documentId })
+        }
         if (open) open(target)
         else if (isEntityType(target.kind)) openEntity(target.kind, target.id)
       },
     }
-  }, [entities, categories, meta, open, withPlaces])
+  }, [entities, categories, meta, open, withPlaces, lists])
 }

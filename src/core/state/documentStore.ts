@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { create } from 'zustand'
 import { getFs } from '../fs'
 import type { ComponentType, Id } from '../model'
@@ -209,4 +209,20 @@ export function forgetDocuments(type: ComponentType) {
   const prefix = `${root}|${type}/`
   useDocs.setState((s) => ({ docs: Object.fromEntries(Object.entries(s.docs).filter(([k]) => !k.startsWith(prefix))) }))
   for (const k of [...histories.keys()]) if (k.startsWith(prefix)) histories.delete(k)
+}
+
+/**
+ * 0.28: every document of one tool (e.g. all Custom Lists), loaded and kept live: edits in the tool show up
+ * here right away. Undefined data = still loading.
+ */
+export function useDocumentsOfType<T>(type: ComponentType, createDefault: () => T): { id: Id; title: string; data: T }[] {
+  const root = useProjectStore((s) => s.root)
+  const refs = useProjectStore((s) => s.meta?.documents)
+  const docs = useDocs((s) => s.docs)
+  const mine = useMemo(() => (refs ?? []).filter((d) => d.type === type), [refs, type])
+  const create = useRef(createDefault)
+  useEffect(() => {
+    if (root) for (const d of mine) void ensureLoaded(root, type, d.id, create.current)
+  }, [root, mine, type])
+  return useMemo(() => (root ? mine.flatMap((d) => (keyOf(root, type, d.id) in docs ? [{ id: d.id, title: d.title, data: docs[keyOf(root, type, d.id)] as T }] : [])) : []), [root, mine, type, docs])
 }

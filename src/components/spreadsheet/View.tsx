@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { Entity, EntityType, Id } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
-import { loadDocumentNow, useDocument, useProjectStore, useUndoRedoKeys } from '@/core/state'
+import { loadDocumentNow, useDocument, useDocumentsOfType, useProjectStore, useUndoRedoKeys } from '@/core/state'
 import { createDamagePresetDoc, damagePresetFormula, type DamagePresetDoc } from '@/shared/calculators'
 import { confirmDialog, promptDialog } from '@/shared/dialogs'
 import { DRAG_MIME, type DragPayload } from '@/shell/editor/actions'
@@ -1083,31 +1083,27 @@ const KIND_LABEL: Record<string, string> = { item: 'items', character: 'characte
 
 /** Keep STAT() up to date with the project's lists and Custom Lists (0.28). */
 function useLookup(engine: Engine, done: () => void): LookupEntry[] {
-  const root = useProjectStore((s) => s.root)
-  const docs = useProjectStore((s) => s.meta?.documents)
   const entities = useProjectStore((s) => s.entities)
   const categories = useProjectStore((s) => s.categories)
-  const [list, setList] = useState<LookupEntry[]>([])
+  const lists = useDocumentsOfType<CustomListDoc>('custom-list', createCustomListDoc)
+  const list = useMemo(
+    () =>
+      lookupEntries(
+        entities as Record<EntityType, Entity[]>,
+        categories,
+        lists.map((l) => ({ title: l.title, doc: l.data })),
+      ),
+    [lists, entities, categories],
+  )
   const doneRef = useRef(done)
   useEffect(() => {
     doneRef.current = done
   })
   useEffect(() => {
-    if (!root || !docs) return
-    let stale = false
-    const lists = docs.filter((d) => d.type === 'custom-list')
-    void Promise.all(lists.map(async (d) => ({ title: d.title, doc: await loadDocumentNow<CustomListDoc>(root, 'custom-list', d.id, createCustomListDoc) }))).then((loaded) => {
-      if (stale) return
-      const next = lookupEntries(entities as Record<EntityType, Entity[]>, categories, loaded)
-      setLookupEntries(next)
-      setList(next)
-      engine.recalc()
-      doneRef.current()
-    })
-    return () => {
-      stale = true
-    }
-  }, [root, docs, entities, categories, engine])
+    setLookupEntries(list)
+    engine.recalc()
+    doneRef.current()
+  }, [list, engine])
   return list
 }
 

@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, Plus, Trash2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { ENTITY_TYPES, type Entity, type EntityType } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
-import { useDocument, useProjectStore, useUndoRedoKeys } from '@/core/state'
+import { useDocument, useIntentHandler, useProjectStore, useUndoRedoKeys } from '@/core/state'
 import { NumberInput } from '@/shared/calculators'
 import { ImagePicker, openEntity } from '@/shared/entityList'
 import { Field, ListDetail } from '@/shared/listDetail'
@@ -18,6 +18,13 @@ export default function View({ documentId, active }: PanelProps) {
   useUndoRedoKeys(doc, active)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [tab, setTab] = useState<'entries' | 'fields'>('entries')
+  // 0.28: a [[link]] to an entry of this list selects it.
+  useIntentHandler('custom-list', (i) => {
+    if (i.action === 'select' && i.documentId === documentId) {
+      setTab('entries')
+      setSelectedId(i.entryId as string)
+    }
+  })
   if (!doc.data) return null
   const d = doc.data
   const set = (fn: (d: CustomListDoc) => CustomListDoc) => doc.update(fn)

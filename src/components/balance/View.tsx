@@ -1,12 +1,12 @@
 import { ExternalLink } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { abilityStats, createAbilitiesDoc, type AbilitiesDoc, type Ability } from '@/components/abilities/model'
 import { createCustomListDoc, type CustomListDoc } from '@/components/custom-list/model'
 import { useDamagePresets } from '@/shared/calculators'
 import { useItems } from '@/shared/listDetail'
 import type { Enemy, Entity, EntityType, Item } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
-import { loadDocumentNow, useProjectStore } from '@/core/state'
+import { useDocumentsOfType, useProjectStore } from '@/core/state'
 import { LineChart } from '@/shared/calculators'
 import { entityLook } from '@/shared/categories'
 import { openEntity } from '@/shared/entityList'
@@ -146,17 +146,6 @@ export default function View(_props: PanelProps) {
 
 /** Every Custom List of the project, loaded (0.28). */
 function useCustomLists() {
-  const root = useProjectStore((s) => s.root)
-  const docs = useProjectStore((s) => s.meta?.documents)
-  const [lists, setLists] = useState<{ title: string; doc: CustomListDoc }[]>([])
-  useEffect(() => {
-    if (!root || !docs) return
-    let stale = false
-    const refs = docs.filter((d) => d.type === 'custom-list')
-    void Promise.all(refs.map(async (d) => ({ title: d.title, doc: await loadDocumentNow<CustomListDoc>(root, 'custom-list', d.id, createCustomListDoc) }))).then((l) => !stale && setLists(l))
-    return () => {
-      stale = true
-    }
-  }, [root, docs])
-  return lists
+  const lists = useDocumentsOfType<CustomListDoc>('custom-list', createCustomListDoc)
+  return useMemo(() => lists.map((l) => ({ title: l.title, doc: l.data })), [lists])
 }
