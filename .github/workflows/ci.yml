@@ -33,6 +33,9 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+        env:
+          # the Material Lab GPU test uses the runner's Chrome; on Linux it must not be skipped
+          MATERIAL_GPU_TEST: ${{ matrix.os == 'ubuntu-22.04' && 'required' || '' }}
       # Tauri's build script needs the frontend output folder to exist.
       - run: npm run build
       - name: Rust tests

@@ -429,4 +429,8 @@ Cinzel, Cinzel Decorative, Crimson Pro, EB Garamond, Fredoka, Grenze Gotisch, IM
 Pirata One, Press Start 2P and Uncial Antiqua are under the SIL Open Font License 1.1, and Luckiest Guy is under the Apache License 2.0.
 Each font's licence and authors are in [`public/fonts/game/licenses/`](public/fonts/game/licenses/). Thank you to all the font makers!
 
+Material Lab's node library comes from [Material Maker](https://github.com/RodZill4/material-maker) by Rodolphe Suescun and
+contributors, under the MIT License. The node files, their licence and the list of nodes we left out are in
+[`src/shared/material/mm-nodes/`](src/shared/material/mm-nodes/). Thank you to the Material Maker team!
+
 <p align="center">🚧 <i>Still building. Thanks for stopping by!</i> 🚧</p>
