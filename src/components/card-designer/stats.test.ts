@@ -36,6 +36,7 @@ describe('custom stats', () => {
     expect(iconPaths('missing')).toEqual([])
   })
 
+  // The first formula loads the spreadsheet engine, which is slow on Windows CI.
   it('shows formula results from a linked sheet, also across sheets', () => {
     const stats = { id: 'b', name: 'Base', cells: { A1: { v: '4' } } }
     const cards = { id: 'a', name: 'Cards', cells: { A1: { v: 'Attack' }, A2: { v: '=Base!A1*2' }, B2: { v: '=1/3' }, C2: { v: 'Text' } } }
@@ -43,7 +44,7 @@ describe('custom stats', () => {
     expect(out.cells.A2.v).toBe('8')
     expect(out.cells.B2.v).toBe('0.3333333333')
     expect(out.cells.C2.v).toBe('Text')
-  })
+  }, 30_000)
 
   it('draws only foil items, in black, for the foil mask', () => {
     const doc = createCardDoc()

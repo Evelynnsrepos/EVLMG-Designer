@@ -189,7 +189,8 @@ describe.skipIf(!hasGit)('git sync with a local repository', () => {
     await pushLatest(b)
     answer('cancel')
     expect(await pullLatest(a)).toBe('cancelled')
-    expect(await read(a, 'components/list.json')).toBe('[\n1,\n2\n]')
+    // git on Windows (autocrlf) checks the file out again with \r\n line ends; the content is the same.
+    expect((await read(a, 'components/list.json')).replace(/\r\n/g, '\n')).toBe('[\n1,\n2\n]')
   })
 
   it('syncs a project that sits inside a repository of several projects', async () => {
