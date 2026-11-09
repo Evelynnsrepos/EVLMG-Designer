@@ -165,6 +165,20 @@ describe.skipIf(!hasGit)('git sync with a local repository', () => {
     expect(useGitSync.getState().conflict).toBeNull()
   })
 
+  it('does not keep a merge that leaves a broken JSON file, and asks instead (0.28)', async () => {
+    await pullLatest(b)
+    await write(a, 'components/x.json', '{"a":2}')
+    await write(b, 'components/y.json', '{"b":')
+    await pushLatest(b)
+    answer('cancel')
+    expect(await pullLatest(a)).toBe('cancelled')
+    expect(await read(a, 'components/x.json')).toBe('{"a":2}')
+    expect(await read(a, 'components/y.json')).toBe('{"b":1}')
+    expect(sh(a, 'status', '--porcelain')).toBe('')
+    answer('git')
+    await pullLatest(a)
+  })
+
   it('asks when both changed the same part of a file (0.28)', async () => {
     await pullLatest(b)
     await write(a, 'components/list.json', '[\n1\n]')
