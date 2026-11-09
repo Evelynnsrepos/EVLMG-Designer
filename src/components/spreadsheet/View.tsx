@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import type { Id } from '@/core/model'
+import type { Entity, EntityType, Id } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
 import { loadDocumentNow, useDocument, useProjectStore, useUndoRedoKeys } from '@/core/state'
 import { createDamagePresetDoc, damagePresetFormula, type DamagePresetDoc } from '@/shared/calculators'
 import { confirmDialog, promptDialog } from '@/shared/dialogs'
 import { DRAG_MIME, type DragPayload } from '@/shell/editor/actions'
-import { Engine, setCalcPresets } from './engine'
+import { Engine, entryTable, setCalcPresets, setLookupEntries, type LookupEntry } from './engine'
+import { lookupEntries } from './lookup'
+import { createCustomListDoc, type CustomListDoc } from '@/components/custom-list/model'
 import {
   addr,
   colName,
@@ -93,6 +95,7 @@ export default function View({ documentId, active }: PanelProps) {
   useEffect(() => () => engine.destroy(), [engine])
   const [, setTick] = useState(0)
   useCalcPresets(engine, active, () => setTick((t) => t + 1))
+  const lookup = useLookup(engine, () => setTick((t) => t + 1))
 
   const wb = useMemo(() => normalizeWorkbook(doc.data), [doc.data])
   engine.sync(wb)
@@ -983,6 +986,11 @@ export default function View({ documentId, active }: PanelProps) {
           <button onClick={() => freeze({ rows: sel.anchor.row, cols: sel.anchor.col })}>Freeze above and left of {addr(sel.anchor.col, sel.anchor.row)}</button>
           {(fr > 0 || fc > 0) && <button onClick={() => freeze({ rows: 0, cols: 0 })}>Unfreeze</button>}
           <button onClick={() => (setMenu(null), addChart())}>Insert chart from selection</button>
+          {[...new Set(lookup.map((e) => e.kind))].map((kind) => (
+            <button key={kind} title="A live table: each row reads the entry with STAT(), so it changes when the list changes" onClick={() => (setMenu(null), writeCells(entryTable(lookup.filter((e) => e.kind === kind), sel.anchor.col, sel.anchor.row)))}>
+              Insert live table of {KIND_LABEL[kind] ?? kind}
+            </button>
+          ))}
           <button onClick={() => sortRange(true)}>Sort A → Z</button>
           <button onClick={() => sortRange(false)}>Sort Z → A</button>
           <button onClick={clearRange}>Clear contents and formatting</button>
@@ -1069,6 +1077,38 @@ export default function View({ documentId, active }: PanelProps) {
     )
     writeCells(changes)
   }
+}
+
+const KIND_LABEL: Record<string, string> = { item: 'items', character: 'characters', town: 'towns', enemy: 'enemies' }
+
+/** Keep STAT() up to date with the project's lists and Custom Lists (0.28). */
+function useLookup(engine: Engine, done: () => void): LookupEntry[] {
+  const root = useProjectStore((s) => s.root)
+  const docs = useProjectStore((s) => s.meta?.documents)
+  const entities = useProjectStore((s) => s.entities)
+  const categories = useProjectStore((s) => s.categories)
+  const [list, setList] = useState<LookupEntry[]>([])
+  const doneRef = useRef(done)
+  useEffect(() => {
+    doneRef.current = done
+  })
+  useEffect(() => {
+    if (!root || !docs) return
+    let stale = false
+    const lists = docs.filter((d) => d.type === 'custom-list')
+    void Promise.all(lists.map(async (d) => ({ title: d.title, doc: await loadDocumentNow<CustomListDoc>(root, 'custom-list', d.id, createCustomListDoc) }))).then((loaded) => {
+      if (stale) return
+      const next = lookupEntries(entities as Record<EntityType, Entity[]>, categories, loaded)
+      setLookupEntries(next)
+      setList(next)
+      engine.recalc()
+      doneRef.current()
+    })
+    return () => {
+      stale = true
+    }
+  }, [root, docs, entities, categories, engine])
+  return list
 }
 
 /** Keep CALC() up to date with the project's Damage Calculator presets. */

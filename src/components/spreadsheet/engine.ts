@@ -54,10 +54,76 @@ class CalcPlugin extends FunctionPlugin {
   }
 }
 
+// ---- STAT(): live numbers from the project's lists (0.28) ----------------------------
+
+/** One entry a sheet can read: items, characters, towns, enemies and Custom List entries. */
+export interface LookupEntry {
+  /** "item", "enemy"… or a Custom List's title. */
+  kind: string
+  name: string
+  fields: Record<string, number | string | boolean>
+}
+
+let lookup: LookupEntry[] = []
+
+/** The entries STAT() reads. */
+export function setLookupEntries(list: LookupEntry[]) {
+  lookup = list
+}
+
+/** =STAT("Fire Sword", "ATK") or =STAT("Tank", "Speed", "Vehicles"): a field of an entry, found by name (case-insensitive). */
+export function statOf(name: string, field: string, kind?: string): number | string | boolean | CellError {
+  const n = name.trim().toLowerCase()
+  const k = kind?.trim().toLowerCase()
+  const hits = lookup.filter((e) => e.name.trim().toLowerCase() === n && (!k || e.kind.toLowerCase() === k))
+  if (!hits.length) return new CellError(ErrorType.NAME, `No entry called "${name}"${kind ? ` in ${kind}` : ''}`)
+  if (hits.length > 1 && !k && new Set(hits.map((h) => h.kind)).size > 1) return new CellError(ErrorType.VALUE, `"${name}" is in ${hits.map((h) => h.kind).join(' and ')}: add which one, e.g. STAT("${name}", "${field}", "${hits[0].kind}")`)
+  if (hits.length > 1) return new CellError(ErrorType.VALUE, `${hits.length} entries are called "${name}" in ${hits[0].kind}: give them different names`)
+  const f = field.trim().toLowerCase()
+  const key = Object.keys(hits[0].fields).find((x) => x.toLowerCase() === f)
+  if (key === undefined) {
+    // A field other entries of this kind have counts as empty here (a stat nobody set is 0, like in the lists).
+    const kindHas = lookup.filter((e) => e.kind === hits[0].kind).flatMap((e) => Object.entries(e.fields)).find(([x]) => x.toLowerCase() === f)
+    if (kindHas) return typeof kindHas[1] === 'number' ? 0 : ''
+    return new CellError(ErrorType.VALUE, `${hits[0].name} has no "${field}"`)
+  }
+  return hits[0].fields[key]
+}
+
+class StatPlugin extends FunctionPlugin {
+  static implementedFunctions = {
+    STAT: {
+      method: 'stat',
+      parameters: [{ argumentType: FunctionArgumentType.STRING }, { argumentType: FunctionArgumentType.STRING }, { argumentType: FunctionArgumentType.STRING, optionalArg: true }],
+      isVolatile: true,
+    },
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- HyperFormula's plugin types are internal
+  stat(ast: any, state: any) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (this as any).runFunction(ast.args, state, (this as any).metadata('STAT'), (name: string, field: string, kind?: string) => statOf(name, field, kind))
+  }
+}
+
+/** A live table of one kind of entry at `col`,`row`: a header (Name and the fields) and one STAT() row per entry. */
+export function entryTable(entries: LookupEntry[], col: number, row: number): Record<string, { v: string }> {
+  const fields = [...new Set(entries.flatMap((e) => Object.keys(e.fields)))]
+  const q = (s: string) => `"${s.replace(/"/g, '""')}"`
+  const out: Record<string, { v: string }> = {}
+  ;['Name', ...fields].forEach((h, i) => (out[addr(col + i, row)] = { v: h }))
+  entries.forEach((e, r) => {
+    out[addr(col, row + r + 1)] = { v: e.name }
+    fields.forEach((f, i) => (out[addr(col + i + 1, row + r + 1)] = { v: `=STAT(${addr(col, row + r + 1)}, ${q(f)}, ${q(e.kind)})` }))
+  })
+  return out
+}
+
 let registered = false
 function register() {
   if (registered) return
   HyperFormula.registerFunctionPlugin(CalcPlugin, { enGB: { CALC: 'CALC' } })
+  HyperFormula.registerFunctionPlugin(StatPlugin, { enGB: { STAT: 'STAT' } })
   registered = true
 }
 
