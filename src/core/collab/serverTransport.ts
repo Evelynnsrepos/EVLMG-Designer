@@ -21,7 +21,7 @@ export interface ServerWelcome {
   projectId: string | null
   serverProjectId: string
   projectName: string
-  role: 'view' | 'write'
+  role: 'view' | 'comment' | 'write'
   empty: boolean
 }
 

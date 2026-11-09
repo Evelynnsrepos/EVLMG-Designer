@@ -2,7 +2,7 @@ import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import * as awarenessProtocol from 'y-protocols/awareness'
 import * as syncProtocol from 'y-protocols/sync'
-import type * as Y from 'yjs'
+import * as Y from 'yjs'
 import { SCHEMA_VERSION } from '../model'
 import {
   decodeJson,
@@ -83,6 +83,8 @@ export class CollabNetwork {
   selfId = ''
   /** View-only access on a server: never send changes (the server would refuse them anyway). */
   readOnly = false
+  /** 0.28: comment access on a server: only changes to the Reviews document are sent (the server refuses the rest). */
+  commentOnly = false
   private readonly peers = new Map<ConnId, Peer>()
   private readonly outgoing = new Set<ConnId>()
   private readonly dialing = new Set<string>()
@@ -338,15 +340,17 @@ export class CollabNetwork {
     const decoder = decoding.createDecoder(payload)
     const encoder = encoding.createEncoder()
     const kind = syncProtocol.readSyncMessage(decoder, encoder, this.doc, peer)
-    if (encoding.length(encoder) > 0 && !this.readOnly) this.send(peer, encodeBytes(MSG.sync, encoding.toUint8Array(encoder)))
+    // shortcut: a comment connection doesn't answer catch-up requests, so reviews written while offline stay local; send per-root diffs if people miss them.
+    if (encoding.length(encoder) > 0 && !this.readOnly && !this.commentOnly) this.send(peer, encodeBytes(MSG.sync, encoding.toUint8Array(encoder)))
     if (kind === syncProtocol.messageYjsSyncStep2) {
       if (!this.syncedOnce) this.syncedOnce = true
       this.events.synced?.(peer)
     }
   }
 
-  private readonly onDocUpdate = (update: Uint8Array, origin: unknown) => {
+  private readonly onDocUpdate = (update: Uint8Array, origin: unknown, _doc: Y.Doc, tr: Y.Transaction) => {
     if (this.readOnly) return
+    if (this.commentOnly && !onlyReviews(tr)) return
     const encoder = encoding.createEncoder()
     syncProtocol.writeUpdate(encoder, update)
     const message = encodeBytes(MSG.sync, encoding.toUint8Array(encoder))
@@ -383,4 +387,17 @@ export class CollabNetwork {
     if (peer.clients.size) awarenessProtocol.removeAwarenessStates(this.awareness, [...peer.clients], 'peer-left')
     if (wasReady) this.events.peers?.(this.readyPeers())
   }
+}
+
+/** Top-level names a comment connection may change (the server's comment_root). */
+export const isReviewsRoot = (name: string) => name === 'doc:reviews/reviews' || name.startsWith('text:doc:reviews/reviews#')
+
+/** Whether a transaction changed nothing but the Reviews document. */
+export function onlyReviews(tr: Y.Transaction): boolean {
+  for (const changed of tr.changed.keys()) {
+    let t = changed
+    while (t._item) t = t._item.parent as typeof t
+    if (!isReviewsRoot(Y.findRootTypeKey(t))) return false
+  }
+  return true
 }

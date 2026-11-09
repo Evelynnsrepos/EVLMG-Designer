@@ -59,7 +59,7 @@ interface CollabState {
   /** The host ended the shared project; the shell asks whether to keep this computer's copy. */
   ended: { root: string; projectName: string; host: string } | null
   /** Working through an EVLMG Designer server (0.8) instead of peer to peer. */
-  server: { name: string; role: 'view' | 'write' } | null
+  server: { name: string; role: 'view' | 'comment' | 'write' } | null
   /** Plugins the server offers (the shell compares them with what is installed and asks). */
   serverPlugins: ServerPlugin[]
 }
@@ -498,6 +498,7 @@ function onServerWelcome(w: ServerWelcome) {
   const a = active
   if (!a?.server) return
   a.network.readOnly = w.role === 'view'
+  a.network.commentOnly = w.role === 'comment'
   useCollab.setState({ server: { name: w.serverName, role: w.role }, error: null })
   void a.server
     .plugins()

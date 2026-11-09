@@ -79,6 +79,7 @@ const T = {
   movedP2pNote: 'People you shared with directly are disconnected and need their own connect code from the server’s admin.',
   connectedVia: (server: string) => `Working through the server “${server}”.`,
   viewOnly: 'Your connect code can only view this project. Changes you make here are not sent to anyone.',
+  commentOnly: 'Your connect code can view this project and write review comments and statuses. Other changes you make here are not sent to anyone.',
   serverInvite: 'New people get their own connect code from the server’s admin page.',
   onlineNow: 'Online now',
   nobodyElse: 'Nobody else is online.',
@@ -164,7 +165,7 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
 
       {shared && server ? (
         <>
-          <ServerInfo name={server.name} viewOnly={server.role === 'view'} />
+          <ServerInfo name={server.name} role={server.role} />
           <div className="modal-actions collab-actions">
             <button className="btn btn-ghost collab-danger" onClick={() => setLeaving(true)}>
               {T.leave}
@@ -296,14 +297,14 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
 }
 
 /** Working through a server: who is online (from presence, since the only direct connection is the server). */
-function ServerInfo({ name, viewOnly }: { name: string; viewOnly: boolean }) {
+function ServerInfo({ name, role }: { name: string; role: 'view' | 'comment' | 'write' }) {
   const remotes = usePresence((s) => s.remotes)
   return (
     <div className="collab-field">
       <p>
         <Server size={14} /> {T.connectedVia(name)}
       </p>
-      {viewOnly && <p className="collab-status">{T.viewOnly}</p>}
+      {role !== 'write' && <p className="collab-status">{role === 'view' ? T.viewOnly : T.commentOnly}</p>}
       <span className="muted collab-small">{T.serverInvite}</span>
       <span>{T.onlineNow}</span>
       <ul className="collab-people">

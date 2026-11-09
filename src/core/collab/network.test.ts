@@ -209,3 +209,22 @@ describe('collab network', () => {
     expect(doc.id).toBeTruthy()
   })
 })
+
+describe('comment connections (0.28)', () => {
+  it('only pass transactions that change the Reviews document', async () => {
+    const { onlyReviews } = await import('./network')
+    const doc = new Y.Doc()
+    const seen: boolean[] = []
+    doc.on('afterTransaction', (tr: Y.Transaction) => seen.push(onlyReviews(tr)))
+    const reviews = doc.getMap('doc:reviews/reviews')
+    doc.transact(() => reviews.set('entries', new Y.Map()))
+    doc.transact(() => (reviews.get('entries') as Y.Map<unknown>).set('a', 'comment'))
+    doc.transact(() => doc.getMap('doc:items/x').set('name', 'Axe'))
+    doc.transact(() => {
+      reviews.set('b', 1)
+      doc.getMap('doc:items/x').set('name', 'Bow')
+    })
+    doc.transact(() => doc.getXmlFragment('text:doc:reviews/reviews#note').insert(0, [new Y.XmlText('hi')]))
+    expect(seen).toEqual([true, true, false, false, true])
+  })
+})
