@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { pickAndImportAssets, useAssetUrl } from '@/core/assets'
 import { newId, type Entity, type EntityType, type Id } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
-import { useDocument, useProjectStore, useUndoRedoKeys } from '@/core/state'
+import { useDocument, useIntentHandler, useProjectStore, useUndoRedoKeys } from '@/core/state'
 import { safeFileName, saveBinaryFile } from '@/core/export'
 import { PresetHeader } from '@/shared/calculators'
 import { ENTITY_LABELS } from '@/shared/categories'
@@ -11,7 +11,10 @@ import '@/shared/listDetail/listDetail.css'
 import { pitchPdf } from './pdf'
 import './pitch.css'
 
-/** Pitch / presentation mode (v0.10): slides built from the project, shown full screen. */
+/**
+ * Pitch / presentation mode (v0.10): slides built from the project, shown full screen.
+ * Intents: `add-slides` ({ slides: { title, text, image }[] }) adds picture-and-text slides at the end (the Storyboard's export).
+ */
 
 type Layout = 'title' | 'text' | 'image' | 'pillars' | 'entities'
 
@@ -58,6 +61,17 @@ export default function View({ documentId, active }: PanelProps) {
   const [sel, setSel] = useState(0)
   const [presenting, setPresenting] = useState<number | null>(null)
   const [dragFrom, setDragFrom] = useState<number | null>(null)
+  useIntentHandler(
+    'pitch',
+    (intent) => {
+      if (intent.action !== 'add-slides' || !Array.isArray(intent.slides)) return
+      const added = (intent.slides as Record<string, unknown>[]).map((x) =>
+        newSlide('image', { title: typeof x.title === 'string' ? x.title : '', text: typeof x.text === 'string' ? x.text : '', image: typeof x.image === 'string' ? x.image : null }),
+      )
+      if (added.length) doc.update((d) => ({ ...d, slides: [...d.slides, ...added] }))
+    },
+    !!doc.data,
+  )
   if (!doc.data) return null
   const slides = doc.data.slides
   const set = (fn: (s: Slide[]) => Slide[]) => doc.update((d) => ({ ...d, slides: fn(d.slides) }))
