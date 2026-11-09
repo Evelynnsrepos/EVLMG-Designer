@@ -749,6 +749,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     body: [
       'Sort every feature by priority: must have, should have, could have, won’t have (now) and cut. Drag cards between the columns or reorder them; click a card to edit it.',
       'Each feature has an effort in days, a status and the design pillar it serves (from Vision & Pillars). Enter the days until release: the planner adds up must and should and tells you when they do not fit, so you know what to move or cut.',
+      'Optionally split a feature’s days by discipline (design, code, art, sound, writing, QA). The toolbar then shows how many must and should days each discipline has, so you see when the artist is booked out while code has room.',
     ],
   },
   tasks: {
@@ -757,6 +758,8 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Keep the work on your game in four columns: to do, doing, review and done. Drag tasks between columns and click one to give it a person, a due date, a priority and notes.',
       'Give tasks a picture and your own categories (like Art, Code or Sound) with colors, and filter the board by category. Columns and categories lets you rename, recolor, add, reorder and remove columns and categories.',
       'Link a task to what it is about: type a name to find items, characters, towns, enemies, wiki articles or any document, and click the link later to jump there. Filter the board by title or person.',
+      'For production: give a task an estimate in hours, a milestone (like Alpha or Beta, made under Columns, categories and milestones) and the tasks it waits for. A task that waits for one that is not done shows Blocked. The toolbar shows every milestone with tasks done, hours left and a red chip when its date passed with work open. Who suggests the names already used.',
+      'CSV for Jira/Linear saves the board as a file both can import, with title, notes, status, person, due date, priority, labels, estimate, milestone (as Fix version) and blockers.',
     ],
   },
   history: {
@@ -771,7 +774,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     title: 'Playtests',
     body: [
       'Log every playtest: date, tester, build, minutes played, scores from 1 to 10 for fun, difficulty (5 means just right) and clarity, notes and quotes.',
-      'Add findings to a session with a severity (blocker, major, minor, idea) and where in the game it happened; tick them off when fixed.',
+      'Add findings to a session with a severity (blocker, major, minor, idea) and where in the game it happened; tick them off when fixed. The list button next to a finding puts it on the Task Board as a task (priority from the severity) and opens the board; afterwards it opens that board again.',
       'The overview shows the scores per build, so you see if changes helped, and every open finding with the worst first and the areas with the most problems.',
     ],
   },

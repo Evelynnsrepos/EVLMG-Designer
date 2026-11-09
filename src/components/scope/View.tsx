@@ -31,7 +31,12 @@ interface Feature {
   status: (typeof STATUSES)[number]
   /** Vision pillar it serves. */
   pillarId: Id | null
+  /** 0.28: days per discipline; when set, effort is their sum. */
+  split?: Partial<Record<Discipline, number>>
 }
+
+const DISCIPLINES = ['Design', 'Code', 'Art', 'Sound', 'Writing', 'QA'] as const
+type Discipline = (typeof DISCIPLINES)[number]
 
 interface ScopeDoc {
   items: Feature[]
@@ -53,6 +58,7 @@ export default function View({ active }: PanelProps) {
   const edit = (id: Id, patch: Partial<Feature>) => set((x) => ({ ...x, items: x.items.map((f) => (f.id === id ? { ...f, ...patch } : f)) }))
   const sum = (p: Priority[]) => d.items.filter((f) => p.includes(f.priority)).reduce((s, f) => s + f.effort, 0)
   const planned = sum(['must', 'should'])
+  const byDiscipline = DISCIPLINES.map((k) => [k, d.items.filter((x) => x.priority === 'must' || x.priority === 'should').reduce((a, x) => a + (x.split?.[k] ?? 0), 0)] as const).filter(([, n]) => n > 0)
   const f = d.items.find((x) => x.id === openId)
   const pillar = (id: Id | null) => pillars.find((p) => p.id === id)
 
@@ -67,6 +73,7 @@ export default function View({ active }: PanelProps) {
           Must + should: {planned} of {d.capacity} days{planned > d.capacity ? ` — ${planned - d.capacity} days too many, move something to could or cut` : ''}
         </span>
         <span className="muted">Could have: {sum(['could'])} days</span>
+        {byDiscipline.length > 0 && <span className="muted">Must + should by discipline: {byDiscipline.map(([k, n]) => `${k} ${n}d`).join(', ')}</span>}
       </div>
       <div className="sc-body">
         <Kanban
@@ -116,8 +123,27 @@ export default function View({ active }: PanelProps) {
             </label>
             <label className="ld-field">
               <span>Effort (days)</span>
-              <NumberInput value={f.effort} min={0} onChange={(effort) => edit(f.id, { effort })} />
+              <NumberInput value={f.effort} min={0} onChange={(effort) => edit(f.id, { effort, split: undefined })} />
             </label>
+            <div className="ld-field">
+              <span>Days per discipline (optional; sets the effort, typing an effort clears them)</span>
+              <div className="ld-inline" style={{ flexWrap: 'wrap' }}>
+                {DISCIPLINES.map((k) => (
+                  <label key={k} className="ld-inline">
+                    {k}
+                    <NumberInput
+                      value={f.split?.[k] ?? 0}
+                      min={0}
+                      onChange={(n) => {
+                        const split = { ...f.split, [k]: n }
+                        const total = Object.values(split).reduce((a, b) => a + (b ?? 0), 0)
+                        edit(f.id, total ? { split, effort: total } : { split: undefined })
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
             <label className="ld-field">
               <span>Status</span>
               <select className="input" value={f.status} onChange={(e) => edit(f.id, { status: e.target.value as Feature['status'] })}>

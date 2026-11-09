@@ -145,3 +145,34 @@ export function importCSV(d: LocDoc, text: string): LocDoc {
   }
   return { languages, items }
 }
+
+const xml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+/** 0.28: one language as XLIFF 1.2, the file translation agencies and CAT tools take. Strings that need an update are marked needs-translation. */
+export function exportXLIFF(d: LocDoc, lang: string): string {
+  const src = d.languages[0]
+  const units = d.items.map((s) => {
+    const target = s.values[lang] ?? ''
+    const state = !target ? 'new' : needsUpdate(d, s, lang) ? 'needs-translation' : 'translated'
+    return [
+      `      <trans-unit id="${xml(s.key)}"${s.ref ? ` resname="${xml(s.ref)}"` : ''}>`,
+      `        <source>${xml(s.values[src] ?? '')}</source>`,
+      `        <target state="${state}">${xml(target)}</target>`,
+      ...(s.context ? [`        <note>${xml(s.context)}</note>`] : []),
+      '      </trans-unit>',
+    ].join('\n')
+  })
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">\n  <file original="strings" source-language="${src}" target-language="${xml(lang)}" datatype="plaintext">\n    <body>\n${units.join('\n')}\n    </body>\n  </file>\n</xliff>\n`
+}
+
+const po = (s: string) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`
+
+/** 0.28: one language as a gettext .po file (Godot, many engines and translators read it). msgctxt is the key, so equal texts stay apart. */
+export function exportPO(d: LocDoc, lang: string): string {
+  const src = d.languages[0]
+  const head = `msgid ""\nmsgstr ""\n"Content-Type: text/plain; charset=UTF-8\\n"\n"Language: ${lang}\\n"\n`
+  const entries = d.items.map((s) =>
+    [...(s.context ? [`#. ${s.context.replace(/\n/g, ' ')}`] : []), ...(needsUpdate(d, s, lang) ? ['#, fuzzy'] : []), `msgctxt ${po(s.key)}`, `msgid ${po(s.values[src] ?? '')}`, `msgstr ${po(s.values[lang] ?? '')}`].join('\n'),
+  )
+  return [head, ...entries].join('\n\n') + '\n'
+}

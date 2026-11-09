@@ -17,6 +17,8 @@ export interface Finding {
   /** Where in the game, e.g. "Level 2", "Inventory". */
   area: string
   fixed: boolean
+  /** 0.28: the task made from this finding on the Task board. */
+  taskId?: Id | null
 }
 
 export interface Session {

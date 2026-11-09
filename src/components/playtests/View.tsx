@@ -1,7 +1,9 @@
-import { Plus, Trash2, X } from 'lucide-react'
+import { ListTodo, Plus, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import type { PanelProps } from '@/core/registry'
-import { useUndoRedoKeys } from '@/core/state'
+import { loadDocumentNow, updateDocument, useProjectStore, useUndoRedoKeys } from '@/core/state'
+import { openDocument } from '@/shared/entityList'
+import { createTasksDoc, newTask, type Task, type TasksDoc } from '../tasks/model'
 import { NumberInput } from '@/shared/calculators'
 import { Field, ListDetail, useItems } from '@/shared/listDetail'
 import { ProofTextarea } from '@/shared/spell'
@@ -76,6 +78,18 @@ export default function View({ active }: PanelProps) {
                 </select>
                 <input className="input pt-text" placeholder="What happened" value={f.text} onChange={(e) => editFinding(s.id, f.id, { text: e.target.value })} />
                 <input className="input pt-area" placeholder="Where" value={f.area} onChange={(e) => editFinding(s.id, f.id, { area: e.target.value })} />
+                <button
+                  className="icon-btn"
+                  title={f.taskId ? 'Open its task' : 'Make a task for this on the Task board'}
+                  aria-label={f.taskId ? 'Open its task' : 'Make a task'}
+                  disabled={!f.text.trim()}
+                  onClick={async () => {
+                    if (!f.taskId) editFinding(s.id, f.id, { taskId: await makeTask(f, s.tester) })
+                    openDocument('tasks')
+                  }}
+                >
+                  <ListTodo size={13} color={f.taskId ? 'var(--accent)' : undefined} />
+                </button>
                 <button className="icon-btn" aria-label="Remove finding" onClick={() => edit({ findings: s.findings.filter((x) => x.id !== f.id) })}>
                   <X size={13} />
                 </button>
@@ -156,4 +170,16 @@ function Overview({ sessions, sevColor, onOpen, onFix }: { sessions: Session[]; 
       ))}
     </div>
   )
+}
+
+const PRIORITY: Record<Severity, Task['priority']> = { blocker: 'Urgent', major: 'High', minor: 'Normal', idea: 'Low' }
+
+/** Puts a finding on the Task board's first column and returns the new task's id. */
+async function makeTask(f: Finding, tester: string): Promise<string | null> {
+  const root = useProjectStore.getState().root
+  if (!root) return null
+  const d = await loadDocumentNow<TasksDoc>(root, 'tasks', 'tasks', createTasksDoc)
+  const t = { ...newTask((d.columns?.[0] ?? { id: 'todo' }).id), title: f.text.trim(), notes: `From a playtest${tester ? ` by ${tester}` : ''}${f.area ? `, where: ${f.area}` : ''}.`, priority: PRIORITY[f.severity] }
+  updateDocument<TasksDoc>(root, 'tasks', 'tasks', (x) => ({ ...x, items: [...x.items, t] }))
+  return t.id
 }

@@ -1,4 +1,4 @@
-import { ArrowUp, ImagePlus, Link2, Plus, Settings2, Trash2, X } from 'lucide-react'
+import { ArrowUp, Download, Flag, ImagePlus, Link2, Lock, Plus, Settings2, Trash2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { newId, type ComponentType, type Id } from '@/core/model'
 import { getManifest, type PanelProps } from '@/core/registry'
@@ -11,55 +11,11 @@ import { combineRefProviders, rankRefItems, useEntityRefProvider, type RefItem }
 import { ProofTextarea } from '@/shared/spell'
 import { useArticleRefProvider } from '@/shared/wiki'
 import { openDocument } from '@/shared/entityList'
+import { saveTextFile } from '@/core/export'
+import { COLUMNS, PRIORITIES, createTasksDoc, milestoneProgress, newTask, openBlockers, tasksCSV, type Task, type TaskLink, type TasksDoc } from './model'
 import './tasks.css'
 
 /** Task board (v0.10): to-dos linked to the items, characters, articles and documents they are about. */
-
-const COLUMNS = [
-  { id: 'todo', title: 'To do', color: '#9aa0a6' },
-  { id: 'doing', title: 'Doing', color: '#3e8ef7' },
-  { id: 'review', title: 'Review', color: '#f08c00' },
-  { id: 'done', title: 'Done', color: '#2f9e44' },
-]
-const PRIORITIES = ['Low', 'Normal', 'High', 'Urgent'] as const
-
-interface TaskLink {
-  kind: string
-  id: Id
-}
-
-interface Task {
-  id: Id
-  title: string
-  notes: string
-  column: string
-  assignee: string
-  due: string
-  priority: (typeof PRIORITIES)[number]
-  links: TaskLink[]
-  image?: string | null
-  categoryIds?: Id[]
-}
-
-interface Column {
-  id: string
-  title: string
-  color: string
-}
-
-interface TaskCategory {
-  id: Id
-  name: string
-  color: string
-}
-
-interface TasksDoc {
-  items: Task[]
-  /** Your own columns; the four defaults until changed. */
-  columns?: Column[]
-  /** Your own categories, like Art, Code, Sound (v0.10). */
-  categories?: TaskCategory[]
-}
 
 const CATEGORY_COLORS = ['#e8590c', '#2f9e44', '#1971c2', '#9c36b5', '#e03131', '#0c8599', '#f08c00', '#c2255c']
 const CATEGORY_NAMES = ['Art', 'Code', 'Sound', 'Writing', 'Design']
@@ -68,9 +24,6 @@ function CardImage({ path }: { path: string }) {
   const url = useAssetUrl(path)
   return url ? <img className="tk-img" src={url} alt="" /> : null
 }
-
-const createTasksDoc = (): TasksDoc => ({ items: [] })
-const newTask = (column: string): Task => ({ id: newId(), title: 'New task', notes: '', column, assignee: '', due: '', priority: 'Normal', links: [] })
 
 export default function View({ active }: PanelProps) {
   const doc = useDocument<TasksDoc>('tasks', 'tasks', createTasksDoc)
@@ -94,6 +47,8 @@ export default function View({ active }: PanelProps) {
   const categories = d.categories ?? []
   const catOf = (id: Id) => categories.find((c) => c.id === id)
   const lastColumn = columns[columns.length - 1]
+  const milestones = d.milestones ?? []
+  const people = [...new Set(d.items.map((x) => x.assignee.trim()).filter(Boolean))]
 
   const docItems: RefItem[] = documents.map((doc) => ({ kind: `doc:${doc.type}`, id: doc.id, label: doc.title, hint: getManifest(doc.type)?.name }))
   const label = (l: TaskLink): RefItem | undefined => (l.kind.startsWith('doc:') ? docItems.find((x) => x.id === l.id) : refs.resolve(l))
@@ -120,11 +75,20 @@ export default function View({ active }: PanelProps) {
           </select>
         )}
         <button className="btn btn-ghost" onClick={() => setManage(true)}>
-          <Settings2 size={14} /> Columns and categories
+          <Settings2 size={14} /> Columns, categories and milestones
+        </button>
+        <button className="btn btn-ghost" title="A CSV file Jira and Linear can import" onClick={() => saveTextFile({ title: 'Export tasks for Jira or Linear', defaultName: 'tasks.csv', text: tasksCSV(d), filter: { name: 'CSV', extensions: ['csv'] } })}>
+          <Download size={14} /> CSV for Jira/Linear
         </button>
         <span className="muted">
           {d.items.filter((x) => x.column !== lastColumn.id).length} open, {d.items.filter((x) => x.column === lastColumn.id).length} in {lastColumn.title}
         </span>
+        {milestoneProgress(d).map((p) => (
+          <span key={p.milestone.id} className={`kb-chip${p.late ? ' tk-p-urgent' : ''}`} title={p.late ? 'Past its date with open tasks' : undefined}>
+            <Flag size={10} /> {p.milestone.name}: {p.done}/{p.total} done{p.hoursLeft ? `, ${p.hoursLeft}h left` : ''}
+            {p.milestone.date && ` (${p.milestone.date})`}
+          </span>
+        ))}
       </div>
       <div className="tk-body">
         <Kanban
@@ -151,9 +115,20 @@ export default function View({ active }: PanelProps) {
                     </span>
                   ) : null,
                 )}
+                {openBlockers(d, x).length > 0 && (
+                  <span className="kb-chip tk-p-high" title={`Waiting for ${openBlockers(d, x).map((b) => b.title).join(', ')}`}>
+                    <Lock size={10} /> Blocked
+                  </span>
+                )}
                 {x.priority !== 'Normal' && <span className={`kb-chip tk-p-${x.priority.toLowerCase()}`}>{x.priority}</span>}
                 {x.assignee && <span className="kb-chip">{x.assignee}</span>}
                 {x.due && <span className="kb-chip">{x.due}</span>}
+                {x.estimate ? <span className="kb-chip">{x.estimate}h</span> : null}
+                {x.milestone && milestones.find((m) => m.id === x.milestone) && (
+                  <span className="kb-chip">
+                    <Flag size={10} /> {milestones.find((m) => m.id === x.milestone)!.name}
+                  </span>
+                )}
                 {x.links.slice(0, 3).map((l) => (
                   <span key={l.id} className="kb-chip tk-link">
                     <Link2 size={10} /> {label(l)?.label ?? 'missing'}
@@ -213,8 +188,52 @@ export default function View({ active }: PanelProps) {
             </div>
             <label className="ld-field">
               <span>Who</span>
-              <input className="input" value={t.assignee} onChange={(e) => edit(t.id, { assignee: e.target.value })} />
+              <input className="input" list="tk-people" value={t.assignee} onChange={(e) => edit(t.id, { assignee: e.target.value })} />
+              <datalist id="tk-people">
+                {people.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
             </label>
+            <label className="ld-field">
+              <span>Estimate (hours)</span>
+              <input className="input" type="number" min={0} step={0.5} value={t.estimate ?? ''} onChange={(e) => edit(t.id, { estimate: e.target.value === '' ? null : Math.max(0, Number(e.target.value)) })} />
+            </label>
+            <label className="ld-field">
+              <span>Milestone</span>
+              <select className="input" value={t.milestone ?? ''} onChange={(e) => edit(t.id, { milestone: e.target.value || null })}>
+                <option value="">None</option>
+                {milestones.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="ld-field">
+              <span>Waits for</span>
+              {(t.blockedBy ?? []).map((id) => (
+                <div key={id} className="ld-inline">
+                  <button className="btn btn-ghost" onClick={() => setOpenId(id)}>
+                    <Lock size={12} /> {d.items.find((o) => o.id === id)?.title ?? 'deleted task'}
+                    {d.items.find((o) => o.id === id)?.column === lastColumn.id && <span className="muted"> (done)</span>}
+                  </button>
+                  <button className="icon-btn" aria-label="Remove" onClick={() => edit(t.id, { blockedBy: (t.blockedBy ?? []).filter((k) => k !== id) })}>
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              <select className="input" value="" onChange={(e) => e.target.value && edit(t.id, { blockedBy: [...(t.blockedBy ?? []), e.target.value] })}>
+                <option value="">Add a task this one waits for…</option>
+                {d.items
+                  .filter((o) => o.id !== t.id && !(t.blockedBy ?? []).includes(o.id))
+                  .map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.title}
+                    </option>
+                  ))}
+              </select>
+            </div>
             <label className="ld-field">
               <span>Due</span>
               <input className="input" type="date" value={t.due} onChange={(e) => edit(t.id, { due: e.target.value })} />
@@ -260,7 +279,7 @@ export default function View({ active }: PanelProps) {
             <button
               className="btn btn-danger ld-danger"
               onClick={() => {
-                set((x) => ({ ...x, items: x.items.filter((o) => o.id !== t.id) }))
+                set((x) => ({ ...x, items: x.items.filter((o) => o.id !== t.id).map((o) => (o.blockedBy?.includes(t.id) ? { ...o, blockedBy: o.blockedBy.filter((k) => k !== t.id) } : o)) }))
                 setOpenId(null)
               }}
             >
@@ -334,6 +353,24 @@ export default function View({ active }: PanelProps) {
               }
             >
               <Plus size={14} /> Add category
+            </button>
+            <h3>Milestones</h3>
+            <p className="muted">Like Vertical slice, Alpha, Beta or Launch. The toolbar shows how many of their tasks are done and the hours left.</p>
+            {milestones.map((m) => (
+              <div key={m.id} className="ld-inline">
+                <input className="input" value={m.name} onChange={(e) => set((x) => ({ ...x, milestones: milestones.map((o) => (o.id === m.id ? { ...o, name: e.target.value } : o)) }))} />
+                <input className="input" type="date" style={{ width: 'auto' }} value={m.date} onChange={(e) => set((x) => ({ ...x, milestones: milestones.map((o) => (o.id === m.id ? { ...o, date: e.target.value } : o)) }))} />
+                <button
+                  className="icon-btn"
+                  aria-label="Remove milestone"
+                  onClick={() => set((x) => ({ ...x, milestones: milestones.filter((o) => o.id !== m.id), items: x.items.map((it) => (it.milestone === m.id ? { ...it, milestone: null } : it)) }))}
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            ))}
+            <button className="btn btn-ghost" onClick={() => set((x) => ({ ...x, milestones: [...milestones, { id: newId(), name: ['Vertical slice', 'Alpha', 'Beta', 'Launch'][milestones.length] ?? 'Milestone', date: '' }] }))}>
+              <Plus size={14} /> Add milestone
             </button>
             <div className="modal-actions">
               <button className="btn btn-primary" onClick={() => setManage(false)}>
