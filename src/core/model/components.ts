@@ -57,6 +57,7 @@ export const COMPONENT_TYPES = [
   'pixel-art',
   'card-designer',
   'vector',
+  'custom-list',
 ] as const
 
 export type BuiltInComponentType = (typeof COMPONENT_TYPES)[number]

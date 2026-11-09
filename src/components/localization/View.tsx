@@ -65,6 +65,19 @@ export default function View({ active }: PanelProps) {
         l.choices.forEach((c, j) => found.push({ ref: `dialogue:${dd.id}:${l.id}:choice:${c.id}`, key: `${k}.line_${i + 1}.choice_${j + 1}`, context: `Choice in "${dd.title}"`, text: c.text }))
       })
     }
+    // 0.28: Custom Lists: entry names and their text fields.
+    for (const cl of documents.filter((x) => x.type === 'custom-list')) {
+      const c = await loadDocumentNow<{ fields?: { id: string; name: string; kind: string }[]; items?: { id: string; name: string; values: Record<string, unknown> }[] }>(root, 'custom-list', cl.id, () => ({}))
+      const texts = (c?.fields ?? []).filter((f) => f.kind === 'text' || f.kind === 'long')
+      for (const r of c?.items ?? []) {
+        const k = unique(`${slug(cl.title)}.${slug(r.name)}`)
+        found.push({ ref: `custom-list:${cl.id}:${r.id}.name`, key: `${k}.name`, context: `${cl.title} name`, text: r.name })
+        for (const f of texts) {
+          const v = r.values[f.id]
+          if (typeof v === 'string') found.push({ ref: `custom-list:${cl.id}:${r.id}.${f.id}`, key: `${k}.${slug(f.name)}`, context: `${cl.title}: ${f.name}`, text: v })
+        }
+      }
+    }
     const r = merge(d, found)
     set(() => r.doc)
     setMessage(`Collected ${r.added} new and ${r.updated} changed texts.${r.updated ? ' Translations of changed texts are marked "needs update".' : ''}`)

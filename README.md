@@ -215,7 +215,7 @@ beginner guides.
 
 ## 🧰 All the tools
 
-51 tools, and you only add the ones your game needs.
+52 tools, and you only add the ones your game needs.
 
 <details>
 <summary><b>Click to see every tool</b></summary>
@@ -235,6 +235,7 @@ beginner guides.
 | **Cosmos Creator** | Universes, galaxies, solar systems, planets, moons and more in an isometric view, with your own pictures for any body. |
 | **Names & Languages** | Generate names in about 50 real-world styles (German, Polish, Japanese…) or from a made-up language's sounds, and build that language with a dictionary and translator. |
 | **Calendar & Eras** | Your world's months, weekdays and eras, a month view and a date calculator; timelines show era years. |
+| **Custom List** | Your own kind of entry (vehicles, buildings, perks, biomes…) with the fields you choose: text, numbers with units, yes/no, choice lists, pictures and links to items, characters, towns and enemies. Exported to your engine and collected for translation. |
 | **History** | Earlier versions of items, characters, towns and enemies: compare what changed and restore. |
 
 #### ✍️ Story and writing
@@ -320,7 +321,7 @@ Made by **Eve.Lopment Games**. Follow along, share what you build, and suggest f
 
 Built with [Tauri 2](https://tauri.app), React, TypeScript, [Konva](https://konvajs.org) and [TipTap](https://tiptap.dev).
 The product spec is in [`docs/SPEC.md`](docs/SPEC.md), [`AGENTS.md`](AGENTS.md) explains how the code is organised,
-and [`docs/PLUGINS.md`](docs/PLUGINS.md) shows how to make your own tools as plugins.
+[`docs/PLUGINS.md`](docs/PLUGINS.md) shows how to make your own tools as plugins, and [`docs/FORMAT.md`](docs/FORMAT.md) describes the project files.
 
 ```bash
 npm test             # unit tests

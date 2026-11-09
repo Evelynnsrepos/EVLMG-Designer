@@ -635,6 +635,14 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     ],
     tips: ['Shortcuts: B pencil, E eraser, L line, U rectangle, O ellipse, G fill, I eyedropper, S shade, M select, Q lasso, W magic wand, V move, C curve, F lasso fill, D gradient, A spray, T text, X swap colours, [ and ] size, comma and period for frames, Enter to play, Tab for tiles and map. Change them in Settings.'],
   },
+  'custom-list': {
+    title: 'Custom List',
+    body: [
+      'For every kind of entry the other lists do not cover: vehicles, buildings, perks, biomes, cards, spells, ships. Each Custom List is one kind; make as many as you need from the sidebar.',
+      'Under Fields, name what one entry is called and add the fields it needs: text, long text, numbers with a unit, yes or no, choice lists, a picture, or links to items, characters, towns and enemies. Changing a field\'s kind converts what is already filled in where it can.',
+      'Under Entries, add entries and fill them in; click a linked entry to open it. Engine export writes every Custom List into tools/custom-list.json with the field names, so your game can read them.',
+    ],
+  },
   vector: {
     title: 'Vector (experimental)',
     body: [

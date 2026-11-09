@@ -103,7 +103,7 @@ export default function View({ documentId, active }: PanelProps) {
 
 ### Collaboration (shared projects)
 
-Projects can be shared and edited live by several people (`src/core/collab/`, see [`docs/COLLABORATION.md`](docs/COLLABORATION.md)).
+Projects can be shared and edited live by several people (`src/core/collab/`, see [`docs/COLLABORATION.md`](docs/COLLABORATION.md)). The project files are described in [`docs/FORMAT.md`](docs/FORMAT.md).
 Components get this for free as long as they follow the data rules above and:
 - Give every list item a unique string `id`. Lists with ids merge per item; other arrays are replaced whole.
 - Change data only through the stores (`useDocument`, `useProjectStore`), never by writing files.

@@ -30,6 +30,7 @@ export const DATA_TOOLS = [
   'achievements',
   'calendar',
   'crafting',
+  'custom-list',
   'damage-calculator',
   'economy',
   'factions',
@@ -49,6 +50,21 @@ export function assetPaths(v: unknown, out = new Set<string>()): Set<string> {
   else if (Array.isArray(v)) v.forEach((x) => assetPaths(x, out))
   else if (v && typeof v === 'object') Object.values(v).forEach((x) => assetPaths(x, out))
   return out
+}
+
+/** A Custom List for a game: values by field name (not field id), entry ids made from names, links as entry uids. */
+export function customListRecords(data: unknown) {
+  const d = data as { one?: string; fields?: { id: string; name: string; kind: string }[]; items?: { id: string; name: string; image: string | null; values: Record<string, unknown> }[] }
+  const fields = d.fields ?? []
+  const used = new Map<string, number>()
+  const records = (d.items ?? []).map((r) => {
+    let id = ident(r.name, d.one ?? 'entry')
+    const n = (used.get(id) ?? 0) + 1
+    used.set(id, n)
+    if (n > 1) id = `${id}_${n}`
+    return { id, uid: r.id, name: r.name, image: r.image, values: Object.fromEntries(fields.map((f) => [f.name, r.values[f.id] ?? null])) }
+  })
+  return { one: d.one ?? 'entry', fields: fields.map((f) => ({ name: f.name, kind: f.kind })), records }
 }
 
 /** The same data with every project asset path pointing at `images/<file>` next to the JSON. */
@@ -151,7 +167,7 @@ export function buildExport(input: ExportInput, engine: Engine): OutFile[] {
       const n = (used.get(id) ?? 0) + 1
       used.set(id, n)
       if (n > 1) id = `${id}_${n}`
-      return { id, uid: d.id, title: d.title, data: relinkAssets(d.data) }
+      return { id, uid: d.id, title: d.title, data: relinkAssets(t.type === 'custom-list' ? customListRecords(d.data) : d.data) }
     })
     files.push({ path: `${data}tools/${t.type}.json`, text: json({ type: t.type, documents }) })
   }

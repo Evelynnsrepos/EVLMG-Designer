@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createEntity } from '@/core/model'
-import { assetPaths, buildExport, ident, type ExportInput } from './build'
+import { assetPaths, buildExport, customListRecords, ident, type ExportInput } from './build'
 
 const input = (): ExportInput => {
   const sword = { ...createEntity('item'), name: 'Fire Sword', stats: { ATK: 12 }, categories: { c1: 'Rare' } }
@@ -57,6 +57,14 @@ describe('engine export of everything (0.28)', () => {
     expect(tree.documents.map((d: { id: string }) => d.id)).toEqual(['warrior', 'warrior_2'])
     expect(tree.documents[0].data.skills[0].image).toBe('images/abc.png')
     expect(files.find((f) => f.path === 'egd/egd_data.gd')!.text).toContain('func tool(type: String')
+  })
+
+  it('writes Custom Lists with values by field name', () => {
+    const out = customListRecords({ one: 'vehicle', fields: [{ id: 'f1', name: 'Speed', kind: 'number' }], items: [{ id: 'u1', name: 'Tank', image: null, values: { f1: 40 } }, { id: 'u2', name: 'Tank', image: null, values: {} }] })
+    expect(out.records).toEqual([
+      { id: 'tank', uid: 'u1', name: 'Tank', image: null, values: { Speed: 40 } },
+      { id: 'tank_2', uid: 'u2', name: 'Tank', image: null, values: { Speed: null } },
+    ])
   })
 
   it('finds project pictures inside tool data', () => {

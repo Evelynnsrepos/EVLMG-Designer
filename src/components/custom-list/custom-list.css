@@ -1,0 +1,57 @@
+.cl-tabs {
+  display: inline-flex;
+  gap: 2px;
+}
+.cl-tabs .active {
+  background: var(--bg-hover);
+  font-weight: 600;
+}
+.cl-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+  overflow: auto;
+}
+.cl-hint {
+  margin: 0 12px;
+  font-size: 12px;
+}
+.cl-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+}
+.cl-field > .input:first-child {
+  flex: 1;
+  min-width: 120px;
+}
+.cl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.cl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: var(--bg-hover);
+  font-size: 12px;
+}
+.cl-chip-name {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.cl-chip-name:hover {
+  text-decoration: underline;
+}
+.cl-field select {
+  flex: 0 0 180px;
+}
