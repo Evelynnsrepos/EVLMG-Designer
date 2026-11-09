@@ -464,7 +464,7 @@ export default function LightPreview({ brushColor, onPickColor, onPin }: { brush
       gradient.needsUpdate = true
       gradient.minFilter = gradient.magFilter = THREE.NearestFilter
       if (st.look) for (const m of [st.look.clay, st.look.gradient]) m.dispose()
-      st.look = { view: setup.view, clay: setup.view === 'clay' ? new THREE.MeshStandardMaterial({ fog: false }) : new THREE.MeshToonMaterial({ gradientMap: gradient, fog: false }), gradient }
+      st.look = { view: setup.view, clay: setup.view === 'clay' ? new THREE.MeshStandardMaterial({ fog: false, side: THREE.DoubleSide }) : new THREE.MeshToonMaterial({ gradientMap: gradient, fog: false, side: THREE.DoubleSide }), gradient }
     }
     st.look.clay.color.set(setup.color)
     if (st.look.clay instanceof THREE.MeshStandardMaterial) st.look.clay.roughness = 0.95 - setup.shine * 0.8
