@@ -29,6 +29,6 @@ export interface FileSystem {
   pickFolder(title: string): Promise<string | null>
   /** Open the OS file manager at this path (PM-7). */
   revealInFolder(path: string): Promise<void>
-  /** Ask the user to choose files to import (images, audio). */
+  /** Ask the user to choose files to import (images, audio); no extensions means any file. */
   pickFiles(title: string, extensions: string[]): Promise<string[]>
 }
