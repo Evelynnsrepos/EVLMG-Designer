@@ -98,8 +98,8 @@ The whole app in five minutes.
   and Linux. No account needed; offline changes merge when you reconnect.
 - **Work through a server** (optional): put a project on your own
   [EVLMG Designer Server](https://github.com/Evelynnsrepos/Evelopment-Games-Designer-Server) so people can
-  join and sync even when nobody else is online. Each person gets their own connect code, for editing or view only,
-  and the server can offer plugins.
+  join and sync even when nobody else is online. Each person gets their own connect code, for editing, view only or
+  comment only (comment codes need a server version that supports them), and the server can offer plugins.
 - **Git sync** (optional, one person): every project gets its own private GitHub repository, or use GitLab, Gitea,
   Codeberg or your own server. It gets the latest version when the project opens and saves in the background when you
   leave it, so you can move between your own computers. Import from Git on the start screen downloads it on a new
@@ -122,6 +122,10 @@ The whole app in five minutes.
 - **Export a project as a zip** and import it again, for backups or to send to someone.
 - **Plugins** add new tools: install one from a GitHub link or a zip in Settings. Plugin tools can use Send to and receive pictures too.
 - **One project palette**: the palette "This project (shared)" travels with the project to teammates, other computers and the mobile app, in every colour panel.
+- **Earlier versions of every document**: the clock button in a panel header shows versions from the backups and
+  restores one (undo works).
+- **Hotkey hints** are on from the start: every button with a key shows it small in its corner. Turn them off in
+  Settings > General.
 - **Settings with tabs and search**: General, Writing, Keys & Hotwheel, Project presets, Git and Plugins.
 - **Your own shortcuts**: change any key in Settings; the user guide (`F1`) has a cheatsheet with the default and your key.
 
@@ -250,15 +254,15 @@ beginner guides.
 | **Dialogue Editor** | Branching conversations as a graph with speakers, choices, conditions and flags, a play-through mode, and export to JSON, Yarn Spinner or Ink. |
 | **Writing Principles** | Story and game-writing rules (show, don't tell; save the player from themselves…) and story structures like the Hero's Journey, ready to extend and sort. |
 | **Storyboard** | Plan cutscenes, YouTube videos or anime episodes: scenes, cuts and panels with shot, camera, timing in seconds + frames, action, dialogue, notes and status; draw panels in Draw, link the script in the Writer, play the animatic with sound, and export PDF storyboard sheets, video, shot list or Pitch Deck slides. |
-| **Localization** | A string table of every player-facing text in every language, collected from the project, with CSV import and export. |
+| **Localization** | A string table of every player-facing text in every language, collected from the project, with CSV import and export. Texts whose source changed are marked "needs update", and one language can go to translators as XLIFF or PO (Godot reads PO). |
 | **Ask Your Project** | Optional: search your own notes and find contradictions, with the helper running only on your computer. It only searches and never writes for you. |
 
 #### 🎨 Art and boards
 
 | Tool | What it does |
 |---|---|
-| **Draw** | A full painting app: pen pressure and tilt (read straight from the pen driver on Linux), about 120 editable brushes (plus .abr, .brush and .brushset import), 26 blend modes, groups, masks and adjustment layers, selections and transform, adjustments, liquify, guides and symmetry, text layers, animation, time-lapse, 250 undo steps (selections, layers and guides included), canvases up to 8K, a light preview (lamps you move around 3D objects, a planar head, a posable figure or your own models, with light presets, contact shadows, colour picking and pinning as a reference), layers that float or dock (with a Bring back button if they get lost), and PSD import and export. |
-| **Pixel Art** | Sprites, animations, tilesets and tilemaps on exact pixels: clean lines, curves, spray, lasso fill, dithered gradients, a shade brush, pixel text in any font, inks, pen pressure, mirror and seamless drawing, selection with move, flip, pixel rotate, scale and outline, palettes with a ramp maker, palette-only and gray modes and palette variants, layers with blend modes and tracing layers, frames with onion skin, linked frames, tags and a preview, tile maps with random and mirrored tiles, new tiles drawn right on the map and maps rebuilt from a picture, sprites that play on characters, enemies, items, abilities and achievements, and export as PNG, GIF, sprite sheet + JSON or Godot SpriteFrames. Opens .ase, .aseprite, GIF, APNG and sprite sheets. |
+| **Draw** | A full painting app: pen pressure and tilt (read straight from the pen driver on Linux), about 120 editable brushes (plus .abr, .brush and .brushset import), 26 blend modes, groups, masks and adjustment layers, selections and transform, adjustments, liquify, guides and symmetry, shape snap (draw roughly, keep holding: circles, tilted ellipses and boxes, arcs; hold longer for a perfect one, with a Shaky hands preset), text layers, animation, time-lapse, 250 undo steps (selections, layers and guides included), canvases up to 8K, a light preview (lamps you move around 3D objects, a planar head, a posable figure or your own models, with light presets, contact shadows, colour picking and pinning as a reference), layers that float or dock (with a Bring back button if they get lost), and PSD import and export. |
+| **Pixel Art** | Sprites, animations, tilesets and tilemaps on exact pixels: clean lines, curves, a pencil that snaps rough shapes clean, spray, lasso fill, dithered gradients, a shade brush, pixel text in any font, inks, pen pressure, mirror and seamless drawing, selection with move, flip, pixel rotate, scale and outline, palettes with a ramp maker, palette-only and gray modes and palette variants, layers with blend modes and tracing layers, frames with onion skin, linked frames, tags and a preview, tile maps with random and mirrored tiles, new tiles drawn right on the map and maps rebuilt from a picture, sprites that play on characters, enemies, items, abilities and achievements, and export as PNG, GIF, sprite sheet + JSON or Godot SpriteFrames. Opens .ase, .aseprite, GIF, APNG and sprite sheets. |
 | **Card Designer** | Pick a card size, then design card fronts and backs on real layers (select and move only what is on the active layer, lock layers so nothing on them changes), fields with choice lists (pick Tank, Bruiser… per card from a dropdown), text that fills in each card's values with `{Name}` (new cards keep every field box), picture fields, colour slots that recolour the whole deck at once, colour variants for factions or rarities, per-card colours and layers, foil items and layers, picture import by drag and drop with right-click replace and fit, snapping to the bleed, cut and safe lines, and a free font pack. Fill the deck in a table, from a live Spreadsheet, or once from a CSV file or Spreadsheet (rows update cards by name or add new ones, columns map to fields, own-text boxes or pictures), then export from one export window with a live preview: print at home (pages with crop marks and double-sided backs, PDF or PNG, any paper), print shops (exact sizes for MakePlayingCards and The Game Crafter, or one-card-per-page PDFs with 3 mm or 1/8 inch bleed), janky photo-station prints with front and back side by side to fold, Tabletop Simulator (a deck ready to spawn, or card sheets for online games), Godot (card pictures or a sprite sheet with .tres files, plus deck.json) and the deck as JSON or a spreadsheet (CSV). The export window remembers every export and its settings and can match another deck's exports, so two versions of a set come out the same. Bleed added on export never changes your design, warnings point out text over the safe line and soft or missing pictures, and foil masks go to print shops. Pictures from Draw, Pixel Art, Vector and Texture Paint arrive on the shown card with Send to. |
 | **Vector** (experimental) | Clean shapes for inventory and skill icons, app icons, logos, buttons, health bars and panels: pick what you are making for the right size, add live shapes (box, circle, polygon, star, ring, heart, shield, cross, gear, speech bubble) with sliders like rounded corners and points, one-click looks (flat, game icon, glossy, outline), gradients, outlines and shadows, layers, a preview at 16 to 128 px on dark, light and in an inventory slot, and save as PNG at any sizes or SVG. Send an icon to a card, the Asset Pool or a Moodboard, or export every icon of the project for Godot (sprite sheet + .tres). |
 | **Texture Paint** (experimental) | Paint 3D models (GLB, OBJ, FBX) on the model and on its texture side by side, with every Draw brush, and export PNG or GLB, or send the texture to the Asset Pool or a Moodboard. |
@@ -292,7 +296,7 @@ beginner guides.
 | **Economy Simulator** | Currency sources and sinks simulated over hours of play: balances, purchases and inflation warnings. |
 | **Gacha & Loot Simulator** | Banner rates, hard and soft pity and 50/50s simulated over thousands of players, plus chest and drop table chances. |
 | **Balance Dashboard** | Item and enemy numbers that stick out, the enemy difficulty curve and gaps in your data. |
-| **Spreadsheet** | Excel-style sheets: hundreds of Excel functions, formulas across sheets, a fill handle, cell formatting, Damage Calculator results in cells, CSV import and export, charts, and frozen rows and columns. |
+| **Spreadsheet** | Excel-style sheets: hundreds of Excel functions, formulas across sheets, a fill handle, cell formatting, Damage Calculator results in cells, `=STAT("Iron Sword", "Damage")` and live tables that read your lists (type over a STAT cell to change the entry), CSV import and export, charts, and frozen rows and columns. |
 
 #### 📌 Planning and pitching
 
@@ -300,9 +304,9 @@ beginner guides.
 |---|---|
 | **Vision & Pillars** | Elevator pitch, vision, player fantasy, selling points, design pillars, references and anti-goals on one page. |
 | **Scope Planner** | Every feature sorted into must, should, could, won't and cut, with effort against the days you have. |
-| **Task Board** | A to-do board with pictures, your own columns and categories, and tasks linked to the entries they are about. |
+| **Task Board** | A to-do board with pictures, your own columns and categories, tasks linked to the entries they are about, estimates, milestones, "waits for" blockers and CSV for Jira or Linear. |
 | **Playtests** | Playtest sessions with scores and findings, scores per build and every open problem in one place. |
-| **Reviews** | Everything with a status or comments on one board, with a "needs review" filter. |
+| **Reviews** | Everything with a status or comments on one board, with a "needs review" filter. Approvals remember who signed off and show "changed since" when the content changes. |
 | **Pitch Deck** | Slides built from your vision, pillars, characters and items, presented full screen. |
 
 </details>
