@@ -8,7 +8,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { getFs } from '@/core/fs'
 import { meshesOf, MODEL_FORMATS, parseModel } from '@/shared/model3d'
-import { applyPose, buildFigure, buildHead, JOINTS, POSES, type Joint } from './figures'
+import { applyPose, buildFigure, JOINTS, POSES, type Joint } from './figures'
 import { AIM, anglesAt, applyPreset, defaultSetup, FLOOR, uid, lampPosition, MAX_LAMPS, MAX_THINGS, PRESET_IDS, restoreSetup, toneSteps, type Lamp, type LightPresetId, type LightSetup, type Shape, type Thing } from './setup'
 import './light.css'
 
@@ -26,7 +26,7 @@ const UI = {
   reset: 'Start over with the default setup',
   objects: 'Objects',
   lamps: 'Lamps',
-  addShape: { ball: 'Add a ball', cube: 'Add a cube', cylinder: 'Add a cylinder', cone: 'Add a cone', ring: 'Add a ring', head: 'Add a head (big flat planes, like a planar study head)', figure: 'Add a posable figure', model: '' } as Record<Shape, string>,
+  addShape: { ball: 'Add a ball', cube: 'Add a cube', cylinder: 'Add a cylinder', cone: 'Add a cone', ring: 'Add a ring', head: 'Add a planar head (big flat planes for drawing study)', figure: 'Add a posable figure', model: '' } as Record<Shape, string>,
   shapeName: { ball: 'Ball', cube: 'Cube', cylinder: 'Cylinder', cone: 'Cone', ring: 'Ring', head: 'Head', figure: 'Figure', model: 'Model' } as Record<Shape, string>,
   pick: 'Pick a colour: tap the view and that colour becomes your brush colour',
   pin: 'Pin this view next to your drawing as a reference image',
@@ -101,8 +101,7 @@ function store(s: LightSetup) {
 }
 
 // Every shape stands on the floor and is about one unit tall at size 1.
-function shapeMesh(shape: Exclude<Shape, 'model'>): THREE.Object3D {
-  if (shape === 'head') return buildHead()
+function shapeMesh(shape: Exclude<Shape, 'model' | 'head'>): THREE.Object3D {
   if (shape === 'figure') return buildFigure()
   const g =
     shape === 'ball'
@@ -117,6 +116,37 @@ function shapeMesh(shape: Exclude<Shape, 'model'>): THREE.Object3D {
   const m = new THREE.Mesh(g)
   m.position.y = shape === 'cube' ? 0.45 : shape === 'ring' ? 0.48 : 0.5
   return m
+}
+
+/** Models that come with the app (public/models, credits in CREDITS.md there), loaded once when first used. */
+const BUILTIN: Partial<Record<Shape, string>> = { head: 'models/planar-head.glb' }
+const builtins = new Map<Shape, THREE.Object3D | 'loading' | 'failed'>()
+function builtin(shape: Shape, loaded: () => void): THREE.Object3D | null {
+  const have = builtins.get(shape)
+  if (have instanceof THREE.Object3D) return have
+  if (!have) {
+    builtins.set(shape, 'loading')
+    fetch(new URL(BUILTIN[shape]!, document.baseURI))
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.statusText))))
+      .then((bytes) => parseModel(bytes, BUILTIN[shape]!))
+      .then(({ object }) => {
+        // Sketchfab files can carry stray helper quads or lines; keep real meshes only.
+        const junk: THREE.Object3D[] = []
+        object.traverse((o) => {
+          const m = o as THREE.Mesh
+          if ((m.isMesh && m.geometry.getAttribute('position').count < 8) || (o as THREE.Line).isLine || (o as THREE.Points).isPoints) junk.push(o)
+        })
+        for (const o of junk) o.removeFromParent()
+        // The planar head looks along +x; turn it to three-quarter so the face planes show at first.
+        const turned = new THREE.Group()
+        turned.add(object)
+        turned.rotation.y = -Math.PI / 6
+        builtins.set(shape, fitModel(turned))
+        loaded()
+      })
+      .catch(() => builtins.set(shape, 'failed'))
+  }
+  return null
 }
 
 /** A loaded model scaled to about one unit and put on the floor. */
@@ -210,6 +240,8 @@ export default function LightPreview({ brushColor, onPickColor, onPin }: { brush
   const [picking, setPicking] = useState(false)
   const [locked, setLocked] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Bumped when a built-in model finished loading, so the scene picks it up.
+  const [builtinsLoaded, setBuiltinsLoaded] = useState(0)
   const box = useRef<HTMLDivElement>(null)
   const stage = useRef<Stage | null>(null)
   const set = (fn: (s: LightSetup) => LightSetup) =>
@@ -448,9 +480,9 @@ export default function LightPreview({ brushColor, onPickColor, onPin }: { brush
       }
       if (!entry) {
         const group = new THREE.Group()
-        const template = t.shape === 'model' ? models.get(t.model!) : null
-        if (t.shape === 'model' && !template) continue
-        const body = template ? template.clone(true) : shapeMesh(t.shape as Exclude<Shape, 'model'>)
+        const template = t.shape === 'model' ? models.get(t.model!) : BUILTIN[t.shape] ? builtin(t.shape, () => setBuiltinsLoaded((n) => n + 1)) : null
+        if ((t.shape === 'model' || BUILTIN[t.shape]) && !template) continue
+        const body = template ? template.clone(true) : shapeMesh(t.shape as Exclude<Shape, 'model' | 'head'>)
         if (template) for (const m of meshesOf(body)) m.userData.model = true
         group.add(body)
         st.scene.add(group)
@@ -540,7 +572,7 @@ export default function LightPreview({ brushColor, onPickColor, onPin }: { brush
     st.outline.visible = !!sel
     if (sel) st.outline.setFromObject(sel.group)
     st.render()
-  }, [setup, selected, activeLamp])
+  }, [setup, selected, activeLamp, builtinsLoaded])
 
   useEffect(() => {
     if (stage.current) stage.current.controls.enabled = !locked

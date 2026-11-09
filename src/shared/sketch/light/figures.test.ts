@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { applyPose, buildFigure, buildHead, POSES } from './figures'
+import { applyPose, buildFigure, POSES } from './figures'
 
 const box = (o: THREE.Object3D) => {
   o.updateMatrixWorld(true)
@@ -36,12 +36,5 @@ describe('light preview figures', () => {
     // Sitting lowers the hips' lowest point below the feet's old place, so it must be lifted back onto the floor by the caller.
     applyPose(f, POSES.sit)
     expect(box(f).min.y).toBeGreaterThan(0.2)
-  })
-
-  it('builds a head about one unit tall, facing +z', () => {
-    const b = box(buildHead())
-    expect(b.min.y).toBeCloseTo(0, 1)
-    expect(b.max.y).toBeGreaterThan(0.9)
-    expect(b.max.z).toBeGreaterThan(0.35)
   })
 })

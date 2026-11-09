@@ -1,17 +1,8 @@
 import * as THREE from 'three'
 
 /**
- * Our own reference shapes for the light preview: a planar head (built from simple blocks with
- * flat faces, so the big planes of a head read clearly) and a posable wooden-mannequin figure.
- * Both are made from code, no model files.
+ * A posable wooden-mannequin figure for the light preview, made from code (no model file).
  */
-
-/** Flat faces: every triangle gets its own normal. */
-function planar(g: THREE.BufferGeometry): THREE.BufferGeometry {
-  const flat = g.index ? g.toNonIndexed() : g
-  flat.computeVertexNormals()
-  return flat
-}
 
 function part(g: THREE.BufferGeometry, at: [number, number, number], scale: [number, number, number] = [1, 1, 1], rot: [number, number, number] = [0, 0, 0]) {
   const m = new THREE.Mesh(g)
@@ -19,25 +10,6 @@ function part(g: THREE.BufferGeometry, at: [number, number, number], scale: [num
   m.scale.set(...scale)
   m.rotation.set(...rot)
   return m
-}
-
-/** A head on a neck, about one unit tall, looking towards +z. */
-export function buildHead(): THREE.Group {
-  const g = new THREE.Group()
-  const p = (geo: THREE.BufferGeometry, at: [number, number, number], scale?: [number, number, number], rot?: [number, number, number]) => g.add(part(planar(geo), at, scale, rot))
-  // Neck, cranium and the face block.
-  p(new THREE.CylinderGeometry(0.13, 0.15, 0.32, 8), [0, 0.16, -0.04])
-  p(new THREE.SphereGeometry(0.34, 10, 8), [0, 0.64, -0.03], [0.9, 1, 1.05])
-  p(new THREE.CylinderGeometry(0.25, 0.14, 0.34, 6), [0, 0.42, 0.05], [1, 1, 0.95], [0, Math.PI / 6, 0])
-  // Brow ridge, nose wedge, cheekbones, chin and ears.
-  p(new THREE.BoxGeometry(0.44, 0.07, 0.12), [0, 0.6, 0.25], [1, 1, 1], [0.15, 0, 0])
-  p(new THREE.ConeGeometry(0.07, 0.2, 4), [0, 0.5, 0.33], [1, 1, 0.8], [Math.PI / 2 - 0.35, Math.PI / 4, 0])
-  for (const side of [-1, 1]) {
-    p(new THREE.SphereGeometry(0.08, 6, 4), [side * 0.15, 0.47, 0.22], [1, 0.8, 0.9])
-    p(new THREE.SphereGeometry(0.07, 6, 4), [side * 0.31, 0.52, -0.02], [0.4, 1, 0.7])
-  }
-  p(new THREE.BoxGeometry(0.15, 0.08, 0.1), [0, 0.27, 0.2], [1, 1, 1], [-0.2, 0, 0])
-  return g
 }
 
 /** The figure's joints and what each slider turns. */
