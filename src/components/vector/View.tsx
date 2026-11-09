@@ -2,6 +2,7 @@ import { zipSync } from 'fflate'
 import { Frame, Shapes } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { safeFileName, saveBinaryFile, saveTextFile } from '@/core/export'
+import { readDocument } from '@/core/project'
 import type { PanelProps } from '@/core/registry'
 import { useDocument, useProjectStore } from '@/core/state'
 import {
@@ -28,6 +29,9 @@ import { createVectorDoc, LOOKS, makeShape, OUTLINE_DARK, PRESETS, shade, startF
 import { VECTOR_NODE_TYPES } from './nodeTypes'
 import { SHAPE_DEFAULTS, SHAPE_LABEL, SHAPE_SLIDERS, SHAPES, shapePath, type ShapeKind } from './shapes'
 import './vector.css'
+import { atlasGrid, godotAtlasTexture } from '../card-designer/exportFormats'
+import { canvasBytes } from '@/shared/print'
+import { SendMenu } from '@/shell/editor/SendMenu'
 
 const T = {
   start: 'What are you making?',
@@ -51,6 +55,8 @@ const T = {
   exportTitle: 'Save as…',
   png: 'Save PNG',
   svg: 'Save SVG',
+  godot: 'Godot: all icons',
+  godotHint: 'Every Vector drawing in this project on one sprite sheet, at the smallest size you ticked, with a .tres file for each icon (put the folder in res://icons/).',
   nothing: 'Select a shape to change its look. Nothing selected: new shapes get these colours.',
 }
 
@@ -69,6 +75,19 @@ function ShapeIcon({ shapeId }: { shapeId: ShapeKind }) {
 
 function dataUrlBytes(url: string) {
   return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0))
+}
+
+/** A Vector drawing as a canvas with its longest side `size` px, drawn from its SVG. shortcut: text uses a fallback font (an SVG picture can't load app fonts), render on the canvas if icons with text look off. */
+async function svgCanvas(d: Pick<VectorDoc, 'artboard' | 'scene'>, size: number) {
+  const img = new Image()
+  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(toSvg(d))}`
+  await img.decode()
+  const k = size / Math.max(d.artboard.width, d.artboard.height)
+  const c = document.createElement('canvas')
+  c.width = Math.round(d.artboard.width * k)
+  c.height = Math.round(d.artboard.height * k)
+  c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height)
+  return c
 }
 
 function StartScreen({ onPick }: { onPick(p: Preset): void }) {
@@ -286,6 +305,44 @@ export default function View({ documentId, active }: PanelProps) {
     else await saveBinaryFile({ title: 'Save PNG sizes', defaultName: `${name} PNG.zip`, bytes: zipSync(Object.fromEntries(files)), filter: { name: 'ZIP', extensions: ['zip'] } })
   }
 
+  /** The drawing as a PNG for Send to, at the biggest ticked size (512 if none). */
+  const picture = async () => {
+    const url = apiRef.current?.exportPng({ area: { x: 0, y: 0, ...d.artboard }, padding: 0, pixelRatio: (sizes.at(-1) ?? 512) / Math.max(d.artboard.width, d.artboard.height), background: d.artboard.bgColor ?? 'transparent' })
+    return url ? new Blob([dataUrlBytes(url)], { type: 'image/png' }) : null
+  }
+
+  const saveGodot = async () => {
+    const root = useProjectStore.getState().root
+    const docs = useProjectStore.getState().meta?.documents.filter((x) => x.type === 'vector') ?? []
+    if (!root || !docs.length) return
+    const size = sizes[0] ?? 64
+    const icons: [string, HTMLCanvasElement][] = []
+    const used = new Set<string>()
+    for (const m of docs) {
+      const v = m.id === documentId ? d : await readDocument<VectorDoc | null>(root, 'vector', m.id, () => null).catch(() => null)
+      if (!v?.artboard) continue
+      let name = safeFileName(m.title, 'icon')
+      for (let i = 2; used.has(name); i++) name = `${safeFileName(m.title, 'icon')} ${i}`
+      used.add(name)
+      icons.push([name, await svgCanvas(v, size)])
+    }
+    const { cols, rows } = atlasGrid(icons.length)
+    const cell = size
+    const sheet = document.createElement('canvas')
+    sheet.width = cols * cell
+    sheet.height = rows * cell
+    const g = sheet.getContext('2d')!
+    const files: Record<string, Uint8Array> = {}
+    icons.forEach(([name, c], i) => {
+      const x = (i % cols) * cell
+      const y = Math.floor(i / cols) * cell
+      g.drawImage(c, x, y)
+      files[`${name}.tres`] = new TextEncoder().encode(godotAtlasTexture('res://icons/icons.png', x, y, c.width, c.height))
+    })
+    files['icons.png'] = await canvasBytes(sheet)
+    await saveBinaryFile({ title: 'Export for Godot', defaultName: 'icons Godot.zip', bytes: zipSync(files), filter: { name: 'ZIP', extensions: ['zip'] } })
+  }
+
   const saveSvg = () => saveTextFile({ title: 'Save SVG', defaultName: `${safeFileName(title, 'Vector')}.svg`, text: toSvg(d), filter: { name: 'SVG', extensions: ['svg'] } })
 
   const setArt = (p: Partial<VectorDoc['artboard']>) => tweak((x) => ({ ...x, artboard: { ...x.artboard, ...p } }))
@@ -466,6 +523,12 @@ export default function View({ documentId, active }: PanelProps) {
             <button className="btn" onClick={() => void saveSvg()}>
               {T.svg}
             </button>
+          </div>
+          <div className="vec-row">
+            <button className="btn" title={T.godotHint} onClick={() => void saveGodot()}>
+              {T.godot}
+            </button>
+            <SendMenu title={title} picture={picture} />
           </div>
         </section>
       </aside>

@@ -4,7 +4,7 @@ import { assetBlobUrl, assetUrl, dragHasFiles, importAssetsFromDataTransfer, pic
 import { pointIn } from '@/shared/zoom'
 import { newId, type Id } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
-import { useDocument, useProjectStore } from '@/core/state'
+import { useDocument, useIntentHandler, useProjectStore } from '@/core/state'
 import {
   CanvasEditor,
   ellipseTool,
@@ -72,6 +72,7 @@ export default function View({ documentId, active }: PanelProps) {
   const title = useProjectStore((s) => s.meta?.documents.find((x) => x.id === documentId)?.title) ?? 'Cards'
   const canvas = useCanvasState()
   const apiRef = useRef<CanvasApi<CardNode> | null>(null)
+  const receive = useRef<((path: string, name: string) => void) | null>(null)
   const [side, setSide] = useState<Side>('front')
   const [showLayers, setShowLayers] = useState(true)
   const [imageMenu, setImageMenu] = useState<{ x: number; y: number; id: Id } | null>(null)
@@ -159,6 +160,14 @@ export default function View({ documentId, active }: PanelProps) {
     ]
   })
 
+  // Send to… from Draw, Pixel Art, Vector and others: the picture goes on the active layer of the shown card.
+  useIntentHandler(
+    'card-designer',
+    (intent) => {
+      if (intent.action === 'add-image' && typeof intent.path === 'string') receive.current?.(intent.path, String(intent.name ?? 'Picture'))
+    },
+    !!d && !!scene && d.started !== false && !!root,
+  )
   if (!d || !scene) return null
   if (d.started === false) return <SizePicker onStart={(w, h, bleed, bleedUnit) => doc.update((x) => ({ ...setBleed(resizeDesign(x, w, h), bleed), bleedUnit, started: true }), { undoable: false })} />
 
@@ -205,6 +214,7 @@ export default function View({ documentId, active }: PanelProps) {
     onScene((s) => ({ ...s, nodes: [...s.nodes, ...nodes] }))
     canvas.setSelection(nodes.map((n) => n.id))
   }
+  receive.current = (path, name) => void placeImages([{ path, kind: 'image', name }], activeLayerId)
   const addFixedImage = async (layerId = activeLayerId) => {
     if (root) await placeImages(await pickAndImportAssets(root, 'image'), layerId)
   }

@@ -240,7 +240,7 @@ export function ExportPanel({ d, deckId, title, cards, root, currentId, update }
       <button className="btn btn-primary" onClick={() => setOpen(true)}>
         Export…
       </button>
-      {card ? <SendMenu title={cardTitle} picture={cardPicture} label="Send this card to…" /> : null}
+      {card ? <SendMenu title={cardTitle} picture={cardPicture} label="Send this card to…" skip={['card-designer']} /> : null}
       {d.exportSettings ? (
         <button className="btn" disabled={busy} title="Export again with the same choices" onClick={() => void again()}>
           {busy ? 'Exporting…' : `Again: ${targetLabel(s)}`}

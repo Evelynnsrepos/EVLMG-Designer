@@ -7,11 +7,13 @@ import { getFs } from '@/core/fs'
 import { newId, PLUGIN_ID_PATTERN, type PluginComponentType } from '@/core/model'
 import { isSafeEntryPath } from '@/core/project'
 import { registerPluginManifest, unregisterPluginManifest, type PanelProps } from '@/core/registry'
-import { useDocument, useProjectStore } from '@/core/state'
+import { useDocument, useIntentHandler, useProjectStore } from '@/core/state'
+import { useAssetUrl } from '@/core/assets'
 import { confirmDialog, promptDialog } from '@/shared/dialogs'
 import { RichTextEditor } from '@/shared/richtext'
 import { addHotwheelAction, openHotwheel, useHotwheel } from '@/shared/hotwheel'
-import { openComponent } from '../editor/actions'
+import { addImageTarget, openComponent, sendImageTo } from '../editor/actions'
+import { SendMenu } from '../editor/SendMenu'
 
 /**
  * Plugins (v0.4, docs/PLUGINS.md). A plugin is a folder in `<app data>/plugins/<id>/`
@@ -54,6 +56,12 @@ export const pluginApi = {
   useHotwheel,
   addHotwheelAction,
   openHotwheel,
+  // v0.28 pictures between tools (additions to API 1)
+  SendMenu,
+  sendImageTo,
+  addImageTarget,
+  useIntentHandler,
+  useAssetUrl,
 }
 
 export type PluginApi = typeof pluginApi
