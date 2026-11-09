@@ -2,10 +2,10 @@ import { Download, FolderOpen } from 'lucide-react'
 import { useState } from 'react'
 import { resolveAssetPath } from '@/core/assets'
 import { getFs } from '@/core/fs'
-import type { Entity, EntityType } from '@/core/model'
+import type { ComponentType, Entity, EntityType } from '@/core/model'
 import { loadDocumentNow, useProjectStore } from '@/core/state'
 import { Modal } from '@/shared/ui'
-import { buildExport, type Engine, type ExportInput } from './build'
+import { assetPaths, buildExport, gatherExport, type Engine } from './build'
 import { useEngineExport } from './open'
 import './engineExport.css'
 
@@ -35,23 +35,19 @@ function EngineExportDialog({ onClose }: { onClose(): void }) {
     setResult(null)
     try {
       const fs = getFs()
-      const quests = await loadDocumentNow<{ quests?: ExportInput['quests'] }>(root, 'quests', 'quests', () => ({ quests: [] }))
-      const dialogues: ExportInput['dialogues'] = []
-      for (const d of meta.documents.filter((x) => x.type === 'dialogue')) {
-        const dl = await loadDocumentNow<{ startId?: string | null; lines?: ExportInput['dialogues'][number]['lines'] }>(root, 'dialogue', d.id, () => ({ lines: [] }))
-        dialogues.push({ title: d.title, startId: dl?.startId ?? null, lines: (dl?.lines ?? []).map((l) => ({ id: l.id, speakerName: l.speakerName, speakerId: l.speakerId, text: l.text, next: l.next, choices: l.choices.map((c) => ({ text: c.text, to: c.to })) })) })
-      }
-      const strings = meta.enabledComponents.includes('localization') ? await loadDocumentNow<ExportInput['strings']>(root, 'localization', 'localization', () => null) : null
-      const files = buildExport({ projectName: meta.name, entities: entities as Record<EntityType, Entity[]>, categories, quests: quests?.quests ?? [], dialogues, strings }, engine)
+      const read = (type: ComponentType, id: string) => loadDocumentNow<unknown>(root, type, id, () => null)
+      const input = await gatherExport(read, meta, entities as Record<EntityType, Entity[]>, categories)
+      const files = buildExport(input, engine)
       for (const f of files) await fs.writeTextAtomic(await fs.join(folder, ...f.path.split('/')), f.text)
       // Pictures of entries go next to the data, so the image paths in the JSON work.
       const dataDir = engine === 'unity' ? ['Assets', 'Resources', 'egd'] : engine === 'godot' ? ['egd'] : engine === 'unreal' ? ['json'] : []
       let images = 0
-      for (const e of Object.values(entities).flat() as Entity[]) {
-        if (!e.image) continue
-        const src = await resolveAssetPath(root, e.image)
+      const pictures = new Set((Object.values(entities).flat() as Entity[]).flatMap((e) => (e.image ? [e.image] : [])))
+      for (const t of input.tools ?? []) assetPaths(t.documents, pictures)
+      for (const path of pictures) {
+        const src = await resolveAssetPath(root, path)
         if (!(await fs.exists(src))) continue
-        await fs.writeBinaryAtomic(await fs.join(folder, ...dataDir, 'images', e.image.split('/').pop()!), await fs.readBinary(src))
+        await fs.writeBinaryAtomic(await fs.join(folder, ...dataDir, 'images', path.split('/').pop()!), await fs.readBinary(src))
         images++
       }
       setResult(`Exported ${files.length} files and ${images} pictures. Read README_EGD.md in that folder for how to use them.`)
@@ -66,7 +62,7 @@ function EngineExportDialog({ onClose }: { onClose(): void }) {
     <Modal onClose={onClose}>
       <div className="ee">
         <h3>Export to a game engine</h3>
-        <p className="muted">Your items, characters, towns, enemies, quests, dialogue and translations as files your engine can load. Export again whenever things change.</p>
+        <p className="muted">Your items, characters, towns, enemies, quests, dialogue with its flags, translations and every data tool (abilities, skill trees, recipes, loot and banners, waves, achievements, XP curves, economy…) as files your engine can load. Export again whenever things change.</p>
         <div className="ee-engines">
           {ENGINES.map((e) => (
             <label key={e.id} className={`ee-engine${engine === e.id ? ' on' : ''}`}>

@@ -328,6 +328,12 @@ npm run typecheck    # TypeScript
 npm run lint         # oxlint
 ```
 
+Build servers can export a project's data without opening the app, with the same files as Engine export:
+
+```bash
+npm run export -- <project folder> <godot|unity|unreal|json> <game project folder>
+```
+
 Pull requests are welcome. For bigger changes, open an issue first so we can talk about it.
 
 <details>

@@ -122,7 +122,7 @@ export const BASICS: Record<string, GuideTopic> = {
       '2. Paint a map right in Pixel Art (Tab switches to the map), or send the tileset to Level Layout: Files → Use in Level Layout puts it in the project\'s tile library and keeps it up to date as you draw. Every level in the project can use it.',
       '3. In Level Layout, paint with the tiles on layers: ground below, fences and fountains above. Pick several tiles to paint them as a stamp, drag a stamp to repeat it for fences and paths, or use Scatter for rocks and flowers that do not repeat. Select and move shifts whole parts of the level.',
       '4. Mark where nothing can walk: tick blocks movement on fence and wall tiles, or paint cells with the Blocked brush. Isometric levels use diamond cells for 32 × 16 tiles.',
-      '5. Godot scene saves the level into your Godot project (egd/levels/) as a TileMap with one layer per layer, collision on blocked tiles and a static body for hand-blocked cells. Open it in Godot and it is ready to walk around in.',
+      '5. Godot scene saves the level into your Godot project (egd/levels/) as a TileMap with one layer per layer, collision on blocked tiles and a static body for hand-blocked cells. Doors, stairs, the player start, exits, enemies, bosses, chests, keys, traps, NPCs and notes come along as Marker2D nodes under Markers, each in a group like egd_enemy, so a script can spawn things there. Open it in Godot and it is ready to walk around in.',
     ],
     tips: ['Tiles look blurry? Keep Sharp pixel art on in Settings.', 'Seams between tiles in the engine? Save the tileset with extruded edges (Pixel Art, Files) and set margin 1, spacing 2 there.'],
   },
@@ -275,6 +275,7 @@ export const BASICS: Record<string, GuideTopic> = {
     title: 'Export to a game engine',
     body: [
       'Engine export at the bottom of the sidebar (or Ctrl+K) writes your items, characters, towns and enemies (with stats, categories and pictures), quests, dialogue and translations into your game project.',
+      'It also writes the flags with every dialogue and quest condition and change by flag name, and each data tool you use as tools/<tool>.json: abilities, achievements, calendar, crafting, damage formulas, economy, factions, gacha and loot, XP curves, level layouts, maps, pacing, skill trees, timelines and waves. Every entry and document has a uid that never changes, so your game can match them across exports. In Godot, Egd.tool("skill-tree", "warrior").data gives one document.',
       'Godot 4 gets the data and an autoload script: add egd/egd_data.gd as an Autoload named Egd and use Egd.items or Egd.find("items", "fire_sword"). Unity gets the data in Resources and C# classes with EgdData.Load(). Unreal gets DataTable CSVs to import with a matching struct. Plain JSON works with anything.',
       'Export again whenever something changes; the files are overwritten. A README_EGD.md in the folder explains the files.',
     ],

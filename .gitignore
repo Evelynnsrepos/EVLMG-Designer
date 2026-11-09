@@ -33,3 +33,4 @@ release/
 
 # Git worktrees for feature branches
 worktrees/
+dist-cli

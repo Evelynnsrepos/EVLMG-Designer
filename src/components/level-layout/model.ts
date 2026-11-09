@@ -324,5 +324,34 @@ export function godotScene(d: LevelDoc, sets: Tileset[], name: string, imagePath
       lines.push(`[node name="Cell${i}" type="CollisionShape2D" parent="Blocked"]`, d.iso ? `position = Vector2(${((x - y) * size) / 2}, ${((x + y) * sizeH) / 2})` : `position = Vector2(${x * size + size / 2}, ${y * size + size / 2})`, 'shape = SubResource("Blocked_1")', ''),
     )
   }
+  // 0.28: the gameplay markers and notes as Marker2D nodes, so spawns, enemies and loot reach the game.
+  const at = (x: number, y: number) => (d.iso ? `position = Vector2(${((x - y) * size) / 2}, ${((x + y) * sizeH) / 2})` : `position = Vector2(${x * size + size / 2}, ${y * size + size / 2})`)
+  const markers = levelMarkers(d)
+  if (markers.length) {
+    lines.push('[node name="Markers" type="Node2D" parent="."]', '')
+    const count = new Map<string, number>()
+    for (const m of markers) {
+      const n = (count.get(m.kind) ?? 0) + 1
+      count.set(m.kind, n)
+      lines.push(`[node name="${m.kind}_${n}" type="Marker2D" parent="Markers" groups=["egd_${m.kind}"]]`, at(m.x, m.y), `metadata/kind = "${m.kind}"`)
+      if (m.text) lines.push(`metadata/text = ${JSON.stringify(m.text)}`)
+      lines.push('')
+    }
+  }
   return lines.join('\n')
+}
+
+/** Tiles that mean something to the game (not floor or walls), plus the numbered notes, by cell. */
+export const MARKER_TILES: readonly TileId[] = ['door', 'stairs', 'spawn', 'exit', 'enemy', 'boss', 'chest', 'key', 'trap', 'npc']
+
+export function levelMarkers(d: LevelDoc): { kind: string; x: number; y: number; text?: string }[] {
+  const out: { kind: string; x: number; y: number; text?: string }[] = []
+  for (const [k, t] of Object.entries(d.tiles)) {
+    if (!MARKER_TILES.includes(t)) continue
+    const [x, y] = k.split(',').map(Number)
+    out.push({ kind: t, x, y })
+  }
+  out.sort((a, b) => a.kind.localeCompare(b.kind) || a.y - b.y || a.x - b.x)
+  for (const n of d.notes) out.push({ kind: 'note', x: Math.floor(n.x), y: Math.floor(n.y), text: n.text })
+  return out
 }

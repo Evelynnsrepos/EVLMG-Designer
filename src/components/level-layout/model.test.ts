@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bucket, clearRegion, counts, createLevelDoc, createLibrary, geometry, godotScene, grid, isBlocked, migrateLevel, moveRegion, stampCells, stampTileAt, usedTilesets, type LevelDoc } from './model'
+import { levelMarkers, bucket, clearRegion, counts, createLevelDoc, createLibrary, geometry, godotScene, grid, isBlocked, migrateLevel, moveRegion, stampCells, stampTileAt, usedTilesets, type LevelDoc } from './model'
 
 describe('level layout', () => {
   it('fills connected areas only', () => {
@@ -103,5 +103,15 @@ describe('v0.16 select and move, isometric levels', () => {
     expect(scene).toContain('tile_layout = 5')
     expect(scene).toContain('tile_size = Vector2i(32, 16)')
     expect(scene).toContain('texture_region_size = Vector2i(32, 16)')
+  })
+
+  it('exports gameplay markers and notes as Marker2D nodes (0.28)', () => {
+    const d: LevelDoc = { ...createLevelDoc(), tiles: { '2,3': 'enemy', '0,0': 'floor', '1,1': 'spawn' }, notes: [{ id: 'n', x: 4, y: 4, text: 'Boss "door"' }] }
+    expect(levelMarkers(d).map((m) => m.kind)).toEqual(['enemy', 'spawn', 'note'])
+    const scene = godotScene(d, [], 'Crypt', () => '')
+    expect(scene).toContain('[node name="enemy_1" type="Marker2D" parent="Markers" groups=["egd_enemy"]]')
+    expect(scene).toContain('position = Vector2(40, 56)')
+    expect(scene).toContain('metadata/text = "Boss \\"door\\""')
+    expect(scene).not.toContain('floor_1')
   })
 })

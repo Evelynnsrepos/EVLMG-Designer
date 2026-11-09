@@ -32,6 +32,7 @@ import {
   MARKERS,
   migrateLevel,
   newLayer,
+  levelMarkers,
   newNote,
   parseArt,
   repeatAt,
@@ -743,7 +744,7 @@ export default function View({ documentId, active }: PanelProps) {
         <button className="btn btn-ghost lv-btn" onClick={() => void exportPng()}>
           <Download size={14} /> PNG
         </button>
-        <button className="btn btn-ghost lv-btn" disabled={!usedTilesets(d, sets).length} title={sets.length ? 'Export the picture tiles as a Godot 4 TileMap scene' : 'Add a tileset and paint with it first'} onClick={() => void exportGodot()}>
+        <button className="btn btn-ghost lv-btn" disabled={!usedTilesets(d, sets).length && !levelMarkers(d).length} title="Export the picture tiles as a Godot 4 TileMap scene, with doors, spawns, enemies, loot and notes as Marker2D nodes" onClick={() => void exportGodot()}>
           <Download size={14} /> Godot scene
         </button>
         {exported && <span className="muted">{exported}</span>}
