@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { needsReview, openComments, reviewKey, type ReviewEntry } from './reviews'
+import { changedSinceSignoff, contentHash, needsReview, openComments, reviewKey, type ReviewEntry } from './reviews'
 
 describe('reviews', () => {
   it('keys entities and documents, single-document tools by type', () => {
@@ -14,5 +14,14 @@ describe('reviews', () => {
     expect(needsReview(e)).toBe(true)
     expect(needsReview({ ...e, comments: [{ ...c, resolved: true }] })).toBe(false)
     expect(needsReview({ ...e, status: 'review', comments: [] })).toBe(true)
+  })
+
+  it('knows when signed-off content changed (0.28)', () => {
+    const e: ReviewEntry = { target: { kind: 'doc', type: 'quests', id: null }, status: 'approved', comments: [], updatedAt: '', signoff: { by: 'Eve', at: '', hash: contentHash({ a: 1 }) } }
+    expect(changedSinceSignoff(e, { a: 1 })).toBe(false)
+    expect(changedSinceSignoff(e, { a: 2 })).toBe(true)
+    expect(changedSinceSignoff(e, undefined)).toBe(false)
+    expect(changedSinceSignoff({ ...e, status: 'draft' }, { a: 2 })).toBe(false)
+    expect(changedSinceSignoff({ ...e, signoff: { by: 'Eve', at: '', hash: null } }, { a: 2 })).toBe(false)
   })
 })

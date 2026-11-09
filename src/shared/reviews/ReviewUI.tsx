@@ -2,7 +2,8 @@ import { Check, MessageSquare, RotateCcw, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useCollab } from '@/core/collab'
 import { Modal } from '@/shared/ui'
-import { openComments, STATUS_COLOR, STATUS_LABEL, STATUSES, useReviews, type ReviewTarget } from './reviews'
+import { peekDocument, useProjectStore } from '@/core/state'
+import { changedSinceSignoff, isSignoff, openComments, STATUS_COLOR, STATUS_LABEL, STATUSES, useReviews, type ReviewTarget } from './reviews'
 import { usePinThread } from './commentTool'
 import './reviews.css'
 
@@ -15,6 +16,8 @@ export function ReviewThread({ target }: { target: ReviewTarget }) {
   const [showResolved, setShowResolved] = useState(false)
   const comments = (entry?.comments ?? []).filter((c) => showResolved || !c.resolved)
   const resolvedCount = (entry?.comments.length ?? 0) - openComments(entry)
+  const current = useTargetContent(target)
+  const changed = changedSinceSignoff(entry, current)
   const send = () => {
     if (!text.trim()) return
     reviews.addComment(target, text.trim(), profile)
@@ -31,12 +34,26 @@ export function ReviewThread({ target }: { target: ReviewTarget }) {
             aria-checked={entry?.status === s}
             className={`review-status${entry?.status === s ? ' on' : ''}`}
             style={{ '--status': STATUS_COLOR[s] } as React.CSSProperties}
-            onClick={() => reviews.setStatus(target, entry?.status === s ? null : s)}
+            onClick={() => reviews.setStatus(target, entry?.status === s ? null : s, profile.name, current)}
           >
             {STATUS_LABEL[s]}
           </button>
         ))}
       </div>
+
+      {entry?.signoff && isSignoff(entry.status) && (
+        <p className={`review-signoff${changed ? ' changed' : ''}`}>
+          {STATUS_LABEL[entry.status!]} by {entry.signoff.by} on {new Date(entry.signoff.at).toLocaleDateString()}
+          {changed && (
+            <>
+              {' '}· <strong>changed since</strong>.{' '}
+              <button className="btn btn-ghost" onClick={() => reviews.setStatus(target, entry.status, profile.name, current)}>
+                Approve again
+              </button>
+            </>
+          )}
+        </p>
+      )}
 
       <div className="review-comments">
         {comments.length === 0 && <p className="review-empty">No comments yet.</p>}
@@ -144,4 +161,19 @@ export function PinThreadHost() {
       </div>
     </Modal>
   )
+}
+
+/** The reviewed thing's current content, when it is at hand (entries always, documents once loaded). */
+function useTargetContent(t: ReviewTarget): unknown {
+  const root = useProjectStore((s) => s.root)
+  const entities = useProjectStore((s) => s.entities)
+  if (t.kind === 'entity') {
+    const e = (entities[t.type] as { id: string }[]).find((x) => x.id === t.id)
+    if (!e) return undefined
+    // Edit times change on every save; the content is what was approved.
+    const { updatedAt: _u, ...content } = e as { updatedAt?: string }
+    return content
+  }
+  if (t.kind === 'doc' && root) return peekDocument(root, t.type, t.id ?? t.type)
+  return undefined
 }

@@ -34,7 +34,24 @@ export interface ReviewEntry {
   status: ReviewStatus | null
   comments: ReviewComment[]
   updatedAt: string
+  /** 0.28: who approved (or made final) and a fingerprint of the content then, to see later changes. */
+  signoff?: { by: string; at: string; hash: string | null }
 }
+
+/** Approved and Final are sign-offs: they remember who and what. */
+export const isSignoff = (s: ReviewStatus | null) => s === 'approved' || s === 'final'
+
+/** A short fingerprint of any JSON value (FNV-1a), to tell whether it changed since a sign-off. */
+export function contentHash(value: unknown): string {
+  const text = JSON.stringify(value) ?? ''
+  let h = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193)
+  return (h >>> 0).toString(36)
+}
+
+/** True when the signed-off content is known to have changed since (unknown content = false). */
+export const changedSinceSignoff = (e: ReviewEntry | undefined, current: unknown) =>
+  !!e?.signoff?.hash && isSignoff(e.status) && current !== undefined && contentHash(current) !== e.signoff.hash
 
 export interface ReviewsDoc {
   entries: Record<string, ReviewEntry>
@@ -67,7 +84,15 @@ export function useReviews() {
       }),
     [doc],
   )
-  const setStatus = useCallback((t: ReviewTarget, status: ReviewStatus | null) => change(t, (e) => ({ ...e, status })), [change])
+  /** `by` and `content` record a sign-off for Approved and Final; any other status drops it. */
+  const setStatus = useCallback(
+    (t: ReviewTarget, status: ReviewStatus | null, by?: string, content?: unknown) =>
+      change(t, (e) => {
+        const { signoff: _old, ...rest } = e
+        return isSignoff(status) ? { ...rest, status, signoff: { by: by || 'Me', at: new Date().toISOString(), hash: content === undefined ? null : contentHash(content) } } : { ...rest, status }
+      }),
+    [change],
+  )
   const addComment = useCallback(
     (t: ReviewTarget, text: string, author: { name: string; color: string }) =>
       change(t, (e) => ({ ...e, comments: [...e.comments, { id: newId(), author: author.name || 'Me', color: author.color, text, at: new Date().toISOString(), resolved: false }] })),
