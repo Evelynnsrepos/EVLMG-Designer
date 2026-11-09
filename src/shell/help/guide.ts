@@ -244,7 +244,7 @@ export const BASICS: Record<string, GuideTopic> = {
       'Click Import from Git on the start screen. If Git on this computer is logged in to GitHub, it connects by itself and lists your projects on GitHub; no address needed. Pick one, or Import all to download every project that is not on this computer yet. Without a GitHub login you can paste any repository address. Downloaded projects stay synced.',
       'Older setups kept all projects in one repository. Import from Git still puts every project in such a repository on the start screen, and Give each project its own repository in the Git sync window moves them to one repository each. The old repository stays as it is, as a backup.',
       '## Changed in two places?',
-      'If you changed the project on two computers without syncing in between, Git sync asks which version to keep. It never mixes them.',
+      'If you changed the project on two computers without syncing in between, Git sync puts both together when they changed different things (a backup is made first). Only when both changed the same part of a file does it ask which version to keep.',
       'Use the Git version: this computer\'s version is saved as a backup first (Restore a backup… in the project\'s menu on the start screen).',
       'Keep this computer\'s version: it replaces the one in the repository.',
       '## Private only',

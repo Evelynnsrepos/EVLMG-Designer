@@ -153,6 +153,31 @@ describe.skipIf(!hasGit)('git sync with a local repository', () => {
     expect(sh(remote, 'show', 'main:project.json')).toBe('{"name":"b"}')
   })
 
+  it('merges changes to different files and pushes the result (0.28)', async () => {
+    answer('git')
+    await pullLatest(a)
+    await write(a, 'components/x.json', '{"a":1}')
+    await write(b, 'components/y.json', '{"b":1}')
+    await pushLatest(b)
+    expect(await pullLatest(a)).toBe('merged')
+    expect(await read(a, 'components/y.json')).toBe('{"b":1}')
+    expect(sh(remote, 'show', 'main:components/x.json')).toBe('{"a":1}')
+    expect(useGitSync.getState().conflict).toBeNull()
+  })
+
+  it('asks when both changed the same part of a file (0.28)', async () => {
+    await pullLatest(b)
+    await write(a, 'components/list.json', '[\n1\n]')
+    await pushLatest(a)
+    await pullLatest(b)
+    await write(a, 'components/list.json', '[\n1,\n2\n]')
+    await write(b, 'components/list.json', '[\n0,\n1\n]')
+    await pushLatest(b)
+    answer('cancel')
+    expect(await pullLatest(a)).toBe('cancelled')
+    expect(await read(a, 'components/list.json')).toBe('[\n1,\n2\n]')
+  })
+
   it('syncs a project that sits inside a repository of several projects', async () => {
     const folderRemote = path.join(home, 'folder.git')
     execFileSync('git', ['init', '-q', '--bare', folderRemote])

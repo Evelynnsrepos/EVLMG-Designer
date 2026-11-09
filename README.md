@@ -194,8 +194,8 @@ your own Git repository, using the Git installed on your computer and your own l
   its Git sync window, after a red warning.
 - **Other hosts**: GitLab, Gitea, Forgejo, Codeberg or your own server work too. *Settings → Git* has login help,
   an address check, and your own branch, commit message and extra Git settings.
-- It **never mixes versions**: if you changed a project on two computers without syncing, it asks which one to keep
-  and backs up the other.
+- **Changes on two computers come together**: if you changed different things on two computers without syncing, it
+  merges them and backs up the state before. Only when both changed the same part does it ask which one to keep.
 - **For one person only.** To work on a project together, use *Work together* or a server. A shared project can
   still get a push-only Git backup from one member.
 

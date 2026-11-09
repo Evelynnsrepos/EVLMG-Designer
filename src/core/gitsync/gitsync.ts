@@ -12,7 +12,8 @@ import { checkPrivate, createProjectRepo, gitHubLogin, setCredentialAsker } from
  * the app, and pushing after leaving a project runs in the background.
  *
  * - "full" (one person, several computers): pull when the project opens, commit and push when it
- *   closes. Never merges: when both sides changed, the user picks which version wins.
+ *   closes. When both sides changed, git merges them (0.28) if the changes don't touch the same
+ *   lines and every file stays valid JSON; otherwise the user picks which version wins.
  * - "backup" (a shared project): one member's computer commits and pushes the merged project when
  *   it closes. It never pulls, so it can never undo teammates' newer work.
  *
@@ -253,10 +254,37 @@ async function hasUnpushed(root: string) {
 const askConflict = () => new Promise<ConflictChoice>((resolve) => useGitSync.setState({ conflict: { resolve: (c) => (useGitSync.setState({ conflict: null }), resolve(c)) } }))
 
 /**
- * Bring this computer up to date with the repository (full mode). Local changes are committed
- * first. When both sides changed, the user chooses; nothing is ever merged.
+ * Merge the repository's commits into this computer's (0.28). Only a clean merge counts: no
+ * conflicting lines, and every changed .json file still parses. Anything else is undone and false.
  */
-export async function pullLatest(root: string): Promise<'same' | 'pulled' | 'pushed' | 'cancelled'> {
+async function tryMerge(root: string, remote: string): Promise<boolean> {
+  const named = (await git(root, ['config', 'user.email'])).code === 0
+  const who = named ? [] : ['-c', `user.name=${useCollab.getState().profile.name || 'Eve.Lopment Games Designer'}`, '-c', 'user.email=egd@localhost']
+  if ((await git(root, [...who, 'merge', '-q', '--no-edit', '-m', `Merge changes from Git (${stamp()})`, remote])).code !== 0) {
+    await git(root, ['merge', '--abort'])
+    return false
+  }
+  const fs = getFs()
+  const changed = (await must(root, ['diff', '--name-only', 'ORIG_HEAD', 'HEAD'])).split('\n').filter((f) => f.endsWith('.json'))
+  for (const f of changed) {
+    const file = await fs.join(root, ...f.split('/'))
+    if (!(await fs.exists(file))) continue
+    try {
+      JSON.parse(await fs.readText(file))
+    } catch {
+      // Two edits next to each other can merge into broken JSON: then it is not a clean merge.
+      await must(root, ['reset', '-q', '--hard', 'ORIG_HEAD'])
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Bring this computer up to date with the repository (full mode). Local changes are committed
+ * first. When both sides changed, a clean merge is kept and pushed; otherwise the user chooses.
+ */
+export async function pullLatest(root: string): Promise<'same' | 'pulled' | 'merged' | 'pushed' | 'cancelled'> {
   await commitAll(root)
   await must(root, ['fetch', '-q', 'origin'], networkMs)
   const remote = `origin/${await branch(root)}`
@@ -267,10 +295,15 @@ export async function pullLatest(root: string): Promise<'same' | 'pulled' | 'pus
     await must(root, ['merge', '-q', '--ff-only', remote])
     return 'pulled'
   }
+  // The merge result is pushed right away, so the other computer gets both sides too.
+  await createBackup(root, 'before-git')
+  if (await tryMerge(root, remote)) {
+    await push(root, false)
+    return 'merged'
+  }
   const choice = await askConflict()
   if (choice === 'git') {
-    // This computer's version is kept twice: in the project backups and as a git branch.
-    await createBackup(root, 'before-git')
+    // This computer's version is kept twice: in the project backups (above) and as a git branch.
     await must(root, ['branch', '-f', `egd-backup-${stamp().replace(/[ :]/g, '-')}`])
     await must(root, ['reset', '-q', '--hard', remote])
     return 'pulled'
