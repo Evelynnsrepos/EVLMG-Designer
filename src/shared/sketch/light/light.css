@@ -163,3 +163,10 @@
 .lightp-slider select {
   width: 100%;
 }
+
+.lightp-project {
+  max-width: 160px;
+  height: 28px;
+  padding: 0 6px;
+  font-size: 12px;
+}

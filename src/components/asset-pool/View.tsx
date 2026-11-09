@@ -1,13 +1,32 @@
-import { ExternalLink, ImagePlus, ListPlus, Plus, Search, Trash2, X } from 'lucide-react'
+import { ExternalLink, FileUp, FolderOpen, ImagePlus, ListPlus, Paperclip, Plus, Search, SquareKanban, Star, Trash2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { dragHasFiles, importAssetsFromDataTransfer, pickAndImportAssets, useAssetUrls } from '@/core/assets'
-import { ENTITY_TYPES, type EntityType, type Id } from '@/core/model'
+import { dragHasFiles, importAssetsFromDataTransfer, pickAndImportAssets, resolveAssetPath, useAssetUrls, type ImportedAsset } from '@/core/assets'
+import { getFs } from '@/core/fs'
+import { ENTITY_TYPES, newId, type EntityType, type Id } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
-import { useDocument, useIntentHandler, useProjectStore, useUndoRedoKeys } from '@/core/state'
+import { postIntent, useDocument, useIntentHandler, useProjectStore, useUndoRedoKeys } from '@/core/state'
+import { openComponent } from '@/shell/editor/actions'
 import { confirmDialog } from '@/shared/dialogs'
 import { openEntity } from '@/shared/entityList'
 import { Modal } from '@/shared/ui'
-import { ASSET_KINDS, createPool, newEntry, nextStatus, parseChecklist, progress, STATUSES, trackedIds, type AssetEntry, type AssetKind, type AssetPool, type Status } from './model'
+import {
+  ASSET_KINDS,
+  createPool,
+  isLate,
+  makeMain,
+  newEntry,
+  nextStatus,
+  parseChecklist,
+  PRIORITIES,
+  progress,
+  STATUSES,
+  trackedIds,
+  type AssetEntry,
+  type AssetKind,
+  type AssetPool,
+  type Priority,
+  type Status,
+} from './model'
 import './asset-pool.css'
 import { ProofTextarea } from '@/shared/spell'
 
@@ -33,14 +52,32 @@ const UI = {
   openSource: 'Open',
   deleted: '(deleted)',
   delete: 'Delete asset',
-  cycle: 'Click to change the status',
+  cycle: (next: string) => `Click to move it on to ${next}`,
+  isDone: 'Done. To change it, pick another status on the right.',
+  owner: 'Who makes it',
+  ownerHint: 'A name, or leave empty',
+  anyone: 'Anyone',
+  due: 'Due',
+  priority: 'Priority',
+  files: 'Files',
+  filesHint: 'The sound, the model, the source file (.psd, .blend…). Drop any file here.',
+  attach: 'Attach file',
+  show: 'Show in folder',
+  makeMain: 'Make this the main picture',
+  makeTask: 'Make a task',
+  makeTaskHint: 'Adds a task on the Task Board with this name, who, due date and picture',
+  openTask: 'Open its task',
+  late: 'late',
 }
+
+const today = () => new Date().toISOString().slice(0, 10)
+const isAudio = (path: string) => path.startsWith('assets/audio/')
 
 const ENTITY_LABEL: Record<EntityType, string> = { item: 'Items', character: 'Characters', town: 'Towns', enemy: 'Enemies' }
 const ENTITY_ONE: Record<EntityType, string> = { item: 'Item', character: 'Character', town: 'Town', enemy: 'Enemy' }
 
 /**
- * Asset Pool (v0.5). Intents: `add-image` ({ path, name }) attaches a picture to the
+ * Asset Pool (v0.5). Intents: `select` ({ id }) shows one entry; `add-image` ({ path, name }) attaches a picture to the
  * selected asset, or makes a new asset from it when none is selected.
  */
 export default function View({ active }: PanelProps) {
@@ -52,9 +89,11 @@ export default function View({ active }: PanelProps) {
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<Status | ''>('')
   const [kindFilter, setKindFilter] = useState<AssetKind | ''>('')
+  const [ownerFilter, setOwnerFilter] = useState('')
   const [bulkOpen, setBulkOpen] = useState(false)
   const pool = doc.data
-  const urlOf = useAssetUrls(pool?.entries.flatMap((e) => e.images) ?? [])
+  const urlOf = useAssetUrls(pool?.entries.flatMap((e) => [...e.images, ...(e.files ?? []).filter((f) => isAudio(f.path)).map((f) => f.path)]) ?? [])
+  const owners = [...new Set((pool?.entries ?? []).map((e) => e.owner?.trim() ?? '').filter(Boolean))].sort()
 
   const nameOf = (e: AssetEntry) => {
     if (!e.sourceType || !e.sourceId) return e.name
@@ -67,6 +106,8 @@ export default function View({ active }: PanelProps) {
   useIntentHandler(
     'asset-pool',
     (intent) => {
+      // A link to one asset (Ctrl+K, [[ ]] in the Wiki or Writer) opens the pool on it.
+      if (intent.action === 'select' && typeof intent.id === 'string') return setSelectedId(intent.id)
       if (intent.action !== 'add-image' || typeof intent.path !== 'string') return
       const path = intent.path
       const target = pool?.entries.find((e) => e.id === selectedId)
@@ -84,11 +125,15 @@ export default function View({ active }: PanelProps) {
     if (!pool) return []
     const q = query.trim().toLowerCase()
     return pool.entries.filter(
-      (e) => (!statusFilter || e.status === statusFilter) && (!kindFilter || e.kind === kindFilter) && (!q || nameOf(e).toLowerCase().includes(q) || e.notes.toLowerCase().includes(q)),
+      (e) =>
+        (!statusFilter || e.status === statusFilter) &&
+        (!kindFilter || e.kind === kindFilter) &&
+        (!ownerFilter || (e.owner?.trim() ?? '') === ownerFilter) &&
+        (!q || nameOf(e).toLowerCase().includes(q) || e.notes.toLowerCase().includes(q) || (e.owner ?? '').toLowerCase().includes(q)),
     )
     // nameOf reads entities, which are in the deps.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [pool, query, statusFilter, kindFilter, entities])
+  }, [pool, query, statusFilter, kindFilter, ownerFilter, entities])
 
   if (!pool) return null
   const selected = pool.entries.find((e) => e.id === selectedId) ?? null
@@ -108,6 +153,39 @@ export default function View({ active }: PanelProps) {
 
   const addPictures = async (e: AssetEntry, paths: string[]) => {
     if (paths.length) edit(e.id, { images: [...e.images, ...paths] })
+  }
+
+  /** Pictures go to Pictures, everything else (sounds, models, source files) to Files. */
+  const attach = (e: AssetEntry, assets: ImportedAsset[]) => {
+    if (!assets.length) return
+    const pics = assets.filter((a) => a.kind === 'image').map((a) => a.path)
+    const files = assets.filter((a) => a.kind !== 'image').map((a) => ({ path: a.path, name: a.name }))
+    edit(e.id, { images: [...e.images, ...pics], files: [...(e.files ?? []), ...files] })
+  }
+
+  const reveal = async (path: string) => {
+    if (root) await getFs().revealInFolder(await resolveAssetPath(root, path))
+  }
+
+  const makeTask = (e: AssetEntry) => {
+    if (e.taskId) {
+      postIntent('tasks', { action: 'open-task', taskId: e.taskId })
+    } else {
+      const taskId = newId()
+      postIntent('tasks', {
+        action: 'add-task',
+        taskId,
+        title: nameOf(e),
+        notes: [`${e.kind}, from the Asset Pool.`, e.notes].filter(Boolean).join('\n'),
+        assignee: e.owner ?? '',
+        due: e.due ?? '',
+        priority: e.priority ?? 'Normal',
+        image: e.images[0] ?? '',
+        links: e.sourceType && e.sourceId ? [{ kind: e.sourceType, id: e.sourceId }] : [],
+      })
+      edit(e.id, { taskId })
+    }
+    openComponent('tasks')
   }
 
   return (
@@ -138,6 +216,14 @@ export default function View({ active }: PanelProps) {
               <option key={k}>{k}</option>
             ))}
           </select>
+          {owners.length > 0 && (
+            <select className="input" value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)}>
+              <option value="">{UI.anyone}</option>
+              {owners.map((o) => (
+                <option key={o}>{o}</option>
+              ))}
+            </select>
+          )}
           <span className="pool-progress" title={UI.done(done, total)}>
             <span className="pool-progress-bar">
               <span style={{ width: total ? `${(done / total) * 100}%` : 0 }} />
@@ -160,11 +246,19 @@ export default function View({ active }: PanelProps) {
                   <div className="pool-row-meta">
                     {e.kind}
                     {e.sourceType && ` · ${ENTITY_ONE[e.sourceType]}${sourceExists(e) ? '' : ` ${UI.deleted}`}`}
+                    {e.owner?.trim() && ` · ${e.owner.trim()}`}
+                    {e.due && <span className={isLate(e, today()) ? 'pool-late' : undefined}>{` · ${UI.due} ${e.due}${isLate(e, today()) ? ` (${UI.late})` : ''}`}</span>}
+                    {(e.files?.length ?? 0) > 0 && (
+                      <span title={e.files!.map((f) => f.name).join(', ')}>
+                        {' · '}
+                        <Paperclip size={11} /> {e.files!.length}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <button
                   className={`pool-status pool-status-${e.status}`}
-                  title={UI.cycle}
+                  title={e.status === 'done' ? UI.isDone : UI.cycle(STATUSES.find((s) => s.id === nextStatus(e.status))!.label)}
                   onClick={(ev) => {
                     ev.stopPropagation()
                     edit(e.id, { status: nextStatus(e.status) })
@@ -185,7 +279,7 @@ export default function View({ active }: PanelProps) {
           onDrop={async (e) => {
             if (!root || !dragHasFiles(e.dataTransfer)) return
             e.preventDefault()
-            await addPictures(selected, (await importAssetsFromDataTransfer(root, e.dataTransfer, 'image')).map((a) => a.path))
+            attach(selected, await importAssetsFromDataTransfer(root, e.dataTransfer, 'file'))
           }}
         >
           <div className="pool-detail-head">
@@ -233,6 +327,32 @@ export default function View({ active }: PanelProps) {
             </select>
           </label>
           <label className="pool-field">
+            {UI.owner}
+            <input className="input" list="pool-owners" placeholder={UI.ownerHint} value={selected.owner ?? ''} onChange={(e) => edit(selected.id, { owner: e.target.value })} />
+            <datalist id="pool-owners">
+              {owners.map((o) => (
+                <option key={o} value={o} />
+              ))}
+            </datalist>
+          </label>
+          <div className="pool-field-row">
+            <label className="pool-field">
+              {UI.due}
+              <input className="input" type="date" value={selected.due ?? ''} onChange={(e) => edit(selected.id, { due: e.target.value })} />
+            </label>
+            <label className="pool-field">
+              {UI.priority}
+              <select className="input" value={selected.priority ?? 'Normal'} onChange={(e) => edit(selected.id, { priority: e.target.value as Priority })}>
+                {PRIORITIES.map((p) => (
+                  <option key={p}>{p}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <button className="btn" title={selected.taskId ? undefined : UI.makeTaskHint} onClick={() => makeTask(selected)}>
+            <SquareKanban size={14} /> {selected.taskId ? UI.openTask : UI.makeTask}
+          </button>
+          <label className="pool-field">
             {UI.notes}
             <ProofTextarea className="input pool-notes" placeholder={UI.notesHint} value={selected.notes} onChange={(e) => edit(selected.id, { notes: e.target.value })} />
           </label>
@@ -240,11 +360,16 @@ export default function View({ active }: PanelProps) {
             {UI.pictures}
             <div className="pool-pictures">
               {selected.images.map((p, i) => (
-                <div key={`${p}-${i}`} className="pool-picture">
+                <div key={`${p}-${i}`} className={`pool-picture${i === 0 && selected.images.length > 1 ? ' is-main' : ''}`}>
                   {urlOf(p) ? <img src={urlOf(p)} alt="" /> : <div className="placeholder-image" />}
                   <button className="icon-btn" title="Remove picture" onClick={() => edit(selected.id, { images: selected.images.filter((_, j) => j !== i) })}>
                     <X size={12} />
                   </button>
+                  {i > 0 && (
+                    <button className="icon-btn pool-make-main" title={UI.makeMain} onClick={() => edit(selected.id, { images: makeMain(selected.images, i) })}>
+                      <Star size={12} />
+                    </button>
+                  )}
                 </div>
               ))}
               <button
@@ -256,6 +381,29 @@ export default function View({ active }: PanelProps) {
               </button>
             </div>
             <span className="muted pool-hint">{UI.dropHint}</span>
+          </div>
+          <div className="pool-field">
+            {UI.files}
+            {(selected.files ?? []).map((f, i) => (
+              <div key={`${f.path}-${i}`} className="pool-file">
+                <div className="pool-file-head">
+                  <span className="pool-file-name" title={f.name}>
+                    {f.name}
+                  </span>
+                  <button className="icon-btn" title={UI.show} onClick={() => void reveal(f.path)}>
+                    <FolderOpen size={13} />
+                  </button>
+                  <button className="icon-btn" title="Remove file" onClick={() => edit(selected.id, { files: (selected.files ?? []).filter((_, j) => j !== i) })}>
+                    <X size={12} />
+                  </button>
+                </div>
+                {isAudio(f.path) && urlOf(f.path) && <audio controls preload="none" src={urlOf(f.path)} />}
+              </div>
+            ))}
+            <button className="btn btn-ghost" onClick={async () => root && attach(selected, await pickAndImportAssets(root, 'file', UI.attach))}>
+              <FileUp size={14} /> {UI.attach}
+            </button>
+            <span className="muted pool-hint">{UI.filesHint}</span>
           </div>
           <button className="btn btn-ghost pool-delete" onClick={() => void remove(selected)}>
             <Trash2 size={14} /> {UI.delete}

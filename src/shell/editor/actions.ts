@@ -117,7 +117,18 @@ export const IMAGE_TARGETS: { type: ComponentType; label: string }[] = [
   { type: 'asset-pool', label: 'Asset Pool' },
   { type: 'storyboard', label: 'Storyboard' },
   { type: 'pixel-art', label: 'Pixel Art (as a tracing layer)' },
+  { type: 'card-designer', label: 'Card Designer (on the shown card)' },
 ]
+
+/** (Plugin API 1, v0.28) Let a plugin tool receive pictures from Send to…; returns a function that removes it again. */
+export function addImageTarget(type: ComponentType, label: string) {
+  const t = { type, label }
+  if (!IMAGE_TARGETS.some((x) => x.type === type)) IMAGE_TARGETS.push(t)
+  return () => {
+    const i = IMAGE_TARGETS.indexOf(t)
+    if (i >= 0) IMAGE_TARGETS.splice(i, 1)
+  }
+}
 
 /**
  * Send a picture to another tool (v0.5, e.g. a drawing from the Sketch tool):

@@ -86,7 +86,7 @@ export class TauriFs implements FileSystem {
     return revealItemInDir(path)
   }
   async pickFiles(title: string, extensions: string[]) {
-    const result = await open({ multiple: true, title, filters: [{ name: 'Files', extensions }], defaultPath: await startFolder(pictureDir) })
+    const result = await open({ multiple: true, title, filters: extensions.length ? [{ name: 'Files', extensions }] : undefined, defaultPath: await startFolder(pictureDir) })
     if (!result) return []
     const paths = Array.isArray(result) ? result : [result]
     if (paths[0]) rememberFolder(await dirname(paths[0]))

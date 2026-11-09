@@ -122,8 +122,8 @@ export const TEMPLATES: Template[] = [
   {
     id: 'art',
     name: 'Drawing and art',
-    description: 'Draw, collect references on moodboards, keep a design language and an asset list.',
-    components: ['sketch', 'moodboard', 'design-language', 'asset-pool', 'storyboard', 'brainstorm', 'tasks'],
+    description: 'Draw, paint pixel art and 3D textures, design cards, collect references on moodboards, keep a design language and an asset list.',
+    components: ['sketch', 'pixel-art', 'texture-paint', 'card-designer', 'moodboard', 'design-language', 'asset-pool', 'storyboard', 'brainstorm', 'tasks'],
     genre: 'Art',
     pillars: [],
     tasks: ['Collect references on a moodboard', 'Draw the first sketches', 'Decide the colour palette'],

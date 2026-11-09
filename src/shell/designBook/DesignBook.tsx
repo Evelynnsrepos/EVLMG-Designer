@@ -11,6 +11,7 @@ import { combineRefProviders, emptyRichText, escapeHtml, richTextToHtml, useEnti
 import { Modal } from '@/shared/ui'
 import { articleTitle, findSourceEntity, useArticleRefProvider, useWikiIndex, type WikiArticleDoc } from '@/shared/wiki'
 import { buildBookHtml, type BookChapter, type BookEntry } from './book'
+import type { CardDoc } from '@/components/card-designer/model'
 import { useDesignBook } from './open'
 import './designBook.css'
 
@@ -20,6 +21,19 @@ export function DesignBookHost() {
   return open ? <DesignBookDialog onClose={() => useDesignBook.setState({ open: false })} /> : null
 }
 
+// Asset Pool and Card Designer data, only the parts the book shows.
+interface AssetLite {
+  id: Id
+  name: string
+  kind: string
+  status: string
+  notes: string
+  images: string[]
+  owner?: string
+  due?: string
+  priority?: string
+}
+const NO_ASSETS: AssetLite[] = []
 // Quest Designer data, read here without importing the tool (it owns the full model).
 interface QuestLite {
   id: Id
@@ -48,11 +62,13 @@ function DesignBookDialog({ onClose }: { onClose(): void }) {
   const { root, meta, entities, categories } = useProjectStore()
   const wiki = useWikiIndex()
   const quests = useDocument<{ quests: QuestLite[] }>('quests', 'quests', () => ({ quests: [] })).data?.quests ?? NO_QUESTS
+  const pool = useDocument<{ entries: AssetLite[] }>('asset-pool', 'pool', () => ({ entries: [] })).data?.entries ?? NO_ASSETS
   const entityRefs = useEntityRefProvider()
   const articleRefs = useArticleRefProvider()
   const refs = useMemo(() => combineRefProviders(entityRefs, articleRefs), [entityRefs, articleRefs])
   const all = entities as Record<EntityType, Entity[]>
 
+  const docsOf = (type: string) => (meta?.documents ?? []).filter((d) => d.type === type).map((d) => ({ id: d.id, label: d.title }))
   const sections = useMemo<Section[]>(
     () =>
       [
@@ -60,8 +76,11 @@ function DesignBookDialog({ onClose }: { onClose(): void }) {
         { id: 'wiki', title: 'Wiki', entries: (wiki?.articles ?? []).map((a) => ({ id: a.id, label: articleTitle(a, all) })) },
         { id: 'writer', title: 'Writing', entries: (meta?.documents ?? []).filter((d) => d.type === 'writer').map((d) => ({ id: d.id, label: d.title })) },
         { id: 'quests', title: 'Quests', entries: quests.map((q) => ({ id: q.id, label: q.name || 'Untitled quest' })) },
+        { id: 'assets', title: 'Assets', entries: meta?.enabledComponents.includes('asset-pool') ? pool.map((a) => ({ id: a.id, label: a.name || 'Untitled' })) : [] },
+        { id: 'card-designer', title: 'Cards', entries: docsOf('card-designer') },
+        { id: 'vector', title: 'Icons', entries: docsOf('vector') },
       ].filter((s) => s.entries.length > 0),
-    [all, wiki, meta, quests],
+    [all, wiki, meta, quests, pool],
   )
 
   const [title, setTitle] = useState(meta?.name ?? 'Design Book')
@@ -133,6 +152,35 @@ function DesignBookDialog({ onClose }: { onClose(): void }) {
           if (d.type !== 'writer' || !ids.has(d.id)) continue
           const doc = await loadDocumentNow<{ body: RichTextDoc }>(root, 'writer', d.id, () => ({ body: emptyRichText() }))
           entries.push({ title: d.title, html: await richHtml(doc.body) })
+        }
+      } else if (s.id === 'assets') {
+        for (const a of pool) {
+          if (!ids.has(a.id)) continue
+          const info = [
+            { label: 'Status', value: a.status.replace('-', ' ') },
+            { label: 'Who', value: a.owner ?? '' },
+            { label: 'Due', value: a.due ?? '' },
+            { label: 'Priority', value: a.priority ?? '' },
+          ].filter((r) => r.value)
+          entries.push({ title: a.name || 'Untitled', kind: a.kind, image: await dataUrl(a.images[0]), info, html: paragraphs(a.notes) })
+        }
+      } else if (s.id === 'card-designer') {
+        // The tools are loaded only when a book really has cards or icons in it.
+        const { cardPainter } = await import('@/components/card-designer/exporting')
+        for (const m of meta?.documents ?? []) {
+          if (m.type !== 'card-designer' || !ids.has(m.id)) continue
+          const deck = await loadDocumentNow<CardDoc | null>(root, 'card-designer', m.id, () => null)
+          const first = deck?.cards?.[0]
+          if (!deck || !first) continue
+          const { paint } = await cardPainter(deck, [first], root)
+          entries.push({ title: m.title, kind: `${deck.cards.length} cards`, image: paint(first, 'front', 150).toDataURL('image/png') })
+        }
+      } else if (s.id === 'vector') {
+        const { toSvg } = await import('@/components/vector/model')
+        for (const m of meta?.documents ?? []) {
+          if (m.type !== 'vector' || !ids.has(m.id)) continue
+          const icon = await loadDocumentNow<Parameters<typeof toSvg>[0] | null>(root, 'vector', m.id, () => null)
+          if (icon?.artboard) entries.push({ title: m.title, kind: 'Icon', image: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(toSvg(icon))}` })
         }
       } else if (s.id === 'quests') {
         for (const q of quests) {

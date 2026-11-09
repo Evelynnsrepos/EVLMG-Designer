@@ -97,6 +97,11 @@ and mark `react` as external.
 | `useHotwheel(() => actions)` | (0.18) Put your tool's actions on the Hotwheel's outer ring (hold Q). Call it in your `View`; see below. |
 | `addHotwheelAction(action)` | (0.18) Add a program-wide action that people can put on the inner ring (Settings → Hotwheel). Returns a function that removes it. |
 | `openHotwheel({ x, y }?)` | (0.18) Open the Hotwheel, e.g. from your own button. |
+| `SendMenu` | (0.28) The app's "Send to…" button: `h(egd.SendMenu, { title, picture: async () => pngBlob })`. Sends the picture to the Asset Pool, Moodboard, Card Designer and the other picture tools. |
+| `sendImageTo(type, blob, name)` | (0.28) The same without the button: save a picture into the project and give it to that tool. |
+| `addImageTarget(type, label)` | (0.28) Let your tool receive pictures from Send to…: `type` is `plugin.<your id>`. Returns a function that removes it. |
+| `useIntentHandler(type, (intent) => …, ready)` | (0.28) Receive what other tools send: a picture arrives as `{ action: 'add-image', path, name }`, `path` being a project path like `assets/images/….png`. |
+| `useAssetUrl(path)` | (0.28) A URL to show a project picture (`assets/…`) in an `<img>`; null while loading. |
 
 Only additions are made to API version 1; nothing is renamed or removed.
 

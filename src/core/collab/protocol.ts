@@ -223,5 +223,5 @@ export async function deviceIdForKey(key: string): Promise<string> {
   return 'k-' + [...hash.slice(0, 16)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-/** Asset paths peers may ask for: `assets/<images|audio>/<uuid>.<ext>`, nothing else. */
-export const ASSET_PATH = /^assets\/(images|audio)\/[0-9a-fA-F-]{36}\.[a-z0-9]{1,5}$/
+/** Asset paths peers may ask for: `assets/<images|audio|files>/<uuid>.<ext>`, nothing else. */
+export const ASSET_PATH = /^assets\/(images|audio|files)\/[0-9a-fA-F-]{36}\.[a-z0-9]{1,10}$/

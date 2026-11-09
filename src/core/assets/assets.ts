@@ -8,8 +8,9 @@ import { newId, type AssetPath } from '../model'
  * project's `assets/images/` or `assets/audio/` as `<uuid>.<ext>`, and
  * components store the returned relative path (`assets/images/<uuid>.png`).
  * Stored paths always use `/`; `resolveAssetPath` turns them into real paths.
+ * v0.26: any other file (a .blend, .psd, .glb…) can be kept too, in `assets/files/`, when a caller asks for 'file'.
  */
-export type AssetKind = 'image' | 'audio'
+export type AssetKind = 'image' | 'audio' | 'file'
 
 export interface ImportedAsset {
   /** Relative path to store in your document, e.g. `assets/images/<uuid>.png`. */
@@ -19,12 +20,12 @@ export interface ImportedAsset {
   name: string
 }
 
-export const ASSET_EXTENSIONS: Record<AssetKind, readonly string[]> = {
+export const ASSET_EXTENSIONS: Record<'image' | 'audio', readonly string[]> = {
   image: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif'],
   audio: ['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus', 'webm'],
 }
 
-const FOLDER: Record<AssetKind, string> = { image: 'images', audio: 'audio' }
+const FOLDER: Record<AssetKind, string> = { image: 'images', audio: 'audio', file: 'files' }
 
 const MIME_EXTENSION: Record<string, string> = {
   'image/png': 'png',
@@ -64,7 +65,7 @@ export function extensionOf(name: string): string {
   return i > 0 ? base.slice(i + 1).toLowerCase() : ''
 }
 
-export function assetKindOfExtension(ext: string): AssetKind | null {
+export function assetKindOfExtension(ext: string): 'image' | 'audio' | null {
   const e = ext.toLowerCase()
   if (ASSET_EXTENSIONS.image.includes(e)) return 'image'
   if (ASSET_EXTENSIONS.audio.includes(e)) return 'audio'
@@ -76,11 +77,23 @@ export function mimeOf(path: string): string {
   return EXTENSION_MIME[extensionOf(path)] ?? 'application/octet-stream'
 }
 
-/** Which kinds a caller accepts: one kind, or both. */
+/** Which kinds a caller accepts: one kind, images or audio ('any'), or every file ('file': other types go to `assets/files/`). */
 export type AcceptKind = AssetKind | 'any'
 
 function accepts(accept: AcceptKind, kind: AssetKind) {
-  return accept === 'any' || accept === kind
+  return accept === 'file' || (accept === 'any' && kind !== 'file') || accept === kind
+}
+
+/** The kind a file is stored as, or null if the caller doesn't take it. */
+function kindFor(ext: string, accept: AcceptKind): AssetKind | null {
+  const kind = assetKindOfExtension(ext) ?? (accept === 'file' ? 'file' : null)
+  return kind && accepts(accept, kind) ? kind : null
+}
+
+/** Stored extension: lower case, 'jpg' for 'jpeg', and 'bin' for names peers would not accept (no or very long extension). */
+function storedExtension(ext: string): string {
+  if (ext === 'jpeg') return 'jpg'
+  return /^[a-z0-9]{1,10}$/.test(ext) ? ext : 'bin'
 }
 
 async function targetFor(root: string, kind: AssetKind, ext: string) {
@@ -95,9 +108,9 @@ async function targetFor(root: string, kind: AssetKind, ext: string) {
 /** Copy a file from disk (file picker result) into the project. Null if the type is not supported. */
 export async function importAssetFromPath(root: string, sourcePath: string, accept: AcceptKind = 'any'): Promise<ImportedAsset | null> {
   const ext = extensionOf(sourcePath)
-  const kind = assetKindOfExtension(ext)
-  if (!kind || !accepts(accept, kind)) return null
-  const { path, abs } = await targetFor(root, kind, ext === 'jpeg' ? 'jpg' : ext)
+  const kind = kindFor(ext, accept)
+  if (!kind) return null
+  const { path, abs } = await targetFor(root, kind, storedExtension(ext))
   await getFs().copyFile(sourcePath, abs)
   return { path, kind, name: sourcePath.split(/[\\/]/).pop() ?? sourcePath }
 }
@@ -110,11 +123,11 @@ export async function importAssetFromBlob(root: string, blob: Blob, accept: Acce
   const fileName = name ?? (blob instanceof File ? blob.name : '')
   const mime = blob.type.split(';')[0].trim().toLowerCase()
   const ext = MIME_EXTENSION[mime] ?? extensionOf(fileName)
-  const kind = assetKindOfExtension(ext)
-  if (!kind || !accepts(accept, kind)) return null
-  const { path, abs } = await targetFor(root, kind, ext === 'jpeg' ? 'jpg' : ext)
+  const kind = kindFor(ext, accept)
+  if (!kind) return null
+  const { path, abs } = await targetFor(root, kind, storedExtension(ext))
   await getFs().writeBinaryAtomic(abs, new Uint8Array(await blob.arrayBuffer()))
-  return { path, kind, name: fileName || `${kind === 'image' ? 'Image' : 'Audio'}.${ext}` }
+  return { path, kind, name: fileName || `${kind === 'image' ? 'Image' : kind === 'audio' ? 'Audio' : 'File'}.${ext}` }
 }
 
 /**
@@ -129,9 +142,10 @@ export function setImageChooser(chooser: ImageChooser | null) {
 
 /** Open the file picker and import every chosen file (MB-7). For images, your drawings are offered first. */
 export async function pickAndImportAssets(root: string, accept: AcceptKind, title?: string): Promise<ImportedAsset[]> {
-  const extensions = accept === 'any' ? [...ASSET_EXTENSIONS.image, ...ASSET_EXTENSIONS.audio] : [...ASSET_EXTENSIONS[accept]]
-  const defaultTitle = accept === 'audio' ? 'Choose audio files' : accept === 'image' ? 'Choose images' : 'Choose images or audio'
-  if (accept !== 'audio' && imageChooser) {
+  // An empty list means every file type.
+  const extensions = accept === 'file' ? [] : accept === 'any' ? [...ASSET_EXTENSIONS.image, ...ASSET_EXTENSIONS.audio] : [...ASSET_EXTENSIONS[accept]]
+  const defaultTitle = accept === 'audio' ? 'Choose audio files' : accept === 'image' ? 'Choose images' : accept === 'file' ? 'Choose files' : 'Choose images or audio'
+  if (accept !== 'audio' && accept !== 'file' && imageChooser) {
     const chosen = await imageChooser(root, title ?? defaultTitle)
     if (chosen === null) return []
     if (chosen !== 'file') return chosen

@@ -6,7 +6,9 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { resolveAssetPath } from '@/core/assets'
 import { getFs } from '@/core/fs'
+import { loadDocumentNow, useProjectStore } from '@/core/state'
 import { meshesOf, MODEL_FORMATS, parseModel } from '@/shared/model3d'
 import { clone as cloneRigged } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import { applyPose, JOINTS, POSES, type Joint } from './figures'
@@ -59,6 +61,7 @@ const UI = {
     rKnee: 'Right knee',
   } as Record<Joint, string>,
   loadModel: 'Add your own model (GLB, glTF, OBJ, FBX). It stays until you close the app.',
+  fromProject: 'Model from this project…',
   modelFailed: 'This model file could not be read. GLB works best.',
   size: 'Size',
   turn: 'Turn',
@@ -85,6 +88,26 @@ const UI = {
 const STORE = 'egd.sketch.lightSetup'
 /** Models loaded this session, by key (bytes aren't stored on the device). */
 const models = new Map<string, THREE.Object3D>()
+
+/** A model file of the open project (key = its assets/… path, so the setup can bring it back next time). */
+async function loadProjectModel(root: string, path: string, name: string) {
+  if (models.has(path)) return
+  const bytes = await getFs().readBinary(await resolveAssetPath(root, path))
+  models.set(path, fitModel((await parseModel(bytes.slice().buffer as ArrayBuffer, name)).object))
+}
+
+/** 3D files already in the project: Texture Paint models and Asset Pool files. */
+async function projectModels(root: string): Promise<{ path: string; name: string }[]> {
+  const out = new Map<string, string>()
+  for (const d of useProjectStore.getState().meta?.documents ?? []) {
+    if (d.type !== 'texture-paint') continue
+    const tp = await loadDocumentNow<{ model?: string | null; modelName?: string } | null>(root, 'texture-paint', d.id, () => null).catch(() => null)
+    if (tp?.model) out.set(tp.model, tp.modelName || d.title)
+  }
+  const pool = await loadDocumentNow<{ entries: { name: string; files?: { path: string; name: string }[] }[] }>(root, 'asset-pool', 'pool', () => ({ entries: [] })).catch(() => ({ entries: [] }))
+  for (const e of pool.entries) for (const f of e.files ?? []) if (MODEL_FORMATS.includes(f.path.split('.').pop()!.toLowerCase())) out.set(f.path, `${e.name}: ${f.name}`)
+  return [...out].map(([path, name]) => ({ path, name }))
+}
 
 function readStored(): unknown {
   try {
@@ -249,6 +272,11 @@ export default function LightPreview({ brushColor, onPickColor, onPin }: { brush
   const [error, setError] = useState<string | null>(null)
   // Bumped when a built-in model finished loading, so the scene picks it up.
   const [builtinsLoaded, setBuiltinsLoaded] = useState(0)
+  const root = useProjectStore((s) => s.root)
+  const [fromProject, setFromProject] = useState<{ path: string; name: string }[]>([])
+  useEffect(() => {
+    if (root) void projectModels(root).then(setFromProject)
+  }, [root])
   const box = useRef<HTMLDivElement>(null)
   const stage = useRef<Stage | null>(null)
   const set = (fn: (s: LightSetup) => LightSetup) =>
@@ -611,6 +639,27 @@ export default function LightPreview({ brushColor, onPickColor, onPin }: { brush
       setError(UI.modelFailed)
     }
   }
+  const addProjectModel = async (path: string) => {
+    const m = fromProject.find((x) => x.path === path)
+    if (!root || !m) return
+    try {
+      await loadProjectModel(root, path, m.name)
+      setError(null)
+      addThing('model', { key: path, name: m.name })
+    } catch {
+      setError(UI.modelFailed)
+    }
+  }
+  // Project models from last time load again; ones this project doesn't have are dropped.
+  useEffect(() => {
+    const missing = setup.things.filter((t) => t.shape === 'model' && t.model && !models.has(t.model))
+    if (!missing.length) return
+    void Promise.all(missing.map((t) => (root ? loadProjectModel(root, t.model!, t.name ?? 'model').then(() => true, () => false) : Promise.resolve(false)))).then((ok) => {
+      const gone = new Set(missing.filter((_, i) => !ok[i]).map((t) => t.id))
+      if (gone.size) set((s) => ({ ...s, things: s.things.filter((t) => !gone.has(t.id)) }))
+      setBuiltinsLoaded((n) => n + 1)
+    })
+  }, [root])
   const patchThing = (id: string, patch: Partial<Thing>) => set((s) => ({ ...s, things: s.things.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))
   const patchLamp = (id: string, patch: Partial<Lamp>) => set((s) => ({ ...s, lamps: s.lamps.map((l) => (l.id === id ? { ...l, ...patch } : l)) }))
   const pin = () => {
@@ -787,6 +836,16 @@ export default function LightPreview({ brushColor, onPickColor, onPin }: { brush
         <button className="icon-btn" title={UI.loadModel} aria-label={UI.loadModel} disabled={setup.things.length >= MAX_THINGS} onClick={() => void loadModel()}>
           <Upload size={15} />
         </button>
+        {fromProject.length > 0 && (
+          <select className="input lightp-project" value="" title={UI.fromProject} aria-label={UI.fromProject} disabled={setup.things.length >= MAX_THINGS} onChange={(e) => void addProjectModel(e.target.value)}>
+            <option value="">{UI.fromProject}</option>
+            {fromProject.map((m) => (
+              <option key={m.path} value={m.path}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
       <div className="lightp-chips">
         {setup.things.map((t) => (

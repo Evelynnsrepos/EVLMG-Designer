@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { newId, type ComponentType, type Id } from '@/core/model'
 import { getManifest, type PanelProps } from '@/core/registry'
 import { pickAndImportAssets, useAssetUrl } from '@/core/assets'
-import { useDocument, useProjectStore, useUndoRedoKeys } from '@/core/state'
+import { useDocument, useIntentHandler, useProjectStore, useUndoRedoKeys } from '@/core/state'
 import { Modal } from '@/shared/ui'
 import { Kanban, moveCard } from '@/shared/kanban'
 import '@/shared/listDetail/listDetail.css'
@@ -25,6 +25,12 @@ function CardImage({ path }: { path: string }) {
   return url ? <img className="tk-img" src={url} alt="" /> : null
 }
 
+const str = (v: unknown) => (typeof v === 'string' ? v : '')
+
+/**
+ * Intents (v0.26, from the Asset Pool): `add-task` ({ taskId, title, notes, assignee, due, priority, image, links })
+ * adds a task in the first column and opens it; `open-task` ({ taskId }) opens one.
+ */
 export default function View({ active }: PanelProps) {
   const doc = useDocument<TasksDoc>('tasks', 'tasks', createTasksDoc)
   useUndoRedoKeys(doc, active)
@@ -38,6 +44,22 @@ export default function View({ active }: PanelProps) {
   const [category, setCategory] = useState('')
   const [manage, setManage] = useState(false)
   const root = useProjectStore((s) => s.root)
+  useIntentHandler(
+    'tasks',
+    (intent) => {
+      const id = str(intent.taskId)
+      if (!id) return
+      if (intent.action === 'add-task' && !doc.data?.items.some((x) => x.id === id)) {
+        const first = doc.data?.columns?.length ? doc.data.columns[0].id : COLUMNS[0].id
+        const priority = PRIORITIES.find((p) => p === intent.priority) ?? 'Normal'
+        const links = Array.isArray(intent.links) ? (intent.links as TaskLink[]).filter((l) => typeof l?.kind === 'string' && typeof l?.id === 'string') : []
+        const task: Task = { ...newTask(first), id, title: str(intent.title) || 'New task', notes: str(intent.notes), assignee: str(intent.assignee), due: str(intent.due), priority, links, image: str(intent.image) || null }
+        doc.update((x) => ({ ...x, items: [...x.items, task] }))
+      }
+      if (intent.action === 'add-task' || intent.action === 'open-task') setOpenId(id)
+    },
+    !!doc.data,
+  )
   if (!doc.data) return null
   const d = doc.data
   const set = (fn: (d: TasksDoc) => TasksDoc) => doc.update(fn)

@@ -17,6 +17,9 @@
   padding: 8px;
   border-bottom: 1px solid var(--border);
 }
+.pool-toolbar select.input {
+  width: auto;
+}
 .pool-toolbar .btn {
   display: inline-flex;
   align-items: center;
@@ -247,4 +250,50 @@
 .pool-checklist {
   min-height: 180px;
   resize: vertical;
+}
+
+/* v0.26: main picture, files, who/due/priority. */
+.pool-picture.is-main {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.pool-picture .pool-make-main {
+  top: auto;
+  bottom: 2px;
+}
+.pool-field-row {
+  display: flex;
+  gap: 8px;
+}
+.pool-field-row .pool-field {
+  flex: 1;
+  min-width: 0;
+}
+.pool-file {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.pool-file-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pool-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.pool-file audio {
+  width: 100%;
+  height: 32px;
+}
+.pool-late {
+  color: var(--danger);
 }

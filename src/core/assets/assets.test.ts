@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { ASSET_PATH } from '../collab/protocol'
 import { getFs, MemoryFs, setFs } from '../fs'
 import { assetKindOfExtension, assetUrl, extensionOf, importAssetFromBlob, importAssetFromPath, importAssetsFromDataTransfer, resolveAssetPath } from '.'
 
@@ -26,6 +27,16 @@ describe('asset import', () => {
   it('rejects unsupported files and kinds the caller does not accept', async () => {
     expect(await importAssetFromBlob(ROOT, new File(['x'], 'notes.txt'))).toBeNull()
     expect(await importAssetFromBlob(ROOT, new Blob([PNG], { type: 'image/png' }), 'audio')).toBeNull()
+  })
+
+  it("keeps any file under assets/files when the caller asks for 'file', and still sorts pictures and sounds", async () => {
+    const blend = await importAssetFromBlob(ROOT, new File(['x'], 'Hero.blend'), 'file')
+    expect(blend).toMatchObject({ kind: 'file', name: 'Hero.blend' })
+    expect(blend?.path).toMatch(/^assets\/files\/[0-9a-f-]{36}\.blend$/)
+    expect(ASSET_PATH.test(blend!.path)).toBe(true)
+    expect((await importAssetFromBlob(ROOT, new File(['x'], 'README'), 'file'))?.path).toMatch(/\.bin$/)
+    expect((await importAssetFromBlob(ROOT, new File([PNG], 'a.png'), 'file'))?.kind).toBe('image')
+    expect((await importAssetFromBlob(ROOT, new File(['x'], 'Hero.blend'), 'any'))).toBeNull()
   })
 
   it('copies a picked file from disk', async () => {

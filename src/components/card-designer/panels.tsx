@@ -8,7 +8,8 @@ import { bleedMmToPx, bleedPxToMm } from '@/shared/print'
 import { CARD_SIZES, resizeDesign, setBleed, type Card, type CardDoc, type CardImageNode, type CardNode, type CardTextNode, type SlotKeys } from './model'
 import { confirmBig, ExportDialog, exportCards, targetLabel } from './ExportDialog'
 import { exportSettings, logExport } from './exportFormats'
-import { runExport } from './exporting'
+import { cardPainter, runExport } from './exporting'
+import { SendMenu } from '@/shell/editor/SendMenu'
 import { TEXT, type OnScene, type Update } from './ui'
 
 /** Colour of a node for the Style panel's pickers. */
@@ -225,11 +226,21 @@ export function ExportPanel({ d, deckId, title, cards, root, currentId, update }
       setBusy(false)
     }
   }
+  // v0.26: the shown card's front as a picture, for the Asset Pool, Moodboard and the other Send to targets.
+  const card = cards.find((c) => c.id === currentId) ?? cards[0]
+  const nameField = d.fields.find((f) => f.name.toLowerCase() === 'name') ?? d.fields.find((f) => f.kind !== 'image')
+  const cardTitle = (card && nameField && card.values[nameField.id]?.trim()) || title
+  const cardPicture = async () => {
+    if (!card) return null
+    const { paint } = await cardPainter(d, [card], root)
+    return new Promise<Blob | null>((res) => paint(card, 'front', 300).toBlob(res, 'image/png'))
+  }
   return (
     <div className="cd-panel">
       <button className="btn btn-primary" onClick={() => setOpen(true)}>
         Export…
       </button>
+      {card ? <SendMenu title={cardTitle} picture={cardPicture} label="Send this card to…" skip={['card-designer']} /> : null}
       {d.exportSettings ? (
         <button className="btn" disabled={busy} title="Export again with the same choices" onClick={() => void again()}>
           {busy ? 'Exporting…' : `Again: ${targetLabel(s)}`}

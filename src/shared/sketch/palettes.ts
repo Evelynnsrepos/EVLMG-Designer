@@ -2,12 +2,21 @@ import { create } from 'zustand'
 import { getFs } from '@/core/fs'
 import { newId } from '@/core/model'
 import { readVersioned, writeVersioned } from '@/core/project'
+import { useProjectStore } from '@/core/state'
 import type { Palette, Swatch } from './color'
 
 /**
  * Colour palettes, colour history and the second colour (Sketch Pro). Like the brush
  * library they belong to this computer, not a project; saved in the app data folder.
+ * v0.28: while a project is open, its own palette (meta.palette) comes first as "This project".
  */
+
+export const PROJECT_PALETTE_ID = 'project'
+const own = (ps: Palette[]) => ps.filter((p) => p.id !== PROJECT_PALETTE_ID)
+function withProject(ps: Palette[]): Palette[] {
+  const meta = useProjectStore.getState().meta
+  return meta ? [{ id: PROJECT_PALETTE_ID, name: 'This project (shared)', colors: meta.palette ?? [] }, ...own(ps)] : own(ps)
+}
 
 const MAX_HISTORY = 10
 
@@ -56,7 +65,7 @@ export const usePalettes = create<PaletteState>()((set, get) => {
     clearTimeout(timer)
     timer = setTimeout(() => {
       const { palettes, defaultId, history, secondary, view } = get()
-      void palettesPath().then((p) => writeVersioned(p, { palettes, defaultId, history, secondary, view }))
+      void palettesPath().then((p) => writeVersioned(p, { palettes: own(palettes), defaultId, history, secondary, view }))
     }, 400)
   }
   const change = (fn: (s: PaletteState) => Partial<PaletteState>) => {
@@ -74,6 +83,7 @@ export const usePalettes = create<PaletteState>()((set, get) => {
       if (get().loaded) return
       const saved = await readVersioned<Partial<Saved> | null>(await palettesPath(), () => null).catch(() => null)
       if (saved) set({ ...saved, palettes: saved.palettes?.length ? saved.palettes : starter() })
+      set((s) => ({ palettes: withProject(s.palettes) }))
       set({ loaded: true })
     },
     used(hex) {
@@ -89,9 +99,11 @@ export const usePalettes = create<PaletteState>()((set, get) => {
       return id
     },
     update(id, patch) {
+      if (id === PROJECT_PALETTE_ID) return void (patch.colors && useProjectStore.getState().updateMeta({ palette: patch.colors }))
       change((s) => ({ palettes: s.palettes.map((p) => (p.id === id ? { ...p, ...patch } : p)) }))
     },
     remove(id) {
+      if (id === PROJECT_PALETTE_ID) return useProjectStore.getState().updateMeta({ palette: [] })
       change((s) => ({ palettes: s.palettes.filter((p) => p.id !== id), defaultId: s.defaultId === id ? (s.palettes.find((p) => p.id !== id)?.id ?? '') : s.defaultId }))
     },
     setDefault(defaultId) {
@@ -101,4 +113,9 @@ export const usePalettes = create<PaletteState>()((set, get) => {
       change(() => ({ view }))
     },
   }
+})
+
+// The project palette follows the open project, and changes from other devices.
+useProjectStore.subscribe((s, prev) => {
+  if (s.meta?.palette !== prev.meta?.palette || !s.meta !== !prev.meta) usePalettes.setState((p) => ({ palettes: withProject(p.palettes) }))
 })
