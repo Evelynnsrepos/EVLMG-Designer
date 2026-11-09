@@ -191,7 +191,7 @@ describe.skipIf(!hasGit)('git sync with a local repository', () => {
     expect(await pullLatest(a)).toBe('cancelled')
     // git on Windows (autocrlf) checks the file out again with \r\n line ends; the content is the same.
     expect((await read(a, 'components/list.json')).replace(/\r\n/g, '\n')).toBe('[\n1,\n2\n]')
-  })
+  }, 180_000) // five syncs in a row: about a minute on Windows CI
 
   it('syncs a project that sits inside a repository of several projects', async () => {
     const folderRemote = path.join(home, 'folder.git')
