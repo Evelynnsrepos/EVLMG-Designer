@@ -94,3 +94,16 @@ describe('tiles from a map picture', () => {
     expect(getPx(e, 0, 0)).toEqual([9, 9, 9, 255])
   })
 })
+
+describe('shapePixels', async () => {
+  const { shapePixels } = await import('./model')
+  it('draws level shapes the crisp way and tilted ones as one clean line', () => {
+    const box = shapePixels({ kind: 'rectangle', points: [{ x: 1, y: 1 }, { x: 8, y: 1 }, { x: 8, y: 5 }, { x: 1, y: 5 }] })
+    expect(box).toHaveLength(22)
+    const tilted = shapePixels({ kind: 'ellipse', points: [{ x: 20, y: 20 }, { x: 12, y: 5 }], angle: 0.7 })
+    // Every pixel touches the next one (no gaps), and the loop closes.
+    for (let i = 1; i < tilted.length; i++) expect(Math.max(Math.abs(tilted[i][0] - tilted[i - 1][0]), Math.abs(tilted[i][1] - tilted[i - 1][1]))).toBeLessThanOrEqual(1)
+    const [a, b] = [tilted[0], tilted[tilted.length - 1]]
+    expect(Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]))).toBeLessThanOrEqual(1)
+  })
+})

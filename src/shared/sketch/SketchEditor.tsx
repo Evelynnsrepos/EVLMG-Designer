@@ -41,7 +41,7 @@ import {
   type SketchLayer,
   type SymmetryMode,
 } from './model'
-import { gentle, HOLD_MS, keys, outline as shapeOutline, perfect, recognize, resize, type Shape } from './quickshape'
+import { gentle, HOLD_MS, keys, PERFECT_MS, outline as shapeOutline, perfect, recognize, resize, type Shape } from './quickshape'
 import { ReferencePicker } from './ReferencePicker'
 import { ShortcutSheet } from './ShortcutSheet'
 import { FloatingPanel, useSpot } from './FloatingPanel'
@@ -557,7 +557,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         rest: { x: number; y: number }
         timer?: ReturnType<typeof setTimeout>
         /** Set once the stroke snapped to a shape; further moves resize it. */
-        snapped?: { shape: Shape; at: { x: number; y: number }; pressure: number; drawn?: Shape }
+        snapped?: { shape: Shape; at: { x: number; y: number }; pressure: number; drawn?: Shape; perfect?: boolean }
       }
     | { kind: 'pan'; sx: number; sy: number; vx: number; vy: number }
     | { kind: 'select'; pts: { x: number; y: number }[]; rect: boolean }
@@ -680,6 +680,11 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       if (g.snapped) {
         g.snapped.at = g.snapped.at ?? p
         drawShape(g, p)
+        // Resting again while resizing also makes the shape perfect.
+        if (Math.hypot(p.x - g.rest.x, p.y - g.rest.y) * (view?.scale ?? 1) > 4) {
+          g.rest = p
+          armPerfect(g)
+        }
         return
       }
       const events = queued ?? e.nativeEvent.getCoalescedEvents?.() ?? [e.nativeEvent]
@@ -748,14 +753,25 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       const pressure = g.pts.reduce((s, q) => s + q.pressure, 0) / g.pts.length
       g.snapped = { shape, at: g.rest, pressure }
       drawShape(g, g.rest)
+      armPerfect(g)
     }, HOLD_MS)
+  }
+  /** Keep holding after the snap: the shape turns perfect (circle, square, clean angle), like Shift. */
+  const armPerfect = (g: Extract<NonNullable<typeof gesture.current>, { kind: 'paint' }>) => {
+    clearTimeout(g.timer)
+    if (g.snapped?.perfect) return
+    g.timer = setTimeout(() => {
+      if (gesture.current !== g || !g.snapped) return
+      g.snapped.perfect = true
+      drawShape(g, g.rest)
+    }, PERFECT_MS)
   }
 
   /** Draw the snapped shape, resized toward `to`; Shift makes it perfect. */
   const drawShape = (g: Extract<NonNullable<typeof gesture.current>, { kind: 'paint' }>, to: { x: number; y: number }) => {
     if (!g.snapped) return
     let shape = resize(g.snapped.shape, g.snapped.at, to)
-    shape = keys.shift ? perfect(shape) : gentle(shape)
+    shape = keys.shift || g.snapped.perfect ? perfect(shape) : gentle(shape)
     g.snapped.drawn = shape
     engine.restroke(shapeOutline(shape, 2, g.pts[0]).map((q) => ({ ...q, pressure: g.snapped!.pressure })))
     setVersion(engine.version)

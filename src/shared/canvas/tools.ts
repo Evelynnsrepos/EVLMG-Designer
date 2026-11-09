@@ -10,7 +10,7 @@ import { NOTE_COLORS } from './nodeTypes'
 import type { CanvasApi, CanvasTool, EllipseNode, LineNode, NodeBase, NoteNode, Point, RectNode, TextNode, ToolPointerEvent } from './types'
 import { useSettings } from '@/core/state'
 import { worldToLocal } from './transform'
-import { HOLD_MS, keys, outline, perfect, recognize, resize, type Shape } from '../sketch/quickshape'
+import { HOLD_MS, keys, PERFECT_MS, outline, perfect, recognize, resize, type Shape } from '../sketch/quickshape'
 
 /** Labels kept as constants so they can be translated later. */
 export const TOOL_LABELS = {
@@ -283,12 +283,12 @@ export const penTool = (options: ToolOptions<LineNode> = {}): CanvasTool<any> =>
     // QuickShape: rest at the end of the stroke to snap it to a clean shape; keep holding to resize, Shift for perfect.
     let rest = { x: 0, y: 0 }
     let timer: ReturnType<typeof setTimeout> | undefined
-    let snapped: { shape: Shape; at: { x: number; y: number } } | null = null
+    let snapped: { shape: Shape; at: { x: number; y: number }; perfect?: boolean } | null = null
     let shaped: number[] | null = null
     const drawShape = (to: { x: number; y: number }) => {
       if (!snapped) return
       let shape = resize(snapped.shape, snapped.at, to)
-      if (keys.shift) shape = perfect(shape)
+      if (keys.shift || snapped.perfect) shape = perfect(shape)
       shaped = outline(shape, 3, { x: 0, y: 0 }).flatMap((q) => [q.x, q.y])
       api.setDraft([{ ...make(shaped), smooth: false }])
     }
@@ -301,13 +301,30 @@ export const penTool = (options: ToolOptions<LineNode> = {}): CanvasTool<any> =>
         if (!shape) return
         snapped = { shape, at: rest }
         drawShape(rest)
+        armPerfect()
       }, HOLD_MS)
+    }
+    // Keep holding after the snap: the shape turns perfect, like Shift.
+    const armPerfect = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        if (!snapped) return
+        snapped.perfect = true
+        drawShape(rest)
+      }, PERFECT_MS)
     }
     arm()
     return {
       move(m) {
         raw = { x: m.world.x - origin.x, y: m.world.y - origin.y }
-        if (snapped) return drawShape(raw)
+        if (snapped) {
+          drawShape(raw)
+          if (!snapped.perfect && Math.hypot(raw.x - rest.x, raw.y - rest.y) * api.viewport.scale > 4) {
+            rest = raw
+            armPerfect()
+          }
+          return
+        }
         sx += (raw.x - sx) * follow
         sy += (raw.y - sy) * follow
         points.push(sx, sy)
