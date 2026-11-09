@@ -77,7 +77,7 @@ const ENTITY_LABEL: Record<EntityType, string> = { item: 'Items', character: 'Ch
 const ENTITY_ONE: Record<EntityType, string> = { item: 'Item', character: 'Character', town: 'Town', enemy: 'Enemy' }
 
 /**
- * Asset Pool (v0.5). Intents: `add-image` ({ path, name }) attaches a picture to the
+ * Asset Pool (v0.5). Intents: `select` ({ id }) shows one entry; `add-image` ({ path, name }) attaches a picture to the
  * selected asset, or makes a new asset from it when none is selected.
  */
 export default function View({ active }: PanelProps) {
@@ -106,6 +106,8 @@ export default function View({ active }: PanelProps) {
   useIntentHandler(
     'asset-pool',
     (intent) => {
+      // A link to one asset (Ctrl+K, [[ ]] in the Wiki or Writer) opens the pool on it.
+      if (intent.action === 'select' && typeof intent.id === 'string') return setSelectedId(intent.id)
       if (intent.action !== 'add-image' || typeof intent.path !== 'string') return
       const path = intent.path
       const target = pool?.entries.find((e) => e.id === selectedId)
