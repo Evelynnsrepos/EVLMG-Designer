@@ -420,7 +420,7 @@ One extra term applies under section 7(b) of the GPL-3.0 (see [`ADDITIONAL-TERMS
 share must visibly credit the original, *Eve.Lopment Games Designer by Evelopment Games*, with a link to this repository.
 Donating on [Ko-fi](https://ko-fi.com/evelynnevlmg) is welcome but never required.
 
-The planar head in Draw's light preview is ["planarhead-model"](https://sketchfab.com/3d-models/planarhead-model-df4a384d5c3a4b358b6d3b5bd80e6d60) by [Beenga](https://sketchfab.com/beangarik), under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), used unchanged (see [public/models/CREDITS.md](public/models/CREDITS.md)).
+The planar head in Draw's light preview is ["planarhead-model"](https://sketchfab.com/3d-models/planarhead-model-df4a384d5c3a4b358b6d3b5bd80e6d60) by [Beenga](https://sketchfab.com/beangarik), under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), used unchanged. The posable figure is ["Mannequiny"](https://github.com/GDQuest/godot-3d-mannequin) by [GDQuest](https://www.gdquest.com/) (model by Luciano Muñoz), under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), used unchanged (see [public/models/CREDITS.md](public/models/CREDITS.md)).
 
 The app font, [Lexend Deca](https://github.com/googlefonts/lexend), is under the [SIL Open Font License 1.1](public/fonts/OFL.txt).
 

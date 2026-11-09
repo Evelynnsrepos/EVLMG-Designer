@@ -8,7 +8,8 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { getFs } from '@/core/fs'
 import { meshesOf, MODEL_FORMATS, parseModel } from '@/shared/model3d'
-import { applyPose, buildFigure, JOINTS, POSES, type Joint } from './figures'
+import { clone as cloneRigged } from 'three/examples/jsm/utils/SkeletonUtils.js'
+import { applyPose, JOINTS, POSES, type Joint } from './figures'
 import { AIM, anglesAt, applyPreset, defaultSetup, FLOOR, uid, lampPosition, MAX_LAMPS, MAX_THINGS, PRESET_IDS, restoreSetup, toneSteps, type Lamp, type LightPresetId, type LightSetup, type Shape, type Thing } from './setup'
 import './light.css'
 
@@ -101,8 +102,7 @@ function store(s: LightSetup) {
 }
 
 // Every shape stands on the floor and is about one unit tall at size 1.
-function shapeMesh(shape: Exclude<Shape, 'model' | 'head'>): THREE.Object3D {
-  if (shape === 'figure') return buildFigure()
+function shapeMesh(shape: Exclude<Shape, 'model' | 'head' | 'figure'>): THREE.Object3D {
   const g =
     shape === 'ball'
       ? new THREE.SphereGeometry(0.5, 48, 32)
@@ -119,7 +119,7 @@ function shapeMesh(shape: Exclude<Shape, 'model' | 'head'>): THREE.Object3D {
 }
 
 /** Models that come with the app (public/models, credits in CREDITS.md there), loaded once when first used. */
-const BUILTIN: Partial<Record<Shape, string>> = { head: 'models/planar-head.glb' }
+const BUILTIN: Partial<Record<Shape, string>> = { head: 'models/planar-head.glb', figure: 'models/mannequin.glb' }
 const builtins = new Map<Shape, THREE.Object3D | 'loading' | 'failed'>()
 function builtin(shape: Shape, loaded: () => void): THREE.Object3D | null {
   const have = builtins.get(shape)
@@ -137,11 +137,17 @@ function builtin(shape: Shape, loaded: () => void): THREE.Object3D | null {
           if ((m.isMesh && m.geometry.getAttribute('position').count < 8) || (o as THREE.Line).isLine || (o as THREE.Points).isPoints) junk.push(o)
         })
         for (const o of junk) o.removeFromParent()
-        // The planar head looks along +x; turn it to three-quarter so the face planes show at first.
-        const turned = new THREE.Group()
-        turned.add(object)
-        turned.rotation.y = -Math.PI / 6
-        builtins.set(shape, fitModel(turned))
+        if (shape === 'figure') {
+          // Posed bones move the skin outside its load-time bounds.
+          for (const m of meshesOf(object)) m.frustumCulled = false
+          builtins.set(shape, fitModel(object, 1.6))
+        } else {
+          // The planar head looks along +x; turn it to three-quarter so the face planes show at first.
+          const turned = new THREE.Group()
+          turned.add(object)
+          turned.rotation.y = -Math.PI / 6
+          builtins.set(shape, fitModel(turned))
+        }
         loaded()
       })
       .catch(() => builtins.set(shape, 'failed'))
@@ -149,11 +155,12 @@ function builtin(shape: Shape, loaded: () => void): THREE.Object3D | null {
   return null
 }
 
-/** A loaded model scaled to about one unit and put on the floor. */
-function fitModel(object: THREE.Object3D): THREE.Object3D {
+/** A loaded model scaled to about one unit (or to the given height) and put on the floor. */
+function fitModel(object: THREE.Object3D, height?: number): THREE.Object3D {
+  object.updateMatrixWorld(true)
   const bounds = new THREE.Box3().setFromObject(object)
   const size = bounds.getSize(new THREE.Vector3())
-  const s = 1 / (Math.max(size.x, size.y, size.z) || 1)
+  const s = height ? height / (size.y || 1) : 1 / (Math.max(size.x, size.y, size.z) || 1)
   const centre = bounds.getCenter(new THREE.Vector3())
   object.scale.multiplyScalar(s)
   object.position.set(-centre.x * s, -bounds.min.y * s, -centre.z * s)
@@ -482,7 +489,7 @@ export default function LightPreview({ brushColor, onPickColor, onPin }: { brush
         const group = new THREE.Group()
         const template = t.shape === 'model' ? models.get(t.model!) : BUILTIN[t.shape] ? builtin(t.shape, () => setBuiltinsLoaded((n) => n + 1)) : null
         if ((t.shape === 'model' || BUILTIN[t.shape]) && !template) continue
-        const body = template ? template.clone(true) : shapeMesh(t.shape as Exclude<Shape, 'model' | 'head'>)
+        const body = template ? cloneRigged(template) : shapeMesh(t.shape as Exclude<Shape, 'model' | 'head' | 'figure'>)
         if (template) for (const m of meshesOf(body)) m.userData.model = true
         group.add(body)
         st.scene.add(group)
@@ -498,6 +505,7 @@ export default function LightPreview({ brushColor, onPickColor, onPin }: { brush
         applyPose(body, t.pose ?? POSES.stand)
         body.position.y = 0
         entry.group.updateMatrixWorld(true)
+        for (const m of meshesOf(body)) if ((m as THREE.SkinnedMesh).isSkinnedMesh) (m as THREE.SkinnedMesh).computeBoundingBox()
         body.position.y = -new THREE.Box3().setFromObject(body).min.y / t.size
       }
       for (const m of meshesOf(entry.group)) {

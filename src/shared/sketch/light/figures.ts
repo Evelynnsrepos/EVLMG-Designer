@@ -1,16 +1,9 @@
 import * as THREE from 'three'
 
 /**
- * A posable wooden-mannequin figure for the light preview, made from code (no model file).
+ * Posing for the light preview's mannequin (the built-in Mannequiny model, see public/models/CREDITS.md).
+ * Sliders turn its skeleton's bones; the model faces +z and its left is +x.
  */
-
-function part(g: THREE.BufferGeometry, at: [number, number, number], scale: [number, number, number] = [1, 1, 1], rot: [number, number, number] = [0, 0, 0]) {
-  const m = new THREE.Mesh(g)
-  m.position.set(...at)
-  m.scale.set(...scale)
-  m.rotation.set(...rot)
-  return m
-}
 
 /** The figure's joints and what each slider turns. */
 export const JOINTS = [
@@ -43,61 +36,56 @@ export const POSES: Record<string, Pose> = {
 }
 
 const DEG = Math.PI / 180
+/** Bone names in the model (glTF loading drops the dots, so "thigh.l" arrives as "thighl"). */
+const BONES = ['spine_01', 'spine_02', 'neck_01', 'upperarml', 'lowerarml', 'upperarmr', 'lowerarmr', 'thighl', 'calfl', 'thighr', 'calfr'] as const
+type Bone = (typeof BONES)[number]
+type Rig = Record<Bone, { bone: THREE.Object3D; rest: THREE.Quaternion; parent: THREE.Quaternion }>
 
-/** A mannequin about 1.6 units tall looking towards +z. Joint groups are in userData.joints. */
-export function buildFigure(): THREE.Group {
-  const root = new THREE.Group()
-  const joints: Record<string, THREE.Group> = {}
-  const joint = (parent: THREE.Object3D, name: string, at: [number, number, number]) => {
-    const j = new THREE.Group()
-    j.position.set(...at)
-    parent.add(j)
-    joints[name] = j
-    return j
+const euler = (x: number, y: number, z: number) => new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z))
+
+/** Turn a bone by a rotation given in the figure's own axes, on top of its rest pose (parents' turns carry over). */
+function turn(r: Rig[Bone], by: THREE.Quaternion) {
+  r.bone.quaternion.copy(r.parent).invert().multiply(by).multiply(r.parent).multiply(r.rest)
+}
+
+/** Find the bones and make arms-down the rest pose (the model comes in a T-pose). Null if bones are missing. */
+function rig(figure: THREE.Object3D): Rig | null {
+  const found = new Map<string, THREE.Object3D>()
+  figure.traverse((o) => found.set(o.name.replace(/\./g, ''), o))
+  if (BONES.some((b) => !found.has(b))) return null
+  const capture = () => {
+    figure.updateWorldMatrix(true, true)
+    // Parent turns in the figure's own axes, whatever the figure is turned to in the scene.
+    const toFigure = figure.getWorldQuaternion(new THREE.Quaternion()).invert()
+    const r = {} as Rig
+    for (const b of BONES) {
+      const bone = found.get(b)!
+      r[b] = { bone, rest: bone.quaternion.clone(), parent: toFigure.clone().multiply(bone.parent!.getWorldQuaternion(new THREE.Quaternion())) }
+    }
+    return r
   }
-  const capsule = (r: number, len: number) => new THREE.CapsuleGeometry(r, len, 4, 12)
-  const hips = joint(root, 'hips', [0, 0.8, 0])
-  hips.add(part(new THREE.SphereGeometry(1, 16, 12), [0, 0.02, 0], [0.16, 0.1, 0.11]))
-  // Torso: bend and twist at the waist.
-  const waist = joint(hips, 'waist', [0, 0.06, 0])
-  waist.add(part(capsule(0.12, 0.26), [0, 0.24, 0], [1.3, 1, 0.75]))
-  const neck = joint(waist, 'neck', [0, 0.5, 0])
-  neck.add(part(new THREE.CylinderGeometry(0.04, 0.045, 0.08, 10), [0, 0.03, 0]))
-  neck.add(part(new THREE.SphereGeometry(0.1, 16, 12), [0, 0.15, 0.01], [0.85, 1.05, 0.95]))
-  for (const [side, x] of [
-    ['l', 1],
-    ['r', -1],
-  ] as const) {
-    // Arms hang from the shoulders; the figure's left is +x.
-    const shoulder = joint(waist, `${side}Shoulder`, [x * 0.19, 0.44, 0])
-    shoulder.add(part(new THREE.SphereGeometry(0.05, 12, 8), [0, 0, 0]))
-    shoulder.add(part(capsule(0.042, 0.2), [0, -0.14, 0]))
-    const elbow = joint(shoulder, `${side}ElbowJ`, [0, -0.28, 0])
-    elbow.add(part(capsule(0.037, 0.19), [0, -0.13, 0]))
-    elbow.add(part(new THREE.SphereGeometry(0.045, 12, 8), [0, -0.28, 0.01], [0.8, 1.2, 0.6]))
-    const hip = joint(hips, `${side}Hip`, [x * 0.085, -0.02, 0])
-    hip.add(part(capsule(0.06, 0.28), [0, -0.19, 0]))
-    const knee = joint(hip, `${side}KneeJ`, [0, -0.39, 0])
-    knee.add(part(capsule(0.05, 0.28), [0, -0.18, 0]))
-    knee.add(part(new THREE.BoxGeometry(0.08, 0.05, 0.18), [0, -0.37, 0.04]))
-  }
-  root.userData.joints = joints
-  return root
+  const t = capture()
+  turn(t.upperarml, euler(0, 0, -Math.PI / 2))
+  turn(t.upperarmr, euler(0, 0, Math.PI / 2))
+  return capture()
 }
 
 /** Turn the figure's joints to the pose (degrees; missing joints are straight). */
 export function applyPose(figure: THREE.Object3D, pose: Pose) {
-  const j = figure.userData.joints as Record<string, THREE.Group>
+  const r: Rig | null = (figure.userData.rig ??= rig(figure))
+  if (!r) return
   const a = (k: Joint) => (pose[k] ?? 0) * DEG
-  j.neck.rotation.set(a('headNod'), a('headTurn'), 0)
-  j.waist.rotation.set(a('bend'), a('twist'), 0)
+  turn(r.neck_01, euler(a('headNod'), a('headTurn'), 0))
+  // Bend and twist are shared by both spine bones so the back curves.
+  turn(r.spine_01, euler(a('bend') / 2, a('twist') / 2, 0))
+  turn(r.spine_02, euler(a('bend') / 2, a('twist') / 2, 0))
   // Forward swings turn the limb's downward direction towards +z (negative x rotation).
-  j.lShoulder.rotation.set(-a('lArmFwd'), 0, a('lArmSide'))
-  j.rShoulder.rotation.set(-a('rArmFwd'), 0, -a('rArmSide'))
-  j.lElbowJ.rotation.set(-a('lElbow'), 0, 0)
-  j.rElbowJ.rotation.set(-a('rElbow'), 0, 0)
-  j.lHip.rotation.set(-a('lLeg'), 0, 0)
-  j.rHip.rotation.set(-a('rLeg'), 0, 0)
-  j.lKneeJ.rotation.set(a('lKnee'), 0, 0)
-  j.rKneeJ.rotation.set(a('rKnee'), 0, 0)
+  turn(r.upperarml, euler(-a('lArmFwd'), 0, a('lArmSide')))
+  turn(r.upperarmr, euler(-a('rArmFwd'), 0, -a('rArmSide')))
+  turn(r.lowerarml, euler(-a('lElbow'), 0, 0))
+  turn(r.lowerarmr, euler(-a('rElbow'), 0, 0))
+  turn(r.thighl, euler(-a('lLeg'), 0, 0))
+  turn(r.thighr, euler(-a('rLeg'), 0, 0))
+  turn(r.calfl, euler(a('lKnee'), 0, 0))
+  turn(r.calfr, euler(a('rKnee'), 0, 0))
 }
