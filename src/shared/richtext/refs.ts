@@ -60,6 +60,10 @@ const toItem = (e: Entity, categories: Category[] = []): RefItem => ({
   label: e.name || 'Untitled',
   hint: ENTITY_HINT[e.type],
   color: entityLook(categories, e.type, e)?.style.color,
+  details: [
+    ...(e.type === 'enemy' ? [['Level', e.levelMin === e.levelMax ? `${e.levelMin}` : `${e.levelMin}–${e.levelMax}`] as [string, string]] : []),
+    ...(e.type === 'item' || e.type === 'enemy' ? Object.entries(e.stats).map(([k, v]): [string, string] => [k, String(v)]) : []),
+  ],
 })
 
 /** `[[` links to a whole tool (`tool`, id = its type) or one of its documents (`doc`, id = the document): jump points in text (v0.18). */
@@ -70,7 +74,20 @@ export const CUSTOM_KIND = 'custom:'
 
 interface CustomListLite {
   one: string
-  items: { id: string; name: string }[]
+  fields: { id: string; name: string; kind: string; unit?: string }[]
+  items: { id: string; name: string; values: Record<string, unknown> }[]
+}
+
+/** Values a card can show: numbers, short texts, choices and yes/no (links and pictures are left out). */
+function customDetails(l: CustomListLite, values: Record<string, unknown>): [string, string][] {
+  return l.fields.flatMap((f): [string, string][] => {
+    const v = values[f.id]
+    if (v === null || v === undefined || v === '') return []
+    if (f.kind === 'number') return [[f.name, `${v}${f.unit ? ` ${f.unit}` : ''}`]]
+    if (f.kind === 'yesno') return [[f.name, v ? 'yes' : 'no']]
+    if (f.kind === 'text' || f.kind === 'choice') return [[f.name, String(v)]]
+    return []
+  })
 }
 // Same default as the Custom List tool's createCustomListDoc (shared code can't import tools).
 const createCustomListLite = () => ({ one: 'entry', fields: [{ id: newId(), name: 'Description', kind: 'long' }], items: [] }) as CustomListLite
@@ -87,7 +104,7 @@ export function useEntityRefProvider(options?: { open?: (target: RefTarget) => v
   const withPlaces = options?.places !== false
   const lists = useDocumentsOfType<CustomListLite>('custom-list', createCustomListLite)
   return useMemo<RefProvider>(() => {
-    const custom: RefItem[] = lists.flatMap((l) => l.data.items.map((r) => ({ kind: CUSTOM_KIND + l.id, id: r.id, label: r.name || 'Untitled', hint: l.title })))
+    const custom: RefItem[] = lists.flatMap((l) => l.data.items.map((r) => ({ kind: CUSTOM_KIND + l.id, id: r.id, label: r.name || 'Untitled', hint: l.title, details: customDetails(l.data, r.values) })))
     const all = [...allEntities(entities).map((e) => toItem(e, categories)), ...custom]
     const tools: RefItem[] = (meta?.enabledComponents ?? []).map((t) => ({ kind: TOOL_KIND, id: t, label: getManifest(t)?.name ?? t, hint: 'Tool' }))
     const docs: RefItem[] = (meta?.documents ?? []).map((d) => ({ kind: DOC_KIND, id: d.id, label: d.title, hint: getManifest(d.type)?.name ?? d.type }))

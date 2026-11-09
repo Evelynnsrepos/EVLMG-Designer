@@ -367,6 +367,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Pick a font and a size for selected text (or for what you type next) in the toolbar.',
       'Click an image for its bar: left, center, right, or with the text flowing around it on the left or right, and 25 to 100% of the text width. Drag the blue corner to size it freely.',
       'An empty document offers spec templates: Feature spec, Level brief, One-page game overview and Postmortem.',
+      'Type ![[ and pick an item, enemy or Custom List entry to put in a card with its current numbers (stats, level, fields). The card updates by itself when the values change, so a spec never quotes old numbers.',
     ],
   },
   'story-writer': {

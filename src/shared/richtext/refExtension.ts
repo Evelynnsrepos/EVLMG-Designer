@@ -164,8 +164,12 @@ export const RefExtension = Node.create<RefOptions, RefStorage>({
           return entries
         },
         command: ({ editor, range, props: entry }) => {
+          // 0.28: `![[` + a pick from the menu makes a card (with the entry's live numbers), Markdown Syntax or not.
+          const card = range.from > 0 && editor.state.doc.textBetween(range.from - 1, range.from) === '!'
           const insert = (item: RefItem | null | undefined) => {
-            if (item) editor.chain().focus().insertContentAt(range, refContent(item)).run()
+            if (!item) return
+            if (card) editor.chain().focus().insertContentAt({ from: range.from - 1, to: range.to }, { type: REF_CARD_NODE, attrs: { kind: item.kind, id: item.id } }).run()
+            else editor.chain().focus().insertContentAt(range, refContent(item)).run()
           }
           if (entry.type === 'ref') return insert(entry.item)
           void Promise.resolve(getProvider()?.create?.(entry.label)).then(insert)
@@ -190,6 +194,12 @@ function refNodeView(tag: 'span' | 'div', getProvider: () => RefProvider | null,
     const paint = () => {
       const item = getProvider()?.resolve(target())
       dom.textContent = shownText(node.attrs, getProvider())
+      // 0.28: cards show the entry's current numbers, so a spec never quotes old values.
+      if (tag === 'div' && item?.details?.length) {
+        const stats = dom.appendChild(document.createElement('span'))
+        stats.className = 'richtext-refcard-stats'
+        stats.textContent = item.details.map(([k, v]) => `${k} ${v}`).join(' · ')
+      }
       dom.title = item ? `${item.hint ? item.hint + ': ' : ''}${item.label} (click to open)` : 'The linked record was deleted'
       dom.classList.toggle('richtext-ref-missing', !item)
       dom.style.color = item?.color ?? ''

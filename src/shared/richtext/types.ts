@@ -25,6 +25,8 @@ export interface RefItem extends RefTarget {
   hint?: string
   /** Text color, e.g. the entity's rarity color (v0.6). */
   color?: string
+  /** 0.28: live values shown on a `![[Name]]` card, e.g. [["Damage", "12"]]. */
+  details?: [string, string][]
 }
 
 /**

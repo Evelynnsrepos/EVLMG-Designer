@@ -471,6 +471,13 @@
 .richtext-refcard::before {
   content: '↗ ';
 }
+.richtext-refcard-stats {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 0.9em;
+}
 .richtext-content table {
   border-collapse: collapse;
   margin: 0 0 0.8em;
