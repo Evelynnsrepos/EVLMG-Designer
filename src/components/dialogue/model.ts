@@ -1,4 +1,5 @@
 import { newId, type Id } from '@/core/model'
+import { toCSV } from '@/shared/csv'
 import type { Condition, Flag, FlagChange } from '@/shared/flags'
 
 /**
@@ -29,6 +30,10 @@ export interface Line {
   conditions: Condition[]
   /** Flag changes when this line is said. */
   changes: FlagChange[]
+  /** 0.28: voice-over direction for the actor ("whispered, out of breath"). */
+  direction?: string
+  /** 0.28: voice-over file name; empty = made from the conversation and line number. */
+  voiceFile?: string
 }
 
 export interface DialogueDoc {
@@ -105,6 +110,7 @@ export function exportJson(doc: DialogueDoc, flags: Flag[], speaker: SpeakerName
           {
             speaker: speaker(l),
             text: l.text,
+            ...(l.voiceFile?.trim() ? { voice: l.voiceFile.trim() } : {}),
             next: l.next ? names.get(l.next) : null,
             conditions: cond(l.conditions),
             changes: chg(l.changes),
@@ -167,4 +173,16 @@ export function exportInk(doc: DialogueDoc, flags: Flag[], speaker: SpeakerName)
   })
   const start = doc.startId ? `-> ${names.get(doc.startId)}` : ''
   return [...vars, '', start, '', ...knots].join('\n')
+}
+
+/** 0.28: the voice file name of a line: its own, or `<conversation>_<NNN>_<speaker>`. */
+export const voiceFileOf = (doc: DialogueDoc, line: Line, conversation: string, speaker: SpeakerName) =>
+  line.voiceFile?.trim() || `${conversation}_${String(doc.lines.indexOf(line) + 1).padStart(3, '0')}_${speaker(line)}`.toLowerCase().replace(/[^a-z0-9_]+/g, '_')
+
+/** 0.28: an actor script, one row per spoken line (choices are spoken too), for a recording session. Filter by speaker in your sheet program. */
+export function actorScript(doc: DialogueDoc, conversation: string, speaker: SpeakerName): string {
+  return toCSV([
+    ['File', 'Speaker', 'Line', 'Direction', 'Conversation'],
+    ...doc.lines.filter((l) => l.text.trim()).map((l) => [voiceFileOf(doc, l, conversation, speaker), speaker(l), l.text, l.direction ?? '', conversation]),
+  ])
 }

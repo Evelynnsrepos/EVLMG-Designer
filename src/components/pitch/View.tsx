@@ -1,12 +1,14 @@
-import { ArrowDown, ArrowUp, ImagePlus, Play, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, FileDown, ImagePlus, Play, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { pickAndImportAssets, useAssetUrl } from '@/core/assets'
 import { newId, type Entity, type EntityType, type Id } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
 import { useDocument, useProjectStore, useUndoRedoKeys } from '@/core/state'
+import { safeFileName, saveBinaryFile } from '@/core/export'
 import { PresetHeader } from '@/shared/calculators'
 import { ENTITY_LABELS } from '@/shared/categories'
 import '@/shared/listDetail/listDetail.css'
+import { pitchPdf } from './pdf'
 import './pitch.css'
 
 /** Pitch / presentation mode (v0.10): slides built from the project, shown full screen. */
@@ -103,6 +105,17 @@ export default function View({ documentId, active }: PanelProps) {
         </button>
         <button className="btn btn-ghost" onClick={fromProject} title="Title, vision, selling points, pillars, characters and items from your project">
           <Sparkles size={14} /> Build from project
+        </button>
+        <button
+          className="btn btn-ghost"
+          disabled={!slides.length || !root}
+          title="One page per slide, to send to publishers or print"
+          onClick={async () => {
+            const bytes = await pitchPdf(root!, slides, vision.pillars ?? [], (x) => (entities[(x as Slide).entityType] ?? []) as Entity[])
+            await saveBinaryFile({ title: 'Save pitch deck as PDF', defaultName: `${safeFileName(project?.name ?? 'pitch')}-pitch.pdf`, bytes, filter: { name: 'PDF', extensions: ['pdf'] } })
+          }}
+        >
+          <FileDown size={14} /> PDF
         </button>
       </div>
       <div className="pi-body">

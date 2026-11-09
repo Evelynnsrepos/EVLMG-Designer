@@ -7,7 +7,7 @@ import { NumberInput } from '@/shared/calculators'
 import { ImagePicker, openEntity } from '@/shared/entityList'
 import { Field, ListDetail } from '@/shared/listDetail'
 import { ProofTextarea } from '@/shared/spell'
-import { changeKind, createCustomListDoc, FIELD_KINDS, newField, newRecord, type CustomField, type CustomListDoc, type CustomRecord, type EntryRef, type FieldKind, type FieldValue } from './model'
+import { changeKind, createCustomListDoc, fromTemplate, TEMPLATES, FIELD_KINDS, newField, newRecord, type CustomField, type CustomListDoc, type CustomRecord, type EntryRef, type FieldKind, type FieldValue } from './model'
 import './custom-list.css'
 
 const TYPE_LABEL: Record<EntityType, string> = { item: 'Item', character: 'Character', town: 'Town', enemy: 'Enemy' }
@@ -33,6 +33,16 @@ export default function View({ documentId, active }: PanelProps) {
       <button className={`btn btn-ghost${tab === 'fields' ? ' active' : ''}`} onClick={() => setTab('fields')}>
         Fields ({d.fields.length})
       </button>
+      {d.items.length === 0 && (
+        <select className="input" style={{ width: 'auto' }} value="" aria-label="Start from a template" onChange={(e) => e.target.value && set(() => fromTemplate(e.target.value))}>
+          <option value="">Start from a template…</option>
+          {TEMPLATES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+      )}
     </span>
   )
 

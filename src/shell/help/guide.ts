@@ -366,6 +366,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'The toolbar also has highlight, checklist and callout buttons. Click a callout\'s title to rename it.',
       'Pick a font and a size for selected text (or for what you type next) in the toolbar.',
       'Click an image for its bar: left, center, right, or with the text flowing around it on the left or right, and 25 to 100% of the text width. Drag the blue corner to size it freely.',
+      'An empty document offers spec templates: Feature spec, Level brief, One-page game overview and Postmortem.',
     ],
   },
   'story-writer': {
@@ -517,6 +518,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Lines and choices can depend on flags (only said if, only offered if) and change flags when said or picked. Lines that nothing leads to are marked.',
       'Play runs through the conversation like the player would, showing the flags as they change.',
       'Export saves the conversation as JSON, Yarn Spinner or Ink, ready for your engine.',
+      'For voice-over, give a line a direction for the actor and, if you like, its own file name (otherwise it is conversation, line number and speaker). Export → Actor script saves every spoken line with file name, speaker, text and direction as CSV for the recording session.',
     ],
   },
   gacha: {
@@ -642,6 +644,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'For every kind of entry the other lists do not cover: vehicles, buildings, perks, biomes, cards, spells, ships. Each Custom List is one kind; make as many as you need from the sidebar.',
       'Under Fields, name what one entry is called and add the fields it needs: text, long text, numbers with a unit, yes or no, choice lists, a picture, or links to items, characters, towns and enemies. Changing a field\'s kind converts what is already filled in where it can.',
       'Under Entries, add entries and fill them in; click a linked entry to open it. Engine export writes every Custom List into tools/custom-list.json with the field names, so your game can read them.',
+      'An empty list offers ready-made templates: Controls & input (keyboard, gamepad and touch per action), Accessibility checklist (the common basics to tick off), Glossary (terms with a do-not-translate flag) and Risk register (likelihood, impact, owner, plan).',
     ],
   },
   vector: {
@@ -792,6 +795,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Make slides to pitch your game. Build from project starts a deck with a title slide, your vision, selling points and design pillars (from Vision & Pillars) and slides of characters and items with their pictures.',
       'Each slide has a layout: title, text, picture and text, design pillars, or a selection of items, characters, towns or enemies. Drag slides in the list to change the order, or use the arrows.',
       'Present shows the deck full screen. Click or use the arrow keys, space or Enter to move on, and Esc to stop.',
+      'PDF saves the deck with one page per slide, to send to publishers or print.',
     ],
   },
   localization: {
@@ -801,6 +805,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Collect texts from the project fills the table with the names and descriptions of items, characters, towns and enemies, quest names, summaries and objectives, and every dialogue line and choice. Run it again after changes: new texts are added and changed source texts updated, translations stay.',
       'Each text remembers what it belongs to, so renaming an item or adding a dialogue line in the middle never moves a translation to the wrong line, and keys never change once made. When a source text changes, its translations turn orange: Needs update in the filter lists them, the tooltip shows the old text, and typing a new translation or the tick (still right) clears the mark.',
       'Show only what is missing in a language, and export the table as CSV for translators or your engine; Import CSV brings their work back.',
+      'For translators… saves one language as XLIFF (for translation tools and agencies) or PO (gettext, which Godot reads). Texts whose source changed are marked as needing an update in both.',
     ],
   },
   storyboard: {

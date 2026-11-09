@@ -13,3 +13,17 @@ describe('custom list', () => {
     expect(changeKind(d, f.id, 'number').items[0].values[f.id]).toBe(40)
   })
 })
+
+describe('templates', () => {
+  it('builds every template with linked field values', async () => {
+    const { TEMPLATES, fromTemplate } = await import('./model')
+    for (const t of TEMPLATES) {
+      const d = fromTemplate(t.id)
+      expect(d.fields.length).toBe(t.fields.length)
+      for (const r of d.items) for (const k of Object.keys(r.values)) expect(d.fields.some((f) => f.id === k)).toBe(true)
+    }
+    const a = fromTemplate('accessibility')
+    const area = a.fields.find((f) => f.name === 'Area')!
+    expect(a.items[0].values[area.id]).toBe('Motor')
+  })
+})

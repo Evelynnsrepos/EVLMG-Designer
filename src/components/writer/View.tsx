@@ -18,7 +18,7 @@ import {
 } from '@/shared/richtext'
 import { useArticleRefProvider } from '@/shared/wiki'
 import { importTextFiles } from './importFiles'
-import { createWriterDoc, EXPORT_FORMATS, exportDocument, type ExportFormat, type WriterDoc } from './document'
+import { createWriterDoc, EXPORT_FORMATS, SPEC_TEMPLATES, exportDocument, type ExportFormat, type WriterDoc } from './document'
 import './writer.css'
 
 const UI = {
@@ -87,6 +87,16 @@ export default function View({ documentId }: PanelProps) {
           <input type="checkbox" checked={syntaxOn} onChange={toggleSyntax} />
           {UI.syntax}
         </label>
+        {editor && editor.isEmpty && (
+          <select className="input" style={{ width: 'auto' }} value="" aria-label="Start from a template" onChange={(e) => e.target.value && editor.commands.setContent(SPEC_TEMPLATES.find((t) => t.id === e.target.value)!.html, { emitUpdate: true })}>
+            <option value="">Start from a template…</option>
+            {SPEC_TEMPLATES.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        )}
         <ImportButton refs={refs} />
         <ExportMenu onExport={runExport} />
       </header>

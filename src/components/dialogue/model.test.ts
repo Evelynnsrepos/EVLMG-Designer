@@ -40,3 +40,16 @@ describe('dialogue', () => {
     expect(ink).toContain('-> n1')
   })
 })
+
+describe('actor script', () => {
+  it('lists spoken lines with automatic or own file names and direction', async () => {
+    const { actorScript } = await import('./model')
+    const a = { ...newLine(), speakerName: 'Mira', text: 'Run!', direction: 'shouted' }
+    const b = { ...newLine(), speakerName: 'Mira', text: 'Okay', voiceFile: 'mira_ok' }
+    const d: DialogueDoc = { startId: a.id, lines: [a, b, { ...newLine(), text: '  ' }] }
+    const csv = actorScript(d, 'Cave Talk', (l) => l.speakerName)
+    expect(csv.split(/\r?\n/).filter(Boolean)).toHaveLength(3)
+    expect(csv).toContain('cave_talk_001_mira,Mira,Run!,shouted,Cave Talk')
+    expect(csv).toContain('mira_ok,Mira,Okay,,Cave Talk')
+  })
+})

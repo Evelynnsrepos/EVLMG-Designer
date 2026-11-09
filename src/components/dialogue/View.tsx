@@ -9,7 +9,7 @@ import { saveTextFile, safeFileName } from '@/core/export'
 import { applyChange, ChangesEditor, checkCondition, ConditionsEditor, FlagsEditor, useFlags, type Flag } from '@/shared/flags'
 import { FlowGraph } from '@/shared/graph'
 import { Modal } from '@/shared/ui'
-import { createDialogueDoc, exportInk, exportJson, exportYarn, newChoice, newLine, unreachable, type Choice, type DialogueDoc, type Line } from './model'
+import { actorScript, createDialogueDoc, exportInk, exportJson, exportYarn, newChoice, newLine, unreachable, type Choice, type DialogueDoc, type Line } from './model'
 import './dialogue.css'
 
 const T = {
@@ -92,8 +92,12 @@ export default function View({ documentId, active }: PanelProps) {
   }
   const line = d.lines.find((l) => l.id === selectedId) ?? null
 
-  const exportAs = async (kind: 'json' | 'yarn' | 'ink') => {
+  const exportAs = async (kind: 'json' | 'yarn' | 'ink' | 'script') => {
     setExportOpen(false)
+    if (kind === 'script') {
+      await saveTextFile({ title: 'Export actor script', defaultName: `${safeFileName(title)}-actor-script.csv`, text: actorScript(d, title, speakerOf), filter: { name: 'CSV', extensions: ['csv'] } })
+      return
+    }
     const text = kind === 'json' ? exportJson(d, flags, speakerOf) : kind === 'yarn' ? exportYarn(d, flags, speakerOf) : exportInk(d, flags, speakerOf)
     const ext = { json: 'json', yarn: 'yarn', ink: 'ink' }[kind]
     await saveTextFile({ title: `Export as ${kind}`, defaultName: `${safeFileName(title)}.${ext}`, text, filter: { name: kind.toUpperCase(), extensions: [ext] } })
@@ -117,6 +121,7 @@ export default function View({ documentId, active }: PanelProps) {
               <button onClick={() => void exportAs('json')}>JSON (for your own game code)</button>
               <button onClick={() => void exportAs('yarn')}>Yarn Spinner (Unity, Godot)</button>
               <button onClick={() => void exportAs('ink')}>Ink (inkle)</button>
+              <button onClick={() => void exportAs('script')}>Actor script for voice recording (CSV)</button>
             </div>
           )}
         </span>
@@ -233,6 +238,10 @@ function LineEditor(p: {
       </div>
       {p.unreachable && <p className="dlg-warn">{T.unreachable}</p>}
       <textarea className="input dlg-text" placeholder={T.text} value={line.text} autoFocus onChange={(e) => onEdit({ text: e.target.value })} />
+      <div className="ld-inline">
+        <input className="input" style={{ flex: 2 }} placeholder="Voice direction (whispered, out of breath…)" value={line.direction ?? ''} onChange={(e) => onEdit({ direction: e.target.value })} />
+        <input className="input" style={{ flex: 1 }} placeholder="Voice file (automatic)" title="Name of the recording; empty = conversation, line number and speaker" value={line.voiceFile ?? ''} onChange={(e) => onEdit({ voiceFile: e.target.value })} />
+      </div>
 
       <section className="dlg-section">
         <h4>{T.choices}</h4>

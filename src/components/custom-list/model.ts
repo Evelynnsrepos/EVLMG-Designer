@@ -79,3 +79,78 @@ export function changeKind(d: CustomListDoc, fieldId: Id, kind: FieldKind): Cust
     items: d.items.map((r) => (fieldId in r.values ? { ...r, values: { ...r.values, [fieldId]: coerce(kind, r.values[fieldId]) } } : r)),
   }
 }
+
+/** 0.28: ready-made lists for studio paperwork. Each makes fields (with choices) and, where it helps, starting entries. */
+export const TEMPLATES: { id: string; label: string; one: string; fields: { name: string; kind: FieldKind; options?: string[] }[]; items?: { name: string; values: Record<string, string | boolean> }[] }[] = [
+  {
+    id: 'controls',
+    label: 'Controls & input',
+    one: 'action',
+    fields: [
+      { name: 'Keyboard & mouse', kind: 'text' },
+      { name: 'Gamepad', kind: 'text' },
+      { name: 'Touch', kind: 'text' },
+      { name: 'Context', kind: 'choice', options: ['Gameplay', 'Menus', 'Vehicle', 'Dialogue'] },
+      { name: 'Can be remapped', kind: 'yesno' },
+      { name: 'Hold or press', kind: 'choice', options: ['Press', 'Hold', 'Toggle'] },
+    ],
+    items: [
+      { name: 'Move', values: { 'Keyboard & mouse': 'WASD', Gamepad: 'Left stick', Context: 'Gameplay', 'Can be remapped': true, 'Hold or press': 'Hold' } },
+      { name: 'Jump', values: { 'Keyboard & mouse': 'Space', Gamepad: 'A / Cross', Context: 'Gameplay', 'Can be remapped': true, 'Hold or press': 'Press' } },
+      { name: 'Interact', values: { 'Keyboard & mouse': 'E', Gamepad: 'X / Square', Context: 'Gameplay', 'Can be remapped': true, 'Hold or press': 'Press' } },
+      { name: 'Pause', values: { 'Keyboard & mouse': 'Esc', Gamepad: 'Start / Options', Context: 'Menus', 'Can be remapped': false, 'Hold or press': 'Press' } },
+    ],
+  },
+  {
+    id: 'accessibility',
+    label: 'Accessibility checklist',
+    one: 'check',
+    fields: [
+      { name: 'Area', kind: 'choice', options: ['Motor', 'Vision', 'Hearing', 'Cognitive', 'General'] },
+      { name: 'Status', kind: 'choice', options: ['Not started', 'Planned', 'Done', 'Not needed'] },
+      { name: 'Notes', kind: 'long' },
+    ],
+    items: [
+      ['Every control can be remapped', 'Motor'],
+      ['No action needs fast repeated presses, or there is a hold alternative', 'Motor'],
+      ['Subtitles on by default, with speaker names and a size choice', 'Hearing'],
+      ['Important sounds also have a visual cue', 'Hearing'],
+      ['Text size can be changed and stays readable on a TV across the room', 'Vision'],
+      ['Nothing relies on colour alone (colour-blind safe)', 'Vision'],
+      ['Screen shake, flashing and motion blur can be turned off', 'Vision'],
+      ['Difficulty options or an assist mode', 'Cognitive'],
+      ['Objective reminder and a way to see the controls at any time', 'Cognitive'],
+      ['Game can be paused anywhere, including cutscenes', 'General'],
+    ].map(([name, area]) => ({ name, values: { Area: area, Status: 'Not started' } })),
+  },
+  {
+    id: 'glossary',
+    label: 'Glossary',
+    one: 'term',
+    fields: [
+      { name: 'Meaning', kind: 'long' },
+      { name: 'Do not translate', kind: 'yesno' },
+      { name: 'Note for translators', kind: 'text' },
+    ],
+  },
+  {
+    id: 'risks',
+    label: 'Risk register',
+    one: 'risk',
+    fields: [
+      { name: 'Likelihood', kind: 'choice', options: ['Low', 'Medium', 'High'] },
+      { name: 'Impact', kind: 'choice', options: ['Low', 'Medium', 'High'] },
+      { name: 'Owner', kind: 'text' },
+      { name: 'What we do about it', kind: 'long' },
+      { name: 'Status', kind: 'choice', options: ['Open', 'Watching', 'Closed'] },
+    ],
+  },
+]
+
+/** A list made from a template, with fresh ids. */
+export function fromTemplate(id: string): CustomListDoc {
+  const t = TEMPLATES.find((x) => x.id === id)!
+  const fields: CustomField[] = t.fields.map((f) => ({ ...newField(f.kind), name: f.name, ...(f.options ? { options: f.options } : {}) }))
+  const byName = new Map(fields.map((f) => [f.name, f.id]))
+  return { one: t.one, fields, items: (t.items ?? []).map((it) => ({ ...newRecord(it.name), values: Object.fromEntries(Object.entries(it.values).map(([k, v]) => [byName.get(k)!, v])) })) }
+}

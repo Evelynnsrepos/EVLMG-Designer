@@ -89,3 +89,17 @@ describe('localization keys stay with their text (0.28)', () => {
     expect(needsUpdate(r.doc, r.doc.items[0], 'de')).toBe(true)
   })
 })
+
+describe('translator files', () => {
+  it('writes XLIFF and PO with escaping and update marks', async () => {
+    const { exportXLIFF, exportPO } = await import('./model')
+    const d: import('./model').LocDoc = { languages: ['en', 'de'], items: [{ id: 'a', key: 'k1', context: 'Shop', values: { en: 'A <b> "x"', de: 'Ein' }, base: { de: 'old' } }, { id: 'b', key: 'k2', context: '', values: { en: 'Hi\nthere' } }] }
+    const x = exportXLIFF(d, 'de')
+    expect(x).toContain('<source>A &lt;b&gt; &quot;x&quot;</source>')
+    expect(x).toContain('<target state="needs-translation">Ein</target>')
+    expect(x).toContain('<target state="new"></target>')
+    const p = exportPO(d, 'de')
+    expect(p).toContain('#, fuzzy\nmsgctxt "k1"\nmsgid "A <b> \\"x\\""\nmsgstr "Ein"')
+    expect(p).toContain('msgid "Hi\\nthere"')
+  })
+})

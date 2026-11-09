@@ -6,7 +6,7 @@ import type { PanelProps } from '@/core/registry'
 import { loadDocumentNow, useDocument, useProjectStore, useUndoRedoKeys } from '@/core/state'
 import { promptDialog } from '@/shared/dialogs'
 import '@/shared/listDetail/listDetail.css'
-import { createLocDoc, exportCSV, importCSV, markTranslated, merge, needsUpdate, newString, progress, slug, type Found, type LocDoc, type LocString } from './model'
+import { createLocDoc, exportCSV, exportPO, exportXLIFF, importCSV, markTranslated, merge, needsUpdate, newString, progress, slug, type Found, type LocDoc, type LocString } from './model'
 import './localization.css'
 
 /** Localization string table (v0.10). */
@@ -105,6 +105,28 @@ export default function View({ active }: PanelProps) {
         <button className="btn btn-ghost" onClick={() => void saveTextFile({ title: 'Export strings', defaultName: 'strings.csv', text: exportCSV(d), filter: { name: 'CSV', extensions: ['csv'] } })}>
           <Download size={14} /> CSV
         </button>
+        <select
+          className="input"
+          style={{ width: 'auto' }}
+          value=""
+          aria-label="Export one language for translators"
+          onChange={(e) => {
+            const [kind, lang] = e.target.value.split(':')
+            if (!lang) return
+            const ext = kind === 'po' ? 'po' : 'xlf'
+            void saveTextFile({ title: `Export ${lang} for translators`, defaultName: `strings.${lang}.${ext}`, text: kind === 'po' ? exportPO(d, lang) : exportXLIFF(d, lang), filter: { name: kind === 'po' ? 'PO' : 'XLIFF', extensions: [ext] } })
+          }}
+        >
+          <option value="">For translators…</option>
+          {d.languages.slice(1).flatMap((l) => [
+            <option key={`x${l}`} value={`xliff:${l}`}>
+              {l} as XLIFF
+            </option>,
+            <option key={`p${l}`} value={`po:${l}`}>
+              {l} as PO (gettext)
+            </option>,
+          ])}
+        </select>
         <button className="btn btn-ghost" onClick={() => file.current?.click()}>
           <Upload size={14} /> Import CSV
         </button>
