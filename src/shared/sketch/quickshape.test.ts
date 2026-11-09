@@ -113,3 +113,33 @@ describe('v0.28 fitting', async () => {
     expect(recognize(wave)?.kind).not.toBe('arc')
   })
 })
+
+describe('shaky hands', async () => {
+  const { steady } = await import('./quickshape')
+  // A hand tremor: quick wobble a few px wide on top of the movement.
+  const tremor = (pts: Pt[], amp: number) => pts.map((p, i) => ({ x: p.x + Math.sin(i * 2.9) * amp, y: p.y + Math.cos(i * 3.7) * amp }))
+  const held = (at: Pt, amp: number) => Array.from({ length: 40 }, (_, i) => ({ x: at.x + Math.sin(i * 1.3) * amp, y: at.y + Math.cos(i * 1.9) * amp }))
+
+  it('finds a line through tremor and a long shaky hold at the end', () => {
+    const shaky = [...tremor(path([{ x: 0, y: 0 }, { x: 90, y: 0 }], 60), 10), ...held({ x: 90, y: 0 }, 9)]
+    expect(recognize(shaky)?.kind).not.toBe('line')
+    const s = recognize(shaky, 12)!
+    expect(s.kind).toBe('line')
+    expect(Math.abs(s.points[1].x - 90)).toBeLessThan(8)
+  })
+
+  it('finds a shaky circle drawn round twice', () => {
+    const loops = Array.from({ length: 300 }, (_, i) => {
+      const a = (i / 300) * Math.PI * 4
+      return { x: 150 + Math.cos(a) * 90, y: 150 + Math.sin(a) * 90 }
+    })
+    const s = recognize([...tremor(loops, 8), ...held(loops[loops.length - 1], 8)], 12)!
+    expect(s.kind).toBe('circle')
+    expect(Math.abs(s.points[1].x - 90)).toBeLessThan(8)
+  })
+
+  it('leaves steady strokes alone', () => {
+    const pts = path([{ x: 0, y: 0 }, { x: 100, y: 0 }])
+    expect(steady(pts, 0)).toBe(pts)
+  })
+})

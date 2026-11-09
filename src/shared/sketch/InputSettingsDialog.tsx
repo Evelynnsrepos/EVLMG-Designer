@@ -3,7 +3,7 @@ import { newId } from '@/core/model'
 import { Modal } from '../ui'
 import { ACTIONS, actionLabel, comboOf, conflicts, formatCombo, keysFor, QUICK_SLOTS, type ActionId } from './actions'
 import { CurveEditor } from './CurveEditor'
-import { useInputSettings } from './inputSettings'
+import { defaultInputSettings, SHAKY_HANDS, useInputSettings } from './inputSettings'
 import { applyCurve, LINEAR, PEN_BITS, tiltToAngles, withNativePen, type CurvePoint } from './pen'
 import './input.css'
 
@@ -21,6 +21,11 @@ const UI = {
   motionFilter: 'Motion filtering',
   motionFilterHelp: 'Takes out shaky jitter while you draw slowly; fast strokes stay sharp.',
   streamlineNote: 'Each brush also has its own Smoothing (StreamLine), next to its size.',
+  steadyHold: 'Holding still',
+  steadyHoldHelp: 'How much your pen may wobble while you hold it at the end of a stroke to snap a shape. Turn it up if shapes never snap for you.',
+  shaky: 'Shaky hands',
+  shakyHelp: 'Sets all three for shaky hands or a jittery tablet. Works in Draw, Pixel Art and the boards.',
+  steady: 'Steady hands',
   testIntro: 'Draw, hover and press the buttons on your pen. This shows what the tablet sends.',
   clear: 'Clear',
   device: 'Device',
@@ -108,6 +113,16 @@ export function InputSettingsDialog({ onClose, initial = 'Pressure' }: { onClose
               <>
                 <Range label={UI.stabilization} help={UI.stabilizationHelp} value={s.stabilization} onChange={(stabilization) => s.update({ stabilization })} />
                 <Range label={UI.motionFilter} help={UI.motionFilterHelp} value={s.motionFilter} onChange={(motionFilter) => s.update({ motionFilter })} />
+                <Range label={UI.steadyHold} help={UI.steadyHoldHelp} value={s.steadyHold} onChange={(steadyHold) => s.update({ steadyHold })} />
+                <div className="input-presets">
+                  <button className="btn" onClick={() => s.update(SHAKY_HANDS)}>
+                    {UI.shaky}
+                  </button>
+                  <button className="btn" onClick={() => s.update({ stabilization: 0, motionFilter: 0, steadyHold: defaultInputSettings().steadyHold })}>
+                    {UI.steady}
+                  </button>
+                </div>
+                <p className="input-help">{UI.shakyHelp}</p>
                 <p className="input-help">{UI.streamlineNote}</p>
               </>
             )}

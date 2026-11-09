@@ -172,9 +172,49 @@ function fitRect(corners: Pt[]): Pt[] | null {
 /** Points on circle `c` from angle a0 sweeping `sweep` (signed). */
 const onCircle = (c: Pt, r: number, a: number): Pt => ({ x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r })
 
-/** The clean shape for a rough stroke, or null if it is too small or too wiggly to guess. */
-export function recognize(raw: Pt[]): Shape | null {
-  if (raw.length < 2) return null
+/**
+ * Shaky hands: drop the wobble while the pen was held at the end (keeping one point where it rested),
+ * then average out tremor about `jitter` wide. Fast, deliberate shape stays; trembling goes.
+ */
+export function steady(pts: Pt[], jitter: number): Pt[] {
+  if (jitter <= 0 || pts.length < 3) return pts
+  // The wobble while holding at the end: everything within one wobble (2 × jitter) of the last point.
+  const last = pts[pts.length - 1]
+  let cut = pts.length - 1
+  while (cut > 0 && dist(pts[cut - 1], last) <= jitter * 2) cut--
+  const held = pts.slice(cut)
+  const rest = { x: held.reduce((s, p) => s + p.x, 0) / held.length, y: held.reduce((s, p) => s + p.y, 0) / held.length }
+  // The same at the start: the little hook or wobble as the pen lands becomes one point.
+  let lead = 0
+  while (lead < cut - 1 && dist(pts[lead + 1], pts[0]) <= jitter * 2) lead++
+  const landed = pts.slice(0, lead + 1)
+  const first = { x: landed.reduce((s, p) => s + p.x, 0) / landed.length, y: landed.reduce((s, p) => s + p.y, 0) / landed.length }
+  const body = [first, ...pts.slice(lead + 1, cut), rest]
+  if (body.length < 5) return body
+  // Average each point with its neighbours until they reach about two jitters apart: tremor
+  // (back and forth in place) cancels out, real movement (going somewhere) is kept.
+  return body.map((p, i) => {
+    if (i === 0 || i === body.length - 1) return p
+    let k = 1
+    while (k < 40 && i - k > 0 && i + k < body.length - 1 && dist(body[i - k], body[i + k]) < jitter * 2) k++
+    k = Math.min(k, i, body.length - 1 - i)
+    let x = 0
+    let y = 0
+    for (let j = -k; j <= k; j++) {
+      x += body[i + j].x
+      y += body[i + j].y
+    }
+    return { x: x / (2 * k + 1), y: y / (2 * k + 1) }
+  })
+}
+
+/**
+ * The clean shape for a rough stroke, or null if it is too small or too wiggly to guess.
+ * `jitter`: how far the pen wobbles (canvas units) for shaky hands; 0 = take the stroke as drawn.
+ */
+export function recognize(input: Pt[], jitter = 0): Shape | null {
+  if (input.length < 2) return null
+  const raw = steady(input, jitter)
   const b0 = bounds(raw)
   const diag = Math.hypot(b0.w, b0.h)
   if (diag < 8) return null
@@ -188,7 +228,7 @@ export function recognize(raw: Pt[]): Shape | null {
   const closed = (dist(start, end) < Math.max(12, diag * 0.22) && length > diag * 1.6) || Math.abs(turn) > Math.PI * 1.8
   if (!closed) {
     const straight = Math.max(...pts.map((p) => segDist(p, start, end)))
-    if (straight < Math.max(4, dist(start, end) * 0.08)) return { kind: 'line', points: [start, end] }
+    if (straight < Math.max(4, jitter, dist(start, end) * 0.08)) return { kind: 'line', points: [start, end] }
     // A smooth bend that follows one circle: an arc through start, middle and end.
     const fit = Math.abs(turn) > 0.5 ? fitCircle(pts) : null
     if (fit && fit.err < 0.05) {

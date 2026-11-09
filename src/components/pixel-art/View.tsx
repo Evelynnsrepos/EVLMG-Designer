@@ -64,6 +64,8 @@ import { ColorsPanel, LayersPanel, PalettePanel, Preview, Timeline } from './Pan
 import { grayHex, grayscale, nearest, paletteOf, reduce, swapColors } from '@/shared/pixel/color'
 import { bounds, combine, cut, flipImg, imgMask, lassoMask, maskImg, outline, paste, placeMask, rectMask, rotate90, rotateAny, scaleImg, wandMask, wrapShift, type Combine, type Mask } from './selection'
 import { gentle, HOLD_MS, keys as shapeKeys, PERFECT_MS, perfect, recognize, resize, type Shape } from '@/shared/sketch/quickshape'
+import { holdTolerance, useInputSettings } from '@/shared/sketch/inputSettings'
+import { MotionFilter } from '@/shared/sketch/pen'
 import './pixel-art.css'
 
 type Tool = 'pencil' | 'eraser' | 'line' | 'curve' | 'rect' | 'ellipse' | 'fill' | 'lassofill' | 'gradient' | 'spray' | 'text' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill' | 'tileRandom' | 'auto'
@@ -409,8 +411,10 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const selecting = useRef<{ start: Pt; path: Pt[]; how: Combine; preview: Mask | null } | null>(null)
   const [, tick] = useState(0)
   const live = useRef<Live | null>(null)
+  // The app-wide pen settings (motion filtering, holding still) also apply here.
+  useEffect(() => void useInputSettings.getState().load(), [])
   /** QuickShape: where the pointer last rested (screen px) and the snap timer. */
-  const hold = useRef<{ timer?: ReturnType<typeof setTimeout>; rest: { x: number; y: number } }>({ rest: { x: 0, y: 0 } })
+  const hold = useRef<{ timer?: ReturnType<typeof setTimeout>; rest: { x: number; y: number }; filter?: MotionFilter }>({ rest: { x: 0, y: 0 } })
   const canvas = useRef<HTMLCanvasElement>(null)
   const overlay = useRef<HTMLCanvasElement>(null)
   const hover = useRef<Pt | null>(null)
@@ -709,7 +713,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   }
 
   // ---- Pointer ----
-  const pos = (e: React.PointerEvent): Pt => {
+  const pos = (e: { clientX: number; clientY: number }): Pt => {
     const r = canvas.current!.getBoundingClientRect()
     const x = Math.floor(((e.clientX - r.left) / r.width) * canvas.current!.width)
     const y = Math.floor(((e.clientY - r.top) / r.height) * canvas.current!.height)
@@ -1020,6 +1024,9 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     live.current = c && tool === 'curve' ? { key: c.key, base: c.base, img: c.base, start: c.a, path: [c.b], button: e.button, ctrl: p } : { key, base, img: base, start: p, path: [p], button: e.button, from, press: [penPressure(e)] }
     clearTimeout(hold.current.timer)
     hold.current.rest = { x: e.clientX, y: e.clientY }
+    // Shaky hands: Motion filtering from Pen and keys also steadies the pencil.
+    hold.current.filter = new MotionFilter(useInputSettings.getState().motionFilter)
+    hold.current.filter.filter(e.clientX, e.clientY, e.timeStamp)
     if (tool === 'spray') spray(live.current, p)
     render(live.current, c && tool === 'curve' ? c.b : p)
     draw()
@@ -1063,7 +1070,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   }
 
   const onMove = (e: React.PointerEvent) => {
-    const p = pos(e)
+    let p = pos(e)
     hover.current = p
     if (draft.current) {
       setMapDraft(placeTiles(draft.current, p, (e.buttons & 2) === 2))
@@ -1090,21 +1097,28 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       return draw()
     }
     if (l.snap) {
-      // Snapped: the shape follows the pointer instead of the stroke growing.
-      reshape(l, p)
-      if (Math.hypot(e.clientX - hold.current.rest.x, e.clientY - hold.current.rest.y) > 4) {
+      // Snapped: the shape follows the pointer instead of the stroke growing; wobbling near the snap keeps it still.
+      const tol = holdTolerance()
+      const px = canvas.current!.getBoundingClientRect().width / canvas.current!.width
+      reshape(l, Math.hypot(p[0] - l.snap.at[0], p[1] - l.snap.at[1]) * px <= tol ? l.snap.at : p)
+      if (Math.hypot(e.clientX - hold.current.rest.x, e.clientY - hold.current.rest.y) > tol) {
         hold.current.rest = { x: e.clientX, y: e.clientY }
         armPerfect(l)
       }
       return draw()
     }
     if (tool === 'pencil' || tool === 'eraser' || tool === 'shade' || tool === 'lassofill') {
+      const f = hold.current.filter
+      if (f && f.amount > 0 && !inMap) {
+        const q = f.filter(e.clientX, e.clientY, e.timeStamp)
+        p = pos({ clientX: q.x, clientY: q.y })
+      }
       const last = l.path[l.path.length - 1]
       if (last[0] === p[0] && last[1] === p[1]) return
       const added = line(last[0], last[1], p[0], p[1]).slice(1)
       l.path.push(...added)
       l.press?.push(...added.map(() => penPressure(e)))
-      if (tool !== 'lassofill' && Math.hypot(e.clientX - hold.current.rest.x, e.clientY - hold.current.rest.y) > 4) {
+      if (tool !== 'lassofill' && Math.hypot(e.clientX - hold.current.rest.x, e.clientY - hold.current.rest.y) > holdTolerance()) {
         hold.current.rest = { x: e.clientX, y: e.clientY }
         armSnap(l)
       }
@@ -1132,7 +1146,8 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     clearTimeout(hold.current.timer)
     hold.current.timer = setTimeout(() => {
       if (live.current !== l || l.snap) return
-      const shape = recognize(l.path.map(([x, y]) => ({ x, y })))
+      const px = canvas.current ? canvas.current.getBoundingClientRect().width / canvas.current.width : 1
+      const shape = recognize(l.path.map(([x, y]) => ({ x, y })), holdTolerance() / px)
       if (!shape) return
       const at = l.path[l.path.length - 1]
       l.snap = { shape, at }

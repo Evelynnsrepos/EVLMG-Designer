@@ -66,7 +66,7 @@ import { hexToRgb } from './color'
 import { BrushCursor, GuideOverlay, ShapeNodes } from './GuideOverlay'
 import { GuidePanel } from './GuidePanel'
 import { InputSettingsDialog } from './InputSettingsDialog'
-import { useInputSettings } from './inputSettings'
+import { holdTolerance, useInputSettings } from './inputSettings'
 import { isEraserEnd, penButton, penData, PenPipeline, type PenPoint } from './pen'
 import { flipAbout, pinch, rotateAbout, toDocPoint, viewMatrix, zoomAbout, type View } from './view'
 // Sketch Pro: canvas, time-lapse and files.
@@ -679,9 +679,11 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     } else if (g.kind === 'paint') {
       if (g.snapped) {
         g.snapped.at = g.snapped.at ?? p
-        drawShape(g, p)
+        // Shaky hands: wobbling near where it snapped keeps the shape still.
+        const near = Math.hypot(p.x - g.snapped.at.x, p.y - g.snapped.at.y) * (view?.scale ?? 1) <= holdTolerance()
+        drawShape(g, near ? g.snapped.at : p)
         // Resting again while resizing also makes the shape perfect.
-        if (Math.hypot(p.x - g.rest.x, p.y - g.rest.y) * (view?.scale ?? 1) > 4) {
+        if (Math.hypot(p.x - g.rest.x, p.y - g.rest.y) * (view?.scale ?? 1) > holdTolerance()) {
           g.rest = p
           armPerfect(g)
         }
@@ -703,8 +705,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       const smoothed = b.streamline > 0 || b.stabilization > 0 || b.motionFilter > 0 || b.tether > 0 || input.stabilization > 0 || input.motionFilter > 0
       const predicted = smoothed ? [] : (e.nativeEvent.getPredictedEvents?.() ?? [])
       engine.predict(g.pipeline.peek(predicted.map((ev) => ({ p: { ...toDoc(ev, g.rect), ...penData(ev, input.pressureCurve) }, t: ev.timeStamp }))), g.last)
-      // QuickShape: the hold timer restarts whenever the pointer really moves.
-      if (Math.hypot(p.x - g.rest.x, p.y - g.rest.y) * (view?.scale ?? 1) > 4) {
+      // QuickShape: the hold timer restarts whenever the pointer really moves (a shaky hold still counts as holding).
+      if (Math.hypot(p.x - g.rest.x, p.y - g.rest.y) * (view?.scale ?? 1) > holdTolerance()) {
         g.rest = p
         armHold()
       }
@@ -748,7 +750,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     clearTimeout(g.timer)
     g.timer = setTimeout(() => {
       if (gesture.current !== g || g.snapped) return
-      const shape = recognize(g.pts)
+      const shape = recognize(g.pts, holdTolerance() / (viewRef.current?.scale ?? 1))
       if (!shape) return
       const pressure = g.pts.reduce((s, q) => s + q.pressure, 0) / g.pts.length
       g.snapped = { shape, at: g.rest, pressure }

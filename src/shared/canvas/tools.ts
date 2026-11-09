@@ -10,6 +10,7 @@ import { NOTE_COLORS } from './nodeTypes'
 import type { CanvasApi, CanvasTool, EllipseNode, LineNode, NodeBase, NoteNode, Point, RectNode, TextNode, ToolPointerEvent } from './types'
 import { useSettings } from '@/core/state'
 import { worldToLocal } from './transform'
+import { holdTolerance } from '../sketch/inputSettings'
 import { HOLD_MS, keys, PERFECT_MS, outline, perfect, recognize, resize, type Shape } from '../sketch/quickshape'
 
 /** Labels kept as constants so they can be translated later. */
@@ -297,7 +298,7 @@ export const penTool = (options: ToolOptions<LineNode> = {}): CanvasTool<any> =>
       timer = setTimeout(() => {
         const pts: { x: number; y: number }[] = []
         for (let i = 0; i < points.length; i += 2) pts.push({ x: points[i], y: points[i + 1] })
-        const shape = recognize(pts)
+        const shape = recognize(pts, holdTolerance() / api.viewport.scale)
         if (!shape) return
         snapped = { shape, at: rest }
         drawShape(rest)
@@ -318,8 +319,9 @@ export const penTool = (options: ToolOptions<LineNode> = {}): CanvasTool<any> =>
       move(m) {
         raw = { x: m.world.x - origin.x, y: m.world.y - origin.y }
         if (snapped) {
-          drawShape(raw)
-          if (!snapped.perfect && Math.hypot(raw.x - rest.x, raw.y - rest.y) * api.viewport.scale > 4) {
+          // Shaky hands: wobbling near where it snapped keeps the shape still.
+          drawShape(Math.hypot(raw.x - snapped.at.x, raw.y - snapped.at.y) * api.viewport.scale <= holdTolerance() ? snapped.at : raw)
+          if (!snapped.perfect && Math.hypot(raw.x - rest.x, raw.y - rest.y) * api.viewport.scale > holdTolerance()) {
             rest = raw
             armPerfect()
           }
@@ -329,7 +331,7 @@ export const penTool = (options: ToolOptions<LineNode> = {}): CanvasTool<any> =>
         sy += (raw.y - sy) * follow
         points.push(sx, sy)
         api.setDraft([make(points)])
-        if (Math.hypot(raw.x - rest.x, raw.y - rest.y) * api.viewport.scale > 4) {
+        if (Math.hypot(raw.x - rest.x, raw.y - rest.y) * api.viewport.scale > holdTolerance()) {
           rest = raw
           arm()
         }
