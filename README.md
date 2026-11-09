@@ -247,7 +247,7 @@ beginner guides.
 | **Quest Designer** | Quests with givers, places, objectives, rewards and chains shown as a graph, plus flags shared with the Dialogue Editor. |
 | **Dialogue Editor** | Branching conversations as a graph with speakers, choices, conditions and flags, a play-through mode, and export to JSON, Yarn Spinner or Ink. |
 | **Writing Principles** | Story and game-writing rules (show, don't tell; save the player from themselves…) and story structures like the Hero's Journey, ready to extend and sort. |
-| **Storyboard** | Cutscene frames with shots, camera moves, dialogue and timing, played back as an animatic. |
+| **Storyboard** | Plan cutscenes, YouTube videos or anime episodes: scenes, cuts and panels with shot, camera, timing in seconds + frames, action, dialogue, notes and status; draw panels in Draw, link the script in the Writer, play the animatic with sound, and export PDF storyboard sheets, video, shot list or Pitch Deck slides. |
 | **Localization** | A string table of every player-facing text in every language, collected from the project, with CSV import and export. |
 | **Ask Your Project** | Optional: search your own notes and find contradictions, with the helper running only on your computer. It only searches and never writes for you. |
 
