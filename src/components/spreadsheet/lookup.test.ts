@@ -14,3 +14,23 @@ describe('STAT() lookup', () => {
     expect(out.find((e) => e.name === 'Tank')).toEqual({ kind: 'Vehicles', name: 'Tank', fields: { Speed: 40 } })
   })
 })
+
+describe('typing over STAT() writes back (0.28)', () => {
+  it('finds the entry and converts the value', async () => {
+    const { statWriteBack } = await import('./lookup')
+    const entries = [
+      { kind: 'item', name: 'Sword', fields: { Description: '', ATK: 5, Rarity: 'Rare' }, src: { entity: 'item' as const, id: 's' } },
+      { kind: 'item', name: 'Bow', fields: { Description: '', ATK: 3, DEX: 2 }, src: { entity: 'item' as const, id: 'b' } },
+      { kind: 'Vehicles', name: 'Tank', fields: { Speed: 40, Armored: true, Note: 'x' }, src: { list: 'L', id: 't' } },
+    ]
+    expect(statWriteBack(entries, '=STAT("Sword", "ATK")', '7')).toEqual({ entity: 'item', id: 's', patch: { stats: { ATK: 7 } } })
+    // A stat other entries of the kind have counts too.
+    expect(statWriteBack(entries, '=STAT("sword";"dex")', '1,5')).toEqual({ entity: 'item', id: 's', patch: { stats: { DEX: 1.5 } } })
+    expect(statWriteBack(entries, '=STAT("Sword", "ATK")', 'high')).toBeNull()
+    expect(statWriteBack(entries, '=STAT("Sword", "Rarity")', 'Epic')).toBeNull()
+    expect(statWriteBack(entries, '=STAT("Tank", "Speed", "Vehicles")', '55')).toEqual({ list: 'L', id: 't', fieldName: 'Speed', value: 55 })
+    expect(statWriteBack(entries, '=STAT("Tank", "Armored")', 'no')).toEqual({ list: 'L', id: 't', fieldName: 'Armored', value: false })
+    expect(statWriteBack(entries, '=STAT("Tank", "Speed")', '=1+1')).toBeNull()
+    expect(statWriteBack(entries, '=A1', '3')).toBeNull()
+  })
+})

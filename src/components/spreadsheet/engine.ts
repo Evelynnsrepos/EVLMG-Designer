@@ -1,3 +1,4 @@
+import type { EntityType } from '@/core/model'
 import { CellError, CellValueDetailedType, DetailedCellError, ErrorType, FunctionArgumentType, FunctionPlugin, HyperFormula, type SimpleCellAddress } from 'hyperformula'
 import type { Id } from '@/core/model'
 import { tryEvaluate } from '@/shared/formulas'
@@ -62,6 +63,8 @@ export interface LookupEntry {
   kind: string
   name: string
   fields: Record<string, number | string | boolean>
+  /** 0.28: where the entry lives, so typing over a STAT() cell can write the value back. */
+  src?: { entity: EntityType; id: string } | { list: string; id: string }
 }
 
 let lookup: LookupEntry[] = []

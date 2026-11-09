@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { Entity, EntityType, Id } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
-import { loadDocumentNow, useDocument, useDocumentsOfType, useProjectStore, useUndoRedoKeys } from '@/core/state'
+import { loadDocumentNow, updateDocument, useDocument, useDocumentsOfType, useProjectStore, useUndoRedoKeys } from '@/core/state'
 import { createDamagePresetDoc, damagePresetFormula, type DamagePresetDoc } from '@/shared/calculators'
 import { confirmDialog, promptDialog } from '@/shared/dialogs'
 import { DRAG_MIME, type DragPayload } from '@/shell/editor/actions'
 import { Engine, entryTable, setCalcPresets, setLookupEntries, type LookupEntry } from './engine'
-import { lookupEntries } from './lookup'
+import { lookupEntries, statWriteBack, type WriteBack } from './lookup'
 import { createCustomListDoc, type CustomListDoc } from '@/components/custom-list/model'
 import {
   addr,
@@ -208,6 +208,22 @@ export default function View({ documentId, active }: PanelProps) {
   }
 
   const startEdit = (text: string, bar = false) => setEditing({ sheetId: sheet.id, key: activeKey, text, bar, refAt: null })
+  const writeBack = (b: WriteBack) => {
+    const root = useProjectStore.getState().root
+    if ('list' in b) {
+      if (root)
+        updateDocument<CustomListDoc>(root, 'custom-list', b.list, (d) => {
+          const f = d.fields.find((x) => x.name === b.fieldName)
+          return f ? { ...d, items: d.items.map((r) => (r.id === b.id ? { ...r, values: { ...r.values, [f.id]: b.value } } : r)) } : d
+        })
+      return
+    }
+    const store = useProjectStore.getState()
+    const e = (store.entities[b.entity] as Entity[]).find((x) => x.id === b.id)
+    if (!e) return
+    const patch = 'stats' in b.patch && 'stats' in e ? { stats: { ...e.stats, ...b.patch.stats } } : b.patch
+    store.updateEntity(b.entity, b.id, patch as never)
+  }
   const commit = (move?: { dc: number; dr: number }) => {
     if (!editing) return
     let text = editing.text
@@ -218,7 +234,10 @@ export default function View({ documentId, active }: PanelProps) {
     }
     const target = wb.sheets.find((x) => x.id === editing.sheetId)
     const before = target?.cells[editing.key]
-    if (target && text !== (before?.v ?? '')) writeCells({ [editing.key]: { v: text, s: before?.s } }, target.id)
+    // 0.28: a value typed over a live STAT() cell changes the entry in its list; the cell keeps reading it.
+    const back = before && text !== before.v ? statWriteBack(lookup, before.v, text) : null
+    if (back) writeBack(back)
+    else if (target && text !== (before?.v ?? '')) writeCells({ [editing.key]: { v: text, s: before?.s } }, target.id)
     setEditing(null)
     grid.current?.focus()
     // Formulas that picked cells on another sheet go back to their own sheet.
@@ -1091,7 +1110,7 @@ function useLookup(engine: Engine, done: () => void): LookupEntry[] {
       lookupEntries(
         entities as Record<EntityType, Entity[]>,
         categories,
-        lists.map((l) => ({ title: l.title, doc: l.data })),
+        lists.map((l) => ({ title: l.title, doc: l.data, id: l.id })),
       ),
     [lists, entities, categories],
   )
