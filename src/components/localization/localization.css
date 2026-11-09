@@ -85,3 +85,12 @@
 .lc-missing {
   background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
+.lc-stale {
+  position: relative;
+  background: color-mix(in srgb, #f08c00 18%, transparent);
+}
+.lc-ok {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+}

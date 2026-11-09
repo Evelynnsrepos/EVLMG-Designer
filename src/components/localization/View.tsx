@@ -1,4 +1,4 @@
-import { Download, Plus, ScanText, Upload, X } from 'lucide-react'
+import { Check, Download, Plus, ScanText, Upload, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { saveTextFile } from '@/core/export'
 import type { Entity } from '@/core/model'
@@ -6,7 +6,7 @@ import type { PanelProps } from '@/core/registry'
 import { loadDocumentNow, useDocument, useProjectStore, useUndoRedoKeys } from '@/core/state'
 import { promptDialog } from '@/shared/dialogs'
 import '@/shared/listDetail/listDetail.css'
-import { createLocDoc, exportCSV, importCSV, merge, newString, progress, slug, type Found, type LocDoc, type LocString } from './model'
+import { createLocDoc, exportCSV, importCSV, markTranslated, merge, needsUpdate, newString, progress, slug, type Found, type LocDoc, type LocString } from './model'
 import './localization.css'
 
 /** Localization string table (v0.10). */
@@ -26,7 +26,11 @@ export default function View({ active }: PanelProps) {
   const edit = (id: string, patch: Partial<LocString>) => set((x) => ({ ...x, items: x.items.map((s) => (s.id === id ? { ...s, ...patch } : s)) }))
   const p = progress(d)
   const q = filter.trim().toLowerCase()
-  const rows = d.items.filter((s) => (!q || `${s.key} ${s.context} ${Object.values(s.values).join(' ')}`.toLowerCase().includes(q)) && (!missing || !s.values[missing]?.trim()))
+  const stale = (s: LocString) => d.languages.some((l) => needsUpdate(d, s, l))
+  const staleCount = d.items.filter(stale).length
+  const rows = d.items.filter(
+    (s) => (!q || `${s.key} ${s.context} ${Object.values(s.values).join(' ')}`.toLowerCase().includes(q)) && (missing === '*stale' ? stale(s) : !missing || !s.values[missing]?.trim()),
+  )
 
   /** Every player-facing text of the project: names and descriptions, quests, dialogue. */
   const collect = async () => {
@@ -42,28 +46,28 @@ export default function View({ active }: PanelProps) {
     for (const [type, list] of Object.entries(entities) as [string, Entity[]][]) {
       for (const e of list) {
         const k = unique(`${type}.${slug(e.name)}`)
-        found.push({ key: `${k}.name`, context: `${type} name`, text: e.name }, { key: `${k}.description`, context: `${type} description`, text: e.description })
+        found.push({ ref: `${type}:${e.id}.name`, key: `${k}.name`, context: `${type} name`, text: e.name }, { ref: `${type}:${e.id}.description`, key: `${k}.description`, context: `${type} description`, text: e.description })
       }
     }
     {
-      const quests = await loadDocumentNow<{ quests?: { name: string; summary: string; objectives: { text: string }[] }[] }>(root, 'quests', 'quests', () => ({ quests: [] }))
+      const quests = await loadDocumentNow<{ quests?: { id: string; name: string; summary: string; objectives: { id: string; text: string }[] }[] }>(root, 'quests', 'quests', () => ({ quests: [] }))
       for (const qu of quests?.quests ?? []) {
         const k = unique(`quest.${slug(qu.name)}`)
-        found.push({ key: `${k}.name`, context: 'Quest name', text: qu.name }, { key: `${k}.summary`, context: 'Quest summary', text: qu.summary })
-        qu.objectives.forEach((o, i) => found.push({ key: `${k}.objective_${i + 1}`, context: 'Quest objective', text: o.text }))
+        found.push({ ref: `quest:${qu.id}.name`, key: `${k}.name`, context: 'Quest name', text: qu.name }, { ref: `quest:${qu.id}.summary`, key: `${k}.summary`, context: 'Quest summary', text: qu.summary })
+        qu.objectives.forEach((o, i) => found.push({ ref: `quest:${qu.id}.objective:${o.id}`, key: `${k}.objective_${i + 1}`, context: 'Quest objective', text: o.text }))
       }
     }
     for (const dd of documents.filter((x) => x.type === 'dialogue')) {
       const dl = await loadDocumentNow<{ lines?: { id: string; speakerName: string; text: string; choices: { id: string; text: string }[] }[] }>(root, 'dialogue', dd.id, () => ({ lines: [] }))
       const k = unique(`dialogue.${slug(dd.title)}`)
       ;(dl?.lines ?? []).forEach((l, i) => {
-        found.push({ key: `${k}.line_${i + 1}`, context: `Dialogue "${dd.title}"${l.speakerName ? `, ${l.speakerName}` : ''}`, text: l.text })
-        l.choices.forEach((c, j) => found.push({ key: `${k}.line_${i + 1}.choice_${j + 1}`, context: `Choice in "${dd.title}"`, text: c.text }))
+        found.push({ ref: `dialogue:${dd.id}:${l.id}`, key: `${k}.line_${i + 1}`, context: `Dialogue "${dd.title}"${l.speakerName ? `, ${l.speakerName}` : ''}`, text: l.text })
+        l.choices.forEach((c, j) => found.push({ ref: `dialogue:${dd.id}:${l.id}:choice:${c.id}`, key: `${k}.line_${i + 1}.choice_${j + 1}`, context: `Choice in "${dd.title}"`, text: c.text }))
       })
     }
     const r = merge(d, found)
     set(() => r.doc)
-    setMessage(`Collected ${r.added} new and ${r.updated} changed texts.`)
+    setMessage(`Collected ${r.added} new and ${r.updated} changed texts.${r.updated ? ' Translations of changed texts are marked "needs update".' : ''}`)
   }
 
   return (
@@ -83,6 +87,7 @@ export default function View({ active }: PanelProps) {
               Missing in {l}
             </option>
           ))}
+          <option value="*stale">Needs update ({staleCount})</option>
         </select>
         <button className="btn btn-ghost" onClick={() => void saveTextFile({ title: 'Export strings', defaultName: 'strings.csv', text: exportCSV(d), filter: { name: 'CSV', extensions: ['csv'] } })}>
           <Download size={14} /> CSV
@@ -155,8 +160,21 @@ export default function View({ active }: PanelProps) {
                     <input className="lc-ctx" value={s.context} onChange={(e) => edit(s.id, { context: e.target.value })} />
                   </td>
                   {d.languages.map((l) => (
-                    <td key={l} className={s.values[l]?.trim() ? '' : 'lc-missing'}>
-                      <textarea rows={1} value={s.values[l] ?? ''} onChange={(e) => edit(s.id, { values: { ...s.values, [l]: e.target.value } })} />
+                    <td key={l} className={!s.values[l]?.trim() ? 'lc-missing' : needsUpdate(d, s, l) ? 'lc-stale' : ''} title={needsUpdate(d, s, l) ? `The ${d.languages[0]} text changed after this was translated. It was: "${s.base?.[l]}"` : undefined}>
+                      <textarea
+                        rows={1}
+                        value={s.values[l] ?? ''}
+                        onChange={(e) => {
+                          const next = { ...s, values: { ...s.values, [l]: e.target.value } }
+                          // Typing a translation means it matches today's source; typing the source leaves the rest as they were.
+                          set((x) => ({ ...x, items: x.items.map((o) => (o.id === s.id ? (l === d.languages[0] ? next : markTranslated(x, next, [l])) : o)) }))
+                        }}
+                      />
+                      {needsUpdate(d, s, l) && (
+                        <button className="icon-btn lc-ok" aria-label="Still right" title="The translation is still right" onClick={() => set((x) => ({ ...x, items: x.items.map((o) => (o.id === s.id ? markTranslated(x, o, [l]) : o)) }))}>
+                          <Check size={12} />
+                        </button>
+                      )}
                     </td>
                   ))}
                   <td>

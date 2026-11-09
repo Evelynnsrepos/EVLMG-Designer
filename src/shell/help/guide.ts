@@ -783,6 +783,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     body: [
       'A table of every text players see, by key, with a column per language. The first language is the source; add more with + Language, and the bar shows how much of each is translated.',
       'Collect texts from the project fills the table with the names and descriptions of items, characters, towns and enemies, quest names, summaries and objectives, and every dialogue line and choice. Run it again after changes: new texts are added and changed source texts updated, translations stay.',
+      'Each text remembers what it belongs to, so renaming an item or adding a dialogue line in the middle never moves a translation to the wrong line, and keys never change once made. When a source text changes, its translations turn orange: Needs update in the filter lists them, the tooltip shows the old text, and typing a new translation or the tick (still right) clears the mark.',
       'Show only what is missing in a language, and export the table as CSV for translators or your engine; Import CSV brings their work back.',
     ],
   },
