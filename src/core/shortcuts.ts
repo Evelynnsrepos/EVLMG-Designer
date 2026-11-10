@@ -51,6 +51,7 @@ export const SHORTCUT_GROUPS = [
     items: [
       { id: 'pixel.pencil', label: 'Pencil', keys: ['b'] },
       { id: 'pixel.eraser', label: 'Eraser', keys: ['e'] },
+      { id: 'pixel.shape', label: 'Shape (shape layers)', keys: ['p'] },
       { id: 'pixel.line', label: 'Line', keys: ['l'] },
       { id: 'pixel.curve', label: 'Curve', keys: ['c'] },
       { id: 'pixel.lassofill', label: 'Lasso fill', keys: ['f'] },
