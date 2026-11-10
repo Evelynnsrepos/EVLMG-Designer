@@ -18,7 +18,7 @@ export interface PixelLayer {
   opacity: number
   locked?: boolean
   /** v0.16: how the layer mixes with the ones below. */
-  blend?: 'multiply' | 'screen' | 'add'
+  blend?: 'multiply' | 'screen' | 'add' | 'overlay' | 'darken' | 'lighten' | 'difference' | 'subtract' | 'hardlight' | 'softlight' | 'dodge' | 'burn'
   /** v0.16: a tracing layer: shown faintly while drawing, left out of every export. */
   reference?: boolean
   /** v0.29: a shape layer: its cels are drawn from live shapes (PixelDoc.shapes) and stay editable. */
@@ -78,6 +78,8 @@ export interface PixelDoc {
   variants?: { id: Id; name: string; colors: string[] }[]
   /** v0.29: live shapes of shape layers, "layerId:frameId" → shapes; the cel PNG is always drawn from them. */
   shapes?: Record<string, ShapeCel>
+  /** v0.29: the selection, as run lengths (see pixel-art/selection.ts), kept here so selecting can be undone. */
+  selection?: string
 }
 
 /** The starter palette: 16 colours picked for this app (black, white, three ramps and a few accents). */
@@ -220,22 +222,26 @@ export function ellipsePoints(x0: number, y0: number, x1: number, y1: number, fi
 }
 
 /** Pixels of exactly the colour at x,y: the connected area (4-way), or every match on the image. */
-export function floodPoints(img: Img, x: number, y: number, contiguous: boolean): [number, number][] {
+export function floodPoints(img: Img, x: number, y: number, contiguous: boolean, tolerance = 0): [number, number][] {
   const w = img.width
   const at = (i: number) => (img.data[i * 4] << 24) | (img.data[i * 4 + 1] << 16) | (img.data[i * 4 + 2] << 8) | img.data[i * 4 + 3]
   // Fully transparent pixels count as one colour whatever their RGB.
   const key = (i: number) => (img.data[i * 4 + 3] === 0 ? 0 : at(i))
-  const target = key(y * w + x)
+  const t0 = y * w + x
+  const target = key(t0)
+  const d = img.data
+  // Tolerance (0..255): how far each channel may be from the clicked colour.
+  const like = tolerance <= 0 ? (i: number) => key(i) === target : (i: number) => (d[i * 4 + 3] === 0 && d[t0 * 4 + 3] === 0) || [0, 1, 2, 3].every((c) => Math.abs(d[i * 4 + c] - d[t0 * 4 + c]) <= tolerance)
   const out: [number, number][] = []
   if (!contiguous) {
-    for (let i = 0; i < w * img.height; i++) if (key(i) === target) out.push([i % w, Math.floor(i / w)])
+    for (let i = 0; i < w * img.height; i++) if (like(i)) out.push([i % w, Math.floor(i / w)])
     return out
   }
   const seen = new Uint8Array(w * img.height)
-  const stack = [y * w + x]
+  const stack = [t0]
   while (stack.length) {
     const i = stack.pop()!
-    if (seen[i] || key(i) !== target) continue
+    if (seen[i] || !like(i)) continue
     seen[i] = 1
     const px = i % w
     const py = (i - px) / w
@@ -270,11 +276,27 @@ export function mirror(points: [number, number][], w: number, h: number, sym: { 
   return out
 }
 
-const BLENDS = {
+const overlay = (s: number, d: number) => (d < 128 ? (2 * s * d) / 255 : 255 - (2 * (255 - s) * (255 - d)) / 255)
+/** How a layer's colour (s) mixes with the colour below (d), per channel 0..255. */
+export const BLENDS = {
   multiply: (s: number, d: number) => (s * d) / 255,
   screen: (s: number, d: number) => 255 - ((255 - s) * (255 - d)) / 255,
   add: (s: number, d: number) => Math.min(255, s + d),
+  // v0.29
+  overlay,
+  darken: (s: number, d: number) => Math.min(s, d),
+  lighten: (s: number, d: number) => Math.max(s, d),
+  difference: (s: number, d: number) => Math.abs(s - d),
+  subtract: (s: number, d: number) => Math.max(0, d - s),
+  hardlight: (s: number, d: number) => overlay(d, s),
+  softlight: (s: number, d: number) => {
+    const [a, b] = [s / 255, d / 255]
+    return 255 * (a <= 0.5 ? b - (1 - 2 * a) * b * (1 - b) : b + (2 * a - 1) * ((b <= 0.25 ? ((16 * b - 12) * b + 4) * b : Math.sqrt(b)) - b))
+  },
+  dodge: (s: number, d: number) => (s >= 255 ? 255 : Math.min(255, (d * 255) / (255 - s))),
+  burn: (s: number, d: number) => (s <= 0 ? 0 : 255 - Math.min(255, ((255 - d) * 255) / s)),
 }
+export type BlendMode = keyof typeof BLENDS
 
 /** Flatten visible layers of one frame (layer opacity, and multiply/screen/add where a layer asks for it). */
 export function composite(layers: { visible: boolean; opacity: number; img: Img | undefined; blend?: PixelLayer['blend'] }[], width: number, height: number): Img {
