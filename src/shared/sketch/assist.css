@@ -79,3 +79,29 @@
   border: none;
   background: none;
 }
+
+/* v0.29: sprite sheet export */
+.sketch-sheet {
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 12px;
+}
+.sketch-sheet > strong {
+  flex-basis: 100%;
+}
+.sketch-sheet-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sketch-sheet .input[type='number'] {
+  width: 60px;
+}
+.sketch-sheet > p {
+  flex-basis: 100%;
+  margin: 0;
+}

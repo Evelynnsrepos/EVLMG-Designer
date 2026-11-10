@@ -79,9 +79,9 @@ export function SheetExport({ frames, title, onClose }: { frames: () => SheetFra
   }
 
   return (
-    <div className="sketch-assist-settings sketch-sheet" onPointerDown={(e) => e.stopPropagation()}>
+    <div className="sketch-sheet" onPointerDown={(e) => e.stopPropagation()}>
       <strong>{UI.title}</strong>
-      <label className="studio-row">
+      <label className="sketch-sheet-row">
         <span>{UI.scale}</span>
         <select className="input" value={scale} onChange={(e) => setScale(Number(e.target.value))}>
           {[1, 0.5, 0.25, 0.125].map((v) => (
@@ -91,7 +91,7 @@ export function SheetExport({ frames, title, onClose }: { frames: () => SheetFra
           ))}
         </select>
       </label>
-      <label className="studio-row">
+      <label className="sketch-sheet-row">
         <span>{UI.layout}</span>
         <select className="input" value={layout} onChange={(e) => setLayout(e.target.value as 'grid' | 'row')}>
           {(['grid', 'row'] as const).map((v) => (
@@ -101,14 +101,14 @@ export function SheetExport({ frames, title, onClose }: { frames: () => SheetFra
           ))}
         </select>
       </label>
-      <label className="studio-row">
+      <label className="sketch-sheet-row">
         <span>{UI.padding}</span>
         <input className="input" type="number" min={0} max={64} value={padding} onChange={(e) => setPadding(Math.max(0, Math.min(64, Number(e.target.value) || 0)))} />
       </label>
-      <label className="studio-row" title={UI.trimHelp}>
+      <label className="sketch-sheet-row" title={UI.trimHelp}>
         <input type="checkbox" checked={trim} onChange={(e) => setTrim(e.target.checked)} /> <span>{UI.trim}</span>
       </label>
-      <div className="studio-row">
+      <div className="sketch-sheet-row">
         <button className="btn" title={UI.godotHelp} onClick={() => void run('godot')}>
           {UI.godot}
         </button>
