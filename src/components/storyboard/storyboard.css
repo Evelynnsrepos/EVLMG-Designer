@@ -4,6 +4,9 @@
   height: 100%;
   min-height: 0;
   outline: none;
+  /* Layout follows the panel's width, not the window's: tools often sit side by side. */
+  container-type: inline-size;
+  container-name: sb;
 }
 .sb-head {
   padding: 0 12px;
@@ -47,6 +50,7 @@
 }
 .sb-screen {
   position: relative;
+  container-type: inline-size;
   max-height: 58vh;
   margin: 0 auto;
   border-radius: 8px;
@@ -91,6 +95,9 @@
   color: #fff;
   text-align: center;
   white-space: pre-line;
+  /* Subtitles keep their size relative to the picture, like on a real screen. */
+  font-size: clamp(9px, 3.2cqi, 22px);
+  line-height: 1.3;
 }
 .sb-count {
   margin-top: 4px;
@@ -290,7 +297,7 @@
 .sb-sheet-head,
 .sb-row {
   display: grid;
-  grid-template-columns: 120px minmax(180px, 1.3fr) minmax(180px, 1.2fr) minmax(160px, 1fr) 84px;
+  grid-template-columns: 136px minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(0, 1fr) 76px;
   gap: 10px;
 }
 .sb-sheet-head {
@@ -347,8 +354,30 @@
   object-fit: contain;
   background: #000;
 }
-.sb-row-text textarea {
+.sb-row-text textarea,
+.sb-side textarea {
   resize: vertical;
+  /* Grow with the text where the webview can; elsewhere drag the corner. */
+  field-sizing: content;
+  min-height: 2.4em;
+  max-height: 16em;
+}
+.sb-row-cut .input,
+.sb-row-time .input {
+  min-width: 0;
+  width: 100%;
+}
+.sb-status {
+  align-self: flex-start;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-script,
+.sb-row-text,
+.sb-side {
+  overflow-wrap: anywhere;
 }
 
 /* Dialogs */
@@ -409,13 +438,14 @@
   border-color: var(--accent);
 }
 
-/* Narrow panels, tablets in portrait and phones */
-@media (max-width: 760px) {
+/* Narrow panels (another tool beside it), tablets in portrait and phones */
+@container sb (max-width: 860px) {
   .sb-body {
     flex-direction: column;
     overflow-y: auto;
   }
   .sb-main {
+    flex: none;
     overflow: visible;
   }
   .sb-side {
@@ -428,13 +458,41 @@
     display: none;
   }
   .sb-row {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
   .sb-row-pic {
     grid-column: 1 / -1;
     order: -1;
   }
+  .sb-row-cut {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    grid-column: 1 / -1;
+    order: -2;
+  }
+  .sb-row-cut .input {
+    width: auto;
+    flex: 1 1 120px;
+  }
+  .sb-row-time {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+  .sb-row-time .input {
+    width: 90px;
+  }
   .sb-stats {
     margin-left: 0;
+  }
+}
+@container sb (max-width: 480px) {
+  .sb-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sb-two {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
