@@ -565,7 +565,7 @@ function PanelFields({ frame: f, n, fps, root, first, edit, onDraw }: { frame: F
       </label>
       <label className="ld-field">
         <span>{UI.sound}</span>
-        <input className="input" value={f.sound} onChange={(e) => edit({ sound: e.target.value })} />
+        <ProofTextarea className="input" rows={1} value={f.sound} onChange={(e) => edit({ sound: e.target.value })} />
       </label>
       <div className="ld-field">
         <span title={UI.audioHint}>{UI.audio}</span>
@@ -653,11 +653,11 @@ function Sheet({ frames, numbers, fps, aspect, selected, playing, onSelect, edit
               <div className="sb-row-text">
                 <ProofTextarea className="input" rows={3} placeholder={UI.action} value={f.action} onChange={(e) => editAt(f.id, { action: e.target.value })} />
                 {f.writer && <WriterLinkBox link={f.writer} onChange={(writer) => editAt(f.id, { writer })} />}
-                <ProofTextarea className="input" rows={1} placeholder={UI.notes} value={f.notes ?? ''} onChange={(e) => editAt(f.id, { notes: e.target.value })} />
+                <ProofTextarea className="input" rows={2} placeholder={UI.notes} value={f.notes ?? ''} onChange={(e) => editAt(f.id, { notes: e.target.value })} />
               </div>
               <div className="sb-row-text">
                 <ProofTextarea className="input" rows={3} placeholder={UI.dialogue} value={f.dialogue} onChange={(e) => editAt(f.id, { dialogue: e.target.value })} />
-                <input className="input" placeholder={UI.sound} value={f.sound} onChange={(e) => editAt(f.id, { sound: e.target.value })} />
+                <ProofTextarea className="input" rows={1} placeholder={UI.sound} value={f.sound} onChange={(e) => editAt(f.id, { sound: e.target.value })} />
               </div>
               <div className="sb-row-time">
                 <TimeInput seconds={f.seconds} fps={fps} onChange={(seconds) => editAt(f.id, { seconds })} />

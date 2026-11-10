@@ -200,7 +200,7 @@ export function drawSheetPages(items: Prepared[], doc: StoryboardDoc, o: SheetOp
         const h = rowH - unit * 1.2
         const s = unit * 1.35
         let cy = y
-        if (p.n.firstOfScene) cy += textBox(ctx, sceneLabel(p.n), xs[0] + unit * 0.5, cy, cols[0] - unit, s * 2.6 * 1.3, s * 0.9, '#a33', 600)
+        if (p.n.firstOfScene) cy += textBox(ctx, sceneLabel(p.n), xs[0] + unit * 0.5, cy, cols[0] - unit, s * 0.9 * 1.3 * 5, s * 0.9, '#a33', 600)
         textBox(ctx, cutLabel(p.n), xs[0] + unit * 0.5, cy, cols[0] - unit, s * 1.4, s * 1.2, '#000', 700)
         if (p.frame.status) textBox(ctx, p.frame.status, xs[0] + unit * 0.5, y + h - s * 2.3, cols[0] - unit, s * 2.3, s * 0.85, '#555')
         pictureBox(ctx, p, xs[1] + unit * 0.5, y, cols[1] - unit, h, aspect)

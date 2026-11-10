@@ -80,7 +80,8 @@
   background: linear-gradient(135deg, #1c1c26, #2b2240);
   color: #f4f2fa;
   box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
-  font-size: clamp(10px, 1.9cqi, 22px);
+  /* Scales with the stage so text never spills out of a small preview. */
+  font-size: clamp(3px, 1.9cqi, 22px);
 }
 .pi-slide h1 {
   position: relative;
@@ -114,10 +115,15 @@
 }
 .pi-split {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 5%;
   height: 100%;
   align-items: center;
+}
+.pi-split > div {
+  max-height: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 .pi-split .pi-img {
   width: 100%;
