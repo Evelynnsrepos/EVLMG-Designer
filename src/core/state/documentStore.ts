@@ -70,6 +70,8 @@ export interface UseDocumentResult<T> {
   redo(): void
   canUndo: boolean
   canRedo: boolean
+  /** Undo steps (oldest first) and redo steps (next one last); not available in shared projects. */
+  history?: { past: readonly T[]; future: readonly T[] }
 }
 
 export function useDocument<T>(type: ComponentType, id: Id, createDefault: () => T): UseDocumentResult<T> {
@@ -105,7 +107,7 @@ export function useDocument<T>(type: ComponentType, id: Id, createDefault: () =>
     return { data, update, undo, redo, canUndo: collab.canUndo(name), canRedo: collab.canRedo(name) }
   }
   const h = key ? historyFor(key) : null
-  return { data, update, undo, redo, canUndo: !!h?.canUndo, canRedo: !!h?.canRedo }
+  return { data, update, undo, redo, canUndo: !!h?.canUndo, canRedo: !!h?.canRedo, ...(h ? { history: { past: h.pastStates as readonly T[], future: h.futureStates as readonly T[] } } : {}) }
 }
 
 /** What `useDocument().update` does, usable outside React. No-op until the document is loaded. */

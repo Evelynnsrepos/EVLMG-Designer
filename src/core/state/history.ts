@@ -33,4 +33,12 @@ export class History<T> {
   get canRedo() {
     return this.future.length > 0
   }
+  /** Saved states, oldest first (for an undo history list). */
+  get pastStates(): readonly T[] {
+    return this.past
+  }
+  /** States redo would bring back, the next one last. */
+  get futureStates(): readonly T[] {
+    return this.future
+  }
 }
