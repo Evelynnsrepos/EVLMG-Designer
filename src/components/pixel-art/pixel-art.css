@@ -26,6 +26,9 @@
 }
 .px-head {
   padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .px-toolbar {
   display: flex;
@@ -351,4 +354,32 @@
   border-radius: 3px;
   border: 1px solid var(--border);
   background-image: linear-gradient(45deg, var(--placeholder, #888) 25%, transparent 25%);
+}
+
+/* Undo history list */
+.px-history {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.px-history-step {
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+}
+.px-history-step:hover {
+  background: var(--bg-hover);
+}
+.px-history-step.on {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.px-history-step.redo {
+  opacity: 0.55;
 }

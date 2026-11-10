@@ -1,4 +1,4 @@
-import { Blend, Brush, PenTool, Type, Sparkles, Circle, Dices, Download, LassoSelect, Spline, SprayCan, Stamp, Eraser, FlipHorizontal2, FlipVertical2, Grid3x3, Lasso, Layers, Map as MapIcon, Move, PaintBucket, Pipette, RotateCcw, RotateCw, Slash, Square, SquareDashed, SunMoon, Upload, WandSparkles } from 'lucide-react'
+import { Blend, Brush, PenTool, CircleDashed, Pentagon, Hand, History as HistoryIcon, Maximize, Type, Sparkles, Circle, Dices, Download, LassoSelect, Spline, SprayCan, Stamp, Eraser, FlipHorizontal2, FlipVertical2, Grid3x3, Lasso, Layers, Map as MapIcon, Move, PaintBucket, Pipette, RotateCcw, RotateCw, Slash, Square, SquareDashed, SunMoon, Upload, WandSparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { importAssetFromBlob, resolveAssetPath } from '@/core/assets'
 import { saveBinaryFile, safeFileName } from '@/core/export'
@@ -62,16 +62,18 @@ import {
 } from '@/shared/pixel/model'
 import { ColorsPanel, LayersPanel, PalettePanel, Preview, Timeline } from './Panels'
 import { grayHex, grayscale, nearest, paletteOf, reduce, swapColors } from '@/shared/pixel/color'
-import { bounds, combine, cut, flipImg, imgMask, lassoMask, maskImg, outline, paste, placeMask, rectMask, rotate90, rotateAny, scaleImg, wandMask, wrapShift, type Combine, type Mask } from './selection'
+import { borderMask, ellipseMask, growMask, invertMask, maskToText, textToMask, bounds, combine, cut, flipImg, imgMask, lassoMask, maskImg, outline, paste, placeMask, rectMask, rotate90, rotateAny, scaleImg, wandMask, wrapShift, type Combine, type Mask } from './selection'
 import { gentle, HOLD_MS, keys as shapeKeys, PERFECT_MS, perfect, recognize, resize, type Shape } from '@/shared/sketch/quickshape'
 import { holdTolerance, useInputSettings } from '@/shared/sketch/inputSettings'
 import { MotionFilter } from '@/shared/sketch/pen'
 import { ShapePanel } from './ShapePanel'
 import { useShapeTool } from './shapeTool'
 import { fromQuickShape, fromStroke } from '@/shared/pixel/shapes'
+import { contentBounds, crop, flipSprite, resizeCanvas, turnSprite } from './docOps'
+import { HistoryList } from './HistoryList'
 import './pixel-art.css'
 
-type Tool = 'pencil' | 'eraser' | 'shape' | 'line' | 'curve' | 'rect' | 'ellipse' | 'fill' | 'lassofill' | 'gradient' | 'spray' | 'text' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill' | 'tileRandom' | 'auto'
+type Tool = 'pencil' | 'eraser' | 'shape' | 'ellipseSelect' | 'polySelect' | 'hand' | 'line' | 'curve' | 'rect' | 'ellipse' | 'fill' | 'lassofill' | 'gradient' | 'spray' | 'text' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill' | 'tileRandom' | 'auto'
 type Pt = [number, number]
 
 /** Pixel Art (v0.16): sprites, animations, tilesets and tilemaps. */
@@ -330,9 +332,25 @@ const TOOLS: { id: Tool; icon: typeof Brush; label: string; key: string }[] = [
   { id: 'shade', icon: SunMoon, label: 'Shade brush: left click one palette step lighter, right click darker', key: 'pixel.shade' },
   { id: 'select', icon: SquareDashed, label: 'Select a rectangle (Shift adds, Ctrl takes away)', key: 'pixel.select' },
   { id: 'lasso', icon: Lasso, label: 'Lasso: select by drawing around (Shift adds, Ctrl takes away)', key: 'pixel.lasso' },
-  { id: 'wand', icon: WandSparkles, label: 'Magic wand: select one exact colour (Shift adds, Ctrl takes away)', key: 'pixel.wand' },
-  { id: 'move', icon: Move, label: 'Move the selection, or the whole layer (arrow keys move 1 px)', key: 'pixel.move' },
+  { id: 'ellipseSelect', icon: CircleDashed, label: 'Select an ellipse (Shift adds, Ctrl takes away)', key: 'pixel.ellipseSelect' },
+  { id: 'polySelect', icon: Pentagon, label: 'Polygon lasso: click the corners, click the first one (or double-click) to finish (Shift adds, Ctrl takes away)', key: 'pixel.polySelect' },
+  { id: 'wand', icon: WandSparkles, label: 'Magic wand: select a colour, with Tolerance for similar ones (Shift adds, Ctrl takes away)', key: 'pixel.wand' },
+  { id: 'move', icon: Move, label: 'Move the selection, or the whole layer (arrow keys move 1 px). Drag a corner to scale (Shift keeps the shape), drag outside the box to rotate (Shift: 15° steps)', key: 'pixel.move' },
+  { id: 'hand', icon: Hand, label: 'Hand: drag to look around (or hold Space, or drag with the middle button)', key: 'pixel.hand' },
 ]
+
+/** Where the old picture sits when the canvas size changes. */
+const ANCHORS: Record<string, { label: string; x: number; y: number }> = {
+  tl: { label: 'Top left', x: 0, y: 0 },
+  tm: { label: 'Top', x: 0.5, y: 0 },
+  tr: { label: 'Top right', x: 1, y: 0 },
+  ml: { label: 'Left', x: 0, y: 0.5 },
+  mm: { label: 'Middle', x: 0.5, y: 0.5 },
+  mr: { label: 'Right', x: 1, y: 0.5 },
+  bl: { label: 'Bottom left', x: 0, y: 1 },
+  bm: { label: 'Bottom', x: 0.5, y: 1 },
+  br: { label: 'Bottom right', x: 1, y: 1 },
+}
 
 /** Copied pixels, shared by every Pixel Art file. */
 let clipboard: { piece: Img; mask: Mask; x: number; y: number } | null = null
@@ -346,7 +364,7 @@ const MAP_TOOLS: { id: Tool; icon: typeof Brush; label: string }[] = [
   { id: 'picker', icon: Pipette, label: 'Pick a tile from the map' },
 ]
 
-type Live = { key: string; base: Img; img: Img; start: Pt; path: Pt[]; button: number; press?: number[]; ctrl?: Pt; from?: string; float?: { piece: Img; mask: Mask; x: number; y: number; rest: Img }; at?: Pt; snap?: { shape: Shape; at: Pt; perfect?: boolean; drawn?: Shape } }
+type Live = { key: string; base: Img; img: Img; start: Pt; path: Pt[]; button: number; press?: number[]; ctrl?: Pt; from?: string; float?: { piece: Img; mask: Mask; x: number; y: number; rest: Img }; at?: Pt; snap?: { shape: Shape; at: Pt; perfect?: boolean; drawn?: Shape }; xform?: { kind: 'scale' | 'rotate'; fixed: Pt; box: { x: number; y: number; w: number; h: number }; mask?: Mask; placed?: Mask } }
 
 function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<PixelDoc> & { data: PixelDoc }; documentId: string; title: string; active: boolean }) {
   const d = doc.data
@@ -354,7 +372,13 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   useEffect(() => maybeStartTour('pixel'), [])
   const root = useProjectStore((s) => s.root)
   const lib = useDocument<TileLibrary>('level-layout', LIBRARY_ID, createLibrary)
-  const update = (fn: (x: PixelDoc) => PixelDoc) => doc.update(fn)
+  // A selection change right after a pixel change (same click) joins that undo step.
+  const justChanged = useRef(false)
+  const update = (fn: (x: PixelDoc) => PixelDoc) => {
+    doc.update(fn)
+    justChanged.current = true
+    queueMicrotask(() => (justChanged.current = false))
+  }
 
   const [tool, setTool] = useState<Tool>('pencil')
   const [colors, setColors] = useState<[string, string]>([d.palette[1] ?? '#ffffff', d.palette[0] ?? '#000000'])
@@ -372,6 +396,14 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const [clean, setClean] = useState(true)
   const [filled, setFilled] = useState(false)
   const [contiguous, setContiguous] = useState(true)
+  // v0.29: how different a colour may be and still count for the bucket and the magic wand (0 = exact).
+  const [tolerance, setTolerance] = useState(0)
+  const [outlineOpts, setOutlineOpts] = useState({ inside: false, corners: false })
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const stage = useRef<HTMLDivElement>(null)
+  const panning = useRef<{ x: number; y: number; sl: number; st: number } | null>(null)
+  const spaceDown = useRef(false)
+  const poly = useRef<{ pts: Pt[]; how: Combine; last: number } | null>(null)
   const [dither, setDither] = useState(16)
   const [sym, setSym] = useState({ x: false, y: false })
   const [seamless, setSeamless] = useState(false)
@@ -411,7 +443,13 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const [sheetOpts, setSheetOpts] = useState<SheetOptions>(DEFAULT_SHEET)
   const [note, setNote] = useState<string | null>(null)
   // The selection (not saved with the file) and the one being drawn.
-  const [mask, setMask] = useState<Mask | null>(null)
+  // v0.29: the selection lives in the document, so selecting, deselecting and moving it are undo steps.
+  const mask = useMemo(() => (d.selection ? textToMask(d.selection, d.width * d.height) : null), [d.selection, d.width, d.height])
+  const setMask = (m: Mask | null) => {
+    const text = m && m.some((v) => v) ? maskToText(m) : undefined
+    if (text === d.selection) return
+    doc.update((x) => ({ ...x, selection: text }), { undoable: !justChanged.current })
+  }
   const selecting = useRef<{ start: Pt; path: Pt[]; how: Combine; preview: Mask | null } | null>(null)
   const [, tick] = useState(0)
   const live = useRef<Live | null>(null)
@@ -605,6 +643,30 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       g.lineWidth = 1
     }
     if (layer.vector && !inMap && !seamless && (tool === 'shape' || tool === 'fill')) shapes.overlay(g, s)
+    const off = seamless && !inMap ? [d.width, d.height] : [0, 0]
+    if (poly.current) {
+      // The polygon lasso so far, with a line to the pointer.
+      const pts = [...poly.current.pts, ...(hover.current ? [hover.current] : [])]
+      g.beginPath()
+      pts.forEach(([x, y], i) => (i ? g.lineTo : g.moveTo).call(g, (x + off[0] + 0.5) * s, (y + off[1] + 0.5) * s))
+      g.strokeStyle = '#4dabf7'
+      g.lineWidth = 1.5
+      g.stroke()
+      g.lineWidth = 1
+    }
+    if (tool === 'move' && !inMap && !live.current) {
+      // Transform handles around what Move would lift.
+      const b = mask ? bounds(mask, d.width) : bounds(imgMask(celImg(d.cels[curKey()], d.width, d.height)), d.width)
+      if (b) {
+        g.strokeStyle = 'rgba(77,171,247,0.9)'
+        g.strokeRect((b.x + off[0]) * s + 0.5, (b.y + off[1]) * s + 0.5, b.w * s, b.h * s)
+        g.fillStyle = '#fff'
+        for (const [cx, cy] of [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]]) {
+          g.fillRect((cx + off[0]) * s - 3.5, (cy + off[1]) * s - 3.5, 7, 7)
+          g.strokeRect((cx + off[0]) * s - 3.5, (cy + off[1]) * s - 3.5, 7, 7)
+        }
+      }
+    }
     if (seamless && !inMap) {
       g.strokeStyle = 'rgba(255,255,255,0.6)'
       g.strokeRect(d.width * s + 0.5, d.height * s + 0.5, d.width * s, d.height * s)
@@ -652,6 +714,9 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     const hit = TOOLS.find((x) => isShortcut(e, x.key))
     const act = (fn: () => void) => (e.preventDefault(), fn())
     if (tool === 'shape' && layer.vector && !inMap && !(e.ctrlKey || e.metaKey) && shapes.key(e)) return e.preventDefault()
+    if (poly.current && e.key === 'Enter') return act(finishPoly)
+    if (poly.current && e.key === 'Escape') return act(() => ((poly.current = null), drawOverlay()))
+    if (e.key === ' ' && !e.repeat) return act(() => (spaceDown.current = true))
     if (hit) return act(() => setTool(hit.id))
     if (isShortcut(e, 'pixel.swap')) return act(() => setColors([colors[1], colors[0]]))
     if (isShortcut(e, 'pixel.bigger')) return act(() => setSize((s) => Math.min(32, s + 1)))
@@ -679,8 +744,13 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     if (!active) return
     const on = (e: KeyboardEvent) => keys.current(e)
     // Capture, so Esc with a selection lets go of it before Layout Mode sees the key.
+    const off = (e: KeyboardEvent) => e.key === ' ' && (spaceDown.current = false)
     window.addEventListener('keydown', on, true)
-    return () => window.removeEventListener('keydown', on, true)
+    window.addEventListener('keyup', off, true)
+    return () => {
+      window.removeEventListener('keydown', on, true)
+      window.removeEventListener('keyup', off, true)
+    }
   }, [active])
 
   // ---- Keep the Level Layout tileset up to date (tilesets linked to the library) ----
@@ -960,7 +1030,14 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   }
 
   const onDown = (e: React.PointerEvent) => {
-    if (e.button === 1) return
+    if (e.button === 1 || tool === 'hand' || spaceDown.current) {
+      // Look around: the stage scrolls with the pointer.
+      const st = stage.current
+      if (!st) return
+      e.currentTarget.setPointerCapture(e.pointerId)
+      panning.current = { x: e.clientX, y: e.clientY, sl: st.scrollLeft, st: st.scrollTop }
+      return
+    }
     const p = pos(e)
     if (tool === 'picker' || (e.altKey && !inMap)) return pick(p, e.button)
     if (inMap && tool === 'auto') {
@@ -993,12 +1070,26 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       setMapDraft(placeTiles(cells, p, e.button === 2))
       return
     }
-    if (tool === 'select' || tool === 'lasso' || tool === 'wand') {
+    if (tool === 'polySelect' && !inMap) {
+      const q = wrap(p)
+      const pl = poly.current
+      const now = Date.now()
+      if (!pl) {
+        poly.current = { pts: [q], how: e.shiftKey ? 'add' : e.ctrlKey || e.metaKey ? 'subtract' : 'replace', last: now }
+        return drawOverlay()
+      }
+      const closes = pl.pts.length >= 3 && (Math.abs(q[0] - pl.pts[0][0]) <= 1 && Math.abs(q[1] - pl.pts[0][1]) <= 1 || now - pl.last < 350)
+      if (closes) return finishPoly()
+      pl.pts.push(q)
+      pl.last = now
+      return drawOverlay()
+    }
+    if (tool === 'select' || tool === 'lasso' || tool === 'wand' || tool === 'ellipseSelect') {
       const how: Combine = e.shiftKey ? 'add' : e.ctrlKey || e.metaKey ? 'subtract' : 'replace'
       const q = wrap(p)
       if (tool === 'wand') {
         if (q[0] < 0 || q[1] < 0 || q[0] >= d.width || q[1] >= d.height) return
-        return setMask(combine(mask, wandMask(celImg(d.cels[curKey()], d.width, d.height), q[0], q[1], contiguous), how))
+        return setMask(combine(mask, wandMask(celImg(d.cels[curKey()], d.width, d.height), q[0], q[1], contiguous, tolerance), how))
       }
       e.currentTarget.setPointerCapture(e.pointerId)
       selecting.current = { start: q, path: [q], how, preview: null }
@@ -1027,7 +1118,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       if (q[0] < 0 || q[1] < 0 || q[0] >= d.width || q[1] >= d.height) return
       const img = cloneImg(base)
       const c = hexToRgba(paintHex(e.button === 2 ? colors[1] : colors[0]))
-      for (const [x, y] of floodPoints(base, q[0], q[1], contiguous)) if (ditherOn(x, y, dither) && (!mask || mask[y * d.width + x])) setPx(img, x, y, c)
+      for (const [x, y] of floodPoints(base, q[0], q[1], contiguous, tolerance)) if (ditherOn(x, y, dither) && (!mask || mask[y * d.width + x])) setPx(img, x, y, c)
       return commit(key, img)
     }
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -1037,6 +1128,14 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       const c = cut(rest, mask ?? rectMask(d.width, d.height, 0, 0, d.width - 1, d.height - 1))
       if (!c) return
       live.current = { key, base, img: base, start: p, path: [p], button: e.button, float: { ...c, rest }, at: p }
+      // Transform handles: a corner scales, outside the box turns.
+      const box = { x: c.x, y: c.y, w: c.piece.width, h: c.piece.height }
+      const reach = Math.max(1, 6 / zoom)
+      const corners: Pt[] = [[box.x, box.y], [box.x + box.w, box.y], [box.x + box.w, box.y + box.h], [box.x, box.y + box.h]]
+      const ci = corners.findIndex(([cx, cy]) => Math.abs(p[0] + 0.5 - cx) <= reach && Math.abs(p[1] + 0.5 - cy) <= reach)
+      const outside = p[0] < box.x - reach || p[1] < box.y - reach || p[0] >= box.x + box.w + reach || p[1] >= box.y + box.h + reach
+      if (ci >= 0) live.current.xform = { kind: 'scale', fixed: corners[(ci + 2) % 4], box, mask: mask ?? undefined }
+      else if (outside) live.current.xform = { kind: 'rotate', fixed: [box.x + box.w / 2, box.y + box.h / 2], box, mask: mask ?? undefined }
       return
     }
     const q = wrap(p)
@@ -1053,6 +1152,60 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     if (tool === 'spray') spray(live.current, p)
     render(live.current, c && tool === 'curve' ? c.b : p)
     draw()
+  }
+
+  /** Transform handles: the lifted pixels scaled from the opposite corner, or turned around the middle. */
+  const transformFloat = (l: Live, p: Pt, shift: boolean) => {
+    const f = l.float!
+    const t = l.xform!
+    let piece: Img
+    let pm: Mask
+    let x: number
+    let y: number
+    const fm = maskImg(f.mask, f.piece.width, f.piece.height)
+    if (t.kind === 'scale') {
+      const [fx, fy] = t.fixed
+      let w = Math.max(1, Math.abs(p[0] + 0.5 - fx))
+      let h = Math.max(1, Math.abs(p[1] + 0.5 - fy))
+      if (shift) {
+        const k = Math.max(w / t.box.w, h / t.box.h)
+        ;[w, h] = [t.box.w * k, t.box.h * k]
+      }
+      ;[w, h] = [Math.max(1, Math.round(w)), Math.max(1, Math.round(h))]
+      piece = scaleImg(f.piece, w, h)
+      pm = imgMask(scaleImg(fm, w, h))
+      x = p[0] + 0.5 < fx ? fx - w : fx
+      y = p[1] + 0.5 < fy ? fy - h : fy
+    } else {
+      const [cx, cy] = t.fixed
+      let deg = ((Math.atan2(p[1] + 0.5 - cy, p[0] + 0.5 - cx) - Math.atan2(l.start[1] + 0.5 - cy, l.start[0] + 0.5 - cx)) * 180) / Math.PI
+      deg = shift ? Math.round(deg / 15) * 15 : Math.round(deg)
+      piece = rotateAny(f.piece, deg)
+      pm = imgMask(rotateAny(fm, deg))
+      x = Math.round(cx - piece.width / 2)
+      y = Math.round(cy - piece.height / 2)
+    }
+    const img = cloneImg(f.rest)
+    paste(img, piece, x, y, pm)
+    l.img = img
+    t.placed = placeMask(d.width, d.height, pm, piece.width, x, y)
+  }
+
+  /** Polygon lasso: the clicked corners become the selection. */
+  const finishPoly = () => {
+    const pl = poly.current
+    poly.current = null
+    if (pl && pl.pts.length >= 3) setMask(combine(mask, lassoMask(d.width, d.height, pl.pts), pl.how))
+    drawOverlay()
+  }
+
+  /** Zoom so the whole picture fits the stage. */
+  const zoomToFit = () => {
+    const st = stage.current
+    if (!st) return
+    const W = inMap && d.map ? d.map.width * ts : d.width
+    const H = inMap && d.map ? d.map.height * ts : d.height
+    setZoom(Math.max(1, Math.min(48, Math.floor(Math.min((st.clientWidth - 48) / W, (st.clientHeight - 48) / H)))))
   }
 
   /** Where the lifted pixels would land, moved by dx,dy. */
@@ -1093,8 +1246,15 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   }
 
   const onMove = (e: React.PointerEvent) => {
+    const pan = panning.current
+    if (pan && stage.current) {
+      stage.current.scrollLeft = pan.sl - (e.clientX - pan.x)
+      stage.current.scrollTop = pan.st - (e.clientY - pan.y)
+      return
+    }
     let p = pos(e)
     hover.current = p
+    if (poly.current) return drawOverlay()
     if (tool === 'shape' && layer.vector && !inMap) {
       shapes.move(wrap(p))
       return drawOverlay()
@@ -1107,11 +1267,15 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     if (sel) {
       const q = wrap(p)
       sel.path.push(q)
-      sel.preview = combine(mask, tool === 'lasso' ? lassoMask(d.width, d.height, sel.path) : rectMask(d.width, d.height, sel.start[0], sel.start[1], q[0], q[1]), sel.how)
+      sel.preview = combine(mask, tool === 'lasso' ? lassoMask(d.width, d.height, sel.path) : tool === 'ellipseSelect' ? ellipseMask(d.width, d.height, sel.start[0], sel.start[1], q[0], q[1]) : rectMask(d.width, d.height, sel.start[0], sel.start[1], q[0], q[1]), sel.how)
       return drawOverlay()
     }
     const l = live.current
     if (!l) return drawOverlay()
+    if (l.float && l.xform) {
+      transformFloat(l, p, e.shiftKey)
+      return draw()
+    }
     if (l.float) {
       l.at = p
       dropFloat(l, p[0] - l.start[0], p[1] - l.start[1])
@@ -1197,6 +1361,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
 
   const onUp = () => {
     clearTimeout(hold.current.timer)
+    if (panning.current) return void (panning.current = null)
     if (tool === 'shape' && layer.vector) return shapes.up()
     if (draft.current) {
       commitMap(draft.current)
@@ -1219,7 +1384,12 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       return
     }
     curve.current = null
-    if (l.float && mask && l.at) setMask(placeMask(d.width, d.height, l.float.mask, l.float.piece.width, l.float.x + l.at[0] - l.start[0], l.float.y + l.at[1] - l.start[1]))
+    if (l.xform) {
+      commit(l.key, l.img)
+      if (l.xform.mask && l.xform.placed) setMask(l.xform.placed)
+      return
+    }
+    const movedMask = l.float && mask && l.at ? placeMask(d.width, d.height, l.float.mask, l.float.piece.width, l.float.x + l.at[0] - l.start[0], l.float.y + l.at[1] - l.start[1]) : null
     if (layer.vector && tool === 'pencil') {
       // On a shape layer the stroke becomes a live shape: the snapped one, or the stroke's corners.
       const made = l.snap?.drawn ? fromQuickShape(l.snap.drawn) : fromStroke(l.path.map(([x, y]) => ({ x, y })))
@@ -1228,6 +1398,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       return
     }
     commit(l.key, l.img)
+    if (movedMask) setMask(movedMask)
   }
 
   const commit = (key: string, img: Img) => {
@@ -1290,7 +1461,10 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     })
     if (mask && newMask) setMask(newMask)
   }
-  const outlineSel = () => commit(curKey(), outline(celImg(d.cels[curKey()], d.width, d.height), hexToRgba(paintHex(colors[0])), mask))
+  const outlineSel = () => commit(curKey(), outline(celImg(d.cels[curKey()], d.width, d.height), hexToRgba(paintHex(colors[0])), mask, outlineOpts))
+  /** Whole-sprite changes (every layer and frame); the selection goes, since it no longer fits. */
+  const spriteOp = (fn: (x: PixelDoc) => PixelDoc) => update((x) => ({ ...fn(x), selection: undefined }))
+  const [canvasSize, setCanvasSize] = useState<{ w: number; h: number; anchor: string } | null>(null)
   /** In palette-only mode every painted colour snaps to the palette; in gray mode it turns gray. */
   const paintHex = (hex: string) => (d.colorMode === 'indexed' ? nearest(d.palette, hex) : d.colorMode === 'gray' ? grayHex(hex) : hex)
   /** Every cel changed by `fn` (one undo step). */
@@ -1464,6 +1638,11 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     <div className="px">
       <div className="px-head">
         <PresetHeader documentId={documentId} kind={d.kind === 'tileset' ? 'Tileset' : 'Sprite'} undo={doc.undo} redo={doc.redo} canUndo={doc.canUndo} canRedo={doc.canRedo} />
+        {doc.history && (
+          <button className={`icon-btn${historyOpen ? ' on' : ''}`} title="Undo history: jump back several steps at once" aria-label="Undo history" onClick={() => setHistoryOpen(!historyOpen)}>
+            <HistoryIcon size={16} />
+          </button>
+        )}
       </div>
       <div className="px-toolbar" data-tour="px-tools">
         {tools.map((t) => (
@@ -1541,7 +1720,12 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                 <input type="checkbox" checked={filled} onChange={(e) => setFilled(e.target.checked)} /> Filled
               </label>
             )}
-            {tool === 'fill' && (
+            {(tool === 'fill' || tool === 'wand') && (
+              <label className="px-row" title="Tolerance: how different a colour may be and still count (0 = exactly the same colour)">
+                Tolerance <input type="range" min={0} max={128} value={tolerance} onChange={(e) => setTolerance(Number(e.target.value))} /> {tolerance}
+              </label>
+            )}
+            {(tool === 'fill' || tool === 'wand') && (
               <label className="px-row" title="Off: every pixel of that colour, also unconnected ones">
                 <input type="checkbox" checked={contiguous} onChange={(e) => setContiguous(e.target.checked)} /> Connected only
               </label>
@@ -1595,6 +1779,9 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
         </label>
         <label className="px-row" title="Zoom (whole steps keep pixels square)">
           Zoom <input type="range" min={1} max={48} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} /> {zoom}×
+          <button className="icon-btn" title="Zoom to fit" aria-label="Zoom to fit" onClick={zoomToFit}>
+            <Maximize size={14} />
+          </button>
         </label>
         {d.kind === 'tileset' && (
           <button className={`btn${inMap ? ' btn-primary' : ''}`} title="Switch between drawing the tiles and painting a map with them (Tab)" onClick={() => setMapMode(!mapMode)}>
@@ -1674,6 +1861,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       )}
       <div className="px-body">
         <aside className="px-side" data-tour="px-palette">
+          {historyOpen && doc.history && <HistoryList past={doc.history.past} future={doc.history.future} current={d} undo={doc.undo} redo={doc.redo} />}
           {inMap && d.map ? (
             <TilePicker set={frameImg(0)} ts={ts} stamp={stamp} onStamp={(s) => (setStamp(s), tool !== 'tile' && tool !== 'tileFill' ? setTool('tile') : null)} />
           ) : (
@@ -1703,7 +1891,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
             <Preview d={d} frameImg={frameImg} playTag={playTag} />
           )}
         </aside>
-        <div className="px-stage" data-tour="px-canvas">
+        <div className="px-stage" data-tour="px-canvas" ref={stage} style={tool === 'hand' ? { cursor: 'grab' } : undefined}>
           <div className="px-canvas" style={{ width: css(cw) * ax, height: css(ch) * ay }}>
             <div className="px-canvas-inner" style={{ width: css(cw), height: css(ch), transform: ax !== 1 || ay !== 1 ? `scale(${ax}, ${ay})` : undefined }}>
             <canvas
@@ -1762,6 +1950,12 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                   <button className="btn btn-ghost" title="A one-pixel line in the main colour around the drawing" onClick={outlineSel}>
                     Outline
                   </button>
+                  <label className="px-row" title="Outline on the drawing's own edge pixels instead of around it">
+                    <input type="checkbox" checked={outlineOpts.inside} onChange={(e) => setOutlineOpts({ ...outlineOpts, inside: e.target.checked })} /> inside
+                  </label>
+                  <label className="px-row" title="Also fill the diagonal corners (rounder, thicker)">
+                    <input type="checkbox" checked={outlineOpts.corners} onChange={(e) => setOutlineOpts({ ...outlineOpts, corners: e.target.checked })} /> corners
+                  </label>
                   <button className="btn btn-ghost" title="Shift by half with wrap-around, to check that a tile repeats without seams" onClick={() => commit(curKey(), wrapShift(celImg(d.cels[curKey()], d.width, d.height), Math.floor(d.width / 2), Math.floor(d.height / 2)))}>
                     Wrap shift
                   </button>
@@ -1780,7 +1974,88 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                   </button>
                 )}
                 {mask && <SelectionInfo mask={mask} width={d.width} />}
+                <div className="px-row px-wrap" title="Change the selection itself">
+                  <button className="btn btn-ghost" onClick={() => setMask(all())}>
+                    All
+                  </button>
+                  {mask && (
+                    <>
+                      <button className="btn btn-ghost" title="Grow the selection by 1 pixel" onClick={() => setMask(growMask(mask, d.width, d.height, 1))}>
+                        Grow
+                      </button>
+                      <button className="btn btn-ghost" title="Shrink the selection by 1 pixel" onClick={() => setMask(growMask(mask, d.width, d.height, -1))}>
+                        Shrink
+                      </button>
+                      <button className="btn btn-ghost" title="Keep only the edge of the selection" onClick={() => setMask(borderMask(mask, d.width, d.height))}>
+                        Border
+                      </button>
+                      <button className="btn btn-ghost" title="Select everything that was not selected" onClick={() => setMask(invertMask(mask))}>
+                        Invert
+                      </button>
+                      <button className="btn btn-ghost" title="Deselect (Ctrl+D)" onClick={() => setMask(null)}>
+                        None
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>}
+              {d.kind === 'sprite' && (
+                <div className="px-panel">
+                  <strong>Whole sprite</strong>
+                  <div className="px-row px-wrap">
+                    <button className="icon-btn" title="Flip every layer and frame left to right" onClick={() => spriteOp((x) => flipSprite(x, 'x'))}>
+                      <FlipHorizontal2 size={14} />
+                    </button>
+                    <button className="icon-btn" title="Flip every layer and frame upside down" onClick={() => spriteOp((x) => flipSprite(x, 'y'))}>
+                      <FlipVertical2 size={14} />
+                    </button>
+                    <button className="icon-btn" title="Turn every layer and frame a quarter clockwise" onClick={() => spriteOp((x) => turnSprite(x, true))}>
+                      <RotateCw size={14} />
+                    </button>
+                    <button className="icon-btn" title="Turn every layer and frame a quarter anticlockwise" onClick={() => spriteOp((x) => turnSprite(x, false))}>
+                      <RotateCcw size={14} />
+                    </button>
+                    <button className="btn btn-ghost" title="Cut off the empty edges around every layer and frame" onClick={() => {
+                      const b = contentBounds(d)
+                      if (!b) return setNote('Nothing to trim: the sprite is empty.')
+                      spriteOp((x) => crop(x, b.x, b.y, b.w, b.h))
+                    }}>
+                      Trim
+                    </button>
+                    {mask && (
+                      <button className="btn btn-ghost" title="Make the canvas the size of the selection" onClick={() => {
+                        const b = bounds(mask, d.width)
+                        if (b) spriteOp((x) => crop(x, b.x, b.y, b.w, b.h))
+                      }}>
+                        Crop to selection
+                      </button>
+                    )}
+                    <button className="btn btn-ghost" title="Make the canvas bigger or smaller" onClick={() => setCanvasSize(canvasSize ? null : { w: d.width, h: d.height, anchor: 'mm' })}>
+                      Canvas size…
+                    </button>
+                  </div>
+                  {canvasSize && (
+                    <div className="px-row px-wrap">
+                      <input className="input px-ms" type="number" min={1} max={2048} value={canvasSize.w} aria-label="Width" onChange={(e) => setCanvasSize({ ...canvasSize, w: Math.max(1, Math.min(2048, Number(e.target.value) || 1)) })} /> ×
+                      <input className="input px-ms" type="number" min={1} max={2048} value={canvasSize.h} aria-label="Height" onChange={(e) => setCanvasSize({ ...canvasSize, h: Math.max(1, Math.min(2048, Number(e.target.value) || 1)) })} />
+                      <select className="input" value={canvasSize.anchor} title="Where the picture sits on the new canvas" onChange={(e) => setCanvasSize({ ...canvasSize, anchor: e.target.value })}>
+                        {Object.entries(ANCHORS).map(([k, a]) => (
+                          <option key={k} value={k}>
+                            {a.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button className="btn" onClick={() => {
+                        const a = ANCHORS[canvasSize.anchor]
+                        spriteOp((x) => resizeCanvas(x, canvasSize.w, canvasSize.h, a.x, a.y))
+                        setCanvasSize(null)
+                      }}>
+                        Apply
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </aside>

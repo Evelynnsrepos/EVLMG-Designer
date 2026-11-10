@@ -38,12 +38,53 @@ export function lassoMask(w: number, h: number, pts: [number, number][]): Mask {
   return m
 }
 
-/** Magic wand: pixels of exactly this colour (connected, or everywhere). */
-export function wandMask(img: Img, x: number, y: number, contiguous: boolean): Mask {
+/** Magic wand: pixels of this colour, within `tolerance` per channel (connected, or everywhere). */
+export function wandMask(img: Img, x: number, y: number, contiguous: boolean, tolerance = 0): Mask {
   const m = new Uint8Array(img.width * img.height)
-  for (const [px, py] of floodPoints(img, x, y, contiguous)) m[py * img.width + px] = 1
+  for (const [px, py] of floodPoints(img, x, y, contiguous, tolerance)) m[py * img.width + px] = 1
   return m
 }
+
+/** The ellipse inside the box (pixel centres), like the Ellipse tool fills it. */
+export function ellipseMask(w: number, h: number, x0: number, y0: number, x1: number, y1: number): Mask {
+  const m = new Uint8Array(w * h)
+  const [ax, bx, ay, by] = [Math.min(x0, x1), Math.max(x0, x1), Math.min(y0, y1), Math.max(y0, y1)]
+  const [cx, cy, rx, ry] = [(ax + bx) / 2, (ay + by) / 2, (bx - ax) / 2 + 0.5, (by - ay) / 2 + 0.5]
+  for (let y = Math.max(0, ay); y <= Math.min(h - 1, by); y++) for (let x = Math.max(0, ax); x <= Math.min(w - 1, bx); x++) if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1) m[y * w + x] = 1
+  return m
+}
+
+/** Grow (n > 0) or shrink (n < 0) the selection by n pixels, in all 8 directions. */
+export function growMask(m: Mask, w: number, h: number, n: number): Mask {
+  let cur = m
+  for (let k = 0; k < Math.abs(n); k++) {
+    const next = new Uint8Array(cur)
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x
+        if (!!cur[i] === n > 0) continue
+        // Growing: an empty pixel next to a selected one joins; shrinking: a selected pixel next to an empty one (or the edge) leaves.
+        let near = false
+        for (let dy = -1; dy <= 1 && !near; dy++)
+          for (let dx = -1; dx <= 1 && !near; dx++) {
+            const [nx, ny] = [x + dx, y + dy]
+            const v = nx >= 0 && ny >= 0 && nx < w && ny < h ? cur[ny * w + nx] : 0
+            near = n > 0 ? !!v : !v
+          }
+        if (near) next[i] = n > 0 ? 1 : 0
+      }
+    cur = next
+  }
+  return cur
+}
+
+/** Only the edge: the selection minus the selection shrunk by `n`. */
+export function borderMask(m: Mask, w: number, h: number, n = 1): Mask {
+  const inner = growMask(m, w, h, -n)
+  return m.map((v, i) => (v && !inner[i] ? 1 : 0))
+}
+
+export const invertMask = (m: Mask): Mask => m.map((v) => (v ? 0 : 1))
 
 export function bounds(m: Mask, w: number): { x: number; y: number; w: number; h: number } | null {
   let x0 = Infinity
@@ -125,15 +166,20 @@ export const imgMask = (img: Img): Mask => {
   return m
 }
 
-/** Outline: a one-pixel line of `color` around the opaque pixels (outside, 4-way), inside the mask if given. */
-export function outline(img: Img, color: RGBA, m?: Mask | null): Img {
+/**
+ * Outline: a one-pixel line of `color` around the opaque pixels, inside the mask if given.
+ * Outside (default) draws on the empty pixels next to the drawing, inside on its own edge pixels;
+ * corners also counts diagonal neighbours (a rounder, thicker look at corners).
+ */
+export function outline(img: Img, color: RGBA, m?: Mask | null, opts: { inside?: boolean; corners?: boolean } = {}): Img {
   const out: Img = { ...img, data: new Uint8ClampedArray(img.data) }
   const w = img.width
   const solid = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < img.height && img.data[(y * w + x) * 4 + 3] > 0
+  const near = opts.corners ? [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]] : [[-1, 0], [1, 0], [0, -1], [0, 1]]
   for (let y = 0; y < img.height; y++)
     for (let x = 0; x < w; x++) {
-      if (solid(x, y) || (m && !m[y * w + x])) continue
-      if (solid(x - 1, y) || solid(x + 1, y) || solid(x, y - 1) || solid(x, y + 1)) setPx(out, x, y, color)
+      if (solid(x, y) !== !!opts.inside || (m && !m[y * w + x])) continue
+      if (near.some(([dx, dy]) => solid(x + dx, y + dy) !== !!opts.inside)) setPx(out, x, y, color)
     }
   return out
 }
@@ -194,4 +240,32 @@ export function scaleImg(img: Img, w: number, h: number): Img {
   const out = blank(Math.max(1, w), Math.max(1, h))
   for (let y = 0; y < out.height; y++) for (let x = 0; x < out.width; x++) setPx(out, x, y, getPx(img, Math.floor((x * img.width) / out.width), Math.floor((y * img.height) / out.height)))
   return out
+}
+
+/** A selection as text for the document (so selecting is an undo step): run lengths, starting with unselected. */
+export function maskToText(m: Mask): string {
+  const runs: number[] = []
+  let cur = 0
+  let n = 0
+  for (const v of m) {
+    if ((v ? 1 : 0) === cur) n++
+    else {
+      runs.push(n)
+      cur = 1 - cur
+      n = 1
+    }
+  }
+  runs.push(n)
+  return runs.join(',')
+}
+
+export function textToMask(t: string, size: number): Mask | null {
+  const m = new Uint8Array(size)
+  let i = 0
+  t.split(',').forEach((r, k) => {
+    const n = Number(r) || 0
+    if (k % 2) m.fill(1, i, Math.min(size, i + n))
+    i += n
+  })
+  return m.some((v) => v) ? m : null
 }

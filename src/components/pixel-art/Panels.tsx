@@ -1,3 +1,4 @@
+import { sortPalette, unusedColors } from './docOps'
 import { ArrowDown, ArrowLeftRight, ArrowUp, Copy, Shapes, Eye, EyeOff, Link2, Lock, Pause, Play, Plus, Tag, Trash2, Unlink, Unlock, Wand2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { newId } from '@/core/model'
@@ -157,6 +158,15 @@ export function LayersPanel(p: { d: PixelDoc; layerId: string; setLayerId(id: st
                 <option value="multiply">Multiply (shadows)</option>
                 <option value="screen">Screen (light)</option>
                 <option value="add">Add (glow)</option>
+                <option value="overlay">Overlay (contrast)</option>
+                <option value="softlight">Soft light</option>
+                <option value="hardlight">Hard light</option>
+                <option value="darken">Darken</option>
+                <option value="lighten">Lighten</option>
+                <option value="dodge">Colour dodge (bright glow)</option>
+                <option value="burn">Colour burn (deep shadow)</option>
+                <option value="difference">Difference</option>
+                <option value="subtract">Subtract</option>
               </select>
             </label>
             <label className="px-row" title="A tracing layer: shown faintly while you draw and left out of every export">
@@ -469,6 +479,20 @@ export function ColorsPanel(p: {
         <label className="px-row" title="Mix neighbouring palette colours for smoother shades">
           <input type="checkbox" checked={dither} onChange={(e) => setDither(e.target.checked)} /> dither
         </label>
+      </div>
+      <div className="px-row px-wrap" title="Tidy the palette (undo brings the old order back)">
+        <button className="btn btn-ghost" title="Order the palette by colour, grays first, each colour dark to light" onClick={() => p.update((x) => ({ ...x, palette: sortPalette(x.palette, 'hue') }))}>
+          Sort by colour
+        </button>
+        <button className="btn btn-ghost" title="Order the palette from dark to light" onClick={() => p.update((x) => ({ ...x, palette: sortPalette(x.palette, 'light') }))}>
+          Sort by lightness
+        </button>
+        <button className="btn btn-ghost" title="Take out palette colours no pixel uses" onClick={() => p.update((x) => {
+          const unused = new Set(unusedColors(x))
+          return unused.size ? { ...x, palette: x.palette.filter((c) => !unused.has(c)) } : x
+        })}>
+          Remove unused
+        </button>
       </div>
       <label className="px-row" title="Palette variants: try other colours on the whole animation without changing it">
         Variant
