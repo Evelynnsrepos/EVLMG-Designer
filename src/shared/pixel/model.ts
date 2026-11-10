@@ -1,5 +1,6 @@
 import { newId, type Id } from '@/core/model'
 import { outline, type Shape } from '@/shared/sketch/quickshape'
+import type { ShapeCel } from './shapes'
 
 /**
  * Pixel Art (v0.16): sprites, tilesets and tilemaps on exact whole pixels.
@@ -20,6 +21,8 @@ export interface PixelLayer {
   blend?: 'multiply' | 'screen' | 'add'
   /** v0.16: a tracing layer: shown faintly while drawing, left out of every export. */
   reference?: boolean
+  /** v0.29: a shape layer: its cels are drawn from live shapes (PixelDoc.shapes) and stay editable. */
+  vector?: boolean
 }
 
 export interface PixelFrame {
@@ -73,6 +76,8 @@ export interface PixelDoc {
   colorMode?: 'indexed' | 'gray'
   /** v0.16: palette variants (enemy colours, team colours): colour i of the palette shown as colour i of the variant. */
   variants?: { id: Id; name: string; colors: string[] }[]
+  /** v0.29: live shapes of shape layers, "layerId:frameId" → shapes; the cel PNG is always drawn from them. */
+  shapes?: Record<string, ShapeCel>
 }
 
 /** The starter palette: 16 colours picked for this app (black, white, three ramps and a few accents). */
