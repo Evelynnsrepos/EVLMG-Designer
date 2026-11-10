@@ -1,4 +1,4 @@
-import { Blend, Brush, Type, Sparkles, Circle, Dices, Download, LassoSelect, Spline, SprayCan, Stamp, Eraser, FlipHorizontal2, FlipVertical2, Grid3x3, Lasso, Layers, Map as MapIcon, Move, PaintBucket, Pipette, RotateCcw, RotateCw, Slash, Square, SquareDashed, SunMoon, Upload, WandSparkles } from 'lucide-react'
+import { Blend, Brush, PenTool, Type, Sparkles, Circle, Dices, Download, LassoSelect, Spline, SprayCan, Stamp, Eraser, FlipHorizontal2, FlipVertical2, Grid3x3, Lasso, Layers, Map as MapIcon, Move, PaintBucket, Pipette, RotateCcw, RotateCw, Slash, Square, SquareDashed, SunMoon, Upload, WandSparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { importAssetFromBlob, resolveAssetPath } from '@/core/assets'
 import { saveBinaryFile, safeFileName } from '@/core/export'
@@ -66,9 +66,12 @@ import { bounds, combine, cut, flipImg, imgMask, lassoMask, maskImg, outline, pa
 import { gentle, HOLD_MS, keys as shapeKeys, PERFECT_MS, perfect, recognize, resize, type Shape } from '@/shared/sketch/quickshape'
 import { holdTolerance, useInputSettings } from '@/shared/sketch/inputSettings'
 import { MotionFilter } from '@/shared/sketch/pen'
+import { ShapePanel } from './ShapePanel'
+import { useShapeTool } from './shapeTool'
+import { fromQuickShape, fromStroke } from '@/shared/pixel/shapes'
 import './pixel-art.css'
 
-type Tool = 'pencil' | 'eraser' | 'line' | 'curve' | 'rect' | 'ellipse' | 'fill' | 'lassofill' | 'gradient' | 'spray' | 'text' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill' | 'tileRandom' | 'auto'
+type Tool = 'pencil' | 'eraser' | 'shape' | 'line' | 'curve' | 'rect' | 'ellipse' | 'fill' | 'lassofill' | 'gradient' | 'spray' | 'text' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill' | 'tileRandom' | 'auto'
 type Pt = [number, number]
 
 /** Pixel Art (v0.16): sprites, animations, tilesets and tilemaps. */
@@ -313,6 +316,7 @@ function fromAse(f: ReturnType<typeof readAse>): Partial<PixelDoc> {
 const TOOLS: { id: Tool; icon: typeof Brush; label: string; key: string }[] = [
   { id: 'pencil', icon: Brush, label: 'Pencil', key: 'pixel.pencil' },
   { id: 'eraser', icon: Eraser, label: 'Eraser', key: 'pixel.eraser' },
+  { id: 'shape', icon: PenTool, label: 'Shape: on a shape layer, click points for a live shape; drag points or the shape to change it, double-click an edge to add a point', key: 'pixel.shape' },
   { id: 'line', icon: Slash, label: 'Line (Shift keeps clean angles)', key: 'pixel.line' },
   { id: 'curve', icon: Spline, label: 'Curve: drag a line, then drag again to bend it', key: 'pixel.curve' },
   { id: 'rect', icon: Square, label: 'Rectangle', key: 'pixel.rect' },
@@ -342,7 +346,7 @@ const MAP_TOOLS: { id: Tool; icon: typeof Brush; label: string }[] = [
   { id: 'picker', icon: Pipette, label: 'Pick a tile from the map' },
 ]
 
-type Live = { key: string; base: Img; img: Img; start: Pt; path: Pt[]; button: number; press?: number[]; ctrl?: Pt; from?: string; float?: { piece: Img; mask: Mask; x: number; y: number; rest: Img }; at?: Pt; snap?: { shape: Shape; at: Pt; perfect?: boolean } }
+type Live = { key: string; base: Img; img: Img; start: Pt; path: Pt[]; button: number; press?: number[]; ctrl?: Pt; from?: string; float?: { piece: Img; mask: Mask; x: number; y: number; rest: Img }; at?: Pt; snap?: { shape: Shape; at: Pt; perfect?: boolean; drawn?: Shape } }
 
 function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<PixelDoc> & { data: PixelDoc }; documentId: string; title: string; active: boolean }) {
   const d = doc.data
@@ -424,6 +428,9 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const fi = Math.min(frame, d.frames.length - 1)
   const layer = d.layers.find((l) => l.id === layerId) ?? d.layers[d.layers.length - 1]
   const ts = d.tileSize ?? 16
+  // v0.29: live shapes on shape layers.
+  const shapeKey = resolveKey(d.cels, celKey(layer.id, d.frames[fi].id))
+  const shapes = useShapeTool({ d, update: doc.update, celKey: shapeKey, colors, size, reach: Math.max(0.75, 6 / zoom) })
   const cols = tileColumns(d)
   const inMap = d.kind === 'tileset' && mapMode && !!d.map
   const mapLayer = d.map?.layers.find((l) => l.id === mapLayerId) ?? d.map?.layers[0]
@@ -597,6 +604,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       g.setLineDash([])
       g.lineWidth = 1
     }
+    if (layer.vector && !inMap && !seamless && (tool === 'shape' || tool === 'fill')) shapes.overlay(g, s)
     if (seamless && !inMap) {
       g.strokeStyle = 'rgba(255,255,255,0.6)'
       g.strokeRect(d.width * s + 0.5, d.height * s + 0.5, d.width * s, d.height * s)
@@ -643,6 +651,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     if (e.defaultPrevented || isTextField(e.target) || (e.target as HTMLElement | null)?.tagName === 'SELECT') return
     const hit = TOOLS.find((x) => isShortcut(e, x.key))
     const act = (fn: () => void) => (e.preventDefault(), fn())
+    if (tool === 'shape' && layer.vector && !inMap && !(e.ctrlKey || e.metaKey) && shapes.key(e)) return e.preventDefault()
     if (hit) return act(() => setTool(hit.id))
     if (isShortcut(e, 'pixel.swap')) return act(() => setColors([colors[1], colors[0]]))
     if (isShortcut(e, 'pixel.bigger')) return act(() => setSize((s) => Math.min(32, s + 1)))
@@ -657,6 +666,8 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     if (mod && k === 'a') return act(() => setMask(all()))
     if (mod && k === 'd') return act(() => setMask(null))
     if (mod && k === 'c') return act(() => copySel(false))
+    // Pixel edits would be overwritten by the next shape change on a shape layer.
+    if (layer.vector && ((mod && (k === 'x' || k === 'v')) || ((e.key === 'Delete' || e.key === 'Backspace') && mask))) return act(() => setNote('This is a shape layer: change it with the Shape tool, or Turn into pixels first.'))
     if (mod && k === 'x') return act(() => copySel(true))
     if (mod && k === 'v') return act(pasteSel)
     if (e.key === 'Escape' && mask) return act(() => setMask(null))
@@ -994,6 +1005,18 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       return
     }
     if (layer.locked || !layer.visible) return setNote(layer.locked ? 'This layer is locked.' : 'This layer is hidden.')
+    if (tool === 'shape' && !layer.vector) return setNote('The Shape tool works on a shape layer: add one with the shapes button in Layers.')
+    if (layer.vector && !inMap) {
+      if (tool === 'shape') {
+        e.currentTarget.setPointerCapture(e.pointerId)
+        return shapes.down(wrap(p))
+      }
+      if (tool === 'fill') {
+        if (!shapes.fillAt(wrap(p), e.button === 2 ? null : paintHex(colors[0]))) setNote('Click inside a closed shape to fill it (right-click takes the fill away).')
+        return
+      }
+      if (tool !== 'pencil') return setNote('This is a shape layer: use the Shape tool, the bucket or the pencil (a rough stroke becomes a shape). Turn into pixels makes it a normal layer.')
+    }
     if (tool === 'text') return void addText(wrap(p))
     if (d.kind === 'tileset' && !inMap && p[0] >= 0 && p[1] >= 0 && p[0] < d.width && p[1] < d.height) setFocusTile(Math.floor(p[1] / ts) * cols + Math.floor(p[0] / ts))
     const frameId = inMap ? d.frames[0].id : d.frames[fi].id
@@ -1072,6 +1095,10 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const onMove = (e: React.PointerEvent) => {
     let p = pos(e)
     hover.current = p
+    if (tool === 'shape' && layer.vector && !inMap) {
+      shapes.move(wrap(p))
+      return drawOverlay()
+    }
     if (draft.current) {
       setMapDraft(placeTiles(draft.current, p, (e.buttons & 2) === 2))
       return
@@ -1138,6 +1165,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     if (!l.snap) return
     let shape = resize(l.snap.shape, { x: l.snap.at[0], y: l.snap.at[1] }, { x: to[0], y: to[1] })
     shape = shapeKeys.shift || l.snap.perfect ? perfect(shape) : gentle(shape)
+    l.snap.drawn = shape
     l.path = shapePixels(shape)
     l.press = undefined
     render(l, to)
@@ -1169,6 +1197,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
 
   const onUp = () => {
     clearTimeout(hold.current.timer)
+    if (tool === 'shape' && layer.vector) return shapes.up()
     if (draft.current) {
       commitMap(draft.current)
       setMapDraft(null)
@@ -1191,6 +1220,13 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     }
     curve.current = null
     if (l.float && mask && l.at) setMask(placeMask(d.width, d.height, l.float.mask, l.float.piece.width, l.float.x + l.at[0] - l.start[0], l.float.y + l.at[1] - l.start[1]))
+    if (layer.vector && tool === 'pencil') {
+      // On a shape layer the stroke becomes a live shape: the snapped one, or the stroke's corners.
+      const made = l.snap?.drawn ? fromQuickShape(l.snap.drawn) : fromStroke(l.path.map(([x, y]) => ({ x, y })))
+      if (made) shapes.add({ ...made, strokeColor: paintHex(l.button === 2 ? colors[1] : colors[0]), width: size })
+      else draw()
+      return
+    }
     commit(l.key, l.img)
   }
 
@@ -1217,7 +1253,10 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
         const next = encode(img)
         if (next) cels[k] = next
       }
-      return { ...x, cels, palette: x.palette.map((c) => (c === from ? to : c)) }
+      // Live shapes change colour with their pixels, so the next edit keeps the new colour.
+      const swap = (c?: string) => (c?.toLowerCase() === from.toLowerCase() ? to : c)
+      const shapes = x.shapes && Object.fromEntries(Object.entries(x.shapes).map(([k, c]) => [k, { ...c, list: c.list.map((sh) => ({ ...sh, fillColor: swap(sh.fillColor), strokeColor: swap(sh.strokeColor) })) }]))
+      return { ...x, cels, ...(shapes ? { shapes } : {}), palette: x.palette.map((c) => (c === from ? to : c)) }
     })
 
   const curKey = () => resolveKey(d.cels, celKey(layer.id, d.frames[inMap ? 0 : fi].id))
@@ -1312,8 +1351,8 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const base = safeFileName(title).replace(/\s+/g, '_').toLowerCase() || 'pixel_art'
   const savePng = (img: Img, name: string) =>
     void pngBytes(img, scale).then((bytes) => saveBinaryFile({ title: 'Export PNG', defaultName: name, bytes, filter: { name: 'PNG image', extensions: ['png'] } }))
-  const sheet = () => {
-    const l = sheetLayout(d, sheetOpts)
+  const sheet = (o: SheetOptions = sheetOpts) => {
+    const l = sheetLayout(d, o)
     const img = blank(l.width, l.height)
     d.frames.forEach((_, i) => {
       const f = frameImg(i)
@@ -1342,6 +1381,11 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const exportSheet = async () => {
     const json = JSON.stringify(sheetJson(d, `${base}.png`, sheetOpts), null, 2)
     if (await writeTo('Choose a folder for the sprite sheet', [], [[`${base}.png`, await pngBytes(sheet())], [`${base}.json`, new TextEncoder().encode(json)]])) setNote(`Saved ${base}.png and ${base}.json.`)
+  }
+  /** GameMaker reads a one-row strip named name_stripN.png as N frames. */
+  const exportStrip = async () => {
+    const name = `${base}_strip${d.frames.length}.png`
+    if (await writeTo('Choose a folder for the GameMaker strip', [], [[name, await pngBytes(sheet({ layout: 'row', padding: 0 }))]])) setNote(`Saved ${name}: import it as a sprite in GameMaker and it splits into ${d.frames.length} frames.`)
   }
   const exportGodot = async () => {
     const tres = godotSpriteFrames(d, `res://egd/sprites/${base}.png`, sheetOpts)
@@ -1589,6 +1633,9 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                   </label>
                   <button onClick={() => void exportSheet()}>Sprite sheet + JSON</button>
                   <button onClick={() => void exportGodot()}>Godot SpriteFrames</button>
+                  <button title="One row of frames named name_stripN.png, which GameMaker splits by itself" onClick={() => void exportStrip()}>
+                    GameMaker strip
+                  </button>
                   <button title="Every frame (or the picked tag) as Storyboard frames, with their timing" onClick={() => void toStoryboard()}>
                     Send the animation to Storyboard
                   </button>
@@ -1679,7 +1726,8 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
           ) : (
             <>
               <LayersPanel d={d} layerId={layer.id} setLayerId={setLayerId} update={update} />
-              <div className="px-panel">
+              {layer.vector && <ShapePanel d={d} layerId={layer.id} frameKey={shapeKey} tool={shapes} update={update} main={paintHex(colors[0])} />}
+              {!layer.vector && <div className="px-panel">
                 <strong>{mask ? 'Selection' : 'Whole layer'}</strong>
                 <div className="px-row px-wrap">
                   <button className="icon-btn" title="Flip left to right" onClick={() => transform((i) => flipImg(i, 'x'))}>
@@ -1732,7 +1780,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                   </button>
                 )}
                 {mask && <SelectionInfo mask={mask} width={d.width} />}
-              </div>
+              </div>}
             </>
           )}
         </aside>

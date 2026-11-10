@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeftRight, ArrowUp, Copy, Eye, EyeOff, Link2, Lock, Pause, Play, Plus, Tag, Trash2, Unlink, Unlock, Wand2 } from 'lucide-react'
+import { ArrowDown, ArrowLeftRight, ArrowUp, Copy, Shapes, Eye, EyeOff, Link2, Lock, Pause, Play, Plus, Tag, Trash2, Unlink, Unlock, Wand2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { newId } from '@/core/model'
 import { toCanvas } from '@/shared/pixel/codec'
@@ -96,8 +96,8 @@ export function LayersPanel(p: { d: PixelDoc; layerId: string; setLayerId(id: st
       ;[layers[i], layers[j]] = [layers[j], layers[i]]
       return { ...d, layers }
     })
-  const add = () => {
-    const l = { id: newId(), name: `Layer ${p.d.layers.length + 1}`, visible: true, opacity: 1 }
+  const add = (vector = false) => {
+    const l = { id: newId(), name: vector ? `Shapes ${p.d.layers.length + 1}` : `Layer ${p.d.layers.length + 1}`, visible: true, opacity: 1, ...(vector ? { vector: true } : {}) }
     p.update((d) => {
       const i = d.layers.findIndex((x) => x.id === p.layerId)
       return { ...d, layers: [...d.layers.slice(0, i + 1), l, ...d.layers.slice(i + 1)] }
@@ -105,13 +105,21 @@ export function LayersPanel(p: { d: PixelDoc; layerId: string; setLayerId(id: st
     p.setLayerId(l.id)
   }
   const remove = (id: string) =>
-    p.update((d) => ({ ...d, layers: d.layers.filter((l) => l.id !== id), cels: Object.fromEntries(Object.entries(d.cels).filter(([k]) => !k.startsWith(`${id}:`))) }))
+    p.update((d) => ({
+      ...d,
+      layers: d.layers.filter((l) => l.id !== id),
+      cels: Object.fromEntries(Object.entries(d.cels).filter(([k]) => !k.startsWith(`${id}:`))),
+      ...(d.shapes ? { shapes: Object.fromEntries(Object.entries(d.shapes).filter(([k]) => !k.startsWith(`${id}:`))) } : {}),
+    }))
   return (
     <div className="px-panel">
       <strong className="px-head">
         Layers
-        <button className="icon-btn" title="New layer" aria-label="New layer" onClick={add}>
+        <button className="icon-btn" title="New layer" aria-label="New layer" onClick={() => add()}>
           <Plus size={14} />
+        </button>
+        <button className="icon-btn" title="New shape layer: live shapes you can keep editing and animate" aria-label="New shape layer" onClick={() => add(true)}>
+          <Shapes size={14} />
         </button>
       </strong>
       {[...p.d.layers].reverse().map((l) => (
@@ -122,6 +130,7 @@ export function LayersPanel(p: { d: PixelDoc; layerId: string; setLayerId(id: st
           <button className="icon-btn" title={l.locked ? 'Unlock' : 'Lock'} onClick={(e) => (e.stopPropagation(), set(l.id, { locked: !l.locked || undefined }))}>
             {l.locked ? <Lock size={12} /> : <Unlock size={12} />}
           </button>
+          {l.vector && <Shapes size={12} aria-label="Shape layer" />}
           <input className="px-name" value={l.name} aria-label="Layer name" onChange={(e) => set(l.id, { name: e.target.value })} />
           <button className="icon-btn" title="Move up" onClick={(e) => (e.stopPropagation(), move(l.id, 1))}>
             <ArrowUp size={12} />
@@ -178,8 +187,14 @@ export function Timeline(p: {
     change((x) => {
       const cels = { ...x.cels }
       if (copy) for (const l of x.layers) if (x.cels[`${l.id}:${x.frames[p.frame].id}`]) cels[`${l.id}:${f.id}`] = x.cels[`${l.id}:${x.frames[p.frame].id}`]
+      // Live shapes come along as an in-between: change them and the frame becomes a key.
+      const shapes = { ...x.shapes }
+      if (copy) for (const l of x.layers) {
+        const s = x.shapes?.[resolveKey(x.cels, `${l.id}:${x.frames[p.frame].id}`)]
+        if (l.vector && s) shapes[`${l.id}:${f.id}`] = { key: false, list: s.list }
+      }
       const shift = (t: PixelTag) => ({ ...t, from: t.from > p.frame ? t.from + 1 : t.from, to: t.to >= p.frame ? t.to + 1 : t.to })
-      return { ...x, frames: [...x.frames.slice(0, p.frame + 1), f, ...x.frames.slice(p.frame + 1)], cels, tags: x.tags.map(shift) }
+      return { ...x, frames: [...x.frames.slice(0, p.frame + 1), f, ...x.frames.slice(p.frame + 1)], cels, ...(x.shapes ? { shapes } : {}), tags: x.tags.map(shift) }
     })
     p.setFrame(p.frame + 1)
   }
