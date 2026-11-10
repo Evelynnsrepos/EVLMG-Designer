@@ -1,4 +1,4 @@
-import { BookOpen, ChevronLeft, ChevronRight, Clapperboard, Copy, Film, Pause, Play, Plus, Settings2 } from 'lucide-react'
+import { BookOpen, ChevronLeft, ChevronRight, Clapperboard, Copy, Film, LayoutGrid, Pause, Play, Plus, Settings2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { importAssetFromBlob } from '@/core/assets'
 import { postIntent, useProjectStore } from '@/core/state'
@@ -6,6 +6,7 @@ import { openComponent } from '@/shell/editor/actions'
 import type { PlayMode } from './assist'
 import type { Assist } from './assistView'
 import { toPng, type SketchEngine } from './engine'
+import { SheetExport } from './SheetExport'
 import './assist.css'
 
 const UI = {
@@ -24,6 +25,7 @@ const UI = {
   next: 'Next page',
   settings: 'Settings',
   toStoryboard: 'Send to Storyboard',
+  sheet: 'Sprite sheet for games: Godot, GameMaker, Unity, PNG + JSON',
   toStoryboardHint: (what: string) => `Send every ${what} to the Storyboard as storyboard frames`,
   sending: 'Sending…',
   sent: (n: number) => `Sent ${n} to the Storyboard`,
@@ -69,6 +71,7 @@ export function AssistButtons({ assist }: { assist: Assist }) {
 export function AssistBar({ assist, engine, title }: { assist: Assist; engine: SketchEngine; title: string }) {
   const root = useProjectStore((s) => s.root)
   const [settings, setSettings] = useState(false)
+  const [sheet, setSheet] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   if (!assist.mode) return null
   const { anim, ids, current, mode } = assist
@@ -125,6 +128,11 @@ export function AssistBar({ assist, engine, title }: { assist: Assist; engine: S
         <button className={`icon-btn${settings ? ' is-active' : ''}`} title={UI.settings} aria-label={UI.settings} onClick={() => setSettings(!settings)}>
           <Settings2 size={15} />
         </button>
+        {!pages && (
+          <button className={`icon-btn${sheet ? ' is-active' : ''}`} title={UI.sheet} aria-label={UI.sheet} onClick={() => setSheet(!sheet)}>
+            <LayoutGrid size={15} />
+          </button>
+        )}
         <button className="icon-btn" title={UI.toStoryboardHint(pages ? 'page' : 'frame')} aria-label={UI.toStoryboard} disabled={!root} onClick={() => void send()}>
           <Clapperboard size={15} />
         </button>
@@ -148,6 +156,14 @@ export function AssistBar({ assist, engine, title }: { assist: Assist; engine: S
           </button>
         ))}
       </div>
+      {sheet && !pages && (
+        <SheetExport
+          title={title}
+          onClose={() => setSheet(false)}
+          // Private layers stay out and the background colour too, so the sprite is see-through.
+          frames={() => assist.frames.map((i) => ({ canvas: assist.render([assist.bg, i, assist.fg], false, true), ms: Math.round(((1 + (anim.holds[ids[i]] ?? 0)) * 1000) / anim.fps) }))}
+        />
+      )}
       {settings && (
         <div className="sketch-assist-settings">
           {pages ? (
