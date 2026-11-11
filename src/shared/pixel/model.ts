@@ -23,6 +23,8 @@ export interface PixelLayer {
   reference?: boolean
   /** v0.29: a shape layer: its cels are drawn from live shapes (PixelDoc.shapes) and stay editable. */
   vector?: boolean
+  /** v0.29: the layer group's name; layers next to each other with the same group fold, hide and move together. */
+  group?: string
 }
 
 export interface PixelFrame {
@@ -41,6 +43,8 @@ export interface PixelTag {
   to: number
   color: string
   loop: LoopMode
+  /** v0.29: play the run this many times in a row ("walk ×3"); missing = once. */
+  repeat?: number
 }
 
 /** A layer of tiles from this file's tileset; "x,y" → tile number (left to right, top to bottom). */
@@ -80,6 +84,8 @@ export interface PixelDoc {
   shapes?: Record<string, ShapeCel>
   /** v0.29: the selection, as run lengths (see pixel-art/selection.ts), kept here so selecting can be undone. */
   selection?: string
+  /** v0.29: see-through frames of a layer (fades), "layerId:frameId" → 0..1; missing = fully visible. */
+  celOpacity?: Record<string, number>
 }
 
 /** The starter palette: 16 colours picked for this app (black, white, three ramps and a few accents). */
@@ -409,14 +415,30 @@ export const tileColumns = (d: Pick<PixelDoc, 'width' | 'tileSize'>) => Math.max
 export const tileRows = (d: Pick<PixelDoc, 'height' | 'tileSize'>) => Math.max(1, Math.floor(d.height / (d.tileSize ?? 16)))
 
 /** The frames a tag plays, in order (ping-pong goes there and back without repeating the ends). */
-export function tagFrames(tag: Pick<PixelTag, 'from' | 'to' | 'loop'> | null, count: number): number[] {
-  const from = tag ? Math.max(0, tag.from) : 0
-  const to = tag ? Math.min(count - 1, tag.to) : count - 1
+export function tagFrames(tag: Pick<PixelTag, 'from' | 'to' | 'loop' | 'repeat'> | null, count: number, tags: readonly PixelTag[] = []): number[] {
+  if (!tag) {
+    // All frames: a tag that repeats plays its run that many times where it starts.
+    const out: number[] = []
+    for (let i = 0; i < count; i++) {
+      const t = tags.find((x) => x.from === i && (x.repeat ?? 1) > 1 && x.to < count)
+      if (!t) {
+        out.push(i)
+        continue
+      }
+      out.push(...tagFrames(t, count))
+      i = t.to
+    }
+    return out
+  }
+  const from = Math.max(0, tag.from)
+  const to = Math.min(count - 1, tag.to)
   const fwd = Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => from + i)
-  if (tag?.loop === 'reverse') return fwd.reverse()
-  if (tag?.loop === 'pingpong') return [...fwd, ...fwd.slice(1, -1).reverse()]
-  return fwd
+  const once = tag.loop === 'reverse' ? fwd.reverse() : tag.loop === 'pingpong' ? [...fwd, ...fwd.slice(1, -1).reverse()] : fwd
+  return Array.from({ length: Math.max(1, Math.min(99, tag.repeat ?? 1)) }, () => once).flat()
 }
+
+/** How see-through a layer is on one frame: the layer's opacity times the frame's own. */
+export const celAlpha = (d: Pick<PixelDoc, 'celOpacity'>, layer: Pick<PixelLayer, 'id' | 'opacity'>, frameId: Id) => layer.opacity * (d.celOpacity?.[celKey(layer.id, frameId)] ?? 1)
 
 /** A sprite sheet cut into frames of cw × ch, left to right and top to bottom; empty cells are skipped. */
 export function sliceSheet(img: Img, cw: number, ch: number): Img[] {

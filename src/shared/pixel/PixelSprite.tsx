@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Id } from '@/core/model'
 import { useDocument, useProjectStore } from '@/core/state'
 import { celImg, toCanvas, useDecoded } from './codec'
-import { composite, createPixelDoc, resolveKey, tagFrames, type PixelDoc } from './model'
+import { celAlpha, composite, createPixelDoc, resolveKey, tagFrames, type PixelDoc } from './model'
 
 /** A sprite from a Pixel Art file on an entry (v0.16): the file and, optionally, the tag that plays. */
 export interface SpriteRef {
@@ -16,7 +16,7 @@ export function PixelSprite({ sprite, size, animate = true }: { sprite: SpriteRe
   const urls = useMemo(() => Object.values(d?.cels ?? {}), [d?.cels])
   useDecoded(urls)
   const [i, setI] = useState(0)
-  const order = d ? tagFrames(d.tags.find((t) => t.id === sprite.tag) ?? null, d.frames.length) : []
+  const order = d ? tagFrames(d.tags.find((t) => t.id === sprite.tag) ?? null, d.frames.length, d.tags) : []
   const frame = order[i % Math.max(1, order.length)] ?? 0
   useEffect(() => {
     if (!d || !animate || order.length < 2) return
@@ -28,7 +28,7 @@ export function PixelSprite({ sprite, size, animate = true }: { sprite: SpriteRe
     const c = ref.current
     if (!c || !d?.frames[frame]) return
     const f = d.frames[frame].id
-    const img = composite(d.layers.filter((l) => !l.reference).map((l) => ({ visible: l.visible, opacity: l.opacity, blend: l.blend, img: celImg(d.cels[resolveKey(d.cels, `${l.id}:${f}`)], d.width, d.height) })), d.width, d.height)
+    const img = composite(d.layers.filter((l) => !l.reference).map((l) => ({ visible: l.visible, opacity: celAlpha(d, l, f), blend: l.blend, img: celImg(d.cels[resolveKey(d.cels, `${l.id}:${f}`)], d.width, d.height) })), d.width, d.height)
     c.width = d.width
     c.height = d.height
     c.getContext('2d')!.drawImage(toCanvas(img), 0, 0)
