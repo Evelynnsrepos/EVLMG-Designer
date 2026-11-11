@@ -1,10 +1,12 @@
-import { sortPalette, unusedColors } from './docOps'
-import { ArrowDown, ArrowLeftRight, ArrowUp, Copy, Shapes, Eye, EyeOff, Link2, Lock, Pause, Play, Plus, Tag, Trash2, Unlink, Unlock, Wand2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { ArrowDown, ArrowLeftRight, ArrowUp, ChevronDown, ChevronRight, Folder, FolderMinus, Copy, Shapes, Eye, EyeOff, Link2, Lock, Pause, Play, Plus, Tag, Trash2, Unlink, Unlock, Wand2 } from 'lucide-react'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import { promptDialog } from '@/shared/dialogs'
 import { newId } from '@/core/model'
 import { toCanvas } from '@/shared/pixel/codec'
 import { BUILTIN_PALETTES } from '@/shared/pixel/color'
-import { ramp, resolveKey, tagFrames, type Img, type LoopMode, type PixelDoc, type PixelTag } from '@/shared/pixel/model'
+import { ramp, resolveKey, rgbaToHex, tagFrames, type Img, type LoopMode, type PixelDoc, type PixelLayer, type PixelTag } from '@/shared/pixel/model'
+import { hslToRgb, rgbToHsl } from './adjust'
+import { sortPalette, unusedColors } from './docOps'
 
 type Update = (fn: (d: PixelDoc) => PixelDoc) => void
 
@@ -40,6 +42,7 @@ export function PalettePanel(p: { d: PixelDoc; colors: [string, string]; setColo
           <input type="color" value={second} onChange={(e) => p.setColors([main, e.target.value])} />
         </label>
       </div>
+      <ColorMixer color={main} set={(c) => p.setColors([c, second])} />
       <strong>Palette</strong>
       <div className="px-swatches">
         {p.d.palette.map((c, i) => (
@@ -85,8 +88,77 @@ export function PalettePanel(p: { d: PixelDoc; colors: [string, string]; setColo
   )
 }
 
+/** The main colour as hue / saturation / lightness sliders and a hex box, plus the last colours used. */
+function ColorMixer({ color, set }: { color: string; set(c: string): void }) {
+  const [recent, setRecent] = useState<string[]>([])
+  const [hex, setHex] = useState(color)
+  useEffect(() => setHex(color), [color])
+  // A colour counts as used once it stays picked for a moment (not every step of a slider drag).
+  useEffect(() => {
+    const t = setTimeout(() => setRecent((r) => [color, ...r.filter((c) => c !== color)].slice(0, 12)), 800)
+    return () => clearTimeout(t)
+  }, [color])
+  const n = parseInt(color.slice(1, 7), 16)
+  const [h, sat, l] = rgbToHsl(n >> 16, (n >> 8) & 255, n & 255)
+  const put = (hh: number, ss: number, ll: number) => set(rgbaToHex(...hslToRgb(hh, ss, ll)))
+  const slider = (label: string, value: number, max: number, onChange: (v: number) => void, bg: string) => (
+    <label className="px-row px-mix" title={label}>
+      <span>{label[0]}</span>
+      <input type="range" min={0} max={max} value={Math.round(value)} style={{ background: bg }} onChange={(e) => onChange(Number(e.target.value))} />
+    </label>
+  )
+  return (
+    <div className="px-mixer">
+      {slider('Hue', h, 359, (v) => put(v, sat, l), 'linear-gradient(90deg, red, yellow, lime, cyan, blue, magenta, red)')}
+      {slider('Saturation', sat * 100, 100, (v) => put(h, v / 100, l), `linear-gradient(90deg, ${rgbaToHex(...hslToRgb(h, 0, l))}, ${rgbaToHex(...hslToRgb(h, 1, l))})`)}
+      {slider('Lightness', l * 100, 100, (v) => put(h, sat, v / 100), `linear-gradient(90deg, #000, ${rgbaToHex(...hslToRgb(h, sat, 0.5))}, #fff)`)}
+      <label className="px-row" title="The main colour as a hex code">
+        #
+        <input
+          className="input px-hex"
+          value={hex.replace('#', '')}
+          maxLength={6}
+          aria-label="Hex colour"
+          onChange={(e) => {
+            const v = `#${e.target.value.replace(/[^0-9a-f]/gi, '').toLowerCase()}`
+            setHex(v)
+            if (/^#[0-9a-f]{6}$/.test(v)) set(v)
+          }}
+        />
+      </label>
+      {recent.length > 1 && (
+        <div className="px-swatches px-recent" title="Colours you used last">
+          {recent.map((c) => (
+            <button key={c} className="px-swatch" style={{ background: c }} title={c} onClick={() => set(c)} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Layers, top first: show/hide, lock, opacity, order and names. */
-export function LayersPanel(p: { d: PixelDoc; layerId: string; setLayerId(id: string): void; update: Update }) {
+export function LayersPanel(p: { d: PixelDoc; layerId: string; frameId: string; setLayerId(id: string): void; update: Update }) {
+  const [folded, setFolded] = useState<Set<string>>(new Set())
+  /** Change every layer of a group at once (one undo step). */
+  const setGroup = (group: string, patch: (l: PixelLayer) => Partial<PixelLayer>) => p.update((d) => ({ ...d, layers: d.layers.map((l) => (l.group === group ? { ...l, ...patch(l) } : l)) }))
+  /** Move a group's layers one step up or down, past the next layer. */
+  const moveGroup = (group: string, by: number) =>
+    p.update((d) => {
+      const idx = d.layers.map((l, i) => (l.group === group ? i : -1)).filter((i) => i >= 0)
+      const edge = by > 0 ? idx[idx.length - 1] + 1 : idx[0] - 1
+      if (edge < 0 || edge >= d.layers.length) return d
+      const members = idx.map((i) => d.layers[i])
+      const rest = d.layers.filter((l) => l.group !== group)
+      const at = rest.indexOf(d.layers[edge]) + (by > 0 ? 1 : 0)
+      return { ...d, layers: [...rest.slice(0, at), ...members, ...rest.slice(at)] }
+    })
+  const putInGroup = async (id: string, value: string) => {
+    const name = value === '+' ? (await promptDialog('Group name', 'Group'))?.trim() : value
+    if (name === undefined || (value === '+' && !name)) return
+    set(id, { group: name || undefined })
+  }
+  const groups = [...new Set(p.d.layers.map((l) => l.group).filter((g): g is string => !!g))]
   const set = (id: string, patch: Partial<PixelDoc['layers'][number]>) => p.update((d) => ({ ...d, layers: d.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)) }))
   const move = (id: string, by: number) =>
     p.update((d) => {
@@ -123,8 +195,43 @@ export function LayersPanel(p: { d: PixelDoc; layerId: string; setLayerId(id: st
           <Shapes size={14} />
         </button>
       </strong>
-      {[...p.d.layers].reverse().map((l) => (
-        <div key={l.id} className={`px-layer${l.id === p.layerId ? ' on' : ''}`} onClick={() => p.setLayerId(l.id)}>
+      {[...p.d.layers].reverse().map((l, i, top) => (
+        <Fragment key={l.id}>
+        {l.group && top[i - 1]?.group !== l.group && (
+          <div className="px-layer px-group">
+            <button className="icon-btn" title={folded.has(l.group) ? 'Unfold' : 'Fold'} onClick={() => setFolded((f) => (f.has(l.group!) ? new Set([...f].filter((g) => g !== l.group)) : new Set([...f, l.group!])))}>
+              {folded.has(l.group) ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+            </button>
+            {(() => {
+              const members = p.d.layers.filter((x) => x.group === l.group)
+              const shown = members.some((x) => x.visible)
+              const locked = members.every((x) => x.locked)
+              return (
+                <>
+                  <button className="icon-btn" title={shown ? 'Hide the group' : 'Show the group'} onClick={() => setGroup(l.group!, () => ({ visible: !shown }))}>
+                    {shown ? <Eye size={13} /> : <EyeOff size={13} />}
+                  </button>
+                  <button className="icon-btn" title={locked ? 'Unlock the group' : 'Lock the group'} onClick={() => setGroup(l.group!, () => ({ locked: !locked || undefined }))}>
+                    {locked ? <Lock size={12} /> : <Unlock size={12} />}
+                  </button>
+                </>
+              )
+            })()}
+            <Folder size={12} />
+            <input className="px-name" value={l.group} aria-label="Group name" onChange={(e) => setGroup(l.group!, () => ({ group: e.target.value }))} />
+            <button className="icon-btn" title="Move the group up" onClick={() => moveGroup(l.group!, 1)}>
+              <ArrowUp size={12} />
+            </button>
+            <button className="icon-btn" title="Move the group down" onClick={() => moveGroup(l.group!, -1)}>
+              <ArrowDown size={12} />
+            </button>
+            <button className="icon-btn" title="Ungroup (the layers stay)" onClick={() => setGroup(l.group!, () => ({ group: undefined }))}>
+              <FolderMinus size={12} />
+            </button>
+          </div>
+        )}
+        {!(l.group && folded.has(l.group)) && (
+        <div className={`px-layer${l.id === p.layerId ? ' on' : ''}${l.group ? ' px-in-group' : ''}`} onClick={() => p.setLayerId(l.id)}>
           <button className="icon-btn" title={l.visible ? 'Hide' : 'Show'} onClick={(e) => (e.stopPropagation(), set(l.id, { visible: !l.visible }))}>
             {l.visible ? <Eye size={13} /> : <EyeOff size={13} />}
           </button>
@@ -143,6 +250,8 @@ export function LayersPanel(p: { d: PixelDoc; layerId: string; setLayerId(id: st
             <Trash2 size={12} />
           </button>
         </div>
+        )}
+        </Fragment>
       ))}
       {p.d.layers
         .filter((l) => l.id === p.layerId)
@@ -167,6 +276,39 @@ export function LayersPanel(p: { d: PixelDoc; layerId: string; setLayerId(id: st
                 <option value="burn">Colour burn (deep shadow)</option>
                 <option value="difference">Difference</option>
                 <option value="subtract">Subtract</option>
+              </select>
+            </label>
+            {p.d.kind === 'sprite' && p.d.frames.length > 1 && (
+              <label className="px-row" title="How see-through this layer is on this frame only (for fades)">
+                This frame{' '}
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={p.d.celOpacity?.[`${l.id}:${p.frameId}`] ?? 1}
+                  onChange={(e) =>
+                    p.update((d) => {
+                      const celOpacity = { ...d.celOpacity }
+                      const v = Number(e.target.value)
+                      if (v >= 1) delete celOpacity[`${l.id}:${p.frameId}`]
+                      else celOpacity[`${l.id}:${p.frameId}`] = v
+                      return { ...d, celOpacity }
+                    })
+                  }
+                />
+              </label>
+            )}
+            <label className="px-row" title="Fold, hide and move layers together">
+              Group
+              <select className="input" value={l.group ?? ''} onChange={(e) => void putInGroup(l.id, e.target.value)}>
+                <option value="">None</option>
+                {groups.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+                <option value="+">New group…</option>
               </select>
             </label>
             <label className="px-row" title="A tracing layer: shown faintly while you draw and left out of every export">
@@ -274,6 +416,20 @@ export function Timeline(p: {
     })
     p.setFrame(j)
   }
+  /** Drag a frame onto another place in the timeline (tags stay on their frame numbers, like the arrows). */
+  const [dragging, setDragging] = useState<number | null>(null)
+  const dropAt = (to: number) => {
+    const from = dragging
+    setDragging(null)
+    if (from === null || from === to) return
+    change((x) => {
+      const frames = [...x.frames]
+      const [f] = frames.splice(from, 1)
+      frames.splice(to, 0, f)
+      return { ...x, frames }
+    })
+    p.setFrame(to)
+  }
   const setTag = (id: string, patch: Partial<PixelTag>) => change((x) => ({ ...x, tags: x.tags.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))
   const newTag = () => change((x) => ({ ...x, tags: [...x.tags, { id: newId(), name: `Tag ${x.tags.length + 1}`, from: p.frame, to: p.frame, color: TAG_COLORS[x.tags.length % TAG_COLORS.length], loop: 'forward' }] }))
 
@@ -336,13 +492,18 @@ export function Timeline(p: {
         {d.frames.map((f, i) => (
           <button
             key={f.id}
-            className={`px-frame${i === p.frame ? ' on' : ''}${range && inPick(i) ? ' picked' : ''}`}
+            className={`px-frame${i === p.frame ? ' on' : ''}${range && inPick(i) ? ' picked' : ''}${dragging !== null && dragging !== i ? ' drop' : ''}`}
+            draggable
+            onDragStart={(e) => (e.dataTransfer.setData('text/plain', String(i)), (e.dataTransfer.effectAllowed = 'move'), setDragging(i))}
+            onDragOver={(e) => dragging !== null && e.preventDefault()}
+            onDrop={(e) => (e.preventDefault(), dropAt(i))}
+            onDragEnd={() => setDragging(null)}
             onClick={(e) => {
               if (e.shiftKey) return setRange([p.frame, i])
               setRange(null)
               p.setFrame(i)
             }}
-            title={`Frame ${i + 1} (Shift-click to pick several)`}
+            title={`Frame ${i + 1} (Shift-click to pick several, drag to move)`}
           >
             <Thumb img={p.frameImg(i)} />
             {d.layers.some((l) => d.cels[`${l.id}:${f.id}`]?.startsWith('@')) && <Link2 size={10} className="px-linkmark" />}
@@ -369,6 +530,9 @@ export function Timeline(p: {
             <option value="reverse">Reverse</option>
             <option value="pingpong">Ping-pong</option>
           </select>
+          <label className="px-row" title="Play this run several times in a row (walk ×3), in exports too">
+            ×<input className="input px-ms" type="number" min={1} max={99} value={t.repeat ?? 1} aria-label="Repeat" onChange={(e) => setTag(t.id, { repeat: Math.max(1, Math.min(99, Math.round(Number(e.target.value) || 1))) > 1 ? Math.max(1, Math.min(99, Math.round(Number(e.target.value) || 1))) : undefined })} />
+          </label>
           <button className="icon-btn" title="Delete tag" onClick={() => change((x) => ({ ...x, tags: x.tags.filter((o) => o.id !== t.id) }))}>
             <Trash2 size={12} />
           </button>
@@ -394,7 +558,7 @@ function Thumb({ img }: { img: Img }) {
 export function Preview({ d, frameImg, playTag }: { d: PixelDoc; frameImg(i: number): Img; playTag: string | null }) {
   const [scale, setScale] = useState(2)
   const [i, setI] = useState(0)
-  const order = tagFrames(d.tags.find((t) => t.id === playTag) ?? null, d.frames.length)
+  const order = tagFrames(d.tags.find((t) => t.id === playTag) ?? null, d.frames.length, d.tags)
   const frame = order[i % order.length] ?? 0
   useEffect(() => {
     const t = setTimeout(() => setI((n) => (n + 1) % Math.max(1, order.length)), d.frames[frame]?.duration ?? 100)

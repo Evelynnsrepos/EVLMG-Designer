@@ -131,6 +131,10 @@ export function stepLabel(a: PixelDoc, b: PixelDoc): string {
   const cels = Object.keys({ ...a.cels, ...b.cels }).filter((k) => a.cels[k] !== b.cels[k])
   const shapes = a.shapes !== b.shapes
   if (cels.length > 1 && !shapes) return cels.length === Object.keys(b.cels).length ? 'Whole sprite' : `Pixels in ${cels.length} places`
+  if (a.frames !== b.frames) {
+    if (a.frames.length !== b.frames.length) return b.frames.length > a.frames.length ? 'New frame' : 'Delete frame'
+    return a.frames.some((f, i) => f.id !== b.frames[i].id) ? 'Frame order' : 'Frame timing'
+  }
   if (shapes) return 'Shapes'
   if (cels.length === 1) {
     const [lid, fid] = cels[0].split(':')
@@ -140,8 +144,8 @@ export function stepLabel(a: PixelDoc, b: PixelDoc): string {
   }
   if (a.palette !== b.palette) return 'Palette'
   if (a.layers !== b.layers) return 'Layers'
-  if (a.frames !== b.frames) return 'Frames'
   if (a.tags !== b.tags) return 'Tags'
+  if (a.celOpacity !== b.celOpacity) return 'Frame opacity'
   if (a.selection !== b.selection) return b.selection ? 'Selection' : 'Deselect'
   return 'Settings'
 }

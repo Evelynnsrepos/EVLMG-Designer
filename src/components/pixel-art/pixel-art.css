@@ -383,3 +383,51 @@
 .px-history-step.redo {
   opacity: 0.55;
 }
+
+/* Colour mixer */
+.px-mixer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.px-mix span {
+  width: 12px;
+  color: var(--text-muted);
+}
+.px-mix input[type='range'] {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  appearance: none;
+}
+.px-hex {
+  width: 80px;
+  font-family: var(--mono);
+}
+.px-recent .px-swatch {
+  width: 14px;
+  height: 14px;
+}
+
+/* Layer groups, frame drag */
+.px-group {
+  font-weight: 600;
+}
+.px-in-group {
+  padding-left: 18px;
+}
+.px-frame.drop:hover {
+  outline: 2px dashed var(--accent);
+}
+.px-adjust summary {
+  cursor: pointer;
+  padding: 4px 0;
+  color: var(--text-muted);
+}
+.px-adjust-name {
+  width: 74px !important;
+}
+.px-adjust input[type='range'] {
+  flex: 1;
+  min-width: 60px;
+}

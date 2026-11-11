@@ -49,6 +49,7 @@ import {
   sliceSheet,
   startDoc,
   tagFrames,
+  celAlpha,
   tileColumns,
   tilePixels,
   sameImg,
@@ -68,9 +69,10 @@ import { holdTolerance, useInputSettings } from '@/shared/sketch/inputSettings'
 import { MotionFilter } from '@/shared/sketch/pen'
 import { ShapePanel } from './ShapePanel'
 import { useShapeTool } from './shapeTool'
-import { fromQuickShape, fromStroke } from '@/shared/pixel/shapes'
+import { fromQuickShape, fromStroke, newShape, type VShape } from '@/shared/pixel/shapes'
 import { contentBounds, crop, flipSprite, resizeCanvas, turnSprite } from './docOps'
 import { HistoryList } from './HistoryList'
+import { adjustImg, despeckle, dropShadow, NO_ADJUST, type Adjust } from './adjust'
 import './pixel-art.css'
 
 type Tool = 'pencil' | 'eraser' | 'shape' | 'ellipseSelect' | 'polySelect' | 'hand' | 'line' | 'curve' | 'rect' | 'ellipse' | 'fill' | 'lassofill' | 'gradient' | 'spray' | 'text' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill' | 'tileRandom' | 'auto'
@@ -339,6 +341,19 @@ const TOOLS: { id: Tool; icon: typeof Brush; label: string; key: string }[] = [
   { id: 'hand', icon: Hand, label: 'Hand: drag to look around (or hold Space, or drag with the middle button)', key: 'pixel.hand' },
 ]
 
+/** Line, Rectangle or Ellipse from `a` to `b` as a live shape (null when it would be a dot). */
+function liveBox(tool: 'rect' | 'ellipse' | 'line', a: Pt, b: Pt, strokeColor: string, width: number, fillColor?: string): VShape | null {
+  if (a[0] === b[0] && a[1] === b[1]) return null
+  if (tool === 'line') return newShape([{ x: a[0], y: a[1] }, { x: b[0], y: b[1] }], false, { strokeColor, width })
+  const [x0, x1, y0, y1] = [Math.min(a[0], b[0]), Math.max(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[1], b[1])]
+  const look = { strokeColor, width, ...(fillColor ? { fillColor } : {}) }
+  if (tool === 'rect') return newShape([{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], true, look)
+  // Eight points on a smooth curve, like a snapped circle: round, yet every bit can be pulled.
+  const [cx, cy, rx, ry] = [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2]
+  const pts = Array.from({ length: 8 }, (_, i) => ({ x: Math.round(cx + rx * Math.cos((i * Math.PI) / 4)), y: Math.round(cy + ry * Math.sin((i * Math.PI) / 4)) }))
+  return newShape(pts, true, { ...look, smooth: true })
+}
+
 /** Where the old picture sits when the canvas size changes. */
 const ANCHORS: Record<string, { label: string; x: number; y: number }> = {
   tl: { label: 'Top left', x: 0, y: 0 },
@@ -364,7 +379,7 @@ const MAP_TOOLS: { id: Tool; icon: typeof Brush; label: string }[] = [
   { id: 'picker', icon: Pipette, label: 'Pick a tile from the map' },
 ]
 
-type Live = { key: string; base: Img; img: Img; start: Pt; path: Pt[]; button: number; press?: number[]; ctrl?: Pt; from?: string; float?: { piece: Img; mask: Mask; x: number; y: number; rest: Img }; at?: Pt; snap?: { shape: Shape; at: Pt; perfect?: boolean; drawn?: Shape }; xform?: { kind: 'scale' | 'rotate'; fixed: Pt; box: { x: number; y: number; w: number; h: number }; mask?: Mask; placed?: Mask } }
+type Live = { key: string; base: Img; img: Img; start: Pt; path: Pt[]; button: number; press?: number[]; ctrl?: Pt; from?: string; float?: { piece: Img; mask: Mask; x: number; y: number; rest: Img }; at?: Pt; snap?: { shape: Shape; at: Pt; perfect?: boolean; drawn?: Shape }; end?: Pt; xform?: { kind: 'scale' | 'rotate'; fixed: Pt; box: { x: number; y: number; w: number; h: number }; mask?: Mask; placed?: Mask } }
 
 function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<PixelDoc> & { data: PixelDoc }; documentId: string; title: string; active: boolean }) {
   const d = doc.data
@@ -483,14 +498,14 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   /** The frame as it is exported: reference layers left out. */
   // Flattened frames are kept until the file changes (thumbnails and onion skin would redo them on every redraw).
   // oxlint-disable-next-line react-hooks/exhaustive-deps -- a new cache whenever pixels, layers or frames change
-  const frameCache = useMemo(() => new Map<number, Img>(), [d.cels, d.layers, d.frames, d.width, d.height, decodedCount])
+  const frameCache = useMemo(() => new Map<number, Img>(), [d.cels, d.layers, d.frames, d.celOpacity, d.width, d.height, decodedCount])
   const frameImg = (i: number) => {
     // The frame being drawn on right now is always fresh.
     const busy = live.current?.key ?? curve.current?.key
     const drawing = !!busy && d.layers.some((l) => resolveKey(d.cels, celKey(l.id, d.frames[i].id)) === busy)
     const hit = !drawing && frameCache.get(i)
     if (hit) return hit
-    const img = composite(d.layers.filter((l) => !l.reference).map((l) => ({ visible: l.visible, opacity: l.opacity, blend: l.blend, img: imgOf(l.id, d.frames[i].id) })), d.width, d.height)
+    const img = composite(d.layers.filter((l) => !l.reference).map((l) => ({ visible: l.visible, opacity: celAlpha(d, l, d.frames[i].id), blend: l.blend, img: imgOf(l.id, d.frames[i].id) })), d.width, d.height)
     if (!drawing) frameCache.set(i, img)
     return img
   }
@@ -694,7 +709,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   useEffect(() => {
     if (!playing) return
     const tag = d.tags.find((t) => t.id === playTag) ?? null
-    const order = tagFrames(tag, d.frames.length)
+    const order = tagFrames(tag, d.frames.length, d.tags)
     let i = Math.max(0, order.indexOf(fi))
     let timer: ReturnType<typeof setTimeout>
     const step = () => {
@@ -815,6 +830,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
 
   /** Paint the whole stroke again from the layer's pixels before it started. */
   const render = (l: Live, end: Pt) => {
+    l.end = end
     const img = cloneImg(l.base)
     const main = hexToRgba(paintHex(l.button === 2 ? colors[1] : colors[0]))
     const other = hexToRgba(paintHex(l.button === 2 ? colors[0] : colors[1]))
@@ -1106,7 +1122,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
         if (!shapes.fillAt(wrap(p), e.button === 2 ? null : paintHex(colors[0]))) setNote('Click inside a closed shape to fill it (right-click takes the fill away).')
         return
       }
-      if (tool !== 'pencil') return setNote('This is a shape layer: use the Shape tool, the bucket or the pencil (a rough stroke becomes a shape). Turn into pixels makes it a normal layer.')
+      if (tool !== 'pencil' && tool !== 'rect' && tool !== 'ellipse' && tool !== 'line') return setNote('This is a shape layer: use the Shape tool, the bucket, Line, Rectangle, Ellipse or the pencil (a rough stroke becomes a shape). Turn into pixels makes it a normal layer.')
     }
     if (tool === 'text') return void addText(wrap(p))
     if (d.kind === 'tileset' && !inMap && p[0] >= 0 && p[1] >= 0 && p[0] < d.width && p[1] < d.height) setFocusTile(Math.floor(p[1] / ts) * cols + Math.floor(p[0] / ts))
@@ -1390,6 +1406,14 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       return
     }
     const movedMask = l.float && mask && l.at ? placeMask(d.width, d.height, l.float.mask, l.float.piece.width, l.float.x + l.at[0] - l.start[0], l.float.y + l.at[1] - l.start[1]) : null
+    if (layer.vector && (tool === 'rect' || tool === 'ellipse' || tool === 'line')) {
+      // On a shape layer these tools make a live shape: Filled gives it the second colour inside.
+      const end = l.end ?? l.start
+      const made = liveBox(tool, l.start, end, paintHex(l.button === 2 ? colors[1] : colors[0]), size, tool !== 'line' && filled ? paintHex(l.button === 2 ? colors[0] : colors[1]) : undefined)
+      if (made) shapes.add(made)
+      else draw()
+      return
+    }
     if (layer.vector && tool === 'pencil') {
       // On a shape layer the stroke becomes a live shape: the snapped one, or the stroke's corners.
       const made = l.snap?.drawn ? fromQuickShape(l.snap.drawn) : fromStroke(l.path.map(([x, y]) => ({ x, y })))
@@ -1461,6 +1485,28 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     })
     if (mask && newMask) setMask(newMask)
   }
+  /** Every pixel of this frame (or every frame of the layer) through `fn`, inside the selection; one undo step. */
+  const editPixels = (fn: (img: Img, m: Mask | null) => Img) => {
+    if (layer.locked) return setNote('This layer is locked.')
+    const keys = allFrames ? [...new Set(d.frames.map((f) => resolveKey(d.cels, celKey(layer.id, f.id))))] : [curKey()]
+    const out: Record<string, string | null> = {}
+    for (const key of keys) {
+      if (!d.cels[key]) continue
+      const next = encode(fn(celImg(d.cels[key], d.width, d.height), mask))
+      if (next !== d.cels[key]) out[key] = next
+    }
+    if (!Object.keys(out).length) return setNote('Nothing changed.')
+    update((x) => {
+      const cels = { ...x.cels }
+      for (const [k, v] of Object.entries(out)) {
+        if (v) cels[k] = v
+        else delete cels[k]
+      }
+      return { ...x, cels }
+    })
+  }
+  const [adj, setAdj] = useState<Adjust>(NO_ADJUST)
+  const [shadow, setShadow] = useState<[number, number]>([1, 1])
   const outlineSel = () => commit(curKey(), outline(celImg(d.cels[curKey()], d.width, d.height), hexToRgba(paintHex(colors[0])), mask, outlineOpts))
   /** Whole-sprite changes (every layer and frame); the selection goes, since it no longer fits. */
   const spriteOp = (fn: (x: PixelDoc) => PixelDoc) => update((x) => ({ ...fn(x), selection: undefined }))
@@ -1536,7 +1582,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     return img
   }
   const exportGif = async () => {
-    const order = tagFrames(d.tags.find((t) => t.id === playTag) ?? null, d.frames.length)
+    const order = tagFrames(d.tags.find((t) => t.id === playTag) ?? null, d.frames.length, d.tags)
     const frames = order.map((i) => {
       const c = toCanvas(frameImg(i), scale)
       return { pixels: c.getContext('2d')!.getImageData(0, 0, c.width, c.height), delay: d.frames[i].duration }
@@ -1598,7 +1644,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   }
   const toStoryboard = async () => {
     if (!root) return
-    const order = tagFrames(d.tags.find((t) => t.id === playTag) ?? null, d.frames.length)
+    const order = tagFrames(d.tags.find((t) => t.id === playTag) ?? null, d.frames.length, d.tags)
     const frames: { path: string; name: string; seconds: number }[] = []
     for (const i of order) {
       const asset = await importAssetFromBlob(root, new Blob([(await pngBytes(frameImg(i), Math.max(scale, 4))) as Uint8Array<ArrayBuffer>], { type: 'image/png' }), 'image', `${base}_${i + 1}.png`)
@@ -1913,7 +1959,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
             <MapPanel d={d} mapLayerId={mapLayer?.id ?? ''} setMapLayerId={setMapLayerId} update={update} />
           ) : (
             <>
-              <LayersPanel d={d} layerId={layer.id} setLayerId={setLayerId} update={update} />
+              <LayersPanel d={d} layerId={layer.id} frameId={d.frames[fi]?.id ?? ''} setLayerId={setLayerId} update={update} />
               {layer.vector && <ShapePanel d={d} layerId={layer.id} frameKey={shapeKey} tool={shapes} update={update} main={paintHex(colors[0])} />}
               {!layer.vector && <div className="px-panel">
                 <strong>{mask ? 'Selection' : 'Whole layer'}</strong>
@@ -1974,6 +2020,47 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                   </button>
                 )}
                 {mask && <SelectionInfo mask={mask} width={d.width} />}
+                <details className="px-adjust">
+                  <summary>Adjust colours</summary>
+                  {(
+                    [
+                      ['hue', 'Hue', -180, 180],
+                      ['saturation', 'Saturation', -100, 100],
+                      ['lightness', 'Lightness', -100, 100],
+                      ['brightness', 'Brightness', -100, 100],
+                      ['contrast', 'Contrast', -100, 100],
+                    ] as const
+                  ).map(([k, label, min, max]) => (
+                    <label key={k} className="px-row px-mix" title={label}>
+                      <span className="px-adjust-name">{label}</span>
+                      <input type="range" min={min} max={max} value={adj[k]} onChange={(e) => setAdj({ ...adj, [k]: Number(e.target.value) })} /> {adj[k]}
+                    </label>
+                  ))}
+                  <div className="px-row px-wrap">
+                    <label className="px-row">
+                      <input type="checkbox" checked={adj.invert} onChange={(e) => setAdj({ ...adj, invert: e.target.checked })} /> Invert
+                    </label>
+                    <button className="btn" title={mask ? 'Change the selected pixels' : 'Change the whole layer'} onClick={() => editPixels((img, m) => adjustImg(img, adj, m))}>
+                      Apply
+                    </button>
+                    <button className="btn btn-ghost" onClick={() => setAdj(NO_ADJUST)}>
+                      Reset
+                    </button>
+                  </div>
+                </details>
+                <details className="px-adjust">
+                  <summary>Effects</summary>
+                  <div className="px-row px-wrap">
+                    <button className="btn btn-ghost" title="A copy of the drawing in the second colour, behind it and moved by the offset" onClick={() => editPixels((img, m) => dropShadow(img, shadow[0], shadow[1], hexToRgba(paintHex(colors[1])), m))}>
+                      Drop shadow
+                    </button>
+                    <input className="input px-ms" type="number" min={-16} max={16} value={shadow[0]} aria-label="Shadow right" title="Right (minus: left)" onChange={(e) => setShadow([Number(e.target.value) || 0, shadow[1]])} />
+                    <input className="input px-ms" type="number" min={-16} max={16} value={shadow[1]} aria-label="Shadow down" title="Down (minus: up)" onChange={(e) => setShadow([shadow[0], Number(e.target.value) || 0])} />
+                  </div>
+                  <button className="btn btn-ghost" title="Clear lone pixels that touch no other pixel" onClick={() => editPixels(despeckle)}>
+                    Remove stray pixels
+                  </button>
+                </details>
                 <div className="px-row px-wrap" title="Change the selection itself">
                   <button className="btn btn-ghost" onClick={() => setMask(all())}>
                     All
