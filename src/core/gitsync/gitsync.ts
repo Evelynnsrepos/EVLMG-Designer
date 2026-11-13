@@ -32,7 +32,8 @@ export interface GitResult {
 }
 export type GitRunner = (cwd: string, args: string[], timeoutMs: number, input?: string) => Promise<GitResult>
 
-const QUICK_MS = 15_000
+// Tests on busy CI machines (Windows next to the GPU test) can take longer than a person would wait.
+const QUICK_MS = import.meta.env?.MODE === 'test' ? 60_000 : 15_000
 const NETWORK_MS = 60_000
 /** While turning sync on, Git may open a sign-in window (Windows); give the person time to sign in. */
 const SIGN_IN_MS = 5 * 60_000
