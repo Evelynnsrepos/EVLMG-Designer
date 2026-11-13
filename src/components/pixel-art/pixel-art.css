@@ -545,3 +545,23 @@
   width: 18px;
   height: 18px;
 }
+
+/* Panels that pop out */
+.px-popout {
+  position: relative;
+}
+.px-popout-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+}
+.px-popped {
+  justify-self: start;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+/* Keep the panel's own header buttons clear of the pop-out button. */
+.px-popout > .px-popout-btn + * > :first-child {
+  margin-right: 26px;
+}

@@ -76,6 +76,7 @@ import { ReferencePicker } from '@/shared/sketch/ReferencePicker'
 import { ReferenceWindow } from '@/shared/sketch/ReferenceWindow'
 import { HistoryList } from './HistoryList'
 import { TilePlayer } from './TilePlayer'
+import { PopOut } from './PopOut'
 import { PaletteSwitch } from './PaletteSwitch'
 import { adjustImg, despeckle, dropShadow, NO_ADJUST, type Adjust } from './adjust'
 import './pixel-art.css'
@@ -337,11 +338,11 @@ const TOOLS: { id: Tool; icon: typeof Brush; label: string; key: string }[] = [
   { id: 'text', icon: Type, label: 'Text: click where it starts; any font, drawn with hard pixels', key: 'pixel.text' },
   { id: 'picker', icon: Pipette, label: 'Eyedropper (or Alt-click)', key: 'pixel.picker' },
   { id: 'shade', icon: SunMoon, label: 'Shade brush: left click one palette step lighter, right click darker', key: 'pixel.shade' },
-  { id: 'select', icon: SquareDashed, label: 'Select a rectangle (Shift adds, Ctrl takes away)', key: 'pixel.select' },
-  { id: 'lasso', icon: Lasso, label: 'Lasso: select by drawing around (Shift adds, Ctrl takes away)', key: 'pixel.lasso' },
-  { id: 'ellipseSelect', icon: CircleDashed, label: 'Select an ellipse (Shift adds, Ctrl takes away)', key: 'pixel.ellipseSelect' },
-  { id: 'polySelect', icon: Pentagon, label: 'Polygon lasso: click the corners, click the first one (or double-click) to finish (Shift adds, Ctrl takes away)', key: 'pixel.polySelect' },
-  { id: 'wand', icon: WandSparkles, label: 'Magic wand: select a colour, with Tolerance for similar ones (Shift adds, Ctrl takes away)', key: 'pixel.wand' },
+  { id: 'select', icon: SquareDashed, label: 'Select a rectangle (Shift adds, Alt takes away, hold Ctrl for a perfect square)', key: 'pixel.select' },
+  { id: 'lasso', icon: Lasso, label: 'Lasso: select by drawing around (Shift adds, Alt takes away)', key: 'pixel.lasso' },
+  { id: 'ellipseSelect', icon: CircleDashed, label: 'Select an ellipse (Shift adds, Alt takes away, hold Ctrl for a perfect circle)', key: 'pixel.ellipseSelect' },
+  { id: 'polySelect', icon: Pentagon, label: 'Polygon lasso: click the corners, click the first one (or double-click) to finish (Shift adds, Alt takes away)', key: 'pixel.polySelect' },
+  { id: 'wand', icon: WandSparkles, label: 'Magic wand: select a colour, with Tolerance for similar ones (Shift adds, Alt takes away)', key: 'pixel.wand' },
   { id: 'move', icon: Move, label: 'Move the selection, or the whole layer (arrow keys move 1 px). Drag a corner to scale (Shift keeps the shape), drag outside the box to rotate (Shift: 15° steps)', key: 'pixel.move' },
   { id: 'hand', icon: Hand, label: 'Hand: drag to look around (or hold Space, or drag with the middle button)', key: 'pixel.hand' },
 ]
@@ -417,8 +418,8 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
   const lib = useDocument<TileLibrary>('level-layout', LIBRARY_ID, createLibrary)
   // A selection change right after a pixel change (same click) joins that undo step.
   const justChanged = useRef(false)
-  const update = (fn: (x: PixelDoc) => PixelDoc) => {
-    doc.update(fn)
+  const update = (fn: (x: PixelDoc) => PixelDoc, options?: { undoable?: boolean }) => {
+    doc.update(fn, options)
     justChanged.current = true
     queueMicrotask(() => (justChanged.current = false))
   }
@@ -1250,7 +1251,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
       const pl = poly.current
       const now = Date.now()
       if (!pl) {
-        poly.current = { pts: [q], how: e.shiftKey ? 'add' : e.ctrlKey || e.metaKey ? 'subtract' : 'replace', last: now }
+        poly.current = { pts: [q], how: e.shiftKey ? 'add' : e.altKey ? 'subtract' : 'replace', last: now }
         return drawOverlay()
       }
       const closes = pl.pts.length >= 3 && (Math.abs(q[0] - pl.pts[0][0]) <= 1 && Math.abs(q[1] - pl.pts[0][1]) <= 1 || now - pl.last < 350)
@@ -1260,7 +1261,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
       return drawOverlay()
     }
     if (tool === 'select' || tool === 'lasso' || tool === 'wand' || tool === 'ellipseSelect') {
-      const how: Combine = e.shiftKey ? 'add' : e.ctrlKey || e.metaKey ? 'subtract' : 'replace'
+      const how: Combine = e.shiftKey ? 'add' : e.altKey ? 'subtract' : 'replace'
       const q = wrap(p)
       if (tool === 'wand') {
         if (q[0] < 0 || q[1] < 0 || q[0] >= d.width || q[1] >= d.height) return
@@ -1274,7 +1275,9 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
     if (tool === 'shape' && !layer.vector) return setNote('The Shape tool works on a shape layer: add one with the shapes button in Layers.')
     if (layer.vector && !inMap) {
       // Shape tool, or a drawing tool grabbing a point or edge of a shape already there: edit it.
-      const grab = (tool === 'line' || (tool === 'curve' && !curve.current) || tool === 'rect' || tool === 'ellipse') && hitShape(shapes.list, { x: wrap(p)[0], y: wrap(p)[1] }, Math.max(0.75, 6 / zoom))
+      // Drawing tools grab only a point, so a new shape can start inside an old one.
+      const hit = (tool === 'line' || (tool === 'curve' && !curve.current) || tool === 'rect' || tool === 'ellipse') && hitShape(shapes.list, { x: wrap(p)[0], y: wrap(p)[1] }, Math.max(0.75, 6 / zoom))
+      const grab = hit && 'point' in hit
       if (tool === 'shape' || grab) {
         e.currentTarget.setPointerCapture(e.pointerId)
         editing.current = true
@@ -1447,7 +1450,9 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
     }
     const sel = selecting.current
     if (sel) {
-      const q = wrap(p)
+      const q0 = wrap(p)
+      // Ctrl while dragging: a perfect square or circle.
+      const q = (e.ctrlKey || e.metaKey) && (tool === 'select' || tool === 'ellipseSelect') ? square(sel.start, q0) : q0
       sel.path.push(q)
       sel.preview = combine(mask, tool === 'lasso' ? lassoMask(d.width, d.height, sel.path) : tool === 'ellipseSelect' ? ellipseMask(d.width, d.height, sel.start[0], sel.start[1], q[0], q[1]) : rectMask(d.width, d.height, sel.start[0], sel.start[1], q[0], q[1]), sel.how)
       return drawOverlay()
@@ -2204,6 +2209,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
             <MapPanel d={d} mapLayerId={mapLayer?.id ?? ''} setMapLayerId={setMapLayerId} update={update} />
           ) : (
             <>
+              <PopOut id="layers" title="Layers">
               <LayersPanel
                 d={d}
                 allTiles={
@@ -2224,6 +2230,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
                 }
                 layerImg={(id) => imgOf(id, d.frames[inMap ? 0 : fi].id)}
                 layerId={layer.id} frameId={d.frames[fi]?.id ?? ''} setLayerId={setLayerId} update={update} />
+              </PopOut>
               {layer.vector && <ShapePanel d={d} layerId={layer.id} frameKey={shapeKey} tool={shapes} update={update} main={paintHex(colors[0])} />}
               {!layer.vector && <div className="px-panel">
                 <strong>{mask ? 'Selection' : 'Whole layer'}</strong>

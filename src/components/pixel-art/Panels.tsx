@@ -8,10 +8,20 @@ import { asSketchBlend, ramp, resolveKey, tagFrames, type Img, type LoopMode, ty
 import { BLEND_MODES, type BlendMode } from '@/shared/sketch/blend'
 import '@/shared/sketch/sketch.css'
 import '@/shared/sketch/layers.css'
+import { PopOut } from './PopOut'
 import { ColorPanel } from '@/shared/sketch/ColorPanel'
 import { sortPalette, unusedColors } from './docOps'
 
-type Update = (fn: (d: PixelDoc) => PixelDoc) => void
+type Update = (fn: (d: PixelDoc) => PixelDoc, options?: { undoable?: boolean }) => void
+
+/** Slider drags: the first change of a drag is the undo step, the rest only follow it (keys still step one by one). */
+const slide = { on: false, first: true }
+const slideProps = { onPointerDown: () => Object.assign(slide, { on: true, first: true }), onPointerUp: () => (slide.on = false) }
+const slideStep = () => {
+  const undoable = !slide.on || slide.first
+  slide.first = false
+  return { undoable }
+}
 
 const TAG_COLORS = ['#e03131', '#f08c00', '#2f9e44', '#1971c2', '#7048e8', '#c2255c']
 
@@ -35,7 +45,8 @@ export function PalettePanel(p: { d: PixelDoc; colors: [string, string]; setColo
           </button>
         </div>
       )}
-      <strong>Palette</strong>
+      <PopOut id="palette" title="Palette">
+        <strong>Palette</strong>
       <div className="px-swatches">
         {p.d.palette.map((c, i) => (
           <button
@@ -74,6 +85,7 @@ export function PalettePanel(p: { d: PixelDoc; colors: [string, string]; setColo
           Save
         </button>
       </div>
+      </PopOut>
     </div>
   )
 }
@@ -100,7 +112,7 @@ export function LayersPanel(p: { d: PixelDoc; layerId: string; frameId: string; 
     set(id, { group: name || undefined })
   }
   const groups = [...new Set(p.d.layers.map((l) => l.group).filter((g): g is string => !!g))]
-  const set = (id: string, patch: Partial<PixelDoc['layers'][number]>) => p.update((d) => ({ ...d, layers: d.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)) }))
+  const set = (id: string, patch: Partial<PixelDoc['layers'][number]>, options?: { undoable?: boolean }) => p.update((d) => ({ ...d, layers: d.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)) }), options)
   const move = (id: string, by: number) =>
     p.update((d) => {
       const i = d.layers.findIndex((l) => l.id === id)
@@ -199,7 +211,7 @@ export function LayersPanel(p: { d: PixelDoc; layerId: string; frameId: string; 
                     <div className="sketch-layer-props" onClick={(e) => e.stopPropagation()}>
                       <label className="sketch-slider" title="Layer opacity">
                         <span>Opacity</span>
-                        <input type="range" min={0} max={1} step={0.01} value={l.opacity} onChange={(e) => set(l.id, { opacity: Number(e.target.value) })} />
+                        <input type="range" min={0} max={1} step={0.01} value={l.opacity} {...slideProps} onChange={(e) => set(l.id, { opacity: Number(e.target.value) }, slideStep())} />
                         <span className="sketch-slider-value">{Math.round(l.opacity * 100)}%</span>
                       </label>
                       {p.d.kind === 'sprite' && p.d.frames.length > 1 && (
@@ -211,6 +223,7 @@ export function LayersPanel(p: { d: PixelDoc; layerId: string; frameId: string; 
                             max={1}
                             step={0.01}
                             value={p.d.celOpacity?.[`${l.id}:${p.frameId}`] ?? 1}
+                            {...slideProps}
                             onChange={(e) =>
                               p.update((d) => {
                                 const celOpacity = { ...d.celOpacity }
@@ -218,7 +231,7 @@ export function LayersPanel(p: { d: PixelDoc; layerId: string; frameId: string; 
                                 if (v >= 1) delete celOpacity[`${l.id}:${p.frameId}`]
                                 else celOpacity[`${l.id}:${p.frameId}`] = v
                                 return { ...d, celOpacity }
-                              })
+                              }, slideStep())
                             }
                           />
                           <span className="sketch-slider-value">{Math.round((p.d.celOpacity?.[`${l.id}:${p.frameId}`] ?? 1) * 100)}%</span>
