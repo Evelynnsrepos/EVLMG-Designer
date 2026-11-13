@@ -59,3 +59,21 @@ describe('live shapes', () => {
     expect(filled.get(2)!.key).toBe(false)
   })
 })
+
+describe('reshapeBox', () => {
+  it('keeps a rectangle a rectangle and a square a square', async () => {
+    const { boxPoints, reshapeBox, newShape } = await import('./shapes')
+    const sq = newShape(boxPoints('rect', 0, 0, 10, 10), true, { box: 'rect' })
+    const free = reshapeBox(sq, 2, { x: 20, y: 14 })!
+    expect(free).toEqual(boxPoints('rect', 0, 0, 20, 14))
+    const kept = reshapeBox(sq, 2, { x: 20, y: 14 }, true)!
+    expect(kept).toEqual(boxPoints('rect', 0, 0, 20, 20))
+    expect(reshapeBox({ ...sq, box: undefined }, 2, { x: 5, y: 5 })).toBeNull()
+  })
+  it('keeps a circle round when a point is dragged with keep', async () => {
+    const { boxPoints, reshapeBox, newShape } = await import('./shapes')
+    const c = newShape(boxPoints('ellipse', 0, 0, 10, 10), true, { box: 'ellipse', smooth: true })
+    // Point 0 is the right-hand point: only the right edge moves, the height follows around the centre.
+    expect(reshapeBox(c, 0, { x: 20, y: 5 }, true)).toEqual(boxPoints('ellipse', 0, -5, 20, 15))
+  })
+})

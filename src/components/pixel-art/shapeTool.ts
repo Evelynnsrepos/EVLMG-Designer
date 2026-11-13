@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { encode } from '@/shared/pixel/codec'
 import { celKey, resolveKey, type PixelDoc } from '@/shared/pixel/model'
-import { drawShapes, fillInBetweens, hitShape, newShape, type Ease, type ShapeCel, type VPoint, type VShape } from '@/shared/pixel/shapes'
+import { drawShapes, fillInBetweens, hitShape, newShape, reshapeBox, type Ease, type ShapeCel, type VPoint, type VShape } from '@/shared/pixel/shapes'
 
 type Pt = [number, number]
 type Update = (fn: (x: PixelDoc) => PixelDoc, options?: { undoable?: boolean }) => void
@@ -87,7 +87,7 @@ export function useShapeTool(h: ShapeToolHost) {
       if (!double) return setSel({ id: s.id, point: null })
       // Double-click on an edge: a new point there, ready to drag.
       const points = [...s.points.slice(0, hit.edge + 1), q, ...s.points.slice(hit.edge + 1)]
-      write(list.map((x) => (x.id === s.id ? { ...x, points } : x)))
+      write(list.map((x) => (x.id === s.id ? { ...x, points, box: undefined } : x)))
       setSel({ id: s.id, point: hit.edge + 1 })
       return
     }
@@ -96,13 +96,16 @@ export function useShapeTool(h: ShapeToolHost) {
     drag.current = { start: h.d, id: s.id, point, from: q, orig: s, moved: false }
   }
 
-  const move = (p: Pt) => {
+  const move = (p: Pt, keep = false) => {
     const g = drag.current
     if (!g) return
     const [dx, dy] = [p[0] - g.from.x, p[1] - g.from.y]
     if (!dx && !dy && !g.moved) return
     g.moved = true
-    const points = g.point === null ? g.orig.points.map((q) => ({ x: q.x + dx, y: q.y + dy })) : g.orig.points.map((q, i) => (i === g.point ? { x: p[0], y: p[1] } : q))
+    const points =
+      g.point === null
+        ? g.orig.points.map((q) => ({ x: q.x + dx, y: q.y + dy }))
+        : (reshapeBox(g.orig, g.point, { x: p[0], y: p[1] }, keep) ?? g.orig.points.map((q, i) => (i === g.point ? { x: p[0], y: p[1] } : q)))
     write(list.map((s) => (s.id === g.id ? { ...s, points } : s)), false)
   }
 
@@ -122,7 +125,7 @@ export function useShapeTool(h: ShapeToolHost) {
     if (pen && e.key === 'Enter') return (finishPen(false), true)
     if (selected && (e.key === 'Delete' || e.key === 'Backspace')) {
       if (sel?.point != null && selected.points.length > 2) {
-        change(selected.id, { points: selected.points.filter((_, i) => i !== sel.point), closed: selected.closed && selected.points.length > 3 })
+        change(selected.id, { box: undefined, points: selected.points.filter((_, i) => i !== sel.point), closed: selected.closed && selected.points.length > 3 })
         setSel({ id: selected.id, point: null })
       } else {
         write(list.filter((s) => s.id !== selected.id))

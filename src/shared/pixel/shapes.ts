@@ -27,6 +27,8 @@ export interface VShape {
   strokeColor?: string
   /** Outline width in pixels. */
   width: number
+  /** Drawn as a rectangle or ellipse: dragging a point resizes the box, so it stays one. */
+  box?: 'rect' | 'ellipse'
 }
 
 /** The shapes of one layer on one frame; `key` = drawn by hand (in-betweens are not keys). */
@@ -36,6 +38,45 @@ export interface ShapeCel {
 }
 
 export const newShape = (points: VPoint[], closed: boolean, look: Partial<VShape> = {}): VShape => ({ id: newId(), points, closed, width: 1, ...look })
+
+/** The points of a rectangle (4 corners) or an ellipse (8 points on a smooth curve) filling a box. */
+export function boxPoints(kind: 'rect' | 'ellipse', x0: number, y0: number, x1: number, y1: number): VPoint[] {
+  if (kind === 'rect') return [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]
+  const [cx, cy, rx, ry] = [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2]
+  return Array.from({ length: 8 }, (_, i) => ({ x: Math.round(cx + rx * Math.cos((i * Math.PI) / 4)), y: Math.round(cy + ry * Math.sin((i * Math.PI) / 4)) }))
+}
+
+/**
+ * Point `i` of a rectangle or ellipse dragged to `p`: the box edges on that point's side follow,
+ * the others stay. `keep` keeps the box's width-to-height ratio (a square stays a square, a circle a circle).
+ * Null when the shape is no (longer a) box.
+ */
+export function reshapeBox(s: VShape, i: number, p: VPoint, keep = false): VPoint[] | null {
+  if (!s.box || s.points.length !== (s.box === 'rect' ? 4 : 8)) return null
+  const xs = s.points.map((q) => q.x)
+  const ys = s.points.map((q) => q.y)
+  let [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
+  const [cx, cy] = [(x0 + x1) / 2, (y0 + y1) / 2]
+  const [w0, h0] = [x1 - x0, y1 - y0]
+  const sx = Math.sign(Math.round(s.points[i].x - cx))
+  const sy = Math.sign(Math.round(s.points[i].y - cy))
+  if (sx > 0) x1 = p.x
+  if (sx < 0) x0 = p.x
+  if (sy > 0) y1 = p.y
+  if (sy < 0) y0 = p.y
+  if (keep && w0 > 0 && h0 > 0) {
+    // The bigger change wins; the other side follows, growing away from the fixed edge (or both ways for a side point).
+    const k = Math.max(Math.abs(x1 - x0) / w0, Math.abs(y1 - y0) / h0)
+    const [w, h] = [Math.round(w0 * k), Math.round(h0 * k)]
+    if (sx > 0) x1 = x0 + w
+    else if (sx < 0) x0 = x1 - w
+    else [x0, x1] = [Math.round(cx - w / 2), Math.round(cx - w / 2) + w]
+    if (sy > 0) y1 = y0 + h
+    else if (sy < 0) y0 = y1 - h
+    else [y0, y1] = [Math.round(cy - h / 2), Math.round(cy - h / 2) + h]
+  }
+  return boxPoints(s.box, Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1))
+}
 
 const dist = (a: VPoint, b: VPoint) => Math.hypot(a.x - b.x, a.y - b.y)
 

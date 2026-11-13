@@ -69,7 +69,7 @@ import { holdTolerance, useInputSettings } from '@/shared/sketch/inputSettings'
 import { MotionFilter } from '@/shared/sketch/pen'
 import { ShapePanel } from './ShapePanel'
 import { useShapeTool, withShapes } from './shapeTool'
-import { fromQuickShape, fromStroke, hitShape, newShape, type VShape } from '@/shared/pixel/shapes'
+import { boxPoints, fromQuickShape, fromStroke, hitShape, newShape, type VShape } from '@/shared/pixel/shapes'
 import { contentBounds, crop, everyTile, flipSprite, resizeCanvas, turnSprite, usedColors } from './docOps'
 import { usePalettes } from '@/shared/sketch/palettes'
 import { ReferencePicker } from '@/shared/sketch/ReferencePicker'
@@ -328,8 +328,8 @@ const TOOLS: { id: Tool; icon: typeof Brush; label: string; key: string }[] = [
   { id: 'shape', icon: PenTool, label: 'Shape: on a shape layer, click points for a live shape; drag points or the shape to change it, double-click an edge to add a point', key: 'pixel.shape' },
   { id: 'line', icon: Slash, label: 'Line (Shift keeps clean angles)', key: 'pixel.line' },
   { id: 'curve', icon: Spline, label: 'Curve: drag a line, then drag again to bend it', key: 'pixel.curve' },
-  { id: 'rect', icon: Square, label: 'Rectangle', key: 'pixel.rect' },
-  { id: 'ellipse', icon: Circle, label: 'Ellipse', key: 'pixel.ellipse' },
+  { id: 'rect', icon: Square, label: 'Rectangle (Ctrl or Shift: a perfect square, also when dragging its corners later)', key: 'pixel.rect' },
+  { id: 'ellipse', icon: Circle, label: 'Ellipse (Ctrl or Shift: a perfect circle, also when dragging its points later)', key: 'pixel.ellipse' },
   { id: 'fill', icon: PaintBucket, label: 'Fill', key: 'pixel.fill' },
   { id: 'lassofill', icon: LassoSelect, label: 'Lasso fill: draw around an area to fill it', key: 'pixel.lassofill' },
   { id: 'gradient', icon: Blend, label: 'Dithered gradient from the main to the second colour (drag its direction)', key: 'pixel.gradient' },
@@ -346,17 +346,21 @@ const TOOLS: { id: Tool; icon: typeof Brush; label: string; key: string }[] = [
   { id: 'hand', icon: Hand, label: 'Hand: drag to look around (or hold Space, or drag with the middle button)', key: 'pixel.hand' },
 ]
 
+/** A curve from `a` to `b` bent towards `c`, as a smooth live shape through its ends and the middle of the bend. */
+function liveCurve(a: Pt, c: Pt, b: Pt, strokeColor: string, width: number): VShape | null {
+  if (a[0] === b[0] && a[1] === b[1] && a[0] === c[0] && a[1] === c[1]) return null
+  const mid = { x: Math.round((a[0] + 2 * c[0] + b[0]) / 4), y: Math.round((a[1] + 2 * c[1] + b[1]) / 4) }
+  return newShape([{ x: a[0], y: a[1] }, mid, { x: b[0], y: b[1] }], false, { strokeColor, width, smooth: true })
+}
+
 /** Line, Rectangle or Ellipse from `a` to `b` as a live shape (null when it would be a dot). */
 function liveBox(tool: 'rect' | 'ellipse' | 'line', a: Pt, b: Pt, strokeColor: string, width: number, fillColor?: string): VShape | null {
   if (a[0] === b[0] && a[1] === b[1]) return null
   if (tool === 'line') return newShape([{ x: a[0], y: a[1] }, { x: b[0], y: b[1] }], false, { strokeColor, width })
   const [x0, x1, y0, y1] = [Math.min(a[0], b[0]), Math.max(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[1], b[1])]
   const look = { strokeColor, width, ...(fillColor ? { fillColor } : {}) }
-  if (tool === 'rect') return newShape([{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], true, look)
-  // Eight points on a smooth curve, like a snapped circle: round, yet every bit can be pulled.
-  const [cx, cy, rx, ry] = [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2]
-  const pts = Array.from({ length: 8 }, (_, i) => ({ x: Math.round(cx + rx * Math.cos((i * Math.PI) / 4)), y: Math.round(cy + ry * Math.sin((i * Math.PI) / 4)) }))
-  return newShape(pts, true, { ...look, smooth: true })
+  // An ellipse is eight points on a smooth curve, like a snapped circle: round, yet every bit can be pulled.
+  return newShape(boxPoints(tool, x0, y0, x1, y1), true, { ...look, box: tool, ...(tool === 'ellipse' ? { smooth: true } : {}) })
 }
 
 /** A see-through checkerboard pattern (cached per context). */
@@ -764,7 +768,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
       g.setLineDash([])
       g.lineWidth = 1
     }
-    if (layer.vector && !inMap && !seamless && ['shape', 'fill', 'line', 'rect', 'ellipse', 'pencil'].includes(tool)) shapes.overlay(g, s)
+    if (layer.vector && !inMap && !seamless && ['shape', 'fill', 'line', 'curve', 'rect', 'ellipse', 'pencil'].includes(tool)) shapes.overlay(g, s)
     const off = seamless && !inMap ? [d.width, d.height] : [0, 0]
     if (poly.current) {
       // The polygon lasso so far, with a line to the pointer.
@@ -1270,7 +1274,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
     if (tool === 'shape' && !layer.vector) return setNote('The Shape tool works on a shape layer: add one with the shapes button in Layers.')
     if (layer.vector && !inMap) {
       // Shape tool, or a drawing tool grabbing a point or edge of a shape already there: edit it.
-      const grab = (tool === 'line' || tool === 'rect' || tool === 'ellipse') && hitShape(shapes.list, { x: wrap(p)[0], y: wrap(p)[1] }, Math.max(0.75, 6 / zoom))
+      const grab = (tool === 'line' || (tool === 'curve' && !curve.current) || tool === 'rect' || tool === 'ellipse') && hitShape(shapes.list, { x: wrap(p)[0], y: wrap(p)[1] }, Math.max(0.75, 6 / zoom))
       if (tool === 'shape' || grab) {
         e.currentTarget.setPointerCapture(e.pointerId)
         editing.current = true
@@ -1280,7 +1284,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
         if (!shapes.fillAt(wrap(p), e.button === 2 ? null : paintHex(colors[0]))) setNote('Click inside a closed shape to fill it (right-click takes the fill away).')
         return
       }
-      if (tool !== 'pencil' && tool !== 'rect' && tool !== 'ellipse' && tool !== 'line') return setNote('This is a shape layer: use the Shape tool, the bucket, Line, Rectangle, Ellipse or the pencil (a rough stroke becomes a shape). Turn into pixels makes it a normal layer.')
+      if (tool !== 'pencil' && tool !== 'rect' && tool !== 'ellipse' && tool !== 'line' && tool !== 'curve') return setNote('This is a shape layer: use the Shape tool, the bucket, Line, Curve, Rectangle, Ellipse or the pencil (a rough stroke becomes a shape). Turn into pixels makes it a normal layer.')
     }
     if (tool === 'text') return void addText(wrap(p))
     if (d.kind === 'tileset' && !inMap && p[0] >= 0 && p[1] >= 0 && p[0] < d.width && p[1] < d.height) setFocusTile(Math.floor(p[1] / ts) * cols + Math.floor(p[0] / ts))
@@ -1434,7 +1438,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
     hover.current = p
     if (poly.current) return drawOverlay()
     if (editing.current && layer.vector && !inMap) {
-      shapes.move(wrap(p))
+      shapes.move(wrap(p), e.ctrlKey || e.metaKey)
       return drawOverlay()
     }
     if (draft.current) {
@@ -1498,7 +1502,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
       render(l, l.path[0])
       return draw()
     }
-    render(l, !e.shiftKey ? p : tool === 'line' || tool === 'curve' ? constrain(l.start, p) : tool === 'rect' || tool === 'ellipse' ? square(l.start, p) : p)
+    render(l, !(e.shiftKey || ((e.ctrlKey || e.metaKey) && (tool === 'rect' || tool === 'ellipse'))) ? p : tool === 'line' || tool === 'curve' ? constrain(l.start, p) : tool === 'rect' || tool === 'ellipse' ? square(l.start, p) : p)
     draw()
   }
   // QuickShape for the pencil, eraser and shade brush: rest at the end of a stroke and it snaps to a clean
@@ -1571,12 +1575,16 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
       return
     }
     const movedMask = l.float && mask && l.at ? placeMask(d.width, d.height, l.float.mask, l.float.piece.width, l.float.x + l.at[0] - l.start[0], l.float.y + l.at[1] - l.start[1]) : null
-    if (tool === 'line' && !inMap && (!layer.vector || layer.sub)) {
-      // A line becomes its own line layer above the layer it was drawn on: click it later to drag its ends.
-      const made = liveBox('line', l.start, l.end ?? l.start, paintHex(l.button === 2 ? colors[1] : colors[0]), size)
+    // A curve keeps three points: both ends and the middle of the bend, so dragging the middle bends it again.
+    const curved = tool === 'curve' && l.ctrl ? liveCurve(l.start, l.ctrl, l.path[0], paintHex(l.button === 2 ? colors[1] : colors[0]), size) : null
+    const boxTool = tool === 'line' || tool === 'rect' || tool === 'ellipse' ? tool : null
+    if ((boxTool || curved) && !inMap && (!layer.vector || layer.sub)) {
+      // Lines, curves, rectangles and ellipses become their own small layer above the layer they were drawn on: click it later to drag their points.
+      const made = curved ?? liveBox(boxTool!, l.start, l.end ?? l.start, paintHex(l.button === 2 ? colors[1] : colors[0]), size, boxTool !== 'line' && filled ? paintHex(l.button === 2 ? colors[0] : colors[1]) : undefined)
       if (!made) return draw()
       const parent = layer.sub ?? layer.id
-      const sub = { ...newPixelLayer(`Line ${d.layers.filter((x) => x.sub).length + 1}`), vector: true, sub: parent }
+      const name = curved ? 'Curve' : boxTool === 'rect' ? 'Rectangle' : boxTool === 'ellipse' ? 'Ellipse' : 'Line'
+      const sub = { ...newPixelLayer(`${name} ${d.layers.filter((x) => x.sub).length + 1}`), vector: true, sub: parent }
       update((x) => {
         const i = x.layers.findIndex((y) => y.id === layer.id)
         const withLayer = { ...x, layers: [...x.layers.slice(0, i + 1), sub, ...x.layers.slice(i + 1)] }
@@ -1585,6 +1593,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
       setLayerId(sub.id)
       return
     }
+    if (layer.vector && curved) return void shapes.add(curved)
     if (layer.vector && (tool === 'rect' || tool === 'ellipse' || tool === 'line')) {
       // On a shape layer these tools make a live shape: Filled gives it the second colour inside.
       const end = l.end ?? l.start
