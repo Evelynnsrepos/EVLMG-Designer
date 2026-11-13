@@ -84,6 +84,20 @@ export function turnSprite(d: PixelDoc, cw: boolean): PixelDoc {
   return reshape(d, H, W, img, (p) => to(p.x, p.y))
 }
 
+/** Tile `n` of a tileset picture copied onto every tile (a layer shown the same on all tiles). */
+export function everyTile(img: Img, n: number, ts: number): Img {
+  const cols = Math.max(1, Math.floor(img.width / ts))
+  const rows = Math.max(1, Math.floor(img.height / ts))
+  const [x0, y0] = [(n % cols) * ts, Math.floor(n / cols) * ts]
+  const out = blank(img.width, img.height)
+  out.data.set(img.data)
+  for (let t = 0; t < cols * rows; t++) {
+    const [tx, ty] = [(t % cols) * ts, Math.floor(t / cols) * ts]
+    for (let y = 0; y < ts; y++) for (let x = 0; x < ts; x++) setPx(out, tx + x, ty + y, getPx(img, x0 + x, y0 + y))
+  }
+  return out
+}
+
 // ---- Palette ------------------------------------------------------------------------
 
 function hueLight(hex: string): [number, number, number] {
@@ -108,6 +122,19 @@ export function sortPalette(colors: string[], by: 'hue' | 'light'): string[] {
     const [ka, kb] = [key(a), key(b)]
     return ka[0] - kb[0] || ka[1] - kb[1]
   })
+}
+
+/** Every colour the drawing uses (pixels of every layer and frame, live shapes), most used first. */
+export function usedColors(d: PixelDoc): string[] {
+  const count = new Map<string, number>()
+  const add = (c: string, n = 1) => count.set(c, (count.get(c) ?? 0) + n)
+  for (const url of Object.values(d.cels)) {
+    if (isLink(url)) continue
+    const img = celImg(url, d.width, d.height)
+    for (let i = 0; i < img.data.length; i += 4) if (img.data[i + 3]) add(rgbaToHex(img.data[i], img.data[i + 1], img.data[i + 2]))
+  }
+  for (const c of Object.values(d.shapes ?? {})) for (const s of c.list) for (const col of [s.fillColor, s.strokeColor]) if (col) add(col.toLowerCase(), 0)
+  return [...count].sort((a, b) => b[1] - a[1]).map(([c]) => c)
 }
 
 /** Palette colours no pixel of any layer or frame uses. */

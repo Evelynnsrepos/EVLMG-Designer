@@ -12,7 +12,8 @@ vi.mock('@/shared/pixel/codec', () => ({
   },
   celImg: (k: string | undefined, w: number, h: number) => (k && store.get(k)) || { width: w, height: h, data: new Uint8ClampedArray(w * h * 4) },
 }))
-import { BLENDS, blank, celKey, createPixelDoc, getPx, setPx, type PixelDoc } from '@/shared/pixel/model'
+import { asSketchBlend, blank, celKey, composite, createPixelDoc, getPx, setPx, type PixelBlend, type PixelDoc } from '@/shared/pixel/model'
+import { BLEND_MODES } from '@/shared/sketch/blend'
 import { contentBounds, crop, flipSprite, resizeCanvas, sortPalette, stepLabel, turnSprite, unusedColors } from './docOps'
 
 const RED = [255, 0, 0, 255] as const
@@ -62,14 +63,19 @@ describe('whole-sprite changes', () => {
     expect(stepLabel(d, { ...d, selection: '0,1' })).toBe('Selection')
     expect(stepLabel(d, flipSprite(d, 'x'))).toMatch(/^Pixels on Layer 1|Whole sprite/)
   })
-  it('blend modes stay in range', () => {
-    for (const [name, f] of Object.entries(BLENDS))
-      for (const s of [0, 64, 128, 255]) for (const b of [0, 100, 255]) {
-        const v = f(s, b)
-        expect(v, `${name}(${s}, ${b})`).toBeGreaterThanOrEqual(0)
-        expect(v, `${name}(${s}, ${b})`).toBeLessThanOrEqual(255)
-      }
-    expect(BLENDS.darken(10, 200)).toBe(10)
-    expect(BLENDS.difference(10, 200)).toBe(190)
+  it('blends layers with Draw\'s modes and the older ones', () => {
+    const px = (r: number, g: number, b: number) => {
+      const i = blank(1, 1)
+      setPx(i, 0, 0, [r, g, b, 255])
+      return i
+    }
+    const mixOf = (blend: PixelBlend) => getPx(composite([{ visible: true, opacity: 1, img: px(200, 100, 50) }, { visible: true, opacity: 1, img: px(100, 200, 50), blend }], 1, 1), 0, 0)
+    expect(mixOf('darken')).toEqual([100, 100, 50, 255])
+    expect(mixOf('difference')).toEqual([100, 100, 0, 255])
+    expect(mixOf('add')).toEqual(mixOf('lighter'))
+    for (const m of BLEND_MODES) for (const v of mixOf(m.id)) expect(v).toBeGreaterThanOrEqual(0)
+    expect(asSketchBlend('add')).toBe('lighter')
+    expect(asSketchBlend(undefined)).toBe('source-over')
   })
+
 })

@@ -1,48 +1,40 @@
-import { ArrowDown, ArrowLeftRight, ArrowUp, ChevronDown, ChevronRight, Folder, FolderMinus, Copy, Shapes, Eye, EyeOff, Link2, Lock, Pause, Play, Plus, Tag, Trash2, Unlink, Unlock, Wand2 } from 'lucide-react'
+import { ArrowDown, ArrowLeftRight, ArrowUp, ChevronDown, ChevronRight, Folder, FolderMinus, Copy, Shapes, Eye, EyeOff, Link2, Lock, Slash, Pause, Play, Plus, Tag, Trash2, Unlink, Unlock, Wand2 } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { promptDialog } from '@/shared/dialogs'
 import { newId } from '@/core/model'
 import { toCanvas } from '@/shared/pixel/codec'
 import { BUILTIN_PALETTES } from '@/shared/pixel/color'
-import { ramp, resolveKey, rgbaToHex, tagFrames, type Img, type LoopMode, type PixelDoc, type PixelLayer, type PixelTag } from '@/shared/pixel/model'
-import { hslToRgb, rgbToHsl } from './adjust'
+import { asSketchBlend, ramp, resolveKey, tagFrames, type Img, type LoopMode, type PixelDoc, type PixelLayer, type PixelTag } from '@/shared/pixel/model'
+import { BLEND_MODES, type BlendMode } from '@/shared/sketch/blend'
+import '@/shared/sketch/sketch.css'
+import '@/shared/sketch/layers.css'
+import { ColorPanel } from '@/shared/sketch/ColorPanel'
 import { sortPalette, unusedColors } from './docOps'
 
 type Update = (fn: (d: PixelDoc) => PixelDoc) => void
 
 const TAG_COLORS = ['#e03131', '#f08c00', '#2f9e44', '#1971c2', '#7048e8', '#c2255c']
 
-/** Palette: click picks the main colour, right-click the second; double-click changes a swatch and every pixel using it. */
+/** Palette: click picks the main colour, right-click the second; double-click a swatch, pick its new colour in the colour panel and every pixel using it changes. */
 export function PalettePanel(p: { d: PixelDoc; colors: [string, string]; setColors(c: [string, string]): void; recolor(from: string, to: string): void; update: Update; onImport(): void; onExport(): void }) {
-  const edit = useRef<HTMLInputElement>(null)
   const [editing, setEditing] = useState<number | null>(null)
   const [steps, setSteps] = useState(5)
-  // The native picker reports its final colour with "change", once it closes.
-  useEffect(() => {
-    const el = edit.current
-    if (!el) return
-    const onChange = () => {
-      if (editing === null) return
-      const from = p.d.palette[editing]
-      if (from && from !== el.value) p.recolor(from, el.value)
-      setEditing(null)
-    }
-    el.addEventListener('change', onChange)
-    return () => el.removeEventListener('change', onChange)
-  }, [editing, p])
 
   const [main, second] = p.colors
   return (
     <div className="px-panel">
-      <div className="px-colors">
-        <label className="px-color main" title="Main colour (left click)" style={{ background: main }}>
-          <input type="color" value={main} onChange={(e) => p.setColors([e.target.value, second])} />
-        </label>
-        <label className="px-color second" title="Second colour (right click)" style={{ background: second }}>
-          <input type="color" value={second} onChange={(e) => p.setColors([main, e.target.value])} />
-        </label>
-      </div>
-      <ColorMixer color={main} set={(c) => p.setColors([c, second])} />
+      <ColorPanel color={main} setColor={(c) => p.setColors([c, second])} swatches={p.d.palette} />
+      {editing !== null && (
+        <div className="px-row px-wrap px-editing">
+          <span className="px-color-dot" style={{ background: p.d.palette[editing] }} /> → <span className="px-color-dot" style={{ background: main }} />
+          <button className="btn" title="Every pixel in the old colour changes too" onClick={() => (p.recolor(p.d.palette[editing], main), setEditing(null))}>
+            Change swatch
+          </button>
+          <button className="btn btn-ghost" onClick={() => setEditing(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
       <strong>Palette</strong>
       <div className="px-swatches">
         {p.d.palette.map((c, i) => (
@@ -55,12 +47,10 @@ export function PalettePanel(p: { d: PixelDoc; colors: [string, string]; setColo
             onContextMenu={(e) => (e.preventDefault(), p.setColors([main, c]))}
             onDoubleClick={() => {
               setEditing(i)
-              edit.current!.value = c
-              edit.current!.click()
+              p.setColors([c, second])
             }}
           />
         ))}
-        <input ref={edit} type="color" className="px-hidden" aria-hidden tabIndex={-1} />
       </div>
       <div className="px-row">
         <button className="btn btn-ghost" title="Add the main colour" onClick={() => p.update((d) => ({ ...d, palette: d.palette.includes(main) ? d.palette : [...d.palette, main] }))}>
@@ -88,57 +78,8 @@ export function PalettePanel(p: { d: PixelDoc; colors: [string, string]; setColo
   )
 }
 
-/** The main colour as hue / saturation / lightness sliders and a hex box, plus the last colours used. */
-function ColorMixer({ color, set }: { color: string; set(c: string): void }) {
-  const [recent, setRecent] = useState<string[]>([])
-  const [hex, setHex] = useState(color)
-  useEffect(() => setHex(color), [color])
-  // A colour counts as used once it stays picked for a moment (not every step of a slider drag).
-  useEffect(() => {
-    const t = setTimeout(() => setRecent((r) => [color, ...r.filter((c) => c !== color)].slice(0, 12)), 800)
-    return () => clearTimeout(t)
-  }, [color])
-  const n = parseInt(color.slice(1, 7), 16)
-  const [h, sat, l] = rgbToHsl(n >> 16, (n >> 8) & 255, n & 255)
-  const put = (hh: number, ss: number, ll: number) => set(rgbaToHex(...hslToRgb(hh, ss, ll)))
-  const slider = (label: string, value: number, max: number, onChange: (v: number) => void, bg: string) => (
-    <label className="px-row px-mix" title={label}>
-      <span>{label[0]}</span>
-      <input type="range" min={0} max={max} value={Math.round(value)} style={{ background: bg }} onChange={(e) => onChange(Number(e.target.value))} />
-    </label>
-  )
-  return (
-    <div className="px-mixer">
-      {slider('Hue', h, 359, (v) => put(v, sat, l), 'linear-gradient(90deg, red, yellow, lime, cyan, blue, magenta, red)')}
-      {slider('Saturation', sat * 100, 100, (v) => put(h, v / 100, l), `linear-gradient(90deg, ${rgbaToHex(...hslToRgb(h, 0, l))}, ${rgbaToHex(...hslToRgb(h, 1, l))})`)}
-      {slider('Lightness', l * 100, 100, (v) => put(h, sat, v / 100), `linear-gradient(90deg, #000, ${rgbaToHex(...hslToRgb(h, sat, 0.5))}, #fff)`)}
-      <label className="px-row" title="The main colour as a hex code">
-        #
-        <input
-          className="input px-hex"
-          value={hex.replace('#', '')}
-          maxLength={6}
-          aria-label="Hex colour"
-          onChange={(e) => {
-            const v = `#${e.target.value.replace(/[^0-9a-f]/gi, '').toLowerCase()}`
-            setHex(v)
-            if (/^#[0-9a-f]{6}$/.test(v)) set(v)
-          }}
-        />
-      </label>
-      {recent.length > 1 && (
-        <div className="px-swatches px-recent" title="Colours you used last">
-          {recent.map((c) => (
-            <button key={c} className="px-swatch" style={{ background: c }} title={c} onClick={() => set(c)} />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 /** Layers, top first: show/hide, lock, opacity, order and names. */
-export function LayersPanel(p: { d: PixelDoc; layerId: string; frameId: string; setLayerId(id: string): void; update: Update }) {
+export function LayersPanel(p: { d: PixelDoc; layerId: string; frameId: string; setLayerId(id: string): void; update: Update; layerImg(id: string): Img | undefined; allTiles?(id: string, on: boolean): void }) {
   const [folded, setFolded] = useState<Set<string>>(new Set())
   /** Change every layer of a group at once (one undo step). */
   const setGroup = (group: string, patch: (l: PixelLayer) => Partial<PixelLayer>) => p.update((d) => ({ ...d, layers: d.layers.map((l) => (l.group === group ? { ...l, ...patch(l) } : l)) }))
@@ -184,8 +125,39 @@ export function LayersPanel(p: { d: PixelDoc; layerId: string; frameId: string; 
       cels: Object.fromEntries(Object.entries(d.cels).filter(([k]) => !k.startsWith(`${id}:`))),
       ...(d.shapes ? { shapes: Object.fromEntries(Object.entries(d.shapes).filter(([k]) => !k.startsWith(`${id}:`))) } : {}),
     }))
+  const groupRow = (g: string) => {
+    const members = p.d.layers.filter((x) => x.group === g)
+    const shown = members.some((x) => x.visible)
+    const locked = members.every((x) => x.locked)
+    return (
+      <div className="sketch-layer px-group">
+        <div className="sketch-layer-row">
+          <button className="icon-btn sketch-fold" title={folded.has(g) ? 'Open the group' : 'Close the group'} onClick={() => setFolded((f) => (f.has(g) ? new Set([...f].filter((x) => x !== g)) : new Set([...f, g])))}>
+            {folded.has(g) ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+          </button>
+          <button className="icon-btn" title={shown ? 'Hide the group' : 'Show the group'} onClick={() => setGroup(g, () => ({ visible: !shown }))}>
+            {shown ? <Eye size={13} /> : <EyeOff size={13} />}
+          </button>
+          <Folder size={18} className="sketch-group-icon" />
+          <input className="px-name sketch-layer-name" value={g} aria-label="Group name" onChange={(e) => setGroup(g, () => ({ group: e.target.value }))} />
+          <button className="icon-btn" title={locked ? 'Unlock the group' : 'Lock the group'} onClick={() => setGroup(g, () => ({ locked: !locked || undefined }))}>
+            {locked ? <Lock size={11} /> : <Unlock size={11} />}
+          </button>
+          <button className="icon-btn" title="Move the group up" onClick={() => moveGroup(g, 1)}>
+            <ArrowUp size={12} />
+          </button>
+          <button className="icon-btn" title="Move the group down" onClick={() => moveGroup(g, -1)}>
+            <ArrowDown size={12} />
+          </button>
+          <button className="icon-btn" title="Ungroup (the layers stay)" onClick={() => setGroup(g, () => ({ group: undefined }))}>
+            <FolderMinus size={12} />
+          </button>
+        </div>
+      </div>
+    )
+  }
   return (
-    <div className="px-panel">
+    <div className="px-panel px-layers">
       <strong className="px-head">
         Layers
         <button className="icon-btn" title="New layer" aria-label="New layer" onClick={() => add()}>
@@ -195,129 +167,126 @@ export function LayersPanel(p: { d: PixelDoc; layerId: string; frameId: string; 
           <Shapes size={14} />
         </button>
       </strong>
-      {[...p.d.layers].reverse().map((l, i, top) => (
-        <Fragment key={l.id}>
-        {l.group && top[i - 1]?.group !== l.group && (
-          <div className="px-layer px-group">
-            <button className="icon-btn" title={folded.has(l.group) ? 'Unfold' : 'Fold'} onClick={() => setFolded((f) => (f.has(l.group!) ? new Set([...f].filter((g) => g !== l.group)) : new Set([...f, l.group!])))}>
-              {folded.has(l.group) ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-            </button>
-            {(() => {
-              const members = p.d.layers.filter((x) => x.group === l.group)
-              const shown = members.some((x) => x.visible)
-              const locked = members.every((x) => x.locked)
-              return (
-                <>
-                  <button className="icon-btn" title={shown ? 'Hide the group' : 'Show the group'} onClick={() => setGroup(l.group!, () => ({ visible: !shown }))}>
-                    {shown ? <Eye size={13} /> : <EyeOff size={13} />}
-                  </button>
-                  <button className="icon-btn" title={locked ? 'Unlock the group' : 'Lock the group'} onClick={() => setGroup(l.group!, () => ({ locked: !locked || undefined }))}>
-                    {locked ? <Lock size={12} /> : <Unlock size={12} />}
-                  </button>
-                </>
-              )
-            })()}
-            <Folder size={12} />
-            <input className="px-name" value={l.group} aria-label="Group name" onChange={(e) => setGroup(l.group!, () => ({ group: e.target.value }))} />
-            <button className="icon-btn" title="Move the group up" onClick={() => moveGroup(l.group!, 1)}>
-              <ArrowUp size={12} />
-            </button>
-            <button className="icon-btn" title="Move the group down" onClick={() => moveGroup(l.group!, -1)}>
-              <ArrowDown size={12} />
-            </button>
-            <button className="icon-btn" title="Ungroup (the layers stay)" onClick={() => setGroup(l.group!, () => ({ group: undefined }))}>
-              <FolderMinus size={12} />
-            </button>
-          </div>
-        )}
-        {!(l.group && folded.has(l.group)) && (
-        <div className={`px-layer${l.id === p.layerId ? ' on' : ''}${l.group ? ' px-in-group' : ''}`} onClick={() => p.setLayerId(l.id)}>
-          <button className="icon-btn" title={l.visible ? 'Hide' : 'Show'} onClick={(e) => (e.stopPropagation(), set(l.id, { visible: !l.visible }))}>
-            {l.visible ? <Eye size={13} /> : <EyeOff size={13} />}
-          </button>
-          <button className="icon-btn" title={l.locked ? 'Unlock' : 'Lock'} onClick={(e) => (e.stopPropagation(), set(l.id, { locked: !l.locked || undefined }))}>
-            {l.locked ? <Lock size={12} /> : <Unlock size={12} />}
-          </button>
-          {l.vector && <Shapes size={12} aria-label="Shape layer" />}
-          <input className="px-name" value={l.name} aria-label="Layer name" onChange={(e) => set(l.id, { name: e.target.value })} />
-          <button className="icon-btn" title="Move up" onClick={(e) => (e.stopPropagation(), move(l.id, 1))}>
-            <ArrowUp size={12} />
-          </button>
-          <button className="icon-btn" title="Move down" onClick={(e) => (e.stopPropagation(), move(l.id, -1))}>
-            <ArrowDown size={12} />
-          </button>
-          <button className="icon-btn" title="Delete layer" disabled={p.d.layers.length < 2} onClick={(e) => (e.stopPropagation(), remove(l.id))}>
-            <Trash2 size={12} />
-          </button>
-        </div>
-        )}
-        </Fragment>
-      ))}
-      {p.d.layers
-        .filter((l) => l.id === p.layerId)
-        .map((l) => (
-          <div key={l.id} className="px-panel">
-            <label className="px-row" title="Layer opacity">
-              Opacity <input type="range" min={0} max={1} step={0.05} value={l.opacity} onChange={(e) => set(l.id, { opacity: Number(e.target.value) })} />
-            </label>
-            <label className="px-row" title="How this layer mixes with the layers below">
-              Blend
-              <select className="input" value={l.blend ?? ''} onChange={(e) => set(l.id, { blend: (e.target.value || undefined) as PixelDoc['layers'][number]['blend'] })}>
-                <option value="">Normal</option>
-                <option value="multiply">Multiply (shadows)</option>
-                <option value="screen">Screen (light)</option>
-                <option value="add">Add (glow)</option>
-                <option value="overlay">Overlay (contrast)</option>
-                <option value="softlight">Soft light</option>
-                <option value="hardlight">Hard light</option>
-                <option value="darken">Darken</option>
-                <option value="lighten">Lighten</option>
-                <option value="dodge">Colour dodge (bright glow)</option>
-                <option value="burn">Colour burn (deep shadow)</option>
-                <option value="difference">Difference</option>
-                <option value="subtract">Subtract</option>
-              </select>
-            </label>
-            {p.d.kind === 'sprite' && p.d.frames.length > 1 && (
-              <label className="px-row" title="How see-through this layer is on this frame only (for fades)">
-                This frame{' '}
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={p.d.celOpacity?.[`${l.id}:${p.frameId}`] ?? 1}
-                  onChange={(e) =>
-                    p.update((d) => {
-                      const celOpacity = { ...d.celOpacity }
-                      const v = Number(e.target.value)
-                      if (v >= 1) delete celOpacity[`${l.id}:${p.frameId}`]
-                      else celOpacity[`${l.id}:${p.frameId}`] = v
-                      return { ...d, celOpacity }
-                    })
-                  }
-                />
-              </label>
-            )}
-            <label className="px-row" title="Fold, hide and move layers together">
-              Group
-              <select className="input" value={l.group ?? ''} onChange={(e) => void putInGroup(l.id, e.target.value)}>
-                <option value="">None</option>
-                {groups.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-                <option value="+">New group…</option>
-              </select>
-            </label>
-            <label className="px-row" title="A tracing layer: shown faintly while you draw and left out of every export">
-              <input type="checkbox" checked={!!l.reference} onChange={(e) => set(l.id, { reference: e.target.checked || undefined })} /> Reference (not exported)
-            </label>
-          </div>
-        ))}
+      <div className="sketch-layer-list">
+        {[...p.d.layers].reverse().map((l, i, top) => {
+          const active = l.id === p.layerId
+          const sub = !!l.sub && p.d.layers.some((x) => x.id === l.sub)
+          return (
+            <Fragment key={l.id}>
+              {l.group && top[i - 1]?.group !== l.group && groupRow(l.group)}
+              {!(l.group && folded.has(l.group)) && (
+                <div className={`sketch-layer${active ? ' is-active' : ''}`} style={{ paddingLeft: 4 + (l.group ? 14 : 0) + (sub ? 14 : 0) }} onClick={() => p.setLayerId(l.id)}>
+                  <div className="sketch-layer-row">
+                    <button className="icon-btn" title={l.visible ? 'Hide' : 'Show'} onClick={(e) => (e.stopPropagation(), set(l.id, { visible: !l.visible }))}>
+                      {l.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+                    </button>
+                    <LayerThumb img={p.layerImg(l.id)} />
+                    {l.vector && (l.sub ? <Slash size={12} aria-label="Line layer" /> : <Shapes size={12} aria-label="Shape layer" />)}
+                    <input className="px-name sketch-layer-name" value={l.name} aria-label="Layer name" onChange={(e) => set(l.id, { name: e.target.value })} />
+                    {l.locked && <Lock size={11} aria-label="Locked" />}
+                    {l.reference && (
+                      <span className="sketch-badge" title="Reference layer: shown faintly, never exported">
+                        R
+                      </span>
+                    )}
+                    {p.allTiles && (
+                      <button className={`icon-btn${l.allTiles ? ' on' : ''}`} title={l.allTiles ? 'Shown on all tiles: drawing on one tile draws on every tile. Click to stop.' : 'Show on all tiles: copies this tile to every tile, and drawing on one draws on all'} aria-label="Show on all tiles" onClick={(e) => (e.stopPropagation(), p.allTiles!(l.id, !l.allTiles))}>
+                        <Link2 size={12} />
+                      </button>
+                    )}
+                  </div>
+                  {active && (
+                    <div className="sketch-layer-props" onClick={(e) => e.stopPropagation()}>
+                      <label className="sketch-slider" title="Layer opacity">
+                        <span>Opacity</span>
+                        <input type="range" min={0} max={1} step={0.01} value={l.opacity} onChange={(e) => set(l.id, { opacity: Number(e.target.value) })} />
+                        <span className="sketch-slider-value">{Math.round(l.opacity * 100)}%</span>
+                      </label>
+                      {p.d.kind === 'sprite' && p.d.frames.length > 1 && (
+                        <label className="sketch-slider" title="How see-through this layer is on this frame only (for fades)">
+                          <span>This frame</span>
+                          <input
+                            type="range"
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            value={p.d.celOpacity?.[`${l.id}:${p.frameId}`] ?? 1}
+                            onChange={(e) =>
+                              p.update((d) => {
+                                const celOpacity = { ...d.celOpacity }
+                                const v = Number(e.target.value)
+                                if (v >= 1) delete celOpacity[`${l.id}:${p.frameId}`]
+                                else celOpacity[`${l.id}:${p.frameId}`] = v
+                                return { ...d, celOpacity }
+                              })
+                            }
+                          />
+                          <span className="sketch-slider-value">{Math.round((p.d.celOpacity?.[`${l.id}:${p.frameId}`] ?? 1) * 100)}%</span>
+                        </label>
+                      )}
+                      <select className="input" title="How this layer mixes with the layers below" value={asSketchBlend(l.blend)} onChange={(e) => set(l.id, { blend: e.target.value === 'source-over' ? undefined : (e.target.value as BlendMode) })}>
+                        {[...new Set(BLEND_MODES.map((m) => m.group))].map((g) => (
+                          <optgroup key={g} label={g}>
+                            {BLEND_MODES.filter((m) => m.group === g).map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                      <select className="input" title="Groups fold, hide, lock and move together" value={l.group ?? ''} onChange={(e) => void putInGroup(l.id, e.target.value)}>
+                        <option value="">No group</option>
+                        {groups.map((g) => (
+                          <option key={g} value={g}>
+                            Group: {g}
+                          </option>
+                        ))}
+                        <option value="+">New group…</option>
+                      </select>
+                      <div className="sketch-layer-actions">
+                        <button className={`btn btn-ghost sketch-small${l.locked ? ' is-active' : ''}`} title="Lock: no drawing on this layer" onClick={() => set(l.id, { locked: !l.locked || undefined })}>
+                          Lock
+                        </button>
+                        <button className={`btn btn-ghost sketch-small${l.reference ? ' is-active' : ''}`} title="A tracing layer: shown faintly while you draw and left out of every export" onClick={() => set(l.id, { reference: !l.reference || undefined })}>
+                          Reference
+                        </button>
+                        <button className="btn btn-ghost sketch-small" title="Move up" onClick={() => move(l.id, 1)}>
+                          ↑
+                        </button>
+                        <button className="btn btn-ghost sketch-small" title="Move down" onClick={() => move(l.id, -1)}>
+                          ↓
+                        </button>
+                        <button className="btn btn-ghost sketch-small" title="Delete layer" disabled={p.d.layers.length < 2} onClick={() => remove(l.id)}>
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </Fragment>
+          )
+        })}
+      </div>
     </div>
   )
+}
+
+/** A layer's picture, small, with hard pixels. */
+function LayerThumb({ img }: { img: Img | undefined }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const c = ref.current
+    if (!c) return
+    const g = c.getContext('2d')!
+    g.clearRect(0, 0, c.width, c.height)
+    if (!img) return
+    const k = Math.min(c.width / img.width, c.height / img.height)
+    g.imageSmoothingEnabled = false
+    g.drawImage(toCanvas(img), (c.width - img.width * k) / 2, (c.height - img.height * k) / 2, img.width * k, img.height * k)
+  }, [img])
+  return <canvas ref={ref} width={44} height={32} className="sketch-thumb px-layer-thumb" />
 }
 
 /** Frames with their duration, tags and play. */
@@ -520,7 +489,7 @@ export function Timeline(p: {
       </div>
       {d.tags.map((t) => (
         <div key={t.id} className="px-tag">
-          <input type="color" value={t.color} title="Colour" onChange={(e) => setTag(t.id, { color: e.target.value })} />
+          <button className="px-swatch px-tag-color" style={{ background: t.color }} title="Tag colour: click for the next one" onClick={() => setTag(t.id, { color: TAG_COLORS[(TAG_COLORS.indexOf(t.color) + 1) % TAG_COLORS.length] })} />
           <input className="input px-tagname" value={t.name} aria-label="Tag name" onChange={(e) => setTag(t.id, { name: e.target.value })} />
           frames
           <input className="input px-ms" type="number" min={1} max={d.frames.length} value={t.from + 1} onChange={(e) => setTag(t.id, { from: Math.max(0, Math.min(t.to, Number(e.target.value) - 1)) })} />–
@@ -542,14 +511,19 @@ export function Timeline(p: {
   )
 }
 
+/** Draw `img` into `c` scaled up `k`× with hard pixels (CSS scaling blurs pixel art in some web views). */
+export function drawSharp(c: HTMLCanvasElement, img: Img, k: number) {
+  k = Math.max(1, Math.round(k * (window.devicePixelRatio || 1)))
+  ;[c.width, c.height] = [img.width * k, img.height * k]
+  const g = c.getContext('2d')!
+  g.imageSmoothingEnabled = false
+  g.drawImage(toCanvas(img), 0, 0, img.width * k, img.height * k)
+}
+
 function Thumb({ img }: { img: Img }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
-    const c = ref.current
-    if (!c) return
-    c.width = img.width
-    c.height = img.height
-    c.getContext('2d')!.drawImage(toCanvas(img), 0, 0)
+    if (ref.current) drawSharp(ref.current, img, Math.max(1, Math.floor(48 / Math.max(img.width, img.height))))
   }, [img])
   return <canvas ref={ref} className="px-thumb" />
 }
@@ -567,11 +541,7 @@ export function Preview({ d, frameImg, playTag }: { d: PixelDoc; frameImg(i: num
   const ref = useRef<HTMLCanvasElement>(null)
   const img = frameImg(frame)
   useEffect(() => {
-    const c = ref.current
-    if (!c) return
-    c.width = img.width
-    c.height = img.height
-    c.getContext('2d')!.drawImage(toCanvas(img), 0, 0)
+    if (ref.current) drawSharp(ref.current, img, scale)
   })
   return (
     <div className="px-panel">
@@ -599,10 +569,12 @@ export function ColorsPanel(p: {
   reduceAll(dither: boolean): void
   variant: string | null
   setVariant(id: string | null): void
+  openPalette(name: string, colors: string[]): void
+  /** The main colour: a clicked variant swatch takes it. */
+  main: string
 }) {
   const [dither, setDither] = useState(false)
-  const edit = useRef<HTMLInputElement>(null)
-  const [editing, setEditing] = useState<number | null>(null)
+  const [presets, setPresets] = useState(false)
   const v = p.d.variants?.find((x) => x.id === p.variant)
   const setVariantColors = (colors: string[]) => p.update((d) => ({ ...d, variants: (d.variants ?? []).map((x) => (x.id === p.variant ? { ...x, colors } : x)) }))
   return (
@@ -615,24 +587,34 @@ export function ColorsPanel(p: {
           <option value="gray">Grays</option>
         </select>
       </label>
-      <label className="px-row" title="Replace the palette with a ready-made one; your pixels stay as they are">
+      <div className="px-row" title="Open a ready-made palette">
         Palette
-        <select
-          className="input"
-          value=""
-          onChange={(e) => {
-            const pal = BUILTIN_PALETTES.find((x) => x.name === e.target.value)
-            if (pal) p.update((d) => ({ ...d, palette: [...pal.colors] }))
-          }}
-        >
-          <option value="">Load…</option>
+        <button className="btn btn-ghost" aria-expanded={presets} onClick={() => setPresets(!presets)}>
+          Ready-made…
+        </button>
+      </div>
+      {presets && (
+        <div className="px-presets">
           {BUILTIN_PALETTES.map((x) => (
-            <option key={x.name} value={x.name}>
-              {x.name}
-            </option>
+            <button
+              key={x.name}
+              className="px-preset"
+              title={`${x.name}: ${x.colors.length} colours`}
+              onClick={() => {
+                setPresets(false)
+                p.openPalette(x.name, [...x.colors])
+              }}
+            >
+              <span>{x.name}</span>
+              <span className="px-preset-chips">
+                {x.colors.map((c, k) => (
+                  <i key={k} style={{ background: c }} />
+                ))}
+              </span>
+            </button>
           ))}
-        </select>
-      </label>
+        </div>
+      )}
       <div className="px-row px-wrap">
         <button className="btn btn-ghost" title="The colours this frame uses become the palette" onClick={p.fromPicture}>
           From picture
@@ -689,22 +671,11 @@ export function ColorsPanel(p: {
                 key={`${c}${i}`}
                 className="px-swatch"
                 style={{ background: v.colors[i] ?? c }}
-                title={`${c} shows as ${v.colors[i] ?? c} · click to change`}
-                onClick={() => {
-                  setEditing(i)
-                  edit.current!.value = v.colors[i] ?? c
-                  edit.current!.click()
-                }}
+                title={`${c} shows as ${v.colors[i] ?? c} · click: the main colour, right-click: back to ${c}`}
+                onClick={() => setVariantColors(p.d.palette.map((x, k) => (k === i ? p.main : (v.colors[k] ?? x))))}
+                onContextMenu={(e) => (e.preventDefault(), setVariantColors(p.d.palette.map((x, k) => (k === i ? x : (v.colors[k] ?? x)))))}
               />
             ))}
-            <input
-              ref={edit}
-              type="color"
-              className="px-hidden"
-              aria-hidden
-              tabIndex={-1}
-              onChange={(e) => editing !== null && setVariantColors(p.d.palette.map((c, i) => (i === editing ? e.target.value : (v.colors[i] ?? c))))}
-            />
           </div>
           <button className="btn btn-ghost" onClick={() => (p.update((d) => ({ ...d, variants: (d.variants ?? []).filter((x) => x.id !== v.id) })), p.setVariant(null))}>
             <Trash2 size={13} /> Delete variant

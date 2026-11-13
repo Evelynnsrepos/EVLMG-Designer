@@ -1,4 +1,4 @@
-import { Blend, Brush, PenTool, CircleDashed, Pentagon, Hand, History as HistoryIcon, Maximize, Type, Sparkles, Circle, Dices, Download, LassoSelect, Spline, SprayCan, Stamp, Eraser, FlipHorizontal2, FlipVertical2, Grid3x3, Lasso, Layers, Map as MapIcon, Move, PaintBucket, Pipette, RotateCcw, RotateCw, Slash, Square, SquareDashed, SunMoon, Upload, WandSparkles } from 'lucide-react'
+import { Blend, Brush, PenTool, CircleDashed, Pentagon, Hand, History as HistoryIcon, ImagePlus, Undo2, Redo2, Maximize, Type, Sparkles, Circle, Dices, Download, LassoSelect, Spline, SprayCan, Stamp, Eraser, FlipHorizontal2, FlipVertical2, Grid3x3, Lasso, Layers, Map as MapIcon, Move, PaintBucket, Pipette, RotateCcw, RotateCw, Slash, Square, SquareDashed, SunMoon, Upload, WandSparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { importAssetFromBlob, resolveAssetPath } from '@/core/assets'
 import { saveBinaryFile, safeFileName } from '@/core/export'
@@ -8,7 +8,7 @@ import type { PanelProps } from '@/core/registry'
 import { isShortcut, keysOf } from '@/core/shortcuts'
 import { keyHint } from '@/shared/hotkeyHints'
 import { loadDocumentNow, postIntent, updateDocument, useDocument, useIntentHandler, useProjectStore, isTextField, useUndoRedoKeys, type UseDocumentResult } from '@/core/state'
-import { NumberInput, PresetHeader } from '@/shared/calculators'
+import { NumberInput } from '@/shared/calculators'
 import { confirmDialog, promptDialog } from '@/shared/dialogs'
 import { cssFamily, GENERIC_FONTS, systemFonts } from '@/shared/fontList'
 import { maybeStartTour } from '@/shell/help/help'
@@ -68,10 +68,15 @@ import { gentle, HOLD_MS, keys as shapeKeys, PERFECT_MS, perfect, recognize, res
 import { holdTolerance, useInputSettings } from '@/shared/sketch/inputSettings'
 import { MotionFilter } from '@/shared/sketch/pen'
 import { ShapePanel } from './ShapePanel'
-import { useShapeTool } from './shapeTool'
-import { fromQuickShape, fromStroke, newShape, type VShape } from '@/shared/pixel/shapes'
-import { contentBounds, crop, flipSprite, resizeCanvas, turnSprite } from './docOps'
+import { useShapeTool, withShapes } from './shapeTool'
+import { fromQuickShape, fromStroke, hitShape, newShape, type VShape } from '@/shared/pixel/shapes'
+import { contentBounds, crop, everyTile, flipSprite, resizeCanvas, turnSprite, usedColors } from './docOps'
+import { usePalettes } from '@/shared/sketch/palettes'
+import { ReferencePicker } from '@/shared/sketch/ReferencePicker'
+import { ReferenceWindow } from '@/shared/sketch/ReferenceWindow'
 import { HistoryList } from './HistoryList'
+import { TilePlayer } from './TilePlayer'
+import { PaletteSwitch } from './PaletteSwitch'
 import { adjustImg, despeckle, dropShadow, NO_ADJUST, type Adjust } from './adjust'
 import './pixel-art.css'
 
@@ -354,6 +359,25 @@ function liveBox(tool: 'rect' | 'ellipse' | 'line', a: Pt, b: Pt, strokeColor: s
   return newShape(pts, true, { ...look, smooth: true })
 }
 
+/** A see-through checkerboard pattern (cached per context). */
+const checkers = new WeakMap<CanvasRenderingContext2D, CanvasPattern>()
+function checker(g: CanvasRenderingContext2D): CanvasPattern {
+  let p = checkers.get(g)
+  if (!p) {
+    const t = document.createElement('canvas')
+    t.width = t.height = 16
+    const c = t.getContext('2d')!
+    c.fillStyle = 'rgba(127,127,127,0.25)'
+    c.fillRect(0, 0, 16, 16)
+    c.fillStyle = 'rgba(127,127,127,0.08)'
+    c.fillRect(8, 0, 8, 8)
+    c.fillRect(0, 8, 8, 8)
+    p = g.createPattern(t, 'repeat')!
+    checkers.set(g, p)
+  }
+  return p
+}
+
 /** Where the old picture sits when the canvas size changes. */
 const ANCHORS: Record<string, { label: string; x: number; y: number }> = {
   tl: { label: 'Top left', x: 0, y: 0 },
@@ -381,7 +405,7 @@ const MAP_TOOLS: { id: Tool; icon: typeof Brush; label: string }[] = [
 
 type Live = { key: string; base: Img; img: Img; start: Pt; path: Pt[]; button: number; press?: number[]; ctrl?: Pt; from?: string; float?: { piece: Img; mask: Mask; x: number; y: number; rest: Img }; at?: Pt; snap?: { shape: Shape; at: Pt; perfect?: boolean; drawn?: Shape }; end?: Pt; xform?: { kind: 'scale' | 'rotate'; fixed: Pt; box: { x: number; y: number; w: number; h: number }; mask?: Mask; placed?: Mask } }
 
-function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<PixelDoc> & { data: PixelDoc }; documentId: string; title: string; active: boolean }) {
+function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { data: PixelDoc }; documentId: string; title: string; active: boolean }) {
   const d = doc.data
   useUndoRedoKeys(doc, active)
   useEffect(() => maybeStartTour('pixel'), [])
@@ -396,7 +420,14 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   }
 
   const [tool, setTool] = useState<Tool>('pencil')
-  const [colors, setColors] = useState<[string, string]>([d.palette[1] ?? '#ffffff', d.palette[0] ?? '#000000'])
+  // The main colour is this file's; the second colour is shared with Draw's colour panel, so both tools agree.
+  const [main, setMain] = useState(d.palette[1] ?? '#ffffff')
+  const second = usePalettes((p) => p.secondary)
+  const colors: [string, string] = [main, second]
+  const setColors = ([a, b]: [string, string]) => {
+    setMain(a)
+    if (b !== usePalettes.getState().secondary) usePalettes.getState().setSecondary(b)
+  }
   const [size, setSize] = useState(1)
   const [round, setRound] = useState(false)
   // v0.16: how strokes put colour down, pen pressure, and a brush made from a selection.
@@ -413,11 +444,17 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const [contiguous, setContiguous] = useState(true)
   // v0.29: how different a colour may be and still count for the bucket and the magic wand (0 = exact).
   const [tolerance, setTolerance] = useState(0)
+  /** What fill and the magic wand look at: this layer, every layer, or the reference layers (like Draw's). */
+  const [sample, setSample] = useState<'layer' | 'all' | 'reference'>('layer')
+  const lookAt = (own: Img) => (sample === 'all' ? frameImg(fi) : sample === 'reference' ? (refImg(fi) ?? own) : own)
+  const [pickingRef, setPickingRef] = useState(false)
   const [outlineOpts, setOutlineOpts] = useState({ inside: false, corners: false })
   const [historyOpen, setHistoryOpen] = useState(false)
   const stage = useRef<HTMLDivElement>(null)
-  const panning = useRef<{ x: number; y: number; sl: number; st: number } | null>(null)
+  const panning = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null)
   const spaceDown = useRef(false)
+  /** A point or shape on a shape layer is being dragged (Shape tool, or Line/Rectangle/Ellipse grabbing one). */
+  const editing = useRef(false)
   const poly = useRef<{ pts: Pt[]; how: Combine; last: number } | null>(null)
   const [dither, setDither] = useState(16)
   const [sym, setSym] = useState({ x: false, y: false })
@@ -435,6 +472,9 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const [variant, setVariant] = useState<string | null>(null)
   const [showGrid, setShowGrid] = useState(true)
   const [zoom, setZoom] = useState(() => Math.max(1, Math.min(32, Math.floor(480 / Math.max(d.width, d.height)))))
+  // Wide or tall pixels: the picture is stretched on screen only.
+  const ax = (d.pixelAspect ?? 1) > 1 ? (d.pixelAspect ?? 1) : 1
+  const ay = (d.pixelAspect ?? 1) < 1 ? 1 / (d.pixelAspect ?? 1) : 1
   const [layerId, setLayerId] = useState(d.layers[d.layers.length - 1].id)
   const [frame, setFrame] = useState(0)
   const [mapMode, setMapMode] = useState(false)
@@ -472,8 +512,14 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   useEffect(() => void useInputSettings.getState().load(), [])
   /** QuickShape: where the pointer last rested (screen px) and the snap timer. */
   const hold = useRef<{ timer?: ReturnType<typeof setTimeout>; rest: { x: number; y: number }; filter?: MotionFilter }>({ rest: { x: 0, y: 0 } })
-  const canvas = useRef<HTMLCanvasElement>(null)
+  // The picture at 1:1 (off screen); `screen` shows it zoomed, `overlay` draws guides on top. Both fill the stage,
+  // so pixels stay sharp at any zoom, zooming costs nothing, and the area around the picture takes the pointer too.
+  const canvas = useRef<HTMLCanvasElement | null>(null)
+  if (!canvas.current) canvas.current = document.createElement('canvas')
+  const screen = useRef<HTMLCanvasElement>(null)
   const overlay = useRef<HTMLCanvasElement>(null)
+  /** Where the picture's top-left corner sits in the stage (CSS px); null = centre it on the next draw. */
+  const view = useRef<{ x: number; y: number } | null>(null)
   const hover = useRef<Pt | null>(null)
 
   const urls = useMemo(() => Object.values(d.cels), [d.cels])
@@ -484,6 +530,11 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   // v0.29: live shapes on shape layers.
   const shapeKey = resolveKey(d.cels, celKey(layer.id, d.frames[fi].id))
   const shapes = useShapeTool({ d, update: doc.update, celKey: shapeKey, colors, size, reach: Math.max(0.75, 6 / zoom) })
+  // Picking a line layer (or a shape layer with one shape) shows that shape's points right away.
+  useEffect(() => {
+    if (layer.vector && shapes.list.length === 1) shapes.setSel({ id: shapes.list[0].id, point: null })
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- only when another layer is picked
+  }, [layer.id])
   const cols = tileColumns(d)
   const inMap = d.kind === 'tileset' && mapMode && !!d.map
   const mapLayer = d.map?.layers.find((l) => l.id === mapLayerId) ?? d.map?.layers[0]
@@ -568,7 +619,59 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       else g.drawImage(img, 0, 0)
       g.globalAlpha = 1
     }
+    present()
     drawOverlay()
+  }
+  /** The stage's size in device pixels, and the picture's size and place on it. */
+  const layout = () => {
+    const st = stage.current
+    const c = canvas.current!
+    const dpr = window.devicePixelRatio || 1
+    const W = st?.clientWidth ?? 0
+    const H = st?.clientHeight ?? 0
+    const w = c.width * zoom * ax
+    const h = c.height * zoom * ay
+    if (!view.current) view.current = { x: Math.round((W - w) / 2), y: Math.round((H - h) / 2) }
+    return { dpr, W, H, w, h, x: view.current.x, y: view.current.y }
+  }
+  /** Show the 1:1 picture zoomed on the stage, nearest-neighbour so every pixel stays a sharp square. */
+  const present = () => {
+    const sc = screen.current
+    if (!sc) return
+    const f = layout()
+    const [bw, bh] = [Math.round(f.W * f.dpr), Math.round(f.H * f.dpr)]
+    if (sc.width !== bw || sc.height !== bh) [sc.width, sc.height] = [bw, bh]
+    const g = sc.getContext('2d')!
+    g.clearRect(0, 0, bw, bh)
+    const [x, y, w, h] = [Math.round(f.x * f.dpr), Math.round(f.y * f.dpr), Math.round(f.w * f.dpr), Math.round(f.h * f.dpr)]
+    g.fillStyle = checker(g)
+    g.save()
+    g.translate(x, y)
+    g.fillRect(0, 0, w, h)
+    g.restore()
+    g.imageSmoothingEnabled = false
+    g.drawImage(canvas.current!, x, y, w, h)
+    g.strokeStyle = 'rgba(127,127,127,0.5)'
+    g.strokeRect(x - 0.5, y - 0.5, w + 1, h + 1)
+  }
+  /** Work on tile `n`: highlight it, zoom so it is big, and centre it. */
+  const focusOn = (n: number) => {
+    setFocusTile(n)
+    const f = layout()
+    const z = Math.max(zoom, Math.min(64, Math.floor((Math.min(f.W, f.H) * 0.6) / ts)))
+    const [tx, ty] = [((n % cols) + 0.5) * ts, (Math.floor(n / cols) + 0.5) * ts]
+    view.current = { x: Math.round(f.W / 2 - tx * z * ax), y: Math.round(f.H / 2 - ty * z * ay) }
+    if (z !== zoom) setZoom(z)
+    else draw()
+  }
+  /** Zoom to `z`, keeping the picture point under (cx, cy) (stage CSS px; default: the middle) in place. */
+  const zoomAt = (z: number, cx?: number, cy?: number) => {
+    const f = layout()
+    const next = Math.max(1, Math.min(64, Math.round(z)))
+    if (next === zoom) return
+    const [px, py] = [cx ?? f.W / 2, cy ?? f.H / 2]
+    view.current = { x: Math.round(px - ((px - f.x) * next) / zoom), y: Math.round(py - ((py - f.y) * next) / zoom) }
+    setZoom(next)
   }
   /** Grid lines every `step` art pixels on the overlay. */
   const lines = (g: CanvasRenderingContext2D, step: number) => {
@@ -589,12 +692,16 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     const o = overlay.current
     const c = canvas.current
     if (!o || !c) return
-    const dpr = window.devicePixelRatio || 1
-    o.width = Math.round(c.width * zoom * dpr)
-    o.height = Math.round(c.height * zoom * dpr)
+    const f = layout()
+    const dpr = f.dpr
+    const [bw, bh] = [Math.round(f.W * dpr), Math.round(f.H * dpr)]
+    if (o.width !== bw || o.height !== bh) [o.width, o.height] = [bw, bh]
     const g = o.getContext('2d')!
     const s = zoom * dpr
+    g.setTransform(1, 0, 0, 1, 0, 0)
     g.clearRect(0, 0, o.width, o.height)
+    // Guides are drawn in picture space: moved to where the picture sits (and stretched for wide/tall pixels).
+    g.setTransform(ax, 0, 0, ay, Math.round(f.x * dpr), Math.round(f.y * dpr))
     g.lineWidth = 1
     if (showGrid && zoom >= 8 && !inMap) {
       g.strokeStyle = 'rgba(127,127,127,0.25)'
@@ -657,7 +764,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       g.setLineDash([])
       g.lineWidth = 1
     }
-    if (layer.vector && !inMap && !seamless && (tool === 'shape' || tool === 'fill')) shapes.overlay(g, s)
+    if (layer.vector && !inMap && !seamless && ['shape', 'fill', 'line', 'rect', 'ellipse', 'pencil'].includes(tool)) shapes.overlay(g, s)
     const off = seamless && !inMap ? [d.width, d.height] : [0, 0]
     if (poly.current) {
       // The polygon lasso so far, with a line to the pointer.
@@ -682,6 +789,18 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
         }
       }
     }
+    if (d.kind === 'tileset' && !inMap && focusTile !== null) {
+      // The tile being worked on.
+      const S = ts * s
+      g.lineWidth = 2
+      g.strokeStyle = '#000'
+      g.strokeRect((focusTile % cols) * S + 1, Math.floor(focusTile / cols) * S + 1, S - 2, S - 2)
+      g.strokeStyle = 'rgba(255, 213, 79, 0.95)'
+      g.setLineDash([6, 4])
+      g.strokeRect((focusTile % cols) * S + 1, Math.floor(focusTile / cols) * S + 1, S - 2, S - 2)
+      g.setLineDash([])
+      g.lineWidth = 1
+    }
     if (seamless && !inMap) {
       g.strokeStyle = 'rgba(255,255,255,0.6)'
       g.strokeRect(d.width * s + 0.5, d.height * s + 0.5, d.width * s, d.height * s)
@@ -699,6 +818,36 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     }
   }
   useEffect(draw)
+  // A new picture size (map, seamless, canvas size) starts centred again.
+  const shownW = inMap && d.map ? d.map.width * ts : d.width * (seamless ? 3 : 1)
+  const shownH = inMap && d.map ? d.map.height * ts : d.height * (seamless ? 3 : 1)
+  useEffect(() => void (view.current = null), [shownW, shownH])
+  // Stage resized: show again. Wheel: Ctrl zooms at the pointer, otherwise it moves the picture (Shift: sideways).
+  const wheel = useRef<(e: WheelEvent) => void>(() => {})
+  wheel.current = (e) => {
+    e.preventDefault()
+    const r = stage.current!.getBoundingClientRect()
+    if (e.ctrlKey || e.metaKey) {
+      const step = zoom < 6 ? 1 : Math.ceil(zoom * 0.15)
+      return zoomAt(zoom + (e.deltaY < 0 ? step : -step), e.clientX - r.left, e.clientY - r.top)
+    }
+    const f = layout()
+    const k = e.deltaMode === 1 ? 16 : 1
+    const [dx, dy] = e.shiftKey && !e.deltaX ? [e.deltaY, 0] : [e.deltaX, e.deltaY]
+    view.current = { x: f.x - dx * k, y: f.y - dy * k }
+    present()
+    drawOverlay()
+  }
+  useEffect(() => {
+    const st = stage.current
+    if (!st) return
+    const onWheel = (e: WheelEvent) => wheel.current(e)
+    st.addEventListener('wheel', onWheel, { passive: false })
+    const ro = new ResizeObserver(() => (present(), drawOverlay()))
+    ro.observe(st)
+    return () => (st.removeEventListener('wheel', onWheel), ro.disconnect())
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- handlers read the latest state through refs
+  }, [])
 
   // Map and tiles have their own tools.
   useEffect(() => {
@@ -740,6 +889,12 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     if (isShortcut(e, 'pixel.next')) return act(() => setFrame((f) => (f + 1) % d.frames.length))
     if (isShortcut(e, 'pixel.play') && d.kind === 'sprite') return act(() => setPlaying((p) => !p))
     if (isShortcut(e, 'pixel.mode') && d.kind === 'tileset') return act(() => setMapMode((m) => !m))
+    // Ctrl+arrows: the next tile (tileset) or the next frame (sprite).
+    const step = ({ ArrowLeft: -1, ArrowRight: 1, ArrowUp: -cols, ArrowDown: cols } as Record<string, number>)[e.key]
+    if (step && (e.ctrlKey || e.metaKey) && !inMap) {
+      if (d.kind === 'tileset') return act(() => focusOn(Math.max(0, Math.min(cols * tileRows(d) - 1, (focusTile ?? 0) + step))))
+      if (Math.abs(step) === 1) return act(() => setFrame((f) => (f + step + d.frames.length) % d.frames.length))
+    }
     if (inMap) return
     const mod = e.ctrlKey || e.metaKey
     const k = e.key.toLowerCase()
@@ -810,9 +965,10 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
 
   // ---- Pointer ----
   const pos = (e: { clientX: number; clientY: number }): Pt => {
-    const r = canvas.current!.getBoundingClientRect()
-    const x = Math.floor(((e.clientX - r.left) / r.width) * canvas.current!.width)
-    const y = Math.floor(((e.clientY - r.top) / r.height) * canvas.current!.height)
+    const r = stage.current!.getBoundingClientRect()
+    const f = layout()
+    const x = Math.floor((e.clientX - r.left - f.x) / (zoom * ax))
+    const y = Math.floor((e.clientY - r.top - f.y) / (zoom * ay))
     if (inMap) return tool === 'pencil' || tool === 'auto' ? [x, y] : [Math.floor(x / ts), Math.floor(y / ts)]
     return seamless ? [x - d.width, y - d.height] : [x, y]
   }
@@ -1047,11 +1203,10 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
 
   const onDown = (e: React.PointerEvent) => {
     if (e.button === 1 || tool === 'hand' || spaceDown.current) {
-      // Look around: the stage scrolls with the pointer.
-      const st = stage.current
-      if (!st) return
+      // Look around: the picture moves with the pointer.
+      const f = layout()
       e.currentTarget.setPointerCapture(e.pointerId)
-      panning.current = { x: e.clientX, y: e.clientY, sl: st.scrollLeft, st: st.scrollTop }
+      panning.current = { x: e.clientX, y: e.clientY, vx: f.x, vy: f.y }
       return
     }
     const p = pos(e)
@@ -1105,7 +1260,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       const q = wrap(p)
       if (tool === 'wand') {
         if (q[0] < 0 || q[1] < 0 || q[0] >= d.width || q[1] >= d.height) return
-        return setMask(combine(mask, wandMask(celImg(d.cels[curKey()], d.width, d.height), q[0], q[1], contiguous, tolerance), how))
+        return setMask(combine(mask, wandMask(lookAt(celImg(d.cels[curKey()], d.width, d.height)), q[0], q[1], contiguous, tolerance), how))
       }
       e.currentTarget.setPointerCapture(e.pointerId)
       selecting.current = { start: q, path: [q], how, preview: null }
@@ -1114,8 +1269,11 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     if (layer.locked || !layer.visible) return setNote(layer.locked ? 'This layer is locked.' : 'This layer is hidden.')
     if (tool === 'shape' && !layer.vector) return setNote('The Shape tool works on a shape layer: add one with the shapes button in Layers.')
     if (layer.vector && !inMap) {
-      if (tool === 'shape') {
+      // Shape tool, or a drawing tool grabbing a point or edge of a shape already there: edit it.
+      const grab = (tool === 'line' || tool === 'rect' || tool === 'ellipse') && hitShape(shapes.list, { x: wrap(p)[0], y: wrap(p)[1] }, Math.max(0.75, 6 / zoom))
+      if (tool === 'shape' || grab) {
         e.currentTarget.setPointerCapture(e.pointerId)
+        editing.current = true
         return shapes.down(wrap(p))
       }
       if (tool === 'fill') {
@@ -1134,7 +1292,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       if (q[0] < 0 || q[1] < 0 || q[0] >= d.width || q[1] >= d.height) return
       const img = cloneImg(base)
       const c = hexToRgba(paintHex(e.button === 2 ? colors[1] : colors[0]))
-      for (const [x, y] of floodPoints(base, q[0], q[1], contiguous, tolerance)) if (ditherOn(x, y, dither) && (!mask || mask[y * d.width + x])) setPx(img, x, y, c)
+      for (const [x, y] of floodPoints(lookAt(base), q[0], q[1], contiguous, tolerance)) if (ditherOn(x, y, dither) && (!mask || mask[y * d.width + x])) setPx(img, x, y, c)
       return commit(key, img)
     }
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -1221,7 +1379,11 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     if (!st) return
     const W = inMap && d.map ? d.map.width * ts : d.width
     const H = inMap && d.map ? d.map.height * ts : d.height
-    setZoom(Math.max(1, Math.min(48, Math.floor(Math.min((st.clientWidth - 48) / W, (st.clientHeight - 48) / H)))))
+    const z = Math.max(1, Math.min(64, Math.floor(Math.min((st.clientWidth - 48) / (W * ax), (st.clientHeight - 48) / (H * ay)))))
+    const [w, h] = [canvas.current!.width * z * ax, canvas.current!.height * z * ay]
+    view.current = { x: Math.round((st.clientWidth - w) / 2), y: Math.round((st.clientHeight - h) / 2) }
+    if (z !== zoom) setZoom(z)
+    else draw()
   }
 
   /** Where the lifted pixels would land, moved by dx,dy. */
@@ -1263,15 +1425,15 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
 
   const onMove = (e: React.PointerEvent) => {
     const pan = panning.current
-    if (pan && stage.current) {
-      stage.current.scrollLeft = pan.sl - (e.clientX - pan.x)
-      stage.current.scrollTop = pan.st - (e.clientY - pan.y)
-      return
+    if (pan) {
+      view.current = { x: pan.vx + e.clientX - pan.x, y: pan.vy + e.clientY - pan.y }
+      present()
+      return drawOverlay()
     }
     let p = pos(e)
     hover.current = p
     if (poly.current) return drawOverlay()
-    if (tool === 'shape' && layer.vector && !inMap) {
+    if (editing.current && layer.vector && !inMap) {
       shapes.move(wrap(p))
       return drawOverlay()
     }
@@ -1306,7 +1468,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     if (l.snap) {
       // Snapped: the shape follows the pointer instead of the stroke growing; wobbling near the snap keeps it still.
       const tol = holdTolerance()
-      const px = canvas.current!.getBoundingClientRect().width / canvas.current!.width
+      const px = zoom * ax
       reshape(l, Math.hypot(p[0] - l.snap.at[0], p[1] - l.snap.at[1]) * px <= tol ? l.snap.at : p)
       if (Math.hypot(e.clientX - hold.current.rest.x, e.clientY - hold.current.rest.y) > tol) {
         hold.current.rest = { x: e.clientX, y: e.clientY }
@@ -1354,7 +1516,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     clearTimeout(hold.current.timer)
     hold.current.timer = setTimeout(() => {
       if (live.current !== l || l.snap) return
-      const px = canvas.current ? canvas.current.getBoundingClientRect().width / canvas.current.width : 1
+      const px = zoom * ax
       const shape = recognize(l.path.map(([x, y]) => ({ x, y })), holdTolerance() / px)
       if (!shape) return
       const at = l.path[l.path.length - 1]
@@ -1378,7 +1540,10 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   const onUp = () => {
     clearTimeout(hold.current.timer)
     if (panning.current) return void (panning.current = null)
-    if (tool === 'shape' && layer.vector) return shapes.up()
+    if (editing.current) {
+      editing.current = false
+      return shapes.up()
+    }
     if (draft.current) {
       commitMap(draft.current)
       setMapDraft(null)
@@ -1406,6 +1571,20 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
       return
     }
     const movedMask = l.float && mask && l.at ? placeMask(d.width, d.height, l.float.mask, l.float.piece.width, l.float.x + l.at[0] - l.start[0], l.float.y + l.at[1] - l.start[1]) : null
+    if (tool === 'line' && !inMap && (!layer.vector || layer.sub)) {
+      // A line becomes its own line layer above the layer it was drawn on: click it later to drag its ends.
+      const made = liveBox('line', l.start, l.end ?? l.start, paintHex(l.button === 2 ? colors[1] : colors[0]), size)
+      if (!made) return draw()
+      const parent = layer.sub ?? layer.id
+      const sub = { ...newPixelLayer(`Line ${d.layers.filter((x) => x.sub).length + 1}`), vector: true, sub: parent }
+      update((x) => {
+        const i = x.layers.findIndex((y) => y.id === layer.id)
+        const withLayer = { ...x, layers: [...x.layers.slice(0, i + 1), sub, ...x.layers.slice(i + 1)] }
+        return withShapes(withLayer, celKey(sub.id, x.frames[fi].id), [made])
+      })
+      setLayerId(sub.id)
+      return
+    }
     if (layer.vector && (tool === 'rect' || tool === 'ellipse' || tool === 'line')) {
       // On a shape layer these tools make a live shape: Filled gives it the second colour inside.
       const end = l.end ?? l.start
@@ -1426,6 +1605,8 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
   }
 
   const commit = (key: string, img: Img) => {
+    // A layer shown on all tiles: what was drawn on this tile goes onto every tile.
+    if (d.kind === 'tileset' && !inMap && layer.allTiles && focusTile !== null && key === curKey()) img = everyTile(img, focusTile, ts)
     const url = encode(img)
     update((x) => {
       const cels = { ...x.cels }
@@ -1669,28 +1850,67 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
     if (!f) return
     const colors = parsePalette(new TextDecoder().decode(f.bytes))
     if (!colors.length) return setNote('No colours found in that file.')
-    if (await confirmDialog({ title: 'Use this palette?', message: `${colors.length} colours replace the current palette. Your pixels stay as they are.`, confirmLabel: 'Use it' })) update((x) => ({ ...x, palette: colors }))
+    openPalette(f.name.replace(/\.[^.]+$/, ''), colors)
   }
+  /** Another palette over a drawing: ask whether to keep the drawn colours or swap them for new ones. */
+  const [switching, setSwitching] = useState<{ name: string; colors: string[]; used: string[] } | null>(null)
+  const openPalette = (name: string, colors: string[]) => {
+    const used = usedColors(d).filter((c) => !colors.includes(c))
+    if (!used.length) return update((x) => ({ ...x, palette: colors }))
+    setSwitching({ name, colors, used })
+  }
+  /** Swap colours everywhere (pixels of every layer and frame, live shapes) in one undo step. */
+  const swapAll = (map: Record<string, string>, palette: string[]) =>
+    update((x) => {
+      const from = Object.keys(map)
+      const to = from.map((c) => map[c])
+      const cels: Record<string, string> = {}
+      for (const [k, url] of Object.entries(x.cels)) cels[k] = isLink(url) ? url : (encode(swapColors(celImg(url, x.width, x.height), from, to)) ?? url)
+      const swap = (c?: string) => (c && map[c.toLowerCase()]) || c
+      const shapes = x.shapes && Object.fromEntries(Object.entries(x.shapes).map(([k, c]) => [k, { ...c, list: c.list.map((sh) => ({ ...sh, fillColor: swap(sh.fillColor), strokeColor: swap(sh.strokeColor) })) }]))
+      return { ...x, cels, ...(shapes ? { shapes } : {}), palette }
+    })
 
   const tools = inMap ? MAP_TOOLS : TOOLS
-  const css = (n: number) => n * zoom
-  // Wide or tall pixels: the canvas is stretched on screen only.
-  const ax = (d.pixelAspect ?? 1) > 1 ? (d.pixelAspect ?? 1) : 1
-  const ay = (d.pixelAspect ?? 1) < 1 ? 1 / (d.pixelAspect ?? 1) : 1
-  const cw = inMap && d.map ? d.map.width * ts : d.width * (seamless ? 3 : 1)
-  const ch = inMap && d.map ? d.map.height * ts : d.height * (seamless ? 3 : 1)
 
   return (
     <div className="px">
-      <div className="px-head">
-        <PresetHeader documentId={documentId} kind={d.kind === 'tileset' ? 'Tileset' : 'Sprite'} undo={doc.undo} redo={doc.redo} canUndo={doc.canUndo} canRedo={doc.canRedo} />
+      {pickingRef && (
+        <ReferencePicker
+          onPick={(image) => {
+            setPickingRef(false)
+            if (image) update((x) => ({ ...x, references: [...(x.references ?? []), { id: newId(), image, x: 24, y: 24 + (x.references?.length ?? 0) * 24, width: 220 }] }))
+          }}
+        />
+      )}
+      {switching && (
+        <PaletteSwitch
+          name={switching.name}
+          used={switching.used}
+          next={switching.colors}
+          preview={frameImg(fi)}
+          onClose={() => setSwitching(null)}
+          onAdd={() => (update((x) => ({ ...x, palette: [...switching.colors, ...switching.used] })), setSwitching(null))}
+          onReplace={(map) => (swapAll(map, switching.colors), setSwitching(null))}
+        />
+      )}
+      <div className="px-toolbar" data-tour="px-tools">
+        {/* No title banner here (the tab and the sidebar name the file): undo, redo and the history list sit first. */}
+        <button className="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!doc.canUndo} onClick={doc.undo}>
+          <Undo2 size={16} />
+        </button>
+        <button className="icon-btn" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!doc.canRedo} onClick={doc.redo}>
+          <Redo2 size={16} />
+        </button>
         {doc.history && (
           <button className={`icon-btn${historyOpen ? ' on' : ''}`} title="Undo history: jump back several steps at once" aria-label="Undo history" onClick={() => setHistoryOpen(!historyOpen)}>
             <HistoryIcon size={16} />
           </button>
         )}
-      </div>
-      <div className="px-toolbar" data-tour="px-tools">
+        <button className="icon-btn" title="Add a reference image (floats over the canvas, not part of the picture)" aria-label="Add a reference image" onClick={() => setPickingRef(true)}>
+          <ImagePlus size={16} />
+        </button>
+        <span className="px-sep" />
         {tools.map((t) => (
           <button key={t.id} className={`icon-btn${tool === t.id ? ' on' : ''}`} title={t.label} aria-label={t.label} {...keyHint('key' in t && typeof t.key === 'string' ? keysOf(t.key)[0] : undefined)} onClick={() => setTool(t.id)}>
             <t.icon size={16} />
@@ -1767,9 +1987,16 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
               </label>
             )}
             {(tool === 'fill' || tool === 'wand') && (
+              <>
               <label className="px-row" title="Tolerance: how different a colour may be and still count (0 = exactly the same colour)">
                 Tolerance <input type="range" min={0} max={128} value={tolerance} onChange={(e) => setTolerance(Number(e.target.value))} /> {tolerance}
               </label>
+                <select className="input" value={sample} title="What the fill and the magic wand look at" onChange={(e) => setSample(e.target.value as typeof sample)}>
+                  <option value="layer">This layer</option>
+                  <option value="all">All layers</option>
+                  <option value="reference">Reference layer</option>
+                </select>
+              </>
             )}
             {(tool === 'fill' || tool === 'wand') && (
               <label className="px-row" title="Off: every pixel of that colour, also unconnected ones">
@@ -1805,8 +2032,8 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
                 <input type="checkbox" checked={onionTint} onChange={(e) => setOnionTint(e.target.checked)} /> tint
               </label>
             )}
-            {d.kind === 'sprite' && (
-              <label className="px-row" title="Preview window: the animation loops next to the palette while you draw">
+            {(d.kind === 'sprite' || !inMap) && (
+              <label className="px-row" title={d.kind === 'tileset' ? 'Play the tiles as an animation: one frame per tile, in order' : 'Preview window: the animation loops next to the palette while you draw'}>
                 <input type="checkbox" checked={preview} onChange={(e) => setPreview(e.target.checked)} /> Preview
               </label>
             )}
@@ -1824,7 +2051,7 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
           </select>
         </label>
         <label className="px-row" title="Zoom (whole steps keep pixels square)">
-          Zoom <input type="range" min={1} max={48} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} /> {zoom}×
+          Zoom <input type="range" min={1} max={64} value={zoom} onChange={(e) => zoomAt(Number(e.target.value))} /> {zoom}×
           <button className="icon-btn" title="Zoom to fit" aria-label="Zoom to fit" onClick={zoomToFit}>
             <Maximize size={14} />
           </button>
@@ -1930,36 +2157,64 @@ function Editor({ doc, documentId, title, active }: { doc: UseDocumentResult<Pix
               reduceAll={(dither) => mapCels((img) => reduce(img, d.palette, dither))}
               variant={variant}
               setVariant={setVariant}
+              openPalette={openPalette}
+              main={colors[0]}
             />
           )}
           {d.kind === 'tileset' && !inMap && focusTile !== null && <TileRepeat tile={tilePixels(frameImg(0), focusTile, cols, ts)} n={focusTile} />}
           {preview && d.kind === 'sprite' && !inMap && (
             <Preview d={d} frameImg={frameImg} playTag={playTag} />
           )}
+          {preview && d.kind === 'tileset' && !inMap && <TilePlayer set={frameImg(0)} cols={cols} count={cols * tileRows(d)} ts={ts} />}
         </aside>
         <div className="px-stage" data-tour="px-canvas" ref={stage} style={tool === 'hand' ? { cursor: 'grab' } : undefined}>
-          <div className="px-canvas" style={{ width: css(cw) * ax, height: css(ch) * ay }}>
-            <div className="px-canvas-inner" style={{ width: css(cw), height: css(ch), transform: ax !== 1 || ay !== 1 ? `scale(${ax}, ${ay})` : undefined }}>
             <canvas
-              ref={canvas}
-              style={{ width: css(cw), height: css(ch) }}
+              ref={screen}
+              className="px-screen"
               onPointerDown={onDown}
               onPointerMove={onMove}
               onPointerUp={onUp}
               onPointerLeave={() => ((hover.current = null), drawOverlay())}
               onContextMenu={(e) => e.preventDefault()}
-              onWheel={(e) => e.ctrlKey && (e.preventDefault(), setZoom((z) => Math.max(1, Math.min(48, z + (e.deltaY < 0 ? 1 : -1)))))}
             />
-            <canvas ref={overlay} className="px-overlay" style={{ width: css(cw), height: css(ch) }} />
-            </div>
-          </div>
+            <canvas ref={overlay} className="px-overlay" />
+            {(d.references ?? []).map((r) => (
+              <ReferenceWindow
+                key={r.id}
+                image={r.image}
+                x={r.x}
+                y={r.y}
+                width={r.width}
+                onChange={(patch) => update((x) => ({ ...x, references: (x.references ?? []).map((y) => (y.id === r.id ? { ...y, ...patch } : y)) }))}
+                onClose={() => update((x) => ({ ...x, references: (x.references ?? []).filter((y) => y.id !== r.id) }))}
+              />
+            ))}
         </div>
         <aside className="px-side right" data-tour="px-layers">
           {inMap && d.map ? (
             <MapPanel d={d} mapLayerId={mapLayer?.id ?? ''} setMapLayerId={setMapLayerId} update={update} />
           ) : (
             <>
-              <LayersPanel d={d} layerId={layer.id} frameId={d.frames[fi]?.id ?? ''} setLayerId={setLayerId} update={update} />
+              <LayersPanel
+                d={d}
+                allTiles={
+                  d.kind === 'tileset'
+                    ? async (id, on) => {
+                        const k0 = resolveKey(d.cels, celKey(id, d.frames[0].id))
+                        const img = d.cels[k0] ? celImg(d.cels[k0], d.width, d.height) : null
+                        if (on && img && !sameImg(everyTile(img, focusTile ?? 0, ts), img) && !(await confirmDialog({ title: 'Show this layer on all tiles?', message: `Tile ${focusTile ?? 0} of this layer is copied onto every other tile, replacing what is there. Undo brings it back.`, confirmLabel: 'Copy to all tiles' }))) return
+                        update((x) => {
+                          const layers = x.layers.map((l) => (l.id === id ? { ...l, allTiles: on || undefined } : l))
+                          // Turning it on copies the tile being worked on (the top-left one if none) onto every tile.
+                          const k = resolveKey(x.cels, celKey(id, x.frames[0].id))
+                          const url = on && x.cels[k] ? encode(everyTile(celImg(x.cels[k], x.width, x.height), focusTile ?? 0, ts)) : undefined
+                          return { ...x, layers, ...(url ? { cels: { ...x.cels, [k]: url } } : {}) }
+                        })
+                      }
+                    : undefined
+                }
+                layerImg={(id) => imgOf(id, d.frames[inMap ? 0 : fi].id)}
+                layerId={layer.id} frameId={d.frames[fi]?.id ?? ''} setLayerId={setLayerId} update={update} />
               {layer.vector && <ShapePanel d={d} layerId={layer.id} frameKey={shapeKey} tool={shapes} update={update} main={paintHex(colors[0])} />}
               {!layer.vector && <div className="px-panel">
                 <strong>{mask ? 'Selection' : 'Whole layer'}</strong>
