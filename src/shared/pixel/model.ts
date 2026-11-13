@@ -1,5 +1,6 @@
 import { newId, type Id } from '@/core/model'
 import { outline, type Shape } from '@/shared/sketch/quickshape'
+import { blendColor, type BlendMode as SketchBlend } from '@/shared/sketch/blend'
 import type { ShapeCel } from './shapes'
 
 /**
@@ -17,14 +18,18 @@ export interface PixelLayer {
   /** 0..1 */
   opacity: number
   locked?: boolean
-  /** v0.16: how the layer mixes with the ones below. */
-  blend?: 'multiply' | 'screen' | 'add' | 'overlay' | 'darken' | 'lighten' | 'difference' | 'subtract' | 'hardlight' | 'softlight' | 'dodge' | 'burn'
+  /** v0.16: how the layer mixes with the ones below (v0.29: any of Draw's modes). */
+  blend?: PixelBlend
   /** v0.16: a tracing layer: shown faintly while drawing, left out of every export. */
   reference?: boolean
   /** v0.29: a shape layer: its cels are drawn from live shapes (PixelDoc.shapes) and stay editable. */
   vector?: boolean
   /** v0.29: the layer group's name; layers next to each other with the same group fold, hide and move together. */
   group?: string
+  /** v0.29: a line layer: a shape layer holding one line drawn on the layer with this id (listed under it). */
+  sub?: Id
+  /** v0.29, tilesets: the layer looks the same on every tile (drawing on one tile draws on all). */
+  allTiles?: boolean
 }
 
 export interface PixelFrame {
@@ -86,6 +91,8 @@ export interface PixelDoc {
   selection?: string
   /** v0.29: see-through frames of a layer (fades), "layerId:frameId" → 0..1; missing = fully visible. */
   celOpacity?: Record<string, number>
+  /** v0.29: reference images floating over the canvas (like Draw's), project asset paths; x, y, width in screen px. */
+  references?: { id: Id; image: string; x: number; y: number; width: number }[]
 }
 
 /** The starter palette: 16 colours picked for this app (black, white, three ramps and a few accents). */
@@ -282,27 +289,29 @@ export function mirror(points: [number, number][], w: number, h: number, sym: { 
   return out
 }
 
-const overlay = (s: number, d: number) => (d < 128 ? (2 * s * d) / 255 : 255 - (2 * (255 - s) * (255 - d)) / 255)
-/** How a layer's colour (s) mixes with the colour below (d), per channel 0..255. */
+/** The three modes Pixel Art had before it took Draw's list (v0.16); still read from older files. */
 export const BLENDS = {
   multiply: (s: number, d: number) => (s * d) / 255,
   screen: (s: number, d: number) => 255 - ((255 - s) * (255 - d)) / 255,
   add: (s: number, d: number) => Math.min(255, s + d),
-  // v0.29
-  overlay,
-  darken: (s: number, d: number) => Math.min(s, d),
-  lighten: (s: number, d: number) => Math.max(s, d),
-  difference: (s: number, d: number) => Math.abs(s - d),
-  subtract: (s: number, d: number) => Math.max(0, d - s),
-  hardlight: (s: number, d: number) => overlay(d, s),
-  softlight: (s: number, d: number) => {
-    const [a, b] = [s / 255, d / 255]
-    return 255 * (a <= 0.5 ? b - (1 - 2 * a) * b * (1 - b) : b + (2 * a - 1) * ((b <= 0.25 ? ((16 * b - 12) * b + 4) * b : Math.sqrt(b)) - b))
-  },
-  dodge: (s: number, d: number) => (s >= 255 ? 255 : Math.min(255, (d * 255) / (255 - s))),
-  burn: (s: number, d: number) => (s <= 0 ? 0 : 255 - Math.min(255, ((255 - d) * 255) / s)),
 }
-export type BlendMode = keyof typeof BLENDS
+/** A layer blend: one of Draw's modes (v0.29), or an older Pixel Art one. */
+export type PixelBlend = keyof typeof BLENDS | SketchBlend
+/** The Draw mode an older Pixel Art blend is (for the mode list). */
+export const asSketchBlend = (b: PixelBlend | undefined): SketchBlend => (b === 'add' ? 'lighter' : b ?? 'source-over')
+
+/** One layer pixel over the colour below, per channel 0..255, for any mode. */
+function mixer(blend: PixelBlend | undefined): ((s: Uint8ClampedArray, i: number, d: Uint8ClampedArray) => [number, number, number]) | null {
+  if (!blend || blend === 'source-over') return null
+  if (blend in BLENDS) {
+    const f = BLENDS[blend as keyof typeof BLENDS]
+    return (s, i, d) => [f(s[i], d[i]), f(s[i + 1], d[i + 1]), f(s[i + 2], d[i + 2])]
+  }
+  return (s, i, d) => {
+    const c = blendColor(blend as SketchBlend, [d[i] / 255, d[i + 1] / 255, d[i + 2] / 255], [s[i] / 255, s[i + 1] / 255, s[i + 2] / 255])
+    return [c[0] * 255, c[1] * 255, c[2] * 255]
+  }
+}
 
 /** Flatten visible layers of one frame (layer opacity, and multiply/screen/add where a layer asks for it). */
 export function composite(layers: { visible: boolean; opacity: number; img: Img | undefined; blend?: PixelLayer['blend'] }[], width: number, height: number): Img {
@@ -311,15 +320,16 @@ export function composite(layers: { visible: boolean; opacity: number; img: Img 
   for (const l of layers) {
     if (!l.visible || !l.img) continue
     const s = l.img.data
-    const mix = l.blend ? BLENDS[l.blend] : null
+    const mix = mixer(l.blend)
     for (let i = 0; i < d.length; i += 4) {
       const a = (s[i + 3] / 255) * l.opacity
       if (!a) continue
       const da = d[i + 3] / 255
       const oa = a + da * (1 - a)
+      // Blending only changes the colour where there is something below.
+      const m = mix && da ? mix(s, i, d) : null
       for (let c = 0; c < 3; c++) {
-        // Blending only changes the colour where there is something below.
-        const src = mix && da ? mix(s[i + c], d[i + c]) * da + s[i + c] * (1 - da) : s[i + c]
+        const src = m ? m[c] * da + s[i + c] * (1 - da) : s[i + c]
         d[i + c] = (src * a + d[i + c] * da * (1 - a)) / oa
       }
       d[i + 3] = oa * 255
