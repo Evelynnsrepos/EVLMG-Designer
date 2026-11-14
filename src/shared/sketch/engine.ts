@@ -85,8 +85,6 @@ export class SketchEngine {
   private moves = 0
   /** Bumped by every change that isn't the GPU stroke (CPU edits, moves, layer changes). */
   private edits = 0
-  /** True while the document has something only Canvas 2D can blend (adjustment layers). */
-  private cpuOnly = false
   private selPath: Path2D | null = null
   /** The selection as an alpha mask (soft edges allowed); null = everything. */
   private sel: Canvas2D | null = null
@@ -167,10 +165,9 @@ export class SketchEngine {
     return !!this.gpu && !this.gpu.lost
   }
 
-  private gpuFor(doc: LayerStack) {
-    this.cpuOnly = doc.layers.some((l) => l.kind === 'adjust')
+  private gpuFor(_doc: LayerStack) {
     if (this.gpu?.lost) this.gpuFailed()
-    return this.gpuActive && !this.cpuOnly
+    return this.gpuActive
   }
 
   private touched(id: Id) {
@@ -271,7 +268,7 @@ export class SketchEngine {
     this.strokeBounds = null
     this.g = null
     this.stroke = null
-    const gpu = this.gpuActive && !this.cpuOnly ? this.gpu! : null
+    const gpu = this.gpuActive ? this.gpu! : null
     if (gpu) {
       const surf = new GpuSurface(gpu, gpu.temp('stroke'))
       gpu.clear(surf.t, null)
@@ -1029,6 +1026,11 @@ export class SketchEngine {
         const entry: GpuLayer = { tex: this.gpu!.picture, key: layer.id, opacity: layer.visible ? layer.opacity : 0, blend: layer.blend, mask: m, ...clipTo, children: this.gpuNodes(children, keys) }
         if (!layer.clip) base = entry
         out.push(entry)
+        continue
+      }
+      if (layer.kind === 'adjust') {
+        // An adjustment layer is the picture below, recoloured; it is never a clipping base.
+        if (layer.visible && layer.adjust) out.push({ tex: this.gpu!.picture, key: layer.id, opacity: layer.opacity, blend: layer.blend, mask: m, ...clipTo, adjust: layer.adjust })
         continue
       }
       const entry: GpuLayer = { tex: this.gpuSource(layer), key: layer.id, opacity: layer.opacity, blend: layer.blend, mask: m, ...clipTo }

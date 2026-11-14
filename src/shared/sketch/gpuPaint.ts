@@ -1,4 +1,7 @@
+import { balanceLut, curvesLut, gradientLut, type Balance } from './adjust/color'
+import * as AS from './adjust/shaders'
 import { blendIndex, GLSL_BLEND, type BlendMode } from './blend'
+import type { LayerAdjust } from './model'
 import type { Filtering } from './brushes'
 import type { Rect } from './tiles'
 
@@ -71,6 +74,8 @@ export interface GpuLayer {
   clipMask?: Tex | null
   clipOpacity?: number
   clipBase?: boolean
+  /** An adjustment layer: the picture below, recoloured, is what gets blended. */
+  adjust?: LayerAdjust
 }
 
 const HEADER = '#version 300 es\nprecision highp float;\n'
@@ -440,6 +445,8 @@ export class GpuPainter {
         region: [QUAD_VERT, REGION_FRAG],
         mix: [QUAD_VERT, MIX_FRAG],
         wet: [QUAD_VERT, WET_FRAG],
+        'adj-hsb': [QUAD_VERT, AS.HSB],
+        'adj-lut': [QUAD_VERT, AS.LUT],
       }[name]!
       p = { prog: compile(this.gl, v, f), loc: new Map() }
       this.progs.set(name, p)
@@ -579,6 +586,7 @@ export class GpuPainter {
   upload(t: Tex, source: TexImageSource, r?: Rect | null) {
     const gl = this.gl
     gl.bindTexture(gl.TEXTURE_2D, t.tex)
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
     if (!r) {
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source)
       return
@@ -865,7 +873,7 @@ export class GpuPainter {
     else gl.clearColor(0, 0, 0, 0)
     gl.clear(gl.COLOR_BUFFER_BIT)
     for (const layer of layers) {
-      const src = layer.children ? this.composeLevel(layer.children, depth + 1, null, byKey, r) : layer.tex
+      const src = layer.children ? this.composeLevel(layer.children, depth + 1, null, byKey, r) : layer.adjust ? this.adjusted(targets[cur], layer.adjust, r) : layer.tex
       if (layer.children && layer.clipBase) this.keepGroup(layer.key, src, r)
       const next = 1 - cur
       this.into(targets[next], r)
@@ -883,6 +891,54 @@ export class GpuPainter {
       cur = next
     }
     return targets[cur]
+  }
+
+  private luts = new Map<string, WebGLTexture>()
+
+  /** Adjustment layers (adjust/shaders.ts, the same as the Adjustments panel): the picture below, recoloured. */
+  private adjusted(below: Tex, a: LayerAdjust, r: Rect | null): Tex {
+    const gl = this.gl
+    const out = this.temp('adjust')
+    this.into(out, r)
+    gl.disable(gl.BLEND)
+    const v = a.values.v
+    if (a.id === 'hsb') {
+      const p = this.prog('adj-hsb')
+      this.bind(0, below.tex, p, 'src')
+      this.set(p, { size: [this.width, this.height], hue: v.hue ?? 0, sat: v.sat ?? 0, bright: v.bright ?? 0 })
+    } else {
+      const p = this.prog('adj-lut')
+      this.bind(0, below.tex, p, 'src')
+      const bal = () => Object.fromEntries((['shadows', 'midtones', 'highlights'] as const).map((k) => [k, [0, 1, 2].map((i) => v[`${k}${i}`] ?? 0)])) as Balance
+      const t = a.id === 'balance' ? balanceLut(bal()) : a.id === 'curves' ? curvesLut(a.values.curves) : gradientLut(a.values.gradient)
+      this.bind(1, this.lut(t), p, 'lut')
+      this.set(p, { size: [this.width, this.height], byLuma: a.id === 'gradient' ? 1 : 0, keepLum: a.id === 'balance' ? (v.keep ?? 0) : 0, amount: a.id === 'gradient' ? (v.amount ?? 1) : 1 })
+    }
+    this.drawQuad()
+    return out
+  }
+
+  /** A 256×1 lookup table texture, made once per table. */
+  private lut(t: [Uint8Array, Uint8Array, Uint8Array]): WebGLTexture {
+    const key = `${t[0]}|${t[1]}|${t[2]}`
+    let tex = this.luts.get(key)
+    if (!tex) {
+      const gl = this.gl
+      const px = new Uint8Array(256 * 4)
+      for (let i = 0; i < 256; i++) px.set([t[0][i], t[1][i], t[2][i], 255], i * 4)
+      gl.activeTexture(gl.TEXTURE7)
+      tex = gl.createTexture()!
+      gl.bindTexture(gl.TEXTURE_2D, tex)
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, px)
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      if (this.luts.size > 32) this.luts.clear()
+      this.luts.set(key, tex)
+    }
+    return tex
   }
 
   /** Keep a group's blended result, so layers clipped to it can use it after the group's targets are reused. */
