@@ -4,6 +4,7 @@ import { shiftColor } from './brushColor'
 import { CurveFill, PathSmoother } from './brushPath'
 import { applyCurve, hasRealPressure, type CurvePoint } from './pen'
 import { GRAINS, grainCanvas, imageTip, seeded, SHAPES, tipImage, type BrushGrain, type BrushShape } from './brushTextures'
+import { GpuSurface, rgb, type DabLook } from './gpuPaint'
 
 /**
  * Brushes (v0.5, extended for Sketch Pro), with a Brush Library and Brush Studio:
@@ -469,7 +470,7 @@ export function hasColorDynamics(b: BrushSettings): boolean {
   )
 }
 
-const hasGrain = (b: BrushSettings) => !!b.grainImage || b.grain !== 'none'
+export const hasGrain = (b: BrushSettings) => !!b.grainImage || b.grain !== 'none'
 const isBlending = (b: BrushSettings) => b.renderMode === 'uniform-blending' || b.renderMode === 'intense-blending'
 
 /** The opacity a finished stroke is drawn with onto the layer. */
@@ -552,6 +553,19 @@ export function brushTip(b: BrushSettings): HTMLCanvasElement {
   return (b.shapeImage && imageTip(b.shapeImage, b.shapeInvert)) || tipImage(b.shapeImage ? 'round' : b.shape, b.hardness)
 }
 
+/** What every GPU dab of this brush looks like: its tip and moving grain. */
+export function dabLook(b: BrushSettings): DabLook {
+  const grain = b.grainMode === 'moving' && hasGrain(b) ? grainCanvas(b) : null
+  return {
+    tip: brushTip(b),
+    filtering: b.shapeFiltering,
+    grain: grain && { image: grain, scale: b.grainScale, zoom: b.grainZoom, rotation: b.grainRotation, movement: b.grainMovement, filtering: b.grainFiltering },
+  }
+}
+
+/** Where stamps go: a Canvas 2D canvas or a GPU stroke texture. */
+type Surface = CanvasRenderingContext2D | GpuSurface
+
 /**
  * Stamps one stroke into an alpha mask. Keeps the distance travelled so taper
  * and spacing are right; `finish` replays all points once the end is known.
@@ -561,10 +575,10 @@ export class StrokeStamper {
   protected points: Pt[] = []
   protected brush: BrushSettings
   protected mirror: (p: { x: number; y: number }) => { x: number; y: number }[]
-  protected out: CanvasRenderingContext2D
+  protected out: Surface
   /** Where final stamps go: `out` itself, or a canvas of its own when the output is assembled. */
-  protected main: CanvasRenderingContext2D
-  private tail: CanvasRenderingContext2D | null = null
+  protected main: Surface
+  private tail: Surface | null = null
   private tailRect: Rect | null = null
   private second: StrokeStamper | null = null
   private dirty: Rect | null = null
@@ -580,7 +594,7 @@ export class StrokeStamper {
   protected colored: boolean
 
   constructor(
-    ctx: CanvasRenderingContext2D,
+    ctx: Surface,
     brush: BrushSettings,
     mirror: (p: { x: number; y: number }) => { x: number; y: number }[] = (p) => [p],
     seed = Math.floor(Math.random() * 1e9),
@@ -599,10 +613,12 @@ export class StrokeStamper {
     this.strokeColor = shiftColor(color, j(brush.strokeHueJitter), j(brush.strokeSatJitter), j(brush.strokeBrightJitter))
     this.colored = forceColor || hasColorDynamics(brush)
     const animate = brush.tipAnimation && (brush.taperEnd > 0 || brush.touchTaperEnd > 0)
-    this.main = animate || brush.dual ? makeCanvas(ctx.canvas.width, ctx.canvas.height).getContext('2d')! : ctx
-    if (animate) this.tail = makeCanvas(ctx.canvas.width, ctx.canvas.height).getContext('2d')!
+    const like = (role: string) => (ctx instanceof GpuSurface ? ctx.like(role) : makeCanvas(ctx.canvas.width, ctx.canvas.height).getContext('2d')!)
+    if (ctx instanceof GpuSurface) ctx.look = dabLook(brush)
+    this.main = animate || brush.dual ? like('stroke-main') : ctx
+    if (animate) this.tail = like('stroke-tail')
     if (brush.dual) {
-      const second = makeCanvas(ctx.canvas.width, ctx.canvas.height).getContext('2d')!
+      const second = like('stroke-second')
       const d = { ...brush.dual, size: brush.size * brush.dualScale, dual: null, tipAnimation: false, stabilization: 0, motionFilter: 0 }
       this.second = new StrokeStamper(second, d, mirror, this.seed + 7, this.strokeColor, this.colored)
     }
@@ -716,6 +732,11 @@ export class StrokeStamper {
     const w = Math.min(this.out.canvas.width, Math.ceil(box.x1)) - x
     const h = Math.min(this.out.canvas.height, Math.ceil(box.y1)) - y
     if (w <= 0 || h <= 0) return
+    if (this.out instanceof GpuSurface) {
+      const op = this.second ? DUAL_MODES.find((m) => m.id === this.brush.dualMode)!.op : 'source-over'
+      this.out.assemble({ x, y, w, h }, this.main as GpuSurface, this.tail as GpuSurface | null, (this.second?.out as GpuSurface | undefined) ?? null, op)
+      return
+    }
     const o = this.out
     o.save()
     o.beginPath()
@@ -724,11 +745,11 @@ export class StrokeStamper {
     o.globalAlpha = 1
     o.globalCompositeOperation = 'source-over'
     o.clearRect(x, y, w, h)
-    o.drawImage(this.main.canvas, x, y, w, h, x, y, w, h)
-    if (this.tail) o.drawImage(this.tail.canvas, x, y, w, h, x, y, w, h)
+    o.drawImage((this.main as CanvasRenderingContext2D).canvas, x, y, w, h, x, y, w, h)
+    if (this.tail) o.drawImage((this.tail as CanvasRenderingContext2D).canvas, x, y, w, h, x, y, w, h)
     if (this.second) {
       o.globalCompositeOperation = DUAL_MODES.find((m) => m.id === this.brush.dualMode)!.op
-      o.drawImage(this.second.out.canvas, x, y, w, h, x, y, w, h)
+      o.drawImage((this.second.out as CanvasRenderingContext2D).canvas, x, y, w, h, x, y, w, h)
     }
     o.restore()
   }
@@ -737,7 +758,7 @@ export class StrokeStamper {
    * Stamp along the points from `c`, stopping before the first stamp past
    * `limit`. Returns where it stopped, so stamping can go on from there.
    */
-  private run(c: Cursor, total: number, limit: number, to: CanvasRenderingContext2D): Cursor {
+  private run(c: Cursor, total: number, limit: number, to: Surface): Cursor {
     const pts = this.points
     if (!pts.length) return c
     let { i, t, dist } = c
@@ -812,7 +833,7 @@ export class StrokeStamper {
     return Math.max(0.4, size * this.brush.spacing * (1 + (this.rand() - 0.5) * 2 * this.brush.spacingJitter))
   }
 
-  private stampPoint(p: Pt, angle: number, at: number, total: number, to: CanvasRenderingContext2D) {
+  private stampPoint(p: Pt, angle: number, at: number, total: number, to: Surface) {
     const b = this.brush
     const { pressure, tilt, speed } = this.inputs(p)
     const k = this.taper(at, total)
@@ -858,7 +879,7 @@ export class StrokeStamper {
   }
 
   /** Mark the area a stamp covers, so only that part is assembled. */
-  protected touch(x: number, y: number, size: number, to: CanvasRenderingContext2D) {
+  protected touch(x: number, y: number, size: number, to: Surface) {
     const r = size * 0.75 + 2
     const box = { x0: x - r, y0: y - r, x1: x + r, y1: y + r }
     this.grow(box)
@@ -905,7 +926,15 @@ export class StrokeStamper {
     return { image: this.dabBuf, w: s, h: s }
   }
 
-  protected drawDab(d: Dab, to: CanvasRenderingContext2D) {
+  protected drawDab(d: Dab, to: Surface) {
+    if (to instanceof GpuSurface) {
+      const color = d.color ? rgb(d.color) : null
+      for (const m of this.mirror({ x: d.x, y: d.y })) {
+        to.dab({ x: m.x, y: m.y, size: d.size, rot: d.rot, sx: d.sx, sy: d.round * d.sy, alpha: d.alpha, at: d.at, color })
+        this.touch(m.x, m.y, d.size, to)
+      }
+      return
+    }
     const { image, w, h } = this.dabImage(d)
     to.globalAlpha = d.alpha
     smoothing(to, this.brush.shapeFiltering)

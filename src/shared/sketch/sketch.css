@@ -634,3 +634,11 @@
   color: var(--text);
   border-color: var(--accent);
 }
+
+/* The picture drawn by the graphics card, under the canvas that takes the pen (0.31). */
+.sketch-gpu {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}

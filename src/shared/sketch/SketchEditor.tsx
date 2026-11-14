@@ -506,6 +506,15 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   // Sketch Pro: canvas changes, stats, time-lapse, import/export, Reference Companion.
   const files = useSketchFiles({ doc, update, engine, root, title, activeId: activeLayer?.id, setActive: setActiveLayerId, flush, fit })
 
+  // The GPU's view of the picture sits under the visible canvas.
+  useEffect(() => {
+    const v = engine.view
+    const box = boxRef.current
+    if (!v || !box) return
+    box.prepend(v)
+    return () => v.remove()
+  }, [engine])
+
   // Redraw the visible canvas.
   useEffect(() => {
     const canvas = viewCanvas.current
@@ -527,7 +536,10 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     ctx.transform(...viewMatrix(view))
     // Transparent: nothing is drawn behind the picture, so the app's own background and wallpaper show through.
     ctx.imageSmoothingEnabled = view.scale < 1 || !!view.rot
-    assist.paint(ctx)
+    // With a graphics card the picture is drawn under this canvas, straight from the GPU (0.31).
+    const gpuShown = !assist.mode && engine.draw(doc, viewMatrix(view), w, h, dpr, ctx.imageSmoothingEnabled)
+    if (engine.view) engine.view.style.visibility = gpuShown ? '' : 'hidden'
+    if (!gpuShown) assist.paint(ctx)
     // Transparent pages are just a white outline over the app's wallpaper.
     const px = 1 / view.scale
     ctx.strokeStyle = doc.backgroundColor ? 'rgba(128,128,128,0.6)' : '#ffffff'
