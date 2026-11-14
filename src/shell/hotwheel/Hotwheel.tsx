@@ -246,24 +246,40 @@ export function bubbleLayout(n: number, r0: number, r1: number) {
   return { mid, step, radius }
 }
 
-function Bubbles({ items, r0, r1, hit, ring }: { items: (HotAction | null)[]; r0: number; r1: number; hit: Hit; ring: 'in' | 'out' }) {
-  const { mid, step, radius } = bubbleLayout(items.length, r0, r1)
+/** One drop: placed with a CSS transform so it can fly out of the middle when the wheel opens (glass.css). */
+function drop(key: string, x: number, y: number, r: number, cls: string, delay: number) {
+  const style = { '--x': `${x}px`, '--y': `${y}px`, '--d': `${delay}ms` } as React.CSSProperties
+  return (
+    <g key={key} className="hw-drop" style={style}>
+      <circle r={r} className={cls} />
+    </g>
+  )
+}
+
+/** The drops (for the shared goo layer) and the labels on top of them, for one ring. */
+function bubbles(items: (HotAction | null)[], r0: number, r1: number, hit: Hit, ring: 'in' | 'out', delay: number, droplets: boolean, maxR?: number) {
+  const layout = bubbleLayout(items.length, r0, r1)
+  const { mid, step } = layout
+  // Outer drops are smaller than inner ones: the bubbles shrink from the middle outwards.
+  const radius = Math.min(layout.radius, maxR ?? Infinity)
   const drops: React.ReactNode[] = []
   const tops: React.ReactNode[] = []
+  const later = (i: number) => delay + i * 14
+  const pad = ring === 'in' ? 8 : 20 // small outer drops let their names spill a little wider
   items.forEach((a, i) => {
     if (!a) return
     const lit = hit?.ring === ring && hit.i === i
     const at = i * step
-    const label = (text: string, x: number, y: number, r: number, key: number | string, icon?: HotAction['icon'], half = false) => (
-      <foreignObject key={`l${key}`} x={x - r - 8} y={y - 24} width={2 * r + 16} height={48}>
-        <div className={half ? 'hotwheel-label half' : 'hotwheel-label'}>
-          {r > 18 && <Icon icon={icon} size={ring === 'in' ? 16 : 15} />}
-          <span>{text}</span>
-        </div>
-      </foreignObject>
-    )
-    const shine = (x: number, y: number, r: number, key: string) => (
-      <path key={`s${key}`} className="hotwheel-shine" d={`M${x - r * 0.62} ${y - r * 0.05}A${r * 0.66} ${r * 0.66} 0 0 1 ${x - r * 0.05} ${y - r * 0.62}`} />
+    const top = (key: string, x: number, y: number, r: number, text: string, icon?: HotAction['icon'], half = false) => (
+      <g key={`t${key}`} className="hw-drop hw-top" style={{ '--x': `${x}px`, '--y': `${y}px`, '--d': `${later(i) + 60}ms` } as React.CSSProperties}>
+        <path className="hotwheel-shine" d={`M${-r * 0.62} ${-r * 0.05}A${r * 0.66} ${r * 0.66} 0 0 1 ${-r * 0.05} ${-r * 0.62}`} />
+        <foreignObject x={-r - pad} y={-24} width={2 * r + 2 * pad} height={48}>
+          <div className={half ? 'hotwheel-label half' : 'hotwheel-label'}>
+            {r > 18 && <Icon icon={icon} size={ring === 'in' ? 16 : 14} />}
+            <span>{text}</span>
+          </div>
+        </foreignObject>
+      </g>
     )
     if (a.halves) {
       // Two drops side by side along the ring, touching, so the goo joins them at the waist.
@@ -273,26 +289,24 @@ function Bubbles({ items, r0, r1, hit, ring }: { items: (HotAction | null)[]; r0
         const [x, y] = polar(mid, ang)
         const on = lit && hit.half === h
         const r = on ? hr * 1.16 : hr
-        drops.push(<circle key={`d${i}-${h}`} cx={x} cy={y} r={r} className={on ? 'lit' : ''} />)
+        drops.push(drop(`d${i}-${h}`, x, y, r, on ? 'lit' : '', later(i)))
         if (on) drops.push(<line key={`n${i}-${h}`} x1={0} y1={0} x2={x} y2={y} strokeWidth={r * 0.7} className="lit" />)
-        tops.push(shine(x, y, r, `${i}-${h}`), label(a.halves![h].label, x, y, r, `${i}-${h}`, undefined, true))
+        tops.push(top(`${i}-${h}`, x, y, r, a.halves![h].label, undefined, true))
       })
-      return
+    } else {
+      const [x, y] = polar(mid, at)
+      const r = lit ? radius * 1.16 : radius
+      drops.push(drop(`d${i}`, x, y, r, lit ? 'lit' : a.on ? 'on' : '', later(i)))
+      if (lit) drops.push(<line key={`n${i}`} x1={0} y1={0} x2={x} y2={y} strokeWidth={r * 0.7} className="lit" />)
+      tops.push(top(`${i}`, x, y, r, a.label, a.icon))
     }
-    const [x, y] = polar(mid, at)
-    const r = lit ? radius * 1.16 : radius
-    drops.push(<circle key={`d${i}`} cx={x} cy={y} r={r} className={lit ? 'lit' : a.on ? 'on' : ''} />)
-    if (lit) drops.push(<line key={`n${i}`} x1={0} y1={0} x2={x} y2={y} strokeWidth={r * 0.7} className="lit" />)
-    tops.push(shine(x, y, r, `${i}`), label(a.label, x, y, r, i, a.icon))
+    // Little droplets in the gaps, further out still: the last, smallest step of the cascade.
+    if (droplets && items.length > 2) {
+      const [x, y] = polar(mid + radius * 0.55, at + step / 2)
+      drops.push(drop(`g${i}`, x, y, Math.max(9, radius * 0.5), 'droplet', later(i) + 90))
+    }
   })
-  return (
-    <>
-      <g className="hotwheel-goo" filter="url(#hotwheel-goo)">
-        {drops}
-      </g>
-      {tops}
-    </>
-  )
+  return { drops, tops }
 }
 
 /** Slider arcs: size on the left, opacity on the right, low at the bottom. Angles: 0 = up, clockwise. */
@@ -355,7 +369,10 @@ function Wheel({ open }: { open: Open }) {
   const size = useSettings((s) => s.hotwheel.size)
   const toolScale = useSettings((s) => (open.panel ? (s.toolScale[open.panel.type] ?? 100) : 100))
   const scale = SIZES[size] * (toolScale / 100)
-  const glass = useGlass() !== 'off'
+  const glassMode = useGlass()
+  const glass = glassMode !== 'off'
+  // The lens lighting is the heavy part of the filter; Light glass (the fast setting) skips it.
+  const fancy = glassMode === 'full'
   const [hit, setHit] = useState<Hit>(null)
   const hitRef = useRef<Hit>(null)
   // The sliders' values, kept here so dragging redraws them; written through to the tool live.
@@ -462,22 +479,55 @@ function Wheel({ open }: { open: Open }) {
   const current = hit && (hit.ring === 'in' ? open.inner[hit.i] : open.outer[hit.i])
   const name = current ? (current.halves ? current.halves[hit.half].label : current.label) : open.panel ? (getManifest(open.panel.type)?.name ?? '') : ''
   const w = (open.sliders.length ? sliderR + 40 : OUT) * 2 + 12
+  const inner = bubbles(open.inner, HOLE + 6, MID, hit, 'in', 0, !open.outer.length)
+  // Outer drops are a size smaller than the inner ones: big in the middle, getting smaller outwards.
+  const outer = open.outer.length ? bubbles(open.outer, MID + 6, OUT, hit, 'out', 70, true, bubbleLayout(open.inner.length, HOLE + 6, MID).radius * 0.74) : null
   return (
     <div className={`hotwheel${glass ? ' bubbles' : ''}${open.closing ? ' closing' : ''}`} style={{ left: cx, top: cy, '--s': scale } as React.CSSProperties} role="menu" aria-label="Hotwheel">
       <svg width={w} height={w} viewBox={`${-w / 2} ${-w / 2} ${w} ${w}`}>
         {glass ? (
           <>
             <defs>
-              <filter id="hotwheel-goo" x="-20%" y="-20%" width="140%" height="140%">
+              {/* Fixed region: the drops move while they fly out, a box-based region would clip them. */}
+              <filter id="hotwheel-goo" filterUnits="userSpaceOnUse" x={-w / 2} y={-w / 2} width={w} height={w} colorInterpolationFilters="sRGB">
                 <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur" />
-                <feColorMatrix in="blur" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" />
+                <feColorMatrix in="blur" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" result="goo" />
+                {fancy && (
+                  <>
+                    {/* Full glass: light the liquid like a lens. A soft specular highlight from the top left, */}
+                    {/* a thin bright rim, and an accent glow caught in the bottom-right edge. */}
+                    <feGaussianBlur in="goo" stdDeviation="5" result="soft" />
+                    <feSpecularLighting in="soft" surfaceScale="7" specularConstant="1.1" specularExponent="26" lightingColor="#fff" result="spec">
+                      <fePointLight x={-160} y={-240} z={240} />
+                    </feSpecularLighting>
+                    <feComposite in="spec" in2="goo" operator="in" result="specIn" />
+                    <feMorphology in="goo" operator="erode" radius="1.4" result="thin" />
+                    <feComposite in="goo" in2="thin" operator="out" result="rim" />
+                    <feFlood className="hotwheel-rim" />
+                    <feComposite in2="rim" operator="in" result="rimLit" />
+                    <feOffset in="goo" dx={-4} dy={-5} result="shift" />
+                    <feComposite in="goo" in2="shift" operator="out" result="edge" />
+                    <feGaussianBlur in="edge" stdDeviation="2" result="edgeSoft" />
+                    <feFlood className="hotwheel-caustic" />
+                    <feComposite in2="edgeSoft" operator="in" result="caustic" />
+                    <feMerge>
+                      <feMergeNode in="goo" />
+                      <feMergeNode in="caustic" />
+                      <feMergeNode in="specIn" />
+                      <feMergeNode in="rimLit" />
+                    </feMerge>
+                  </>
+                )}
               </filter>
             </defs>
+            {/* One goo layer for the middle and every ring, so the drops flow out of (and back into) the middle. */}
             <g className="hotwheel-goo" filter="url(#hotwheel-goo)">
-              <circle r={HOLE + 4} />
+              <circle r={HOLE + 4} className="hotwheel-core" />
+              {inner.drops}
+              {outer?.drops}
             </g>
-            <Bubbles items={open.inner} r0={HOLE + 6} r1={MID - 2} hit={hit} ring="in" />
-            {open.outer.length > 0 && <Bubbles items={open.outer} r0={MID + 4} r1={OUT} hit={hit} ring="out" />}
+            {inner.tops}
+            {outer?.tops}
             <circle r={HOLE} className="hotwheel-hole" />
           </>
         ) : (
@@ -513,10 +563,11 @@ function openAt(at?: { x: number; y: number }, hold?: Open['hold']) {
   let inner = useSettings.getState().hotwheel.inner.map((id) => all.find((a) => a.id === id) ?? null)
   // The size slider already changes the brush, so its Smaller | Bigger slot would do the same thing twice.
   if (sized) inner = inner.map((a) => (a?.id === 'scale' ? null : a))
+  const outer = (panel ? outerRing(panel) : []).filter((a) => !(sized && a.id === 'pair.size')) // Draw's own Smaller | Bigger
   // Bubbles only show what is there: no empty drops.
   if (document.documentElement.dataset.glass) inner = inner.filter(Boolean)
   const p = at ?? pointer
-  useWheel.setState({ open: { x: p.x, y: p.y, panel, inner, outer: panel ? outerRing(panel) : [], sliders, hold, at: performance.now() } })
+  useWheel.setState({ open: { x: p.x, y: p.y, panel, inner, outer, sliders, hold, at: performance.now() } })
 }
 
 /** Mount once in the editor: the wheel, and Q / pen button / right-hold / middle button to open it. */

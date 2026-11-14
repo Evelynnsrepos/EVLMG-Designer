@@ -205,6 +205,12 @@
 :root[data-glass] .hotwheel-goo .on {
   fill: color-mix(in srgb, var(--accent) 35%, var(--bg-elevated));
 }
+:root[data-glass] .hotwheel-goo .hotwheel-core {
+  fill: color-mix(in srgb, var(--bg-elevated) 82%, var(--accent));
+}
+:root[data-glass] .hotwheel-goo .droplet {
+  fill: color-mix(in srgb, var(--bg-elevated) 70%, var(--accent));
+}
 :root[data-glass] .hotwheel-goo circle.lit {
   fill: var(--accent);
 }
@@ -218,6 +224,17 @@
   stroke-width: 2.5;
   stroke-linecap: round;
   pointer-events: none;
+}
+:root[data-glass] .hotwheel-rim {
+  flood-color: #fff;
+  flood-opacity: 0.5;
+}
+:root[data-glass] .hotwheel-caustic {
+  flood-color: var(--accent);
+  flood-opacity: 0.75;
+}
+.hw-drop {
+  transform: translate(var(--x), var(--y));
 }
 :root[data-glass] .hotwheel-hole {
   fill: color-mix(in srgb, var(--bg-elevated) 90%, var(--accent));
@@ -234,6 +251,45 @@
   :root[data-glass] .hotwheel-goo circle,
   :root[data-glass] .hotwheel-goo line {
     transition: r 0.16s var(--ease), stroke-width 0.16s var(--ease);
+  }
+  /* Opening: every drop flows out of the middle blob, inner ring first, labels just after.
+     Closing: they are pulled back in. The wheel itself only pops, no spin. */
+  .hotwheel.bubbles {
+    animation: hotwheel-pop 0.2s var(--ease);
+  }
+  .hotwheel.bubbles.closing {
+    animation: glass-fade-out 0.13s ease-in forwards;
+  }
+  .hotwheel.bubbles .hw-drop {
+    animation: hw-emerge 0.36s cubic-bezier(0.2, 0.9, 0.3, 1.15) var(--d) both;
+  }
+  .hotwheel.bubbles .hw-top {
+    animation-name: hw-emerge-top;
+  }
+  .hotwheel.bubbles.closing .hw-drop {
+    animation: hw-absorb 0.13s ease-in forwards;
+  }
+}
+@keyframes hotwheel-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(calc(var(--s) * 0.7));
+  }
+}
+@keyframes hw-emerge {
+  from {
+    transform: translate(0, 0) scale(0.25);
+  }
+}
+@keyframes hw-emerge-top {
+  from {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.25);
+  }
+}
+@keyframes hw-absorb {
+  to {
+    transform: translate(0, 0) scale(0.2);
   }
 }
 
