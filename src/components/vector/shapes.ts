@@ -3,7 +3,7 @@
  * SVG path data here. The canvas (Konva Path) and the SVG export both draw from this one function.
  */
 
-export const SHAPES = ['rect', 'ellipse', 'polygon', 'star', 'ring', 'heart', 'shield', 'cross', 'gear', 'bubble'] as const
+export const SHAPES = ['rect', 'ellipse', 'polygon', 'star', 'ring', 'heart', 'shield', 'cross', 'gear', 'bubble', 'arrow'] as const
 export type ShapeKind = (typeof SHAPES)[number]
 
 export const SHAPE_LABEL: Record<ShapeKind, string> = {
@@ -17,6 +17,7 @@ export const SHAPE_LABEL: Record<ShapeKind, string> = {
   cross: 'Cross',
   gear: 'Gear',
   bubble: 'Speech bubble',
+  arrow: 'Arrow',
 }
 
 export interface ShapeGeometry {
@@ -43,6 +44,7 @@ export const SHAPE_SLIDERS: Record<ShapeKind, { corner?: boolean; sides?: { labe
   cross: { corner: true, inner: 'Thickness' },
   gear: { corner: true, sides: { label: 'Teeth', min: 4, max: 24 }, inner: 'Tooth depth' },
   bubble: { corner: true },
+  arrow: { corner: true, inner: 'Shaft thickness' },
 }
 
 export const SHAPE_DEFAULTS: Record<ShapeKind, Pick<ShapeGeometry, 'corner' | 'sides' | 'inner'>> = {
@@ -56,6 +58,7 @@ export const SHAPE_DEFAULTS: Record<ShapeKind, Pick<ShapeGeometry, 'corner' | 's
   cross: { corner: 0, inner: 34 },
   gear: { corner: 20, sides: 10, inner: 22 },
   bubble: { corner: 40 },
+  arrow: { corner: 0, inner: 40 },
 }
 
 interface P {
@@ -188,6 +191,13 @@ export function shapePath(g: ShapeGeometry): string {
       }).flat()
       const pts = fitBox(unit, w, h)
       return `${roundedPolygon(pts, (corner * small) / 10)} ${ellipse(w / 2, h / 2, w * 0.17, h * 0.17, true)}`
+    }
+    case 'arrow': {
+      // Points right; the head takes 45 % of the length.
+      const t = (h * inner) / 2
+      const hx = w * 0.55
+      const pts = [[0, h / 2 - t], [hx, h / 2 - t], [hx, 0], [w, h / 2], [hx, h], [hx, h / 2 + t], [0, h / 2 + t]].map(([x, y]) => ({ x, y }))
+      return roundedPolygon(pts, corner * Math.min(t, w * 0.1))
     }
     case 'bubble': {
       const bh = h * 0.8
