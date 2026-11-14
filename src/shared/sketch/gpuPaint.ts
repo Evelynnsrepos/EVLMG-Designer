@@ -717,18 +717,24 @@ export class GpuPainter {
   }
 
   /** dst[0..w) = src at (x, y), `zoom` src pixels per dst pixel (a piece of the layer under a wet stamp). */
-  region(src: Tex, dst: Tex, x: number, y: number, w: number, h: number, zoom = 1) {
+  region(src: Tex, dst: Tex, x: number, y: number, w: number, h: number, zoom = 1, over = false) {
     const gl = this.gl
     this.into(dst, { x: 0, y: 0, w, h })
-    gl.disable(gl.BLEND)
+    if (over) {
+      gl.enable(gl.BLEND)
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+    } else gl.disable(gl.BLEND)
     const p = this.prog('region')
     this.bind(0, src.tex, p, 'src')
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, zoom === 1 ? gl.NEAREST : gl.LINEAR)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, zoom === 1 ? gl.NEAREST : gl.LINEAR)
+    // Smooth between pixels when scaled or moved by part of a pixel, like Canvas 2D's drawImage.
+    const f = zoom === 1 && Number.isInteger(x) && Number.isInteger(y) ? gl.NEAREST : gl.LINEAR
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, f)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, f)
     this.set(p, { off: [x, y], srcSize: [src.w, src.h], zoom })
     this.drawQuad()
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+    gl.disable(gl.BLEND)
   }
 
   /** out[0..s) = a × (1 - k) + b × k. */

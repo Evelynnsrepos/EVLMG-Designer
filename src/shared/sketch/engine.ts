@@ -81,6 +81,8 @@ export class SketchEngine {
   private onPicture: { layers: SketchLayer[]; background: string | null | undefined; withBackground: boolean; edits: number } | null = null
   /** Part of the picture the GPU stroke changed since it was last blended. */
   private gpuDirty: Rect | null = null
+  /** Counts lifts with the Move tool, so the GPU uploads each lifted piece once. */
+  private moves = 0
   /** Bumped by every change that isn't the GPU stroke (CPU edits, moves, layer changes). */
   private edits = 0
   /** True while the document has something only Canvas 2D can blend (adjustment layers). */
@@ -227,7 +229,7 @@ export class SketchEngine {
   }
 
   dropLayer(id: Id) {
-    for (const k of [id, `${id}:live`]) {
+    for (const k of [id, `${id}:live`, `${id}:piece`]) {
       this.gpu?.free(this.texs.get(k)?.t)
       this.texs.delete(k)
     }
@@ -694,6 +696,7 @@ export class SketchEngine {
     } else layer.ctx.clearRect(0, 0, this.width, this.height)
     layer.ctx.restore()
     this.floating = { layerId, piece, rects, before, dx: 0, dy: 0 }
+    this.moves++
     this.touched(layerId)
   }
 
@@ -987,11 +990,28 @@ export class SketchEngine {
     if (this.g?.layerId === layer.id) return this.g.preview
     const stroking = this.stroke && this.strokeOpts?.layer.id === layer.id
     if (!stroking && this.floating?.layerId !== layer.id) return this.tex(layer.id)
+    const gpu = this.gpu!
+    const live = (k: string) => {
+      let e = this.texs.get(`${layer.id}:${k}`)
+      if (!e) this.texs.set(`${layer.id}:${k}`, (e = { t: gpu.target(), version: -1 }))
+      return e
+    }
+    const f = this.floating
+    if (f && !f.view) {
+      // Moving: the lifted pixels go up once, then are drawn at their new place each frame.
+      const piece = live('piece')
+      if (piece.version !== this.moves) {
+        gpu.upload(piece.t, f.piece.canvas)
+        piece.version = this.moves
+      }
+      const out = live('live').t
+      gpu.copy(this.tex(layer.id), out, null)
+      gpu.region(piece.t, out, -f.dx, -f.dy, this.width, this.height, 1, true)
+      return out
+    }
     const { canvas, dirty } = this.livePixels(layer)
-    const key = `${layer.id}:live`
-    let e = this.texs.get(key)
-    if (!e) this.texs.set(key, (e = { t: this.gpu!.target(), version: 0 }))
-    this.gpu!.upload(e.t, canvas, dirty)
+    const e = live('live')
+    gpu.upload(e.t, canvas, dirty)
     return e.t
   }
 
