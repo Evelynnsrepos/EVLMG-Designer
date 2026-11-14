@@ -292,6 +292,18 @@ export const BASICS: Record<string, GuideTopic> = {
       'The small T in a tool’s header picks the font that tool shows its text in, for this project. Boards like the Brainstorm Board use it too.',
     ],
   },
+  glass: {
+    title: 'Glass look',
+    body: [
+      'Settings > General > Glass look gives the whole app a glass style: rounded, see-through menus, dialogs, toolbars, cards and panels over a soft background made from your project colours.',
+      'Full glass also blurs what is behind the sidebar, dialogs and menus. Light glass looks the same without the blur and is the fastest. Off brings back the classic solid look.',
+      'Canvases always stay solid, so drawing is never slowed down by the glass. Your Project look colours and wallpaper tint the glass too.',
+    ],
+    tips: [
+      'On Linux the app starts with Light glass. If the app feels slower or some parts look wrong, pick Light or Off.',
+      'When your computer asks for less transparency or less motion, the glass and its animations follow that.',
+    ],
+  },
   typing: {
     title: 'Typing shortcuts (Markdown Syntax)',
     body: [

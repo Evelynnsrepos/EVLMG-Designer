@@ -20,7 +20,7 @@ export type Glass = 'full' | 'light' | 'off'
 const GLASS_KEY = 'egd-glass'
 
 /** Without a saved choice: off when the system asks for less transparency or there is no graphics card
- *  (blur is very slow then), light on Linux (WebKitGTK re-blurs a lot), full elsewhere. */
+ *  (blur is very slow then), light (no blur) on Linux, where WebKitGTK blur is slow and can glitch, full elsewhere. */
 export function defaultGlass(env: { reduceTransparency: boolean; softwareGpu: boolean; linux: boolean }): Glass {
   if (env.reduceTransparency || env.softwareGpu) return 'off'
   return env.linux ? 'light' : 'full'
@@ -66,17 +66,6 @@ export function setGlass(glass: Glass) {
 }
 
 export const useGlass = () => useThemeStore((s) => s.glass)
-
-/** Blur over a canvas is re-done for every brush dab, so glass goes solid while a pen or mouse draws on one. */
-export function pauseGlassWhileDrawing() {
-  const root = document.documentElement
-  const stop = () => root.classList.remove('is-drawing')
-  addEventListener('pointerdown', (e) => {
-    if (root.dataset.glass && (e.target as Element | null)?.closest?.('canvas')) root.classList.add('is-drawing')
-  }, true)
-  addEventListener('pointerup', stop, true)
-  addEventListener('pointercancel', stop, true)
-}
 
 export function toggleTheme() {
   const theme: Theme = useThemeStore.getState().theme === 'dark' ? 'light' : 'dark'

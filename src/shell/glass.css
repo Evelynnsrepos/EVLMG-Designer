@@ -1,28 +1,40 @@
 /*
  * Glass look (Liquid Glass style), on when <html data-glass="full|light"> (shell/theme.ts, Settings > General).
  * Without data-glass nothing here applies, so "Off" is exactly the classic look.
- * Canvases and panel bodies stay solid: blur over a canvas would be redone for every brush dab.
+ *
+ * Rules that keep it fast and free of rendering bugs (WebKitGTK on Linux):
+ * - Real blur (backdrop-filter) only in "full", and only on the few top-level surfaces in --blur-surfaces below:
+ *   the sidebar, dialogs, Ctrl+K and menus. Everything else gets the glass colours and edges without blur.
+ * - Never blur inside something that is already blurred: WebKit then has no backdrop and paints the box dark.
+ * - Never blur over a canvas: floating bars over Draw / Pixel Art are glass-coloured but not blurred.
+ * - Blurred boxes never animate their size or position (WebKit re-renders the blur black for a frame); they only fade.
  * The fill opacities are checked for readable text over pure white and black in glass.test.ts.
  */
 :root[data-glass] {
-  --glass-blur: 24px;
+  --glass-blur: 22px;
   --glass-fill: color-mix(in srgb, var(--bg-elevated) 62%, transparent);
   --glass-fill-thick: color-mix(in srgb, var(--bg-elevated) 90%, transparent);
-  --glass-border: rgb(255 255 255 / 0.12);
-  --glass-hi: rgb(255 255 255 / 0.2);
+  --glass-chip: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+  --glass-border: color-mix(in srgb, var(--accent) 10%, rgb(255 255 255 / 0.12));
+  --glass-hi: rgb(255 255 255 / 0.18);
   --glass-lo: rgb(0 0 0 / 0.18);
+  --glass-shadow: 0 12px 36px rgb(0 0 0 / 0.3);
+  --glass-shadow-sm: 0 4px 14px rgb(0 0 0 / 0.18);
   --radius: 14px;
   --radius-sm: 9px;
   --radius-xl: 20px;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 :root[data-glass][data-theme='light'] {
-  --glass-border: rgb(255 255 255 / 0.65);
-  --glass-hi: rgb(255 255 255 / 0.9);
+  --glass-border: color-mix(in srgb, var(--accent) 8%, rgb(255 255 255 / 0.75));
+  --glass-hi: rgb(255 255 255 / 0.95);
   --glass-lo: rgb(0 0 0 / 0.06);
+  --glass-shadow: 0 12px 36px rgb(30 20 60 / 0.16);
+  --glass-shadow-sm: 0 4px 14px rgb(30 20 60 / 0.1);
 }
+/* Light glass: the same look without any blur (the fastest; the default on Linux). */
 :root[data-glass='light'] {
-  --glass-blur: 10px;
-  --glass-fill: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
+  --glass-fill: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
   --glass-fill-thick: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
 }
 
@@ -35,31 +47,31 @@
     var(--bg);
 }
 
-/* --- Glass surfaces ------------------------------------------------------------------------------- */
-:root[data-glass] .sidebar,
-:root[data-glass] .modal,
-:root[data-glass] .menu,
-:root[data-glass] .palette,
-:root[data-glass] .help-tour-card,
-:root[data-glass] .proof-card,
-:root[data-glass] .ref-picker-menu,
-:root[data-glass] .richtext-refmenu,
-:root[data-glass] .writer-menu,
-:root[data-glass] .map-popup,
-:root[data-glass] .custom-color-pop,
-:root[data-glass] .cp-float,
-:root[data-glass] .fp,
-:root[data-glass] .brushlib,
-:root[data-glass] .sketch-floatbars > * {
+/* --- 1. Floating glass: dialogs, menus, popups, pickers ---------------------------------------------- */
+:root[data-glass] :is(
+    .sidebar, .modal, .menu, .palette, .help-tour-card, .proof-card, .ref-picker-menu, .richtext-refmenu,
+    .richtext-image-bar, .writer-menu, .map-popup, .map-subbar, .custom-color-pop, .canvas-toolbar,
+    .cd-picker-pop, .cd-shapes-menu, .ss-calcmenu, .ss-calcpanel, .ss-menu, .esc-hint,
+    .cp-float, .fp, .brushlib-menu, .adjust-panel, .sketch-floatbars > *
+  ) {
   background: var(--glass-fill-thick);
-  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
   border: 1px solid var(--glass-border);
   box-shadow:
     inset 0 1px 0 var(--glass-hi),
     inset 0 -1px 0 var(--glass-lo),
-    0 12px 36px rgb(0 0 0 / 0.3);
+    var(--glass-shadow);
 }
-/* The sidebar only sits over the app's own background (never over a canvas), so it may be thinner. */
+/* Real blur, full glass only, top-level surfaces only (not the ones over canvases). */
+:root[data-glass='full'] :is(.sidebar, .modal, .menu, .palette, .help-tour-card, .ref-picker-menu, .richtext-refmenu, .writer-menu, .ss-menu, .ss-calcmenu, .cd-shapes-menu, .cd-picker-pop) {
+  backdrop-filter: blur(var(--glass-blur));
+}
+/* Glass inside glass (a menu in the sidebar, a picker in a dialog): no second blur, so it never turns dark. */
+:root[data-glass] :is(.sidebar, .modal, .menu, .palette, .help-tour-card) :is(.menu, .ref-picker-menu, .richtext-refmenu, .writer-menu, .ss-menu, .ss-calcmenu, .cd-shapes-menu, .cd-picker-pop, .custom-color-pop, .cp-float) {
+  backdrop-filter: none;
+  background: var(--bg-elevated);
+}
+
+/* The sidebar sits only over the app background, so it may be thinner and floats with a gap. */
 :root[data-glass] .sidebar {
   background: var(--glass-fill);
   margin: 8px 0 8px 8px;
@@ -71,18 +83,27 @@
 :root[data-glass] .sidebar-bottom {
   border-top-color: var(--glass-border);
 }
-:root[data-glass] .modal,
-:root[data-glass] .palette {
+:root[data-glass] .sidebar-row:hover,
+:root[data-glass] .sidebar-row.on {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+:root[data-glass] :is(.modal, .palette, .help-tour-card) {
   border-radius: var(--radius-xl);
+}
+:root[data-glass] .menu {
+  border-radius: var(--radius);
+  padding: 5px;
+}
+:root[data-glass] .menu button {
+  border-radius: var(--radius-sm);
 }
 
 /* Lighter dimming behind dialogs, so the glass has something to show. */
-:root[data-glass] .modal-backdrop,
-:root[data-glass] .palette-backdrop {
+:root[data-glass] :is(.modal-backdrop, .palette-backdrop) {
   background: rgb(0 0 0 / 0.28);
 }
 
-/* Panels float with a gap over the background; their bodies (and canvases) stay solid. */
+/* --- 2. Panels float with a gap; their bodies (and canvases) stay solid -------------------------------- */
 :root[data-glass] .workspace {
   background: transparent;
   padding: 8px;
@@ -91,36 +112,119 @@
   border-color: var(--glass-border);
   box-shadow:
     inset 0 1px 0 var(--glass-hi),
-    0 8px 24px rgb(0 0 0 / 0.22);
+    var(--glass-shadow-sm);
 }
 :root[data-glass] .panel.active {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border));
 }
 
-/* Pill buttons and a highlight edge on the main button. */
-:root[data-glass] .btn {
+/* --- 3. Toolbars, side panels, tab rows inside the tools: glass colours, no blur ---------------------- */
+:root[data-glass] :is(
+    .px-toolbar, .px-timeline-bar, .sketch-topbar, .lv-toolbar, .ss-toolbar, .sb-toolbar, .richtext-toolbar,
+    .elist-toolbar, .ld-toolbar, .item-toolbar, .pool-toolbar, .cosmos-toolbar, .dlg-toolbar, .gl-toolbar,
+    .wp-toolbar, .quests-toolbar, .reviews-toolbar, .skills-toolbar, .tp-bar, .cal-bar, .cb-bar
+  ) {
+  background: var(--glass-chip);
+  border-radius: var(--radius);
+  box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 0 0 1px var(--glass-border);
+}
+:root[data-glass] :is(
+    .px-side, .sketch-panel, .wiki-side, .vec-side, .sb-side, .gl-side, .ft-side, .pc-side, .pi-side,
+    .reviews-side, .sc-side, .skills-side, .tk-side, .lv-dock, .cd-panel, .sketch-text-panel, .wiki-infobox
+  ) {
+  background: var(--glass-chip);
+  border-color: var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+}
+:root[data-glass] .elist-detail {
+  box-shadow: inset 1px 0 0 var(--glass-hi);
+}
+
+/* Tab rows become one pill with the open tab as a raised pill. */
+:root[data-glass] :is(.settings-tabs, .cp-tabs, .ss-tabs, .pool-tabs, .quests-tabs, .cl-tabs, .wiki-new-tabs) {
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-sunken) 70%, transparent);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.18);
+  width: fit-content;
+}
+:root[data-glass] :is(.settings-tabs, .cp-tabs, .ss-tabs, .pool-tabs, .quests-tabs, .cl-tabs, .wiki-new-tabs) > :is(button, [role='tab']) {
   border-radius: 999px;
 }
-:root[data-glass] .btn-primary {
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
+:root[data-glass] .settings-tab.on {
+  border-color: var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow-sm);
 }
 
-/* While drawing on a canvas: no blur at all, glass over the canvas turns solid until the pen lifts. */
-:root[data-glass].is-drawing * {
-  backdrop-filter: none !important;
+/* --- 4. Cards ---------------------------------------------------------------------------------------- */
+:root[data-glass] :is(
+    .project-card, .item-card, .elist-card, .kb-card, .pc-card, .wp-card, .reviews-card, .richtext-refcard
+  ) {
+  background: var(--glass-chip);
+  border-color: var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow-sm);
+}
+:root[data-glass] .project-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--glass-border));
 }
 
-/* Menus and dialogs grow in a little (none when the system asks for less motion). */
+/* --- 5. Buttons, inputs ------------------------------------------------------------------------------ */
+:root[data-glass] .btn {
+  border-radius: 999px;
+  border-color: var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+}
+:root[data-glass] :is(.btn-primary, .btn-danger) {
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), 0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+:root[data-glass] .btn-ghost {
+  border-color: transparent;
+  box-shadow: none;
+}
+:root[data-glass] .icon-btn.on,
+:root[data-glass] .icon-btn[aria-pressed='true'] {
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+}
+:root[data-glass] .input {
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.15);
+}
+
+/* --- 6. Hotwheel: glass-coloured slices with a light rim (it opens over canvases, so no blur) -------- */
+:root[data-glass] .hotwheel-slice > path {
+  --f: var(--glass-fill-thick);
+}
+:root[data-glass] .hotwheel-slice.on > path {
+  --f: color-mix(in srgb, var(--accent) 28%, var(--glass-fill-thick));
+}
+:root[data-glass] .hotwheel-slice > path.half:not(.lit) {
+  --f: color-mix(in srgb, var(--accent) 10%, var(--glass-fill-thick));
+}
+:root[data-glass] .hotwheel > svg {
+  filter: drop-shadow(0 0 1px var(--glass-hi)) drop-shadow(0 8px 22px rgb(0 0 0 / 0.35));
+}
+
+/* --- 7. Motion (none when the system asks for less) --------------------------------------------------- */
 @media (prefers-reduced-motion: no-preference) {
-  :root[data-glass] .modal,
-  :root[data-glass] .menu,
-  :root[data-glass] .palette {
-    animation: glass-in 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Blurred boxes only fade in, never move or scale. */
+  :root[data-glass] :is(.modal, .menu, .palette, .help-tour-card) {
+    animation: glass-fade 0.14s var(--ease);
+  }
+  :root[data-glass] :is(.btn, .icon-btn, .sidebar-row, .settings-tab) {
+    transition: background-color 0.15s var(--ease), box-shadow 0.15s var(--ease), color 0.15s var(--ease);
+  }
+  :root[data-glass] :is(.btn, .icon-btn):active:not(:disabled) {
+    scale: 0.96;
+  }
+  :root[data-glass] :is(.project-card, .item-card) {
+    transition: translate 0.18s var(--ease), box-shadow 0.18s var(--ease), border-color 0.18s;
+  }
+  :root[data-glass] :is(.project-card, .item-card):hover {
+    translate: 0 -2px;
   }
 }
-@keyframes glass-in {
+@keyframes glass-fade {
   from {
     opacity: 0;
-    transform: scale(0.96);
   }
 }
