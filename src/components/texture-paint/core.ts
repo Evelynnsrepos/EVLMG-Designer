@@ -38,8 +38,23 @@ export const SHAPE_MAPS = [
   { key: 'sky', label: 'Where dust and rain land (sky exposure)', blend: 'source-over', visible: false },
   { key: 'height', label: 'Bottom dark, top bright (height)', blend: 'source-over', visible: false },
   { key: 'part_random', label: 'A different grey per piece (part random)', blend: 'source-over', visible: false },
+  { key: 'edges', label: 'Near sharp edges (edge distance)', blend: 'source-over', visible: false },
+  { key: 'creases', label: 'Near inner creases (crease distance)', blend: 'source-over', visible: false },
 ] as const
 export type ShapeMapKey = (typeof SHAPE_MAPS)[number]['key']
+
+/** Wear and dirt the core can place (`bake::Wear::key`), in plain words, with a starting amount. */
+export const WEARS = [
+  { key: 'edge_wear', label: 'Worn edges', hint: 'Paint rubbed off the sharp outer edges', amount: 0.35 },
+  { key: 'dirt', label: 'Dirt in corners', hint: 'Grime where things meet and in gaps', amount: 0.45 },
+  { key: 'dust', label: 'Dust on top', hint: 'Dust on surfaces that face up', amount: 0.5 },
+  { key: 'rain_streaks', label: 'Rain streaks', hint: 'Long marks running down the sides', amount: 0.45 },
+  { key: 'drips', label: 'Drips', hint: 'Thin runs down the steep sides', amount: 0.5 },
+  { key: 'cavity_grime', label: 'Grime in seams', hint: 'Dark lines in small seams and engravings', amount: 0.5 },
+  { key: 'crease_grime', label: 'Grime in creases', hint: 'Along the inner folds and creases', amount: 0.45 },
+  { key: 'thin_areas', label: 'Thin parts', hint: 'Ears, leaves, cloth edges: for a glow or see-through', amount: 0.5 },
+] as const
+export type WearKey = (typeof WEARS)[number]['key']
 
 export const coreAvailable = () => isTauri()
 
@@ -136,6 +151,19 @@ export const fillPart = (doc: string, mode: FillModeKey, tri: number, at: [numbe
 export async function bakeMap(doc: string, map: ShapeMapKey, size: number): Promise<ImageData> {
   const bytes = new Uint8Array(await invoke<ArrayBuffer>('texpaint_bake', { doc, size, maps: [map] }))
   return new ImageData(toRgba(bytes, size), size, size)
+}
+
+/** A wear mask at `size`²: white where the wear goes. */
+export async function wearMask(doc: string, size: number, kind: WearKey, amount: number, breakup: number, seed: number): Promise<ImageData> {
+  const bytes = new Uint8Array(await invoke<ArrayBuffer>('texpaint_wear', { doc, size, kind, amount, breakup, seed }))
+  return new ImageData(toRgba(bytes, size), size, size)
+}
+
+/** A picture as a canvas, to hand to the Draw editor. */
+export function toCanvas(img: ImageData): HTMLCanvasElement {
+  const c = Object.assign(document.createElement('canvas'), { width: img.width, height: img.height })
+  c.getContext('2d')!.putImageData(img, 0, 0)
+  return c
 }
 
 /** The core's answer (one grey plane, then the coverage plane) as RGBA pixels. */

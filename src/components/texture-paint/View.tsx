@@ -1,4 +1,4 @@
-import { Box, Download, Grid3x3, Mountain, PaintBucket, RefreshCw } from 'lucide-react'
+import { Box, Check, Dices, Download, Grid3x3, Mountain, PaintBucket, RefreshCw, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { importAssetFromBlob, resolveAssetPath } from '@/core/assets'
 import { saveBinaryFile, safeFileName } from '@/core/export'
@@ -10,7 +10,8 @@ import { createSketchDoc, SketchEditor, type SketchEditorHandle } from '@/shared
 import type * as THREE from 'three'
 import { createTexturePaintDoc, MODEL_EXTENSIONS, TEXTURE_SIZES, uvFlipped, type TexturePaintDoc } from './model'
 import { Viewer, type PaintTarget, type ViewerHandle } from './Viewer'
-import { bakeMap, coreAvailable, drawTriangles, FILL_MODES, fillPart, loadModel, packModel, pick, SHAPE_MAPS, unloadModel, type FillModeKey, type PackedModel, type ShapeMapKey } from './core'
+import { bakeMap, coreAvailable, drawTriangles, FILL_MODES, fillPart, loadModel, packModel, pick, SHAPE_MAPS, toCanvas, unloadModel, WEARS, wearMask, type FillModeKey, type PackedModel, type ShapeMapKey, type WearKey } from './core'
+import type { Id } from '@/core/model'
 import './texture-paint.css'
 import { SendMenu } from '@/shell/editor/SendMenu'
 
@@ -29,6 +30,17 @@ const UI = {
   noCore: 'Fill a part and shape maps need the installed app (desktop, tablet or phone).',
   preparing: 'Getting the model ready…',
   noLayer: 'Pick a visible, unlocked paint layer on the right first.',
+  wear: 'Add wear or dirt: a new layer in your current colour, with a mask that puts it where it belongs on the model (Ctrl+Z undoes it)',
+}
+
+/** The wear layer being tuned: its settings and where its mask is. */
+interface WearEdit {
+  kind: WearKey
+  layerId: Id
+  maskId: Id
+  amount: number
+  breakup: number
+  seed: number
 }
 
 /** Copy a model file into the project (assets/models/<id>.<ext>). */
@@ -61,6 +73,7 @@ export default function View({ documentId, active }: PanelProps) {
   const [core, setCore] = useState<'off' | 'loading' | 'ready'>('off')
   const [fillMode, setFillMode] = useState<FillModeKey | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  const [wear, setWear] = useState<WearEdit | null>(null)
   useEffect(() => () => void unloadModel(documentId!), [documentId])
 
   useEffect(() => {
@@ -177,18 +190,45 @@ export default function View({ documentId, active }: PanelProps) {
     setBusy('Baking…')
     try {
       const img = await bakeMap(documentId!, key, size)
-      const c = Object.assign(document.createElement('canvas'), { width: d.width, height: d.height })
-      const small = Object.assign(document.createElement('canvas'), { width: size, height: size })
-      small.getContext('2d')!.putImageData(img, 0, 0)
-      c.getContext('2d')!.drawImage(small, 0, 0, d.width, d.height)
-      const blob = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/png'))
-      const asset = blob && (await importAssetFromBlob(root, blob, 'image', `${key}.png`))
-      if (asset) await editor.current.insertImage(asset.path, info.label.replace(/ \(.*\)$/, ''), { fill: true, layer: { blend: info.blend, visible: info.visible } })
+      editor.current.insertPicture(toCanvas(img), info.label.replace(/ \(.*\)$/, ''), { layer: { blend: info.blend, visible: info.visible } })
       setNote(info.visible ? null : `Added as a hidden layer: turn on its eye on the right to see it.`)
     } catch (e) {
       setNote(`Baking failed: ${String(e)}`)
     } finally {
       setBusy(null)
+    }
+  }
+
+  // shortcut: wear masks share the shape maps' 2048² cap.
+  const wearSize = () => Math.min(d.width, 2048)
+
+  const addWear = async (key: WearKey) => {
+    const info = WEARS.find((w) => w.key === key)
+    if (!info || !editor.current) return
+    setBusy('Placing wear…')
+    try {
+      const seed = 1
+      const mask = await wearMask(documentId!, wearSize(), key, info.amount, 0.5, seed)
+      const { layerId, maskId } = editor.current.insertPicture(editor.current.color, info.label, { mask: toCanvas(mask) })
+      if (maskId) setWear({ kind: key, layerId, maskId, amount: info.amount, breakup: 0.5, seed })
+      setNote(null)
+    } catch (e) {
+      setNote(`Placing wear failed: ${String(e)}`)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** New settings for the wear layer: its mask is made again (one undo step each). */
+  const retune = async (next: WearEdit) => {
+    // The layer was undone or deleted: nothing left to tune.
+    if (!editor.current || !d.layers.some((l) => l.id === next.maskId)) return setWear(null)
+    setWear(next)
+    try {
+      const mask = await wearMask(documentId!, wearSize(), next.kind, next.amount, next.breakup, next.seed)
+      editor.current.replacePixels(next.maskId, toCanvas(mask))
+    } catch (e) {
+      setNote(String(e))
     }
   }
 
@@ -231,6 +271,17 @@ export default function View({ documentId, active }: PanelProps) {
               ))}
             </select>
           </label>
+          <label className="tp-pick" title={core === 'off' ? UI.noCore : UI.wear}>
+            <Sparkles size={14} />
+            <select value="" disabled={core !== 'ready' || !!busy} onChange={(e) => e.target.value && void addWear(e.target.value as WearKey)}>
+              <option value="">Add wear…</option>
+              {WEARS.map((w) => (
+                <option key={w.key} value={w.key} title={w.hint}>
+                  {w.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <button className="btn btn-ghost" title={UI.glb} onClick={() => void exportGlb()} disabled={!bytes || !!busy}>
             <Download size={14} /> {busy ?? 'GLB'}
           </button>
@@ -238,6 +289,7 @@ export default function View({ documentId, active }: PanelProps) {
             <RefreshCw size={14} />
           </button>
         </div>
+        {wear && <WearBar key={`${wear.layerId}:${wear.amount}:${wear.breakup}:${wear.seed}`} wear={wear} onChange={(w) => void retune(w)} onDone={() => setWear(null)} />}
         <Viewer bytes={bytes} path={model ?? ''} target={target} onOriginal={(img) => void onOriginal(img)} onModel={onModel} filling={!!fillMode && core === 'ready'} onFillAt={(o, dir) => void fillAt(o, dir)} handleRef={viewer} />
         <p className="tp-hint" role="status">
           {note ?? (fillMode ? 'Click a piece of the model to fill it with the current colour. Drag next to it or with the right button to turn.' : 'Paint on the model with the left button. Drag next to it or with the right button to turn, the middle button to move, the wheel to zoom.')}
@@ -268,6 +320,33 @@ function Start({ model, onPick, onStart }: { model: string; onPick(): void; onSt
       </div>
       <button className="btn btn-primary" disabled={!model} onClick={() => onStart(size)}>
         {UI.start}
+      </button>
+    </div>
+  )
+}
+
+/** Tune the wear layer just added: sliders take effect when let go, each change one undo step. */
+function WearBar({ wear, onChange, onDone }: { wear: WearEdit; onChange(w: WearEdit): void; onDone(): void }) {
+  const [amount, setAmount] = useState(wear.amount)
+  const [breakup, setBreakup] = useState(wear.breakup)
+  const label = WEARS.find((w) => w.key === wear.kind)?.label ?? 'Wear'
+  const commit = () => (amount !== wear.amount || breakup !== wear.breakup) && onChange({ ...wear, amount, breakup })
+  return (
+    <div className="tp-wear" role="group" aria-label={`${label} settings`}>
+      <strong>{label}</strong>
+      <label title="Less or more of it">
+        How much
+        <input type="range" min={0} max={1} step={0.01} value={amount} onChange={(e) => setAmount(+e.target.value)} onPointerUp={commit} onKeyUp={commit} />
+      </label>
+      <label title="Smooth edges, or broken up by noise">
+        Break up
+        <input type="range" min={0} max={1} step={0.01} value={breakup} onChange={(e) => setBreakup(+e.target.value)} onPointerUp={commit} onKeyUp={commit} />
+      </label>
+      <button className="btn btn-ghost" title="Another random pattern" onClick={() => onChange({ ...wear, seed: wear.seed + 1 })}>
+        <Dices size={14} /> New pattern
+      </button>
+      <button className="btn btn-ghost" title="Done: paint the mask on the right to add or take away wear by hand" onClick={onDone}>
+        <Check size={14} /> Done
       </button>
     </div>
   )

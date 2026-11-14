@@ -98,3 +98,16 @@
 .tp-pick select {
   max-width: 13em;
 }
+.tp-wear {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.tp-wear label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
