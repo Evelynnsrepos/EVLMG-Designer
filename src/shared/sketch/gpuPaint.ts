@@ -769,6 +769,18 @@ export class GpuPainter {
    * out = the layer `dst` with the stroke `mask` (and predicted points) painted on, inside `r`.
    * `sel` is the selection mask, if any.
    */
+  private selectionFrom: TexImageSource | null = null
+
+  /** The selection mask in one texture, uploaded again only when the selection changes (each one is a new canvas). */
+  private selection(img: TexImageSource): WebGLTexture {
+    const t = this.temp('selection')
+    if (this.selectionFrom !== img) {
+      this.upload(t, img)
+      this.selectionFrom = img
+    }
+    return t.tex
+  }
+
   /** Gaussian blur of all four channels of `src` into `out`, inside `r`. */
   blurRgba(src: Tex, out: Tex, r: Rect, sigma: number) {
     const p = this.prog('blur')
@@ -843,7 +855,7 @@ export class GpuPainter {
     this.copy(spare, work, r)
   }
 
-  applyStroke(dst: Tex, mask: Tex, pred: Tex | null, out: Tex, look: StrokeLook, r: Rect, sel: { image: TexImageSource; version: number } | null, wet: Tex | null = null) {
+  applyStroke(dst: Tex, mask: Tex, pred: Tex | null, out: Tex, look: StrokeLook, r: Rect, sel: TexImageSource | null, wet: Tex | null = null) {
     const grow = (n: number) => clip({ x: r.x - n, y: r.y - n, w: r.w + 2 * n, h: r.h + 2 * n }, this.width, this.height)
     const edges = look.wetEdges > 0 || look.burntEdges > 0
     // The blur passes read the stroke texture around the area too.
@@ -875,7 +887,7 @@ export class GpuPainter {
     this.bind(3, g ? this.image(g.image, g.filtering, true) : null, p, 'grain')
     this.bind(4, edges ? this.temp('edges').tex : null, p, 'edges')
     this.bind(5, look.height > 0 ? this.temp('relief').tex : null, p, 'relief')
-    this.bind(6, sel ? this.image(sel.image, 'mask', false, sel.version) : null, p, 'sel')
+    this.bind(6, sel ? this.selection(sel) : null, p, 'sel')
     this.bind(7, wet?.tex ?? null, p, 'wet')
     const gi = g?.image as { width: number; height: number } | undefined
     this.set(p, {

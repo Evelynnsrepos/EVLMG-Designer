@@ -398,13 +398,14 @@ export class SketchEngine {
     const changed = g.surf.takeChanged()
     // Undo keeps (and reads back) only the tiles the stroke's stamps touched, not the whole box around it.
     if (changed) for (const t of tilesIn(changed, this.width, this.height)) g.tiles.set(`${t.x},${t.y}`, t)
-    let r = final ? this.strokeArea(opts) : union(changed, p)
+    // At the end the last predicted points' area is painted again too, so none of them stay on the layer.
+    let r = final ? union(this.strokeArea(opts), g.predRect) : union(changed, p)
     if (!r) return
     // Wet and burnt edges and 3D paint look at the mask around a pixel, so a stamp changes a bit more.
     const pad = final ? 0 : Math.ceil(Math.max(g.look.wetEdges || g.look.burntEdges ? g.look.edgeBlur * 3 : 0, g.look.height > 0 ? 6 : 0)) + 1
     r = clip({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad }, this.width, this.height)
     if (!r) return
-    this.gpu!.applyStroke(this.tex(g.layerId), g.surf.t, final ? null : (g.pred?.t ?? null), g.preview, g.look, r, this.sel ? { image: this.sel.canvas, version: 0 } : null, this.wetWork)
+    this.gpu!.applyStroke(this.tex(g.layerId), g.surf.t, final ? null : (g.pred?.t ?? null), g.preview, g.look, r, this.sel?.canvas ?? null, this.wetWork)
     this.growDirty(r)
   }
 
@@ -448,7 +449,7 @@ export class SketchEngine {
     const pad = Math.ceil(g.look.wetEdges || g.look.burntEdges ? g.look.edgeBlur * 3 : 0) + 8
     const c = clip({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad }, this.width, this.height)
     if (!c) return
-    this.gpu!.applyStroke(this.tex(g.layerId), g.surf.t, g.pred?.t ?? null, g.preview, g.look, c, this.sel ? { image: this.sel.canvas, version: 0 } : null, this.wetWork)
+    this.gpu!.applyStroke(this.tex(g.layerId), g.surf.t, g.pred?.t ?? null, g.preview, g.look, c, this.sel?.canvas ?? null, this.wetWork)
     this.growDirty(c)
   }
 
@@ -481,7 +482,7 @@ export class SketchEngine {
     const g = this.g
     if (g && this.strokeOpts) {
       // Start the stroke over: its texture and preview go back to the plain layer where it was.
-      const old = this.strokeArea(this.strokeOpts)
+      const old = union(this.strokeArea(this.strokeOpts), g.predRect)
       const r = old && clip(old, this.width, this.height)
       const gpu = this.gpu!
       gpu.clear(g.surf.t, null)

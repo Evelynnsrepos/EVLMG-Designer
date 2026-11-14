@@ -562,14 +562,14 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   // Sketch Pro: canvas changes, stats, time-lapse, import/export, Reference Companion.
   const files = useSketchFiles({ doc, update, engine, root, title, activeId: activeLayer?.id, setActive: setActiveLayerId, flush, fit })
 
-  // The GPU's view of the picture sits under the visible canvas.
+  // The GPU's view of the picture sits under the visible canvas (a new one after the working area grew).
+  const gpuView = engine.view
   useEffect(() => {
-    const v = engine.view
     const box = boxRef.current
-    if (!v || !box) return
-    box.prepend(v)
-    return () => v.remove()
-  }, [engine])
+    if (!gpuView || !box) return
+    box.prepend(gpuView)
+    return () => gpuView.remove()
+  }, [gpuView])
 
   // Redraw the visible canvas.
   useEffect(() => {
