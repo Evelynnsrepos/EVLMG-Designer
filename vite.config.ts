@@ -13,8 +13,11 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    watch: { ignored: ['**/src-tauri/**'] },
+    // Git worktrees of other branches live in worktrees/ (git-ignored): never part of this app.
+    watch: { ignored: ['**/src-tauri/**', '**/worktrees/**'] },
   },
+  // Only this app's page: scanning worktrees/*/index.html pulled in a second React from their node_modules.
+  optimizeDeps: { entries: ['index.html'] },
   test: {
     globals: true,
     environment: 'node',
