@@ -400,9 +400,13 @@ export class GpuPainter {
   /** Shows the picture; the editor puts it under its own overlay canvas. */
   readonly canvas: HTMLCanvasElement
   readonly gl: WebGL2RenderingContext
-  readonly width: number
-  readonly height: number
-  lost = false
+  width: number
+  height: number
+  private lostEvent = false
+  /** The GPU context is gone (reset, driver restart); the engine falls back and makes a new painter. */
+  get lost() {
+    return this.lostEvent || this.gl.isContextLost()
+  }
   private progs = new Map<string, Prog>()
   private quad: WebGLBuffer
   private dabBuf: WebGLBuffer
@@ -414,7 +418,7 @@ export class GpuPainter {
   private groupTex = new Map<string, Tex>()
   private empty: WebGLTexture
   /** The blended picture; only the changed part is blended again. */
-  readonly picture: Tex
+  picture: Tex
   private temps = new Map<string, Tex>()
   private crop: CanvasRenderingContext2D | null = null
 
@@ -447,7 +451,7 @@ export class GpuPainter {
     canvas.className = 'sketch-gpu'
     canvas.addEventListener('webglcontextlost', (e) => {
       e.preventDefault()
-      this.lost = true
+      this.lostEvent = true
     })
     this.quad = gl.createBuffer()!
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quad)
@@ -552,6 +556,31 @@ export class GpuPainter {
     let t = this.temps.get(name)
     if (!t) this.temps.set(name, (t = this.target(w, h)))
     return t
+  }
+
+  /**
+   * The working area grew (0.31): `layers` (the layers' textures) are copied into bigger ones, `left`, `top` in, on
+   * the GPU; everything else that is picture-sized starts over. The context, its canvas and the shaders stay.
+   */
+  resize(g: { left: number; top: number; width: number; height: number }, layers: Tex[]): Tex[] {
+    const out = layers.map((old) => {
+      const t = this.target(g.width, g.height)
+      this.region(old, t, -g.left, -g.top, g.width, g.height)
+      this.free(old)
+      return t
+    })
+    for (const t of this.temps.values()) if (t.w === this.width && t.h === this.height) this.free(t)
+    for (const [k, t] of this.temps) if (t.w === this.width && t.h === this.height) this.temps.delete(k)
+    for (const lv of this.levels) lv.forEach((t) => this.free(t))
+    this.levels = []
+    for (const t of this.groupTex.values()) this.free(t)
+    this.groupTex.clear()
+    this.free(this.picture)
+    this.width = g.width
+    this.height = g.height
+    this.picture = this.target()
+    this.selectionFrom = null
+    return out
   }
 
   /** Hand a texture back as a named scratch texture (the old layer texture becomes the next preview). */

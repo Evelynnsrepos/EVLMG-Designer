@@ -78,7 +78,9 @@ export class SketchEngine {
   /** Each layer's GPU texture and the layer version it holds. */
   private texs = new Map<string, { t: Tex; version: number }>()
   /** The stroke being painted on the GPU: its stamps, predicted points, and the layer with the stroke on it. */
-  private g: { surf: GpuSurface; pred: GpuSurface | null; predRect: Rect | null; preview: Tex; look: StrokeLook; layerId: Id; tiles: Map<string, Rect> } | null = null
+  private g: { surf: GpuSurface; pred: GpuSurface | null; predRect: Rect | null; preview: Tex; look: StrokeLook; layerId: Id; tiles: Map<string, Rect>; points: InputPoint[]; seed: number } | null = null
+  /** The GPU worked once here: after a reset it is tried again (a few times, at most once a second). */
+  private gpuRetry: { at: number; left: number } | null = null
   /** What the GPU picture shows, so only changes are blended again. */
   private onPicture: { layers: SketchLayer[]; background: string | null | undefined; withBackground: boolean; edits: number } | null = null
   /** Part of the picture the GPU stroke changed since it was last blended. */
@@ -122,6 +124,7 @@ export class SketchEngine {
     this.scratch = this.canvas()
     this.paint = this.canvas()
     this.gpu = GpuPainter.create(width, height, colorSpace)
+    if (this.gpu) this.gpuRetry = { at: 0, left: 5 }
   }
 
   /** The canvas the GPU shows the picture on (the editor puts it under its overlay), or null. */
@@ -172,10 +175,14 @@ export class SketchEngine {
     this.livePreview = null
     this.onPicture = null
     this.gpuDirty = null
-    const hadGpu = !!this.gpu
-    this.gpu?.destroy()
-    this.texs.clear()
-    this.gpu = hadGpu ? GpuPainter.create(this.width, this.height, this.colorSpace) : null
+    if (this.gpu && !this.gpu.lost) {
+      // The layers' GPU copies move along on the GPU: no new context, no shaders built again, nothing uploaded.
+      const ids = [...this.texs.keys()].filter((k) => this.layers.has(k))
+      for (const k of [...this.texs.keys()]) if (!this.layers.has(k)) this.gpu.free(this.texs.get(k)!.t)
+      const moved = this.gpu.resize(g, ids.map((k) => this.texs.get(k)!.t))
+      this.texs.clear()
+      ids.forEach((k, i) => this.texs.set(k, { t: moved[i], version: this.layerVersions.get(k) ?? 0 }))
+    } else this.texs.clear()
     this.edits++
     this.version++
   }
@@ -193,11 +200,10 @@ export class SketchEngine {
 
   /** The GPU failed or its context was lost: carry on in Canvas 2D (each layer's Canvas 2D copy is up to date). */
   private gpuFailed() {
+    // The stroke being painted carries on in Canvas 2D, painted again from its points.
+    if (this.g) this.strokeToCpu()
     this.gpu = null
     this.texs.clear()
-    this.g = null
-    this.stamper = null
-    this.strokeOpts = null
     this.onPicture = null
     this.edits++
     this.version++
@@ -225,7 +231,37 @@ export class SketchEngine {
 
   private gpuFor(_doc: LayerStack) {
     if (this.gpu?.lost) this.gpuFailed()
+    const r = this.gpuRetry
+    if (!this.gpu && r && r.left > 0 && performance.now() - r.at > 1000) {
+      // A reset GPU (driver restart, graphics switch, sleep) usually works again a moment later.
+      r.at = performance.now()
+      r.left--
+      this.gpu = GpuPainter.create(this.width, this.height, this.colorSpace)
+      if (this.gpu) {
+        r.left = 5
+        this.edits++
+        this.version++
+      }
+    }
     return this.gpuActive
+  }
+
+  /** The GPU went away in the middle of a stroke: paint the stroke again in Canvas 2D (same points, same random numbers) and go on there. */
+  private strokeToCpu() {
+    const g = this.g!
+    const opts = this.strokeOpts
+    this.g = null
+    if (!opts) return
+    this.stroke = this.canvas()
+    this.strokeBounds = null
+    this.livePreview = null
+    this.stamper = this.newStamper(opts, g.seed)
+    for (const p of g.points) this.stamper.add(p)
+  }
+
+  /** A point with the time it arrived, so a stroke painted again comes out the same. */
+  private timed(p: InputPoint): InputPoint {
+    return (p as { time?: number }).time === undefined ? ({ ...p, time: performance.now() } as InputPoint) : p
   }
 
   private touched(id: Id) {
@@ -332,8 +368,10 @@ export class SketchEngine {
       gpu.clear(surf.t, null)
       const preview = gpu.temp('preview')
       gpu.copy(this.tex(opts.layer.id), preview, null)
-      this.g = { surf, pred: null, predRect: null, preview, look: this.strokeLook(opts), layerId: opts.layer.id, tiles: new Map() }
-      this.stamper = this.gpuStamper(opts, surf)
+      const seed = Math.floor(Math.random() * 1e9)
+      p = this.timed(p)
+      this.g = { surf, pred: null, predRect: null, preview, look: this.strokeLook(opts), layerId: opts.layer.id, tiles: new Map(), points: [p], seed }
+      this.stamper = this.gpuStamper(opts, surf, seed)
     } else {
       this.stroke = this.canvas()
       this.stamper = this.newStamper(opts)
@@ -411,7 +449,14 @@ export class SketchEngine {
 
   strokeTo(p: InputPoint) {
     if (!this.stamper) return
-    this.stamper.add(p)
+    if (this.g) {
+      if (this.gpu?.lost) this.gpuFailed()
+      else {
+        p = this.timed(p)
+        this.g.points.push(p)
+      }
+    }
+    this.stamper!.add(p)
     this.version++
   }
 
@@ -495,8 +540,10 @@ export class SketchEngine {
         this.growDirty(r)
       }
       this.strokeBounds = null
+      g.points = points.map((p) => this.timed(p))
+      g.seed = 1
       this.stamper = this.gpuStamper(this.strokeOpts, g.surf, 1)
-      for (const p of points) this.stamper.add(p)
+      for (const p of g.points) this.stamper.add(p)
       this.version++
       return
     }
@@ -563,6 +610,7 @@ export class SketchEngine {
   /** Finish the stroke: merge it into the layer and record undo. Returns the changed layer. */
   endStroke(): Id | null {
     const opts = this.strokeOpts
+    if (this.g && this.gpu?.lost) this.gpuFailed()
     if (this.g && opts) return this.endGpuStroke(opts)
     if (!this.stroke || !opts) return null
     this.predicted = null
