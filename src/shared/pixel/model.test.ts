@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { sliceSheet } from './model'
-import { blank, brushOffsets, cleanPath, composite, ellipsePoints, floodPoints, getPx, line, parsePalette, ramp, rectPoints, setPx, shadeStep, tagFrames } from './model'
+import { blank, brushOffsets, cleanPath, composite, ellipsePoints, floodPoints, getPx, line, parsePalette, ramp, rectPoints, setPx, shadeStep, tagFrames, type Img } from './model'
 
 describe('pixel art drawing', () => {
   it('draws exact lines and drops L corners for clean lines', () => {
@@ -105,5 +105,21 @@ describe('shapePixels', async () => {
     for (let i = 1; i < tilted.length; i++) expect(Math.max(Math.abs(tilted[i][0] - tilted[i - 1][0]), Math.abs(tilted[i][1] - tilted[i - 1][1]))).toBeLessThanOrEqual(1)
     const [a, b] = [tilted[0], tilted[tilted.length - 1]]
     expect(Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]))).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('composite with a flattened base', () => {
+  it('gives the same picture as flattening every layer at once', () => {
+    const img = (seed: number): Img => {
+      const out = blank(5, 4)
+      for (let i = 0; i < out.data.length; i++) out.data[i] = (i * seed * 37 + seed * 11) % 256
+      return out
+    }
+    const layers = [1, 2, 3, 4].map((n, i) => ({ visible: true, opacity: 0.5 + i * 0.15, blend: (['normal', 'multiply', 'screen', 'normal'] as const)[i], img: img(n) }))
+    const all = composite(layers, 5, 4)
+    const below = composite(layers.slice(0, 2), 5, 4)
+    const belowCopy = new Uint8ClampedArray(below.data)
+    expect(composite(layers.slice(2), 5, 4, below).data).toEqual(all.data)
+    expect(below.data).toEqual(belowCopy)
   })
 })

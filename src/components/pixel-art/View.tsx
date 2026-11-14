@@ -17,7 +17,7 @@ import { encodeGif } from '@/shared/sketch/files/gif'
 import { createLibrary, drawTile, FLIP_H, FLIP_V, LIBRARY_ID, tilePixel, tileRect, TRANSPOSE, turnFlags, type TileLibrary } from '@/shared/tileset'
 import { IMAGE_TARGETS, openComponent, sendImageTo } from '@/shell/editor/actions'
 import { readAse } from './ase'
-import { celImg, decode, decodeFrames, encode, pngBytes, toCanvas, useDecoded } from '@/shared/pixel/codec'
+import { blit, celImg, decode, decodeFrames, encode, pngBytes, toCanvas, useDecoded } from '@/shared/pixel/codec'
 import { DEFAULT_SHEET, godotSpriteFrames, sheetJson, sheetLayout, type SheetOptions } from './exports'
 import {
   blank,
@@ -554,35 +554,58 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
   /** The frame as it is exported: reference layers left out. */
   // Flattened frames are kept until the file changes (thumbnails and onion skin would redo them on every redraw).
   // oxlint-disable-next-line react-hooks/exhaustive-deps -- a new cache whenever pixels, layers or frames change
-  const frameCache = useMemo(() => new Map<number, Img>(), [d.cels, d.layers, d.frames, d.celOpacity, d.width, d.height, decodedCount])
+  const frameCache = useMemo(() => new Map<number | string, Img>(), [d.cels, d.layers, d.frames, d.celOpacity, d.width, d.height, decodedCount])
   const frameImg = (i: number) => {
     // The frame being drawn on right now is always fresh.
     const busy = live.current?.key ?? curve.current?.key
     const drawing = !!busy && d.layers.some((l) => resolveKey(d.cels, celKey(l.id, d.frames[i].id)) === busy)
     const hit = !drawing && frameCache.get(i)
     if (hit) return hit
-    const img = composite(d.layers.filter((l) => !l.reference).map((l) => ({ visible: l.visible, opacity: celAlpha(d, l, d.frames[i].id), blend: l.blend, img: imgOf(l.id, d.frames[i].id) })), d.width, d.height)
-    if (!drawing) frameCache.set(i, img)
-    return img
+    const own = d.layers.filter((l) => !l.reference)
+    const list = own.map((l) => ({ visible: l.visible, opacity: celAlpha(d, l, d.frames[i].id), blend: l.blend, img: imgOf(l.id, d.frames[i].id) }))
+    if (!drawing) {
+      const img = composite(list, d.width, d.height)
+      frameCache.set(i, img)
+      return img
+    }
+    // While drawing, the layers below the one being drawn on are flattened once per stroke, not on every move.
+    const k = own.findIndex((l) => resolveKey(d.cels, celKey(l.id, d.frames[i].id)) === busy)
+    const key = `below:${i}:${busy}:${k}`
+    let below = frameCache.get(key)
+    if (!below) frameCache.set(key, (below = composite(list.slice(0, k), d.width, d.height)))
+    return composite(list.slice(k), d.width, d.height, below)
   }
   /** Reference layers of a frame, drawn faintly under the picture while you draw. */
-  const refImg = (i: number) => (d.layers.some((l) => l.reference && l.visible) ? composite(d.layers.filter((l) => l.reference).map((l) => ({ visible: l.visible, opacity: l.opacity, img: imgOf(l.id, d.frames[i].id) })), d.width, d.height) : null)
+  const refImg = (i: number) => {
+    const refs = d.layers.filter((l) => l.reference)
+    if (!refs.some((l) => l.visible)) return null
+    const busy = live.current?.key ?? curve.current?.key
+    const drawing = !!busy && refs.some((l) => resolveKey(d.cels, celKey(l.id, d.frames[i].id)) === busy)
+    const hit = !drawing && frameCache.get(`ref:${i}`)
+    if (hit) return hit
+    const img = composite(refs.map((l) => ({ visible: l.visible, opacity: l.opacity, img: imgOf(l.id, d.frames[i].id) })), d.width, d.height)
+    if (!drawing) frameCache.set(`ref:${i}`, img)
+    return img
+  }
 
   // ---- Drawing on screen ----
+  // Setting a canvas's size wipes and reallocates it, so only when it really changes.
+  const fit = (c: HTMLCanvasElement, w: number, h: number) => {
+    if (c.width !== w || c.height !== h) [c.width, c.height] = [w, h]
+  }
   const draw = () => {
     const c = canvas.current
     if (!c) return
     const g = c.getContext('2d')!
     g.imageSmoothingEnabled = false
     if (inMap && d.map) {
-      c.width = d.map.width * ts
-      c.height = d.map.height * ts
+      fit(c, d.map.width * ts, d.map.height * ts)
       g.clearRect(0, 0, c.width, c.height)
-      const set = toCanvas(frameImg(0))
+      const set = blit(frameImg(0), 0)
       for (const ml of d.map.layers) {
         if (!ml.visible) continue
         if (ml.id === mapLayer?.id && live.current?.key === 'map') {
-          g.drawImage(toCanvas(live.current.img), 0, 0)
+          g.drawImage(blit(live.current.img, 1), 0, 0)
           continue
         }
         const cells = ml.id === mapLayer?.id && mapDraft ? mapDraft : ml.cells
@@ -594,8 +617,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
       }
     } else {
       const reps = seamless ? 3 : 1
-      c.width = d.width * reps
-      c.height = d.height * reps
+      fit(c, d.width * reps, d.height * reps)
       g.clearRect(0, 0, c.width, c.height)
       const at = seamless ? [d.width, d.height] : [0, 0]
       if (onion && d.frames.length > 1)
@@ -604,17 +626,17 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
             const j = fi + dir * k
             if (j < 0 || j >= d.frames.length) continue
             g.globalAlpha = (dir < 0 ? 0.32 : 0.2) / k
-            g.drawImage(onionTint ? tinted(frameImg(j), dir < 0 ? '#e03131' : '#1c7ed6') : toCanvas(frameImg(j)), at[0], at[1])
+            g.drawImage(onionTint ? tinted(frameImg(j), dir < 0 ? '#e03131' : '#1c7ed6') : blit(frameImg(j)), at[0], at[1])
             g.globalAlpha = 1
           }
       const v = d.variants?.find((x) => x.id === variant)
       const ref = refImg(fi)
       if (ref) {
         g.globalAlpha = 0.45
-        g.drawImage(toCanvas(ref), at[0], at[1])
+        g.drawImage(blit(ref), at[0], at[1])
         g.globalAlpha = 1
       }
-      const img = toCanvas(v ? swapColors(frameImg(fi), d.palette, v.colors) : frameImg(fi))
+      const img = blit(v ? swapColors(frameImg(fi), d.palette, v.colors) : frameImg(fi))
       if (seamless)
         for (let y = 0; y < 3; y++)
           for (let x = 0; x < 3; x++) {
@@ -1207,6 +1229,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
   }
 
   const onDown = (e: React.PointerEvent) => {
+    flush()
     if (e.button === 1 || tool === 'hand' || spaceDown.current) {
       // Look around: the picture moves with the pointer.
       const f = layout()
@@ -1430,23 +1453,41 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
     return next
   }
 
+  // Pen and mouse moves can come many times per screen frame (WebKitGTK does not merge them):
+  // every move is recorded, but the picture is rendered and drawn at most once per frame.
+  const pending = useRef(new Map<string, () => void>())
+  const raf = useRef(0)
+  const flush = () => {
+    cancelAnimationFrame(raf.current)
+    raf.current = 0
+    const jobs = pending.current
+    const work = jobs.get('work')
+    jobs.delete('work')
+    const rest = [...jobs.values()]
+    jobs.clear()
+    work?.()
+    for (const job of rest) job()
+  }
+  const onFrame = (kind: 'work' | 'view' | 'overlay', job: () => void) => {
+    pending.current.set(kind, job)
+    if (!raf.current) raf.current = requestAnimationFrame(flush)
+  }
   const onMove = (e: React.PointerEvent) => {
     const pan = panning.current
     if (pan) {
       view.current = { x: pan.vx + e.clientX - pan.x, y: pan.vy + e.clientY - pan.y }
-      present()
-      return drawOverlay()
+      return onFrame('view', () => (present(), drawOverlay()))
     }
     let p = pos(e)
     hover.current = p
-    if (poly.current) return drawOverlay()
+    if (poly.current) return onFrame('overlay', drawOverlay)
     if (editing.current && layer.vector && !inMap) {
       shapes.move(wrap(p), e.ctrlKey || e.metaKey)
-      return drawOverlay()
+      return onFrame('overlay', drawOverlay)
     }
     if (draft.current) {
-      setMapDraft(placeTiles(draft.current, p, (e.buttons & 2) === 2))
-      return
+      const [dr, right] = [draft.current, (e.buttons & 2) === 2]
+      return onFrame('work', () => setMapDraft(placeTiles(dr, p, right)))
     }
     const sel = selecting.current
     if (sel) {
@@ -1454,36 +1495,35 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
       // Ctrl while dragging: a perfect square or circle.
       const q = (e.ctrlKey || e.metaKey) && (tool === 'select' || tool === 'ellipseSelect') ? square(sel.start, q0) : q0
       sel.path.push(q)
-      sel.preview = combine(mask, tool === 'lasso' ? lassoMask(d.width, d.height, sel.path) : tool === 'ellipseSelect' ? ellipseMask(d.width, d.height, sel.start[0], sel.start[1], q[0], q[1]) : rectMask(d.width, d.height, sel.start[0], sel.start[1], q[0], q[1]), sel.how)
-      return drawOverlay()
+      onFrame('work', () => (sel.preview = combine(mask, tool === 'lasso' ? lassoMask(d.width, d.height, sel.path) : tool === 'ellipseSelect' ? ellipseMask(d.width, d.height, sel.start[0], sel.start[1], q[0], q[1]) : rectMask(d.width, d.height, sel.start[0], sel.start[1], q[0], q[1]), sel.how), drawOverlay()))
+      return
     }
     const l = live.current
-    if (!l) return drawOverlay()
+    if (!l) return onFrame('overlay', drawOverlay)
     if (l.float && l.xform) {
-      transformFloat(l, p, e.shiftKey)
-      return draw()
+      const shift = e.shiftKey
+      return onFrame('work', () => (transformFloat(l, p, shift), draw()))
     }
     if (l.float) {
       l.at = p
-      dropFloat(l, p[0] - l.start[0], p[1] - l.start[1])
-      return draw()
+      return onFrame('work', () => (dropFloat(l, p[0] - l.start[0], p[1] - l.start[1]), draw()))
     }
     if (l.key === 'map') {
       const last = l.path[l.path.length - 1]
       if (last[0] !== p[0] || last[1] !== p[1]) l.path.push(...line(last[0], last[1], p[0], p[1]).slice(1))
-      renderAuto(l)
-      return draw()
+      return onFrame('work', () => (renderAuto(l), draw()))
     }
     if (l.snap) {
       // Snapped: the shape follows the pointer instead of the stroke growing; wobbling near the snap keeps it still.
       const tol = holdTolerance()
       const px = zoom * ax
-      reshape(l, Math.hypot(p[0] - l.snap.at[0], p[1] - l.snap.at[1]) * px <= tol ? l.snap.at : p)
+      const to = Math.hypot(p[0] - l.snap.at[0], p[1] - l.snap.at[1]) * px <= tol ? l.snap.at : p
+      onFrame('work', () => (reshape(l, to), draw()))
       if (Math.hypot(e.clientX - hold.current.rest.x, e.clientY - hold.current.rest.y) > tol) {
         hold.current.rest = { x: e.clientX, y: e.clientY }
         armPerfect(l)
       }
-      return draw()
+      return
     }
     if (tool === 'pencil' || tool === 'eraser' || tool === 'shade' || tool === 'lassofill') {
       const f = hold.current.filter
@@ -1504,11 +1544,10 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
     if (tool === 'spray') spray(l, p)
     if (tool === 'curve' && l.ctrl) {
       l.ctrl = p
-      render(l, l.path[0])
-      return draw()
+      return onFrame('work', () => (render(l, l.path[0]), draw()))
     }
-    render(l, !(e.shiftKey || ((e.ctrlKey || e.metaKey) && (tool === 'rect' || tool === 'ellipse'))) ? p : tool === 'line' || tool === 'curve' ? constrain(l.start, p) : tool === 'rect' || tool === 'ellipse' ? square(l.start, p) : p)
-    draw()
+    const end = !(e.shiftKey || ((e.ctrlKey || e.metaKey) && (tool === 'rect' || tool === 'ellipse'))) ? p : tool === 'line' || tool === 'curve' ? constrain(l.start, p) : tool === 'rect' || tool === 'ellipse' ? square(l.start, p) : p
+    onFrame('work', () => (render(l, end), draw()))
   }
   // QuickShape for the pencil, eraser and shade brush: rest at the end of a stroke and it snaps to a clean
   // line, arc, box or ellipse in whole pixels; keep holding and it turns perfect. One undo step, like any stroke.
@@ -1547,6 +1586,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
   }
 
   const onUp = () => {
+    flush()
     clearTimeout(hold.current.timer)
     if (panning.current) return void (panning.current = null)
     if (editing.current) {

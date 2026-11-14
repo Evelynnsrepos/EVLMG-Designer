@@ -32,6 +32,15 @@ export function toCanvas(img: Img, scale = 1): HTMLCanvasElement {
   return big
 }
 
+const slots: HTMLCanvasElement[] = []
+/** Like toCanvas, but reuses canvas number `slot` and copies nothing: for drawing right away (the next blit to that slot overwrites it). */
+export function blit(img: Img, slot = 0): HTMLCanvasElement {
+  const c = (slots[slot] ??= document.createElement('canvas'))
+  if (c.width !== img.width || c.height !== img.height) [c.width, c.height] = [img.width, img.height]
+  c.getContext('2d')!.putImageData(new ImageData(img.data as Uint8ClampedArray<ArrayBuffer>, img.width, img.height), 0, 0)
+  return c
+}
+
 /** Pixels to a PNG data URL (and remembered decoded); null when the image is fully transparent. */
 export function encode(img: Img): string | null {
   let any = false

@@ -314,8 +314,9 @@ function mixer(blend: PixelBlend | undefined): ((s: Uint8ClampedArray, i: number
 }
 
 /** Flatten visible layers of one frame (layer opacity, and multiply/screen/add where a layer asks for it). */
-export function composite(layers: { visible: boolean; opacity: number; img: Img | undefined; blend?: PixelLayer['blend'] }[], width: number, height: number): Img {
-  const out = blank(width, height)
+export function composite(layers: { visible: boolean; opacity: number; img: Img | undefined; blend?: PixelLayer['blend'] }[], width: number, height: number, base?: Img): Img {
+  // `base`: layers already flattened below these (kept unchanged).
+  const out = base ? cloneImg(base) : blank(width, height)
   const d = out.data
   for (const l of layers) {
     if (!l.visible || !l.img) continue
