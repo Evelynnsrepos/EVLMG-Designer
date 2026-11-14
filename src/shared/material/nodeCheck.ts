@@ -1,15 +1,17 @@
 // Shared by the node tests: puts one library node in a small graph with test pictures on its inputs,
 // renders it and measures whether the result tiles.
 import { createGen, type Gen, GenContext, GenGraph } from './gen'
-import { mmLibrary } from './library'
+import { is3dOutput, mmLibrary, PICTURE_TYPES } from './library'
 import { fragmentSource, type MaterialRenderer, ShaderError } from './render'
 
 // What feeds each input type in the test: a tiling noise for pictures, a circle for shapes.
-const TEST_SOURCES: Record<string, string> = { f: 'perlin', rgb: 'perlin_color', rgba: 'perlin_color', sdf2d: 'sdcircle', fill: 'fill2' }
-const PICTURE_TYPES = ['f', 'rgb', 'rgba', 'sdf2d', 'fill']
+const TEST_SOURCES: Record<string, string> = {
+  f: 'perlin', rgb: 'perlin_color', rgba: 'perlin_color', sdf2d: 'sdcircle', fill: 'fill2',
+  sdf3d: 'sdf3d_sphere', sdf3dc: 'sdf3d_sphere', tex3d: 'tex3d_fbm', tex3d_gs: 'tex3d_fbm',
+}
 
 /** The node inside a test graph, plus the output that gets rendered. */
-export function testNode(id: string): { gen: Gen; output: number } {
+export function testNode(id: string): { gen: Gen; output: number; is3d: boolean } {
   const probe = createGen({ type: id, name: id, parameters: {}, node_position: { x: 0, y: 0 } }, mmLibrary)!
   const inputs = probe.getInputDefs()
   const nodes: object[] = [{ name: 'node', type: id, parameters: {}, node_position: { x: 0, y: 0 } }]
@@ -38,7 +40,7 @@ export function testNode(id: string): { gen: Gen; output: number } {
   graph.deserialize({ nodes, connections, label: 'test' })
   const gen = graph.child('node')!
   const output = gen.getOutputDefs().findIndex(o => PICTURE_TYPES.includes(o.type))
-  return { gen, output }
+  return { gen, output, is3d: is3dOutput(gen.getOutputDefs()[output]?.type) }
 }
 
 /** The fragment shader of the node's final pass (no GPU needed). */
@@ -54,6 +56,7 @@ export interface NodeCheck {
   seam?: number
   tiles?: boolean
   finite?: boolean
+  is3d?: boolean
 }
 
 /**
@@ -79,12 +82,13 @@ export function seamScore(pixels: Float32Array, size: number): number {
 
 export function checkNode(id: string, renderer: MaterialRenderer, size = 128): NodeCheck {
   try {
-    const { gen, output } = testNode(id)
+    const { gen, output, is3d } = testNode(id)
     const r = renderer.render(gen, output, size)
     const finite = r.pixels.every(Number.isFinite)
     const seam = seamScore(r.pixels, size)
     // shortcut: up to 1.5× the harshest inside change counts as tiling; a gradient's seam scores 50× or more
-    return { id, seam, finite, tiles: finite && seam <= 1.5 }
+    // a 3D preview is one lit object, never meant to tile
+    return { id, seam, finite, is3d, tiles: finite && (is3d || seam <= 1.5) }
   } catch (e) {
     if (e instanceof ShaderError) {
       const line = +(e.log.match(/ERROR: \d+:(\d+)/)?.[1] ?? 0)

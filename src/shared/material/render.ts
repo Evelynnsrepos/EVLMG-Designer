@@ -1,5 +1,6 @@
 // Material Lab renderer: runs the GLSL from gen.ts on the GPU with WebGL2.
 // Buffers become render passes into their own textures; everything else is stitched into one shader per pass.
+import { PREVIEW_3D } from './preview3d'
 import { godotToGlsl } from './godot'
 import { type Gen, GenBuffer, GenContext, GenIterateBuffer, type ShaderCode, type Uniform } from './gen'
 
@@ -74,7 +75,7 @@ export function fragmentSource(code: ShaderCode): string {
   let body = code.code
   let rgba = code.outputValues.rgba
   if (rgba === undefined) {
-    const preview = PREVIEW[code.outputType]
+    const preview = PREVIEW[code.outputType] ?? PREVIEW_3D[code.outputType]
     if (!preview) throw new Error(`Can't show a ${code.outputType || 'missing'} output as a picture`)
     defs += preview.replace('$(code)', body).replaceAll('$(value)', code.outputValues[code.outputType])
     body = ''
@@ -349,7 +350,10 @@ function setUniform(gl: WebGL2RenderingContext, loc: WebGLUniformLocation | null
     if (Array.isArray(v)) gl.uniform1fv(loc, v)
     else gl.uniform1f(loc, +v)
   }
-  else if (u.type === 'int') gl.uniform1i(loc, Math.trunc(+v))
+  else if (u.type === 'int') {
+    if (Array.isArray(v)) gl.uniform1iv(loc, Int32Array.from(v))
+    else gl.uniform1i(loc, Math.trunc(+v))
+  }
   else if (u.type === 'vec2') gl.uniform2fv(loc, v as number[])
   else if (u.type === 'vec4') gl.uniform4fv(loc, v as number[])
 }
