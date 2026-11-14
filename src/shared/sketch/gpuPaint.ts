@@ -361,6 +361,9 @@ function compile(gl: WebGL2RenderingContext, vert: string, frag: string) {
 /** Turn off to test the Canvas 2D engine (Settings → Drawing). */
 export const gpuAllowed = { value: true }
 
+/** Tests turn this on to run the GPU engine on SwiftShader. */
+export const gpuAllowSoftware = { value: false }
+
 /** Software GL drivers paint slower than Canvas 2D, so the engine stays on Canvas 2D there. */
 export const isSoftwareGl = (renderer: string) => /llvmpipe|softpipe|swiftshader|software|swrast/i.test(renderer)
 
@@ -398,7 +401,7 @@ export class GpuPainter {
       const max = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number
       if (width > max || height > max) return null
       const info = gl.getExtension('WEBGL_debug_renderer_info')
-      if (info && isSoftwareGl(String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)))) return null
+      if (info && !gpuAllowSoftware.value && isSoftwareGl(String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)))) return null
       if (colorSpace !== 'srgb' && 'drawingBufferColorSpace' in gl) {
         gl.drawingBufferColorSpace = colorSpace
         gl.unpackColorSpace = colorSpace
