@@ -36,7 +36,13 @@ How a node becomes a picture: `gen.getShaderCode('uv', output, new GenContext())
 - **Tests:** `gen.test.ts` builds the shader of every included node without a GPU. `gpu.test.ts` compiles and
   renders every included node in headless Chrome/Chromium (small buffers and at most 8 loop rounds, to stay fast on a software GPU) and checks that the picture tiles (3D previews are one object, so they only have to render cleanly); it is skipped when no
   browser is found, and CI sets `MATERIAL_GPU_TEST=required` so it can't be skipped there.
-- Not built yet: the document type, screens, export. Those are builds 2 to 4.
+- **Screens (build 2 and 3, `src/components/material/`):** the `material` document (see `docs/FORMAT.md`), a gallery
+  of 31 of Material Maker's example materials (`shared/material/examples/`), the lit preview (`preview.ts`: ball,
+  3×3 tiled floor, 64 px pixel-art tile, five light presets, one map at a time), the Simple view (Material node
+  sliders, "Surprise me" = Material Maker's variation) and PNG map export, plus the Graph view (`GraphView.tsx`:
+  move, connect, add nodes by search, float/enum/size/boolean/colour settings, node pictures).
+- Not built yet: the Layers view, editors for gradient/curve/polygon/spline/pixel settings, Godot material export,
+  own 3D model in the preview, before/after slider, frames and comments in the graph, pinch zoom. Those are builds 2 to 4.
 
 ## Mobile app
 
