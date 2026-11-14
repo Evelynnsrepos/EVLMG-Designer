@@ -1,4 +1,5 @@
 import { ImagePlus, X } from 'lucide-react'
+import { frameOf } from '../growth'
 import { useEffect, useRef, useState } from 'react'
 import { useAssetUrl } from '@/core/assets'
 import type { SketchEngine } from '../engine'
@@ -51,14 +52,15 @@ export function CompanionWindow(p: { doc: SketchDoc; engine: SketchEngine; compa
       last.current = Date.now()
       const dpr = window.devicePixelRatio || 1
       canvas.width = Math.round(c.width * dpr)
-      canvas.height = Math.round(((c.width * d.height) / d.width) * dpr)
+      const f = frameOf(d)
+      canvas.height = Math.round(((c.width * f.h) / f.w) * dpr)
       const ctx = canvas.getContext('2d')!
       ctx.imageSmoothingQuality = 'high'
       if (d.backgroundColor) {
         ctx.fillStyle = d.backgroundColor
         ctx.fillRect(0, 0, canvas.width, canvas.height)
       }
-      ctx.drawImage(e.render({ ...d, layers: exportLayers(d.layers) }, false), 0, 0, canvas.width, canvas.height)
+      ctx.drawImage(e.render({ ...d, layers: exportLayers(d.layers) }, false), f.x, f.y, f.w, f.h, 0, 0, canvas.width, canvas.height)
     }
     if (timer.current) return
     const wait = REDRAW_MS - (Date.now() - last.current)

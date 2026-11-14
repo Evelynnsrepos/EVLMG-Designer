@@ -47,7 +47,8 @@ import { ReferencePicker } from './ReferencePicker'
 import { ReferenceWindow } from './ReferenceWindow'
 import { ShortcutSheet } from './ShortcutSheet'
 import { FloatingPanel, useSpot } from './FloatingPanel'
-import { maxLayers } from './tiles'
+import { growDoc, growFor, shiftDocData } from './growth'
+import { boundsOf, maxLayers, type Rect } from './tiles'
 import './sketch.css'
 // Sketch Pro: layers, selections (feat/sketch-layers)
 import { exportLayers, hasPixels, insertAbove, isGroup, lockedInTree } from './layers'
@@ -198,6 +199,8 @@ export interface SketchEditorProps {
   panel?: ReactNode
   /** Imperative access for the host tool. */
   editorRef?: Ref<SketchEditorHandle>
+  /** 0.31: paint and moved pixels can go past the canvas's edges (the working area grows); Draw only. */
+  growable?: boolean
 }
 
 export interface SketchEditorHandle {
@@ -227,11 +230,20 @@ function CardGuides({ g, width, height, scale }: { g: NonNullable<SketchDoc['car
   )
 }
 
-export function SketchEditor({ doc, update: save, active, title, actions, swatches = SWATCHES, panel, editorRef }: SketchEditorProps) {
+export function SketchEditor({ doc, update: save, active, title, actions, swatches = SWATCHES, panel, editorRef, growable = false }: SketchEditorProps) {
   const root = useProjectStore((s) => s.root)
   const engineRef = useRef<SketchEngine | null>(null)
   const colorSpace = doc.colorSpace ?? 'srgb'
-  if (!engineRef.current || engineRef.current.width !== doc.width || engineRef.current.height !== doc.height || engineRef.current.colorSpace !== colorSpace) {
+  // A new engine only when the drawing's size was changed from outside (Canvas dialog, another file): when the
+  // working area grows, the engine grows first and the drawing follows a moment later.
+  const docSize = useRef({ w: doc.width, h: doc.height })
+  // oxlint-disable-next-line react/refs -- compared during render on purpose, see above
+  const resized = docSize.current.w !== doc.width || docSize.current.h !== doc.height
+  // oxlint-disable-next-line react/refs
+  docSize.current = { w: doc.width, h: doc.height }
+  const mismatch = engineRef.current && (engineRef.current.width !== doc.width || engineRef.current.height !== doc.height)
+  // oxlint-disable-next-line react/refs
+  if (!engineRef.current || (mismatch && resized) || engineRef.current.colorSpace !== colorSpace) {
     // oxlint-disable-next-line react/refs -- the engine is a mutable drawing surface, created once per canvas size
     engineRef.current = new SketchEngine(doc.width, doc.height, colorSpace)
   }
@@ -462,6 +474,29 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     [engine, flush, saveKey],
   )
 
+  /**
+   * 0.31: make room past the canvas's edge before paint or moved pixels reach the working area's edge.
+   * Only between strokes; the view moves along so nothing jumps, and every layer is saved again at the new size.
+   */
+  const growTo = (r: Rect, margin: number) => {
+    if (!growable || engine.stroking) return null
+    const g = growFor(engine.width, engine.height, r, margin)
+    if (!g) return null
+    engine.grow(g, (m) => shiftDocData(m, g))
+    xf.grow(g)
+    sel.refresh()
+    const v = viewRef.current
+    if (v) {
+      const [a, b, c, d] = viewMatrix(v)
+      const next = { ...v, x: v.x - (a * g.left + c * g.top), y: v.y - (b * g.left + d * g.top) }
+      viewRef.current = next
+      setView(next)
+    }
+    save((d) => growDoc(d, g))
+    for (const l of doc.layers) if (hasPixels(l)) markDirty(l.id)
+    return g
+  }
+
   // ColorDrop: drag the colour onto the canvas to fill (Sketch Pro).
   const drop = useColorDrop(
     engine,
@@ -501,9 +536,10 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const fit = useCallback(() => {
     const box = boxRef.current
     if (!box) return
-    const scale = Math.min((box.clientWidth - 40) / doc.width, (box.clientHeight - 40) / doc.height, 1)
-    setView({ scale, x: (box.clientWidth - doc.width * scale) / 2, y: (box.clientHeight - doc.height * scale) / 2 })
-  }, [doc.width, doc.height])
+    const f = doc.frame ?? { x: 0, y: 0, w: doc.width, h: doc.height }
+    const scale = Math.min((box.clientWidth - 40) / f.w, (box.clientHeight - 40) / f.h, 1)
+    setView({ scale, x: (box.clientWidth - f.w * scale) / 2 - f.x * scale, y: (box.clientHeight - f.h * scale) / 2 - f.y * scale })
+  }, [doc.width, doc.height, doc.frame])
 
   useEffect(() => {
     if (!view) fit()
@@ -548,9 +584,18 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     if (!gpuShown) assist.paint(ctx)
     // Transparent pages are just a white outline over the app's wallpaper.
     const px = 1 / view.scale
+    const f = doc.frame ?? { x: 0, y: 0, w: doc.width, h: doc.height }
+    if (doc.frame) {
+      // 0.31: paint past the canvas's edges stays, dimmed; exports are cut to the canvas.
+      ctx.beginPath()
+      ctx.rect(0, 0, doc.width, doc.height)
+      ctx.rect(f.x, f.y, f.w, f.h)
+      ctx.fillStyle = 'rgba(0,0,0,0.45)'
+      ctx.fill('evenodd')
+    }
     ctx.strokeStyle = doc.backgroundColor ? 'rgba(128,128,128,0.6)' : '#ffffff'
     ctx.lineWidth = (doc.backgroundColor ? 1 : 1.5) * px
-    ctx.strokeRect(-0.5 * px, -0.5 * px, doc.width + px, doc.height + px)
+    ctx.strokeRect(f.x - 0.5 * px, f.y - 0.5 * px, f.w + px, f.h + px)
     ctx.restore()
   })
 
@@ -637,7 +682,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         tether: (strokeBrush.tether * 150) / view.scale,
         constraint: assistFor(liveGuide, activeLayer.id, 8 / view.scale),
       })
-      const pt = pipeline.push({ ...p, ...penData(e.nativeEvent, input.pressureCurve) }, e.timeStamp)[0] ?? { ...p, pressure: 1 }
+      // Near the working area's edge: grow it first, so the stroke can go past the canvas.
+      const at = growTo({ x: p.x - strokeBrush.size, y: p.y - strokeBrush.size, w: strokeBrush.size * 2, h: strokeBrush.size * 2 }, 128) ? toDoc(e) : p
+      const pt = pipeline.push({ ...at, ...penData(e.nativeEvent, input.pressureCurve) }, e.timeStamp)[0] ?? { ...at, pressure: 1 }
       const opts = { layer: activeLayer, brush: strokeBrush, color, symmetry: 'off' as const, erase: t === 'eraser', smudge: t === 'smudge', mirror: symmetryMirror(liveGuide, activeLayer.id) }
       engine.beginStroke(opts, pt)
       gesture.current = { kind: 'paint', pipeline, last: pt, rect: e.currentTarget.getBoundingClientRect(), opts, pts: [pt], rest: pt }
@@ -759,6 +806,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       if (!g.snapped) for (const q of g.pipeline.flush()) engine.strokeTo(q)
       markDirty(engine.endStroke())
       files.stroked()
+      // Room for the next stroke when this one came near the edge.
+      const b = boundsOf(g.pts, g.opts.brush.size)
+      if (b) growTo(b, Math.max(256, g.opts.brush.size * 2))
       if (g.snapped?.drawn && lastPointer.current) {
         setShapeOffer({ shape: g.snapped.drawn, opts: g.opts, pressure: g.snapped.pressure, start: g.pts[0], at: lastPointer.current, editing: false })
       }
@@ -767,6 +817,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       sel.up(viewRef.current?.scale ?? 1)
     } else if (g.kind === 'move') {
       xf.up()
+      // Pixels moved near or past the edge keep their room, so they aren't cut when they are dropped.
+      const b = xf.bounds
+      if (b) growTo(b, 128)
     }
   }
 
@@ -1242,7 +1295,11 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
           {view && (
             <svg className="sketch-overlay">
               <g transform={`matrix(${viewMatrix(view).join(' ')})`}>
-                {doc.cardGuides && doc.cardGuides.visible !== false && <CardGuides g={doc.cardGuides} width={doc.width} height={doc.height} scale={view.scale} />}
+                {doc.cardGuides && doc.cardGuides.visible !== false && (
+                  <g transform={`translate(${doc.frame?.x ?? 0} ${doc.frame?.y ?? 0})`}>
+                    <CardGuides g={doc.cardGuides} width={doc.frame?.w ?? doc.width} height={doc.frame?.h ?? doc.height} scale={view.scale} />
+                  </g>
+                )}
                 {liveGuide && <GuideOverlay guide={liveGuide} width={doc.width} height={doc.height} scale={view.scale} editing={editingGuide} toDoc={toDoc} onChange={setGuide} />}
                 <SelectionOutline sel={sel} />
                 <TextBoxes layers={doc.layers} activeId={activeLayer?.id} scale={view.scale} all={tool === 'text'} />

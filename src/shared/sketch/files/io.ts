@@ -1,4 +1,5 @@
 import { zipSync } from 'fflate'
+import { frameOf, toFrame } from '../growth'
 import { resolveAssetPath } from '@/core/assets'
 import { getFs, isTauri } from '@/core/fs'
 import type { AssetPath } from '@/core/model'
@@ -109,12 +110,13 @@ const out = (bytes: Uint8Array, ext: string, name = FILTERS[ext]): Exported => (
 
 /** The picture without private layers, flattened, as a 2D canvas (the engine may hand out its GPU canvas). */
 function flat(engine: SketchEngine, doc: SketchDoc, background: string | null): HTMLCanvasElement {
-  const { canvas, ctx } = makeCanvas(doc.width, doc.height)
+  const f = frameOf(doc)
+  const { canvas, ctx } = makeCanvas(f.w, f.h)
   if (background) {
     ctx.fillStyle = background
-    ctx.fillRect(0, 0, doc.width, doc.height)
+    ctx.fillRect(0, 0, f.w, f.h)
   }
-  ctx.drawImage(engine.render({ ...doc, layers: exportLayers(doc.layers) }, false), 0, 0)
+  ctx.drawImage(engine.render({ ...doc, layers: exportLayers(doc.layers) }, false), -f.x, -f.y)
   return canvas
 }
 
@@ -125,9 +127,10 @@ function flat(engine: SketchEngine, doc: SketchDoc, background: string | null): 
  */
 export function layerFrames(engine: SketchEngine, doc: SketchDoc): (() => HTMLCanvasElement)[] {
   const layers = exportLayers(doc.layers)
+  const f = frameOf(doc)
   const draw = (stack: SketchDoc['layers']) => () => {
-    const { canvas, ctx } = makeCanvas(doc.width, doc.height)
-    ctx.drawImage(engine.render({ layers: stack, backgroundColor: doc.backgroundColor }, true), 0, 0)
+    const { canvas, ctx } = makeCanvas(f.w, f.h)
+    ctx.drawImage(engine.render({ layers: stack, backgroundColor: doc.backgroundColor }, true), -f.x, -f.y)
     return canvas
   }
   if (doc.animation?.on) {
@@ -144,7 +147,9 @@ export function layerFrames(engine: SketchEngine, doc: SketchDoc): (() => HTMLCa
 }
 
 export async function exportDrawing(format: ExportFormat, engine: SketchEngine, doc: SketchDoc, fps = 8): Promise<Exported> {
-  const { width, height } = doc
+  // 0.31: only the canvas (the frame) is exported, not paint past its edges.
+  const { w: width, h: height } = frameOf(doc)
+  const layerPixels = (id: string) => toFrame(engine.layerCanvas(id), doc)
   switch (format) {
     case 'png':
       return out(new Uint8Array(await (await canvasBlob(flat(engine, doc, doc.backgroundColor))).arrayBuffer()), 'png')
@@ -158,7 +163,7 @@ export async function exportDrawing(format: ExportFormat, engine: SketchEngine, 
         width,
         height,
         layers,
-        pixels: (id) => (engine.isEmpty(id) ? null : engine.pixels(doc, id)),
+        pixels: (id) => (engine.isEmpty(id) ? null : layerPixels(id).getContext('2d')!.getImageData(0, 0, width, height)),
         composite: pixelsOf(flat(engine, doc, doc.backgroundColor ?? '#ffffff'), width, height),
       })
       return out(bytes, 'psd')
@@ -168,7 +173,7 @@ export async function exportDrawing(format: ExportFormat, engine: SketchEngine, 
       const pixelLayers = exportLayers(doc.layers).filter((l) => !isGroup(l) && !isMask(l))
       for (const [i, l] of pixelLayers.entries()) {
         const name = `${String(i + 1).padStart(2, '0')} ${l.name.replace(/[<>:"/\\|?*]/g, '')}.png`
-        files[name] = new Uint8Array(await (await engine.layerPng(l.id)).arrayBuffer())
+        files[name] = new Uint8Array(await (await canvasBlob(layerPixels(l.id))).arrayBuffer())
       }
       return out(zipSync(files, { level: 0 }), 'zip')
     }

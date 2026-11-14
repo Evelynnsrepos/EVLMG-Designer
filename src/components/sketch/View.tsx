@@ -39,6 +39,7 @@ export default function View({ documentId, active }: PanelProps) {
   const guides = doc.data.cardGuides
   return (
     <SketchEditor
+      growable
       panel={
         guides && (
           <label className="sketch-row">
