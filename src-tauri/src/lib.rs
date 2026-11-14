@@ -50,6 +50,7 @@ pub fn run() {
       texpaint_commands::texpaint_fill,
       texpaint_commands::texpaint_pick,
       texpaint_commands::texpaint_bake,
+      texpaint_commands::texpaint_wear,
     ])
     .setup(|app| {
       if let Some(window) = app.get_webview_window("main") {

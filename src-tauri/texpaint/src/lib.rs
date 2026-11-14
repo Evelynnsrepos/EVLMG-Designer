@@ -84,6 +84,23 @@ pub fn weld_positions(positions: &[Vec3]) -> Vec<usize> {
         .collect()
 }
 
+/// Like `weld_positions`, but only within the same object of the file: two objects that touch (a crate on a
+/// floor) keep their own normals and edges.
+pub fn weld_within_objects(mesh: &Mesh) -> Vec<usize> {
+    let mut object = vec![0u32; mesh.positions.len()];
+    for (t, tri) in mesh.indices.chunks_exact(3).enumerate() {
+        for &v in tri {
+            object[v as usize] = mesh.tri_object.get(t).copied().unwrap_or(0);
+        }
+    }
+    let mut map: HashMap<([i32; 3], u32), usize> = HashMap::with_capacity(mesh.positions.len());
+    mesh.positions
+        .iter()
+        .enumerate()
+        .map(|(i, p)| *map.entry(((*p * 1.0e4).round().as_ivec3().to_array(), object[i])).or_insert(i))
+        .collect()
+}
+
 /// Small test models.
 #[cfg(test)]
 pub(crate) mod shapes {

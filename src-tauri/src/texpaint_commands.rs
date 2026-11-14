@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use texpaint::bake::{self, Map};
+use texpaint::bake::{Baker, Map, Wear};
 use texpaint::topology::{FillMode, SelectOpts, Topology};
 use texpaint::{Mesh, bvh::Bvh};
 
@@ -12,6 +12,15 @@ struct Loaded {
   mesh: Mesh,
   topo: Topology,
   bvh: Bvh,
+  /// Maps baked so far, per texture size, so wear can be tried again without baking twice.
+  bakers: Mutex<HashMap<u32, Arc<Baker>>>,
+}
+
+impl Loaded {
+  fn baker(&self, size: u32) -> Arc<Baker> {
+    let mut b = self.bakers.lock().unwrap_or_else(|e| e.into_inner());
+    b.entry(size).or_insert_with(|| Arc::new(Baker::new(&self.mesh, size))).clone()
+  }
 }
 
 /// The models the open Texture Paint documents sent, by document id.
@@ -32,7 +41,7 @@ pub async fn texpaint_load(request: tauri::ipc::Request<'_>, state: tauri::State
   let bytes = bytes.clone();
   let loaded = tauri::async_runtime::spawn_blocking(move || -> Result<Loaded, String> {
     let mesh = Mesh::from_bytes(&bytes)?;
-    Ok(Loaded { topo: Topology::build(&mesh), bvh: Bvh::from_mesh(&mesh), mesh })
+    Ok(Loaded { topo: Topology::build(&mesh), bvh: Bvh::from_mesh(&mesh), mesh, bakers: Mutex::default() })
   })
   .await
   .map_err(|e| e.to_string())??;
@@ -68,7 +77,16 @@ pub fn texpaint_pick(doc: String, origin: [f32; 3], dir: [f32; 3], state: tauri:
 pub async fn texpaint_bake(doc: String, size: u32, maps: Vec<String>, state: tauri::State<'_, TexpaintState>) -> Result<tauri::ipc::Response, String> {
   let l = state.get(&doc)?;
   let maps: Vec<Map> = maps.iter().map(|k| Map::from_key(k).ok_or_else(|| format!("unknown map {k}"))).collect::<Result<_, _>>()?;
-  let out = tauri::async_runtime::spawn_blocking(move || bake::bake(&l.mesh, size, &maps).concat()).await.map_err(|e| e.to_string())?;
+  let out = tauri::async_runtime::spawn_blocking(move || l.baker(size).bake(&maps).concat()).await.map_err(|e| e.to_string())?;
+  Ok(tauri::ipc::Response::new(out))
+}
+
+/// A wear mask (`bake::Wear` key) at `size`²: grey bytes where the wear goes, then the coverage.
+#[tauri::command]
+pub async fn texpaint_wear(doc: String, size: u32, kind: String, amount: f32, breakup: f32, seed: u32, state: tauri::State<'_, TexpaintState>) -> Result<tauri::ipc::Response, String> {
+  let l = state.get(&doc)?;
+  let kind = Wear::from_key(&kind).ok_or("unknown wear")?;
+  let out = tauri::async_runtime::spawn_blocking(move || l.baker(size).wear(kind, amount, breakup, seed).concat()).await.map_err(|e| e.to_string())?;
   Ok(tauri::ipc::Response::new(out))
 }
 
