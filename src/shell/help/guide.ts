@@ -458,7 +458,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Send to → Pixel Art puts the drawing into the open Pixel Art file as a tracing layer, scaled to fit, to draw pixel art over it',
       'Merge down, flattening a group and deleting layers are one undo step each: Ctrl+Z brings the layers and their pixels back',
     ],
-    tips: ['Space or the middle mouse button pans, the mouse wheel zooms, 0 fits the canvas into view.', 'Undo goes back 250 steps. Everything saves by itself a moment after you stop drawing.'],
+    tips: ['Space or the middle mouse button pans, the mouse wheel zooms, 0 fits the canvas into view.', 'Undo goes back 250 steps. Everything saves by itself a moment after you stop drawing. The last 100 steps are kept when you close the app, so you can still undo them next time (Pixel Art keeps its history too).'],
   },
   'design-language': {
     title: 'Design Language',

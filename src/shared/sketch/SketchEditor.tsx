@@ -24,7 +24,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
 import { importAssetFromBlob, pickAndImportAssets, resolveAssetPath } from '@/core/assets'
 import { getFs } from '@/core/fs'
 import { newId, type Id } from '@/core/model'
@@ -48,6 +48,7 @@ import { ReferenceWindow } from './ReferenceWindow'
 import { ShortcutSheet } from './ShortcutSheet'
 import { FloatingPanel, useSpot } from './FloatingPanel'
 import { growDoc, growFor, shiftDocData } from './growth'
+import { SketchHistoryFile } from './historyFile'
 import { boundsOf, maxLayers, type Rect } from './tiles'
 import './sketch.css'
 // Sketch Pro: layers, selections (feat/sketch-layers)
@@ -201,6 +202,8 @@ export interface SketchEditorProps {
   editorRef?: Ref<SketchEditorHandle>
   /** 0.31: paint and moved pixels can go past the canvas's edges (the working area grows); Draw only. */
   growable?: boolean
+  /** 0.31: keep the undo history between sessions under this document id (Draw). */
+  historyId?: Id
 }
 
 export interface SketchEditorHandle {
@@ -230,7 +233,7 @@ function CardGuides({ g, width, height, scale }: { g: NonNullable<SketchDoc['car
   )
 }
 
-export function SketchEditor({ doc, update: save, active, title, actions, swatches = SWATCHES, panel, editorRef, growable = false }: SketchEditorProps) {
+export function SketchEditor({ doc, update: save, active, title, actions, swatches = SWATCHES, panel, editorRef, growable = false, historyId }: SketchEditorProps) {
   const root = useProjectStore((s) => s.root)
   const engineRef = useRef<SketchEngine | null>(null)
   const colorSpace = doc.colorSpace ?? 'srgb'
@@ -382,6 +385,14 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const resave = useRef(() => {})
   /** Pixel saves go through the app's auto-save, so closing the app or project writes them too. */
   const saveKey = useRef(`${root}|sketch-pixels/${newId()}`).current
+  const historyFile = useMemo(() => (root && historyId ? new SketchHistoryFile(root, historyId) : null), [root, historyId, engine])
+  const historyTried = useRef<SketchHistoryFile | null>(null)
+  /** Once every layer is loaded: put back the undo steps from the last session (0.31). */
+  const loadHistory = () => {
+    if (!historyFile || historyTried.current === historyFile || loading.current.size) return
+    historyTried.current = historyFile
+    void historyFile.load(engine, new Set(docRef.current.layers.map((l) => l.id))).then((n) => n && setVersion(engine.version))
+  }
 
   useEffect(() => {
     if (!root) return
@@ -415,8 +426,10 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
           loading.current.delete(layer.id)
           // Paint that waited for the picture can be saved now.
           if (dirty.current.has(layer.id)) resave.current()
+          loadHistory()
         })
     }
+    loadHistory()
     for (const id of [...loaded.current.keys()]) {
       if (!doc.layers.some((l) => l.id === id)) {
         loaded.current.delete(id)
@@ -455,6 +468,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     save((d) => ({ ...d, sticker: sticker?.path ?? null, layers: d.layers.map((l) => (saved.has(l.id) ? { ...l, image: saved.get(l.id)! } : l)) }))
     // Each save writes a new PNG (assets are write-once); remove the ones this editor replaced.
     for (const p of old) void resolveAssetPath(root, p).then((abs) => getFs().remove(abs).catch(() => {}))
+    void historyFile?.sync(engine)
     setSaving(false)
   }, [root, engine, update])
   // Sketch Pro: one save at a time, so an older save never lands after a newer one (and reloads old pixels).

@@ -40,6 +40,7 @@ export default function View({ documentId, active }: PanelProps) {
   return (
     <SketchEditor
       growable
+      historyId={documentId!}
       panel={
         guides && (
           <label className="sketch-row">

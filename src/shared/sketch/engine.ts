@@ -12,7 +12,7 @@ import { mirrored, type InputPoint, type SketchDoc, type SketchLayer, type Symme
 import { applyRelief } from './relief'
 import { runCpu } from './adjust/cpu'
 import { toFrame, type Growth } from './growth'
-import { TileHistory, tilesIn, type Rect } from './tiles'
+import { TileHistory, tilesIn, type Rect, type UndoStep } from './tiles'
 
 /**
  * The raster painting engine behind SketchEditor: one offscreen canvas per
@@ -925,6 +925,22 @@ export class SketchEngine {
 
   get canUndo() {
     return this.history.canUndo
+  }
+
+  /** The undo and redo steps, for saving them between sessions (0.31). */
+  get historyStacks() {
+    return this.history.stacks
+  }
+
+  /** Put back undo steps from an earlier session. */
+  loadHistory(undo: UndoStep[], redo: UndoStep[]) {
+    this.history.load(undo, redo)
+    this.version++
+  }
+
+  /** Pixels of part of a layer (its Canvas 2D copy), e.g. to check a saved undo step still fits. */
+  layerPixels(id: Id, r: Rect): ImageData {
+    return this.ensure(id).ctx.getImageData(r.x, r.y, r.w, r.h)
   }
   get canRedo() {
     return this.history.canRedo
