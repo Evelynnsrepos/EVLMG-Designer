@@ -1,0 +1,32 @@
+[package]
+name = "vector-geom"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+publish = false
+description = "Shape maths for EVLMG Designer's Vector tool: VectorCraft's path operations compiled to WebAssembly"
+
+# Its own workspace: not part of src-tauri, built with scripts/build-vector-geom.sh.
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Booleans, shape builder regions, offset and outline from VectorCraft (MIT OR Apache-2.0), pinned.
+vectorcraft-pathops = { git = "https://github.com/storytold/vectorcraft", rev = "1e4e3534f5e6481ffc08a5ba52eaacea533fd2d0" }
+vectorcraft-geom = { git = "https://github.com/storytold/vectorcraft", rev = "1e4e3534f5e6481ffc08a5ba52eaacea533fd2d0" }
+kurbo = "0.13"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[patch.crates-io]
+# VectorCraft builds on its own linesweeper fork (MIT OR Apache-2.0); a git dependency doesn't bring its patches along.
+linesweeper = { git = "https://github.com/storytold/craft-libs", rev = "481f66d287b2a06845f3667a19daf35f0fe958ed" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
