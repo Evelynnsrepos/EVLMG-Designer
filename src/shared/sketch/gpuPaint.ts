@@ -2,6 +2,7 @@ import { balanceLut, curvesLut, gradientLut, type Balance } from './adjust/color
 import * as AS from './adjust/shaders'
 import { blendIndex, GLSL_BLEND, type BlendMode } from './blend'
 import { glAllowed } from './gl'
+import { MESH_FRAG } from './meshRender'
 import type { LayerAdjust } from './model'
 import type { Filtering } from './brushes'
 import type { Rect } from './tiles'
@@ -137,6 +138,14 @@ void main() {
   vec3 p = toClip * vec3(uv * doc, 1.0);
   gl_Position = vec4(p.xy, 0.0, 1.0);
 }`
+
+/** Move/transform: the lifted pixels through the transform mesh (meshRender.ts's shader, drawn in document pixels). */
+const MESH_VERT = `${HEADER}
+layout(location = 0) in vec2 pos;
+layout(location = 1) in vec2 uv;
+uniform vec2 size;
+out vec2 vuv;
+void main() { vuv = uv; gl_Position = vec4(pos / size * 2.0 - 1.0, 0.0, 1.0); }`
 
 /** One dab per instance. */
 const DAB_VERT = `${HEADER}
@@ -460,7 +469,7 @@ export class GpuPainter {
     this.empty = this.rawTexture(1, 1)
     this.picture = this.target()
     // Compile everything now, so a driver that can't run them falls back to Canvas 2D right away.
-    for (const p of ['blend', 'copy', 'view', 'dab', 'blur', 'apply', 'region', 'mix', 'wet']) this.prog(p)
+    for (const p of ['blend', 'copy', 'view', 'dab', 'blur', 'apply', 'region', 'mix', 'wet', 'mesh']) this.prog(p)
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
   }
@@ -475,6 +484,7 @@ export class GpuPainter {
         tint: [VIEW_VERT, TINT_FRAG],
         dab: [DAB_VERT, DAB_FRAG],
         ribbon: [RIBBON_VERT, RIBBON_FRAG],
+        mesh: [MESH_VERT, MESH_FRAG],
         blur: [QUAD_VERT, BLUR_FRAG],
         apply: [QUAD_VERT, APPLY_FRAG],
         region: [QUAD_VERT, REGION_FRAG],
@@ -505,6 +515,7 @@ export class GpuPainter {
       else if (typeof v === 'number') gl.uniform1f(l, v)
       else if (v.length === 2) gl.uniform2f(l, v[0], v[1])
       else if (v.length === 3) gl.uniform3f(l, v[0], v[1], v[2])
+      else if (v.length === 4) gl.uniform4f(l, v[0], v[1], v[2], v[3])
       else if (v.length === 9) gl.uniformMatrix3fv(l, false, v)
     }
   }
@@ -774,6 +785,31 @@ export class GpuPainter {
     gl.enableVertexAttribArray(1)
     gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 20, 8)
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, verts.length / 5)
+    gl.disableVertexAttribArray(1)
+    gl.disable(gl.BLEND)
+  }
+
+  private meshUv: WebGLBuffer | null = null
+
+  /** Draw `src` through a transform mesh onto `dst` (source-over), inside `r`; `box` is the source rectangle. */
+  mesh(src: Tex, dst: Tex, mesh: { pos: Float32Array; uv: Float32Array }, box: { x: number; y: number; w: number; h: number }, mode: 0 | 1 | 2, r: Rect | null) {
+    const gl = this.gl
+    this.into(dst, r)
+    const p = this.prog('mesh')
+    this.bind(0, src.tex, p, 'src')
+    this.set(p, { size: [this.width, this.height], box: [box.x, box.y, box.w, box.h] })
+    this.seti(p, 'mode', mode)
+    gl.enable(gl.BLEND)
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.dabBuf)
+    gl.bufferData(gl.ARRAY_BUFFER, mesh.pos, gl.STREAM_DRAW)
+    gl.enableVertexAttribArray(0)
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
+    gl.bindBuffer(gl.ARRAY_BUFFER, (this.meshUv ??= gl.createBuffer()!))
+    gl.bufferData(gl.ARRAY_BUFFER, mesh.uv, gl.STREAM_DRAW)
+    gl.enableVertexAttribArray(1)
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0)
+    gl.drawArrays(gl.TRIANGLES, 0, mesh.pos.length / 2)
     gl.disableVertexAttribArray(1)
     gl.disable(gl.BLEND)
   }

@@ -6,6 +6,8 @@ import { SketchEngine } from './engine'
 import { glAllowed } from './gl'
 import { gpuAllowSoftware } from './gpuPaint'
 import { newLayer, type InputPoint, type LayerAdjust } from './model'
+import { transformState } from './transform'
+import { Transformer } from './transformer'
 
 /** A pen point with a fixed time, so speed-based settings come out the same in both runs. */
 const pt = (x: number, y: number, pressure: number, time: number) => ({ x, y, pressure, time }) as InputPoint
@@ -118,6 +120,28 @@ function adjusted(id: LayerAdjust['id'], gpu: boolean) {
   return { px: e.render({ layers: [a, b, adj], backgroundColor: '#ffffff' }).getContext('2d')!.getImageData(0, 0, W, H).data, gpu: e.gpuActive }
 }
 
+/** The Move tool: a layer moved and turned, then dropped (on the GPU it is drawn and dropped there). */
+function moved(gpu: boolean) {
+  const e = engine(gpu)
+  const layer = newLayer('L')
+  e.edit(layer.id, (c) => {
+    c.fillStyle = '#c03020'
+    c.fillRect(40, 30, 90, 60)
+    c.fillStyle = '#3080c0'
+    c.fillRect(100, 70, 50, 50)
+  })
+  const xf = new Transformer(e)
+  xf.begin(layer.id)
+  const s0 = (xf as unknown as { state: Parameters<typeof transformState>[0] }).state
+  for (let i = 1; i <= 5; i++) {
+    const a = i * 0.05
+    xf.set(transformState(s0, [Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a), 20 + i * 6, -10 + i * 3]))
+    e.draw({ layers: [layer], backgroundColor: null }, [1, 0, 0, 1, 0, 0], W, H, 1, false)
+  }
+  xf.commit(null)
+  return { px: e.layerCanvas(layer.id).getContext('2d')!.getImageData(0, 0, W, H).data, gpu: e.gpuActive }
+}
+
 /** Paint on the GPU, undo, redo: the picture must come back exactly each time. */
 function undoRoundTrip(): GpuDiff[] {
   const e = engine(true)
@@ -170,5 +194,6 @@ export async function runSketchGpuCheck(): Promise<{ strokes: GpuDiff[]; adjust:
     const g = adjusted(id, true)
     return diff(id, g.gpu, g.px, adjusted(id, false).px)
   })
-  return { strokes, adjust, undo: undoRoundTrip() }
+  const g = moved(true)
+  return { strokes: [...strokes, diff('Move tool (turned and moved)', g.gpu, g.px, moved(false).px)], adjust, undo: undoRoundTrip() }
 }

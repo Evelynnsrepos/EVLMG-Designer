@@ -12,6 +12,7 @@ import { mirrored, type InputPoint, type SketchDoc, type SketchLayer, type Symme
 import { applyRelief } from './relief'
 import { runCpu } from './adjust/cpu'
 import { toFrame, type Growth } from './growth'
+import { buildMesh, outerBounds, type XfState } from './transform'
 import { TileHistory, tilesIn, type Rect, type UndoStep } from './tiles'
 
 /**
@@ -70,7 +71,7 @@ export class SketchEngine {
   /** The stroke colored, ready to composite. */
   private paint: Canvas2D
   /** Pixels being moved with the Move tool, lifted off their layer. */
-  private floating: { layerId: Id; piece: Canvas2D; rects: Rect[]; before: ImageData[]; dx: number; dy: number; view?: HTMLCanvasElement | null } | null = null
+  private floating: { layerId: Id; piece: Canvas2D; rects: Rect[]; before: ImageData[]; dx: number; dy: number; view?: HTMLCanvasElement | null; mesh?: { state: XfState; mode: 0 | 1 | 2; box: Rect } | null } | null = null
   private history = new TileHistory()
   /** Bumped per layer whenever its pixels change, so the GPU only uploads changed layers. */
   private layerVersions = new Map<Id, number>()
@@ -87,6 +88,8 @@ export class SketchEngine {
   private gpuDirty: Rect | null = null
   /** Counts lifts with the Move tool, so the GPU uploads each lifted piece once. */
   private moves = 0
+  /** The part of the picture being blended right now (null = all of it). */
+  private composeRect: Rect | null = null
   /** Bumped by every change that isn't the GPU stroke (CPU edits, moves, layer changes). */
   private edits = 0
   private selPath: Path2D | null = null
@@ -157,6 +160,7 @@ export class SketchEngine {
       f.piece = { canvas: n, ctx: n.getContext('2d')! }
       f.rects = f.rects.map((r) => ({ ...r, x: r.x + g.left, y: r.y + g.top }))
       f.view = null
+      f.mesh = null
     }
     this.history.shift(g.left, g.top, pad, mapMeta)
     if (this.selPath) {
@@ -823,7 +827,22 @@ export class SketchEngine {
     if (!f) return null
     this.floating = null
     const layer = this.ensure(f.layerId)
-    if (!f.dx && !f.dy && !f.view) {
+    const live = this.texs.get(`${f.layerId}:live`)
+    if (f.mesh && live && this.gpuActive) {
+      // The GPU already shows the dropped pixels: they become the layer, and only where they landed is read back.
+      const gpu = this.gpu!
+      const r = clip(f.mesh.box, this.width, this.height)
+      if (r) layer.ctx.putImageData(gpu.read(live.t, r, this.colorSpace), r.x, r.y)
+      this.pushTiles(f.layerId, f.rects, f.before)
+      this.touched(f.layerId)
+      const e = this.texs.get(f.layerId)
+      if (e) {
+        gpu.copy(live.t, e.t, null)
+        e.version = this.layerVersions.get(f.layerId) ?? 0
+      }
+      return f.layerId
+    }
+    if (!f.dx && !f.dy && !f.view && !f.mesh) {
       f.rects.forEach((r, i) => layer.ctx.putImageData(f.before[i], r.x, r.y))
       this.touched(f.layerId)
       return null
@@ -848,8 +867,31 @@ export class SketchEngine {
   setFloatingView(view: HTMLCanvasElement | null) {
     if (!this.floating) return
     this.floating.view = view
+    this.floating.mesh = null
     this.edits++
     this.version++
+  }
+
+  /**
+   * Show the lifted pixels through a transform (Move tool) on the GPU: only where they were and where they are now
+   * is drawn again. False without a GPU; the transformer then renders a picture for setFloatingView.
+   */
+  setFloatingMesh(state: XfState, interp: 'nearest' | 'bilinear' | 'bicubic'): boolean {
+    const f = this.floating
+    if (!f || !this.gpuActive) return false
+    const b = outerBounds(state)
+    const box = { x: b.x - 2, y: b.y - 2, w: b.w + 4, h: b.h + 4 }
+    this.growDirty(f.mesh ? union(f.mesh.box, box) : box)
+    if (!f.mesh) this.edits++
+    f.mesh = { state, mode: interp === 'nearest' ? 0 : interp === 'bilinear' ? 1 : 2, box }
+    f.view = null
+    this.version++
+    return true
+  }
+
+  /** True while the lifted pixels are only drawn on the GPU (dropping them needs a picture first). */
+  get floatingOnGpu() {
+    return !!this.floating?.mesh
   }
 
   /** Put the lifted pixels back where they were, without an undo step. */
@@ -1097,9 +1139,10 @@ export class SketchEngine {
     this.syncGpuStroke()
     const s = this.onPicture
     // Canvas 2D strokes (wet paint, smudge) and moved pixels come from the CPU each frame.
-    const live = !!this.stroke || !!this.floating
+    const live = !!this.stroke || (!!this.floating && !this.floating.mesh)
     const full = live || !s || s.layers !== doc.layers || s.background !== doc.backgroundColor || s.withBackground !== withBackground || s.edits !== this.edits
-    const r = full ? null : this.gpuDirty
+    const r = full ? null : this.gpuDirty && clip(this.gpuDirty, this.width, this.height)
+    this.composeRect = r
     if (full || r) {
       const keys = new Set<string>()
       const stack = this.gpuNodes(layerTree(doc.layers), keys)
@@ -1130,6 +1173,13 @@ export class SketchEngine {
         piece.version = this.moves
       }
       const out = live('live').t
+      if (f.mesh) {
+        // Only the part being blended again (where the pixels were and are now) is redrawn.
+        const r = this.composeRect
+        gpu.copy(this.tex(layer.id), out, r)
+        gpu.mesh(piece.t, out, buildMesh(f.mesh.state, f.mesh.state.warp ? 32 : 16), f.mesh.state.src, f.mesh.mode, r)
+        return out
+      }
       gpu.copy(this.tex(layer.id), out, null)
       gpu.region(piece.t, out, -f.dx, -f.dy, this.width, this.height, 1, true)
       return out

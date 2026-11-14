@@ -97,10 +97,18 @@ export class Transformer {
   private show() {
     const piece = this.engine.floatingPiece
     if (!piece || !this.state || !this.out) return
+    // With a GPU the engine draws the mesh itself; the picture is only made when the pixels are dropped.
+    if (!this.engine.setFloatingMesh(this.state, this.interp)) this.bake()
+    this.changed()
+  }
+
+  /** Render the transformed pixels into a picture the engine can drop onto the layer. */
+  private bake() {
+    const piece = this.engine.floatingPiece
+    if (!piece || !this.state || !this.out) return
     renderMesh(piece, this.state, this.out.ctx, this.interp, !this.uploaded)
     this.uploaded = true
     this.engine.setFloatingView(this.out.canvas)
-    this.changed()
   }
 
   set(state: XfState) {
@@ -135,6 +143,8 @@ export class Transformer {
   commit(sel: Selector | null): Id | null {
     if (!this.active) return this.reset()
     const s = this.state!
+    // Lost the GPU while moving: make the picture to drop the usual way.
+    if (this.engine.floatingOnGpu && !this.engine.gpuActive) this.bake()
     const id = this.engine.endMove()
     if (sel && id) {
       const first = this.first!
