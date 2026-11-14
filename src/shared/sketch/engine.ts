@@ -637,7 +637,8 @@ export class SketchEngine {
       if (r && !gpu.lost) {
         g.pred = null
         this.syncGpuStroke(true)
-        const rects = g.tiles.size ? [...g.tiles.values()] : tilesIn(r, this.width, this.height)
+        // Touched tiles side by side are read and written as one strip: far fewer calls than tile by tile.
+        const rects = rowRuns(g.tiles.size ? [...g.tiles.values()] : tilesIn(r, this.width, this.height))
         const before = this.snapshot(id, rects)
         // The preview (layer + stroke) becomes the layer; the old texture is the next stroke's preview.
         const e = this.texs.get(id)!
@@ -645,8 +646,10 @@ export class SketchEngine {
         e.t = g.preview
         gpu.swapTemp('preview', old)
         const ctx = this.ensure(id).ctx
-        for (const t of rects) ctx.putImageData(gpu.read(e.t, t, this.colorSpace), t.x, t.y)
-        this.pushTiles(id, rects, before)
+        // What the GPU painted is also undo's "after" (putting it back gives the same pixels), so it isn't read twice.
+        const after = rects.map((t) => gpu.read(e.t, t, this.colorSpace))
+        rects.forEach((t, i) => ctx.putImageData(after[i], t.x, t.y))
+        this.pushTiles(id, rects, before, after)
         this.layerVersions.set(id, (this.layerVersions.get(id) ?? 0) + 1)
         e.version = this.layerVersions.get(id)!
         this.growDirty(r)
@@ -697,8 +700,8 @@ export class SketchEngine {
   }
 
   /** Record a pixel step; it remembers the selection, so undoing the edit brings that selection back. */
-  private pushTiles(layerId: Id, rects: Rect[], before: ImageData[]) {
-    if (!this.history.push(layerId, rects, before, this.snapshot(layerId, rects))) return
+  private pushTiles(layerId: Id, rects: Rect[], before: ImageData[], after = this.snapshot(layerId, rects)) {
+    if (!this.history.push(layerId, rects, before, after)) return
     this.history.last!.sel = { before: this.selectionMask, after: this.selectionMask }
     this.freshPush = true
     queueMicrotask(() => (this.freshPush = false))
@@ -1387,6 +1390,18 @@ export function toPng(canvas: HTMLCanvasElement): Promise<Blob> {
 }
 
 /** The part of `r` inside the canvas, in whole pixels; null when nothing is left. */
+/** Tiles in the same row that touch, joined into strips (fewer, larger reads and writes). */
+export function rowRuns(tiles: Rect[]): Rect[] {
+  const sorted = [...tiles].sort((a, b) => a.y - b.y || a.x - b.x)
+  const out: Rect[] = []
+  for (const t of sorted) {
+    const last = out.at(-1)
+    if (last && last.y === t.y && last.h === t.h && last.x + last.w === t.x) last.w += t.w
+    else out.push({ ...t })
+  }
+  return out
+}
+
 /** The smallest rectangle around both (either may be null). */
 function union(a: Rect | null, b: Rect | null): Rect | null {
   if (!a || !b) return a ?? b

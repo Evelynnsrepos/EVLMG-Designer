@@ -665,12 +665,14 @@ export class GpuPainter {
     const px = new Uint8Array(r.w * r.h * 4)
     gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb)
     gl.readPixels(r.x, r.y, r.w, r.h, gl.RGBA, gl.UNSIGNED_BYTE, px)
+    const lut = unpremultiply()
     for (let i = 0; i < px.length; i += 4) {
       const a = px[i + 3]
       if (a && a < 255) {
-        px[i] = Math.min(255, Math.round((px[i] * 255) / a))
-        px[i + 1] = Math.min(255, Math.round((px[i + 1] * 255) / a))
-        px[i + 2] = Math.min(255, Math.round((px[i + 2] * 255) / a))
+        const row = a << 8
+        px[i] = lut[row | px[i]]
+        px[i + 1] = lut[row | px[i + 1]]
+        px[i + 2] = lut[row | px[i + 2]]
       }
     }
     return new ImageData(new Uint8ClampedArray(px.buffer), r.w, r.h, { colorSpace })
@@ -1110,6 +1112,16 @@ export class GpuPainter {
   destroy() {
     this.gl.getExtension('WEBGL_lose_context')?.loseContext()
   }
+}
+
+let unpremultiplied: Uint8Array | null = null
+/** Straight colour for each alpha (high byte) and premultiplied value (low byte), as Math.round(c · 255 / a). */
+function unpremultiply(): Uint8Array {
+  if (!unpremultiplied) {
+    unpremultiplied = new Uint8Array(65536)
+    for (let a = 1; a < 256; a++) for (let c = 0; c < 256; c++) unpremultiplied[(a << 8) | c] = Math.min(255, Math.round((c * 255) / a))
+  }
+  return unpremultiplied
 }
 
 /** The part of `r` inside a w×h picture, in whole pixels; null when nothing is left. */
