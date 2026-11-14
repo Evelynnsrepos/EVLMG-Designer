@@ -177,6 +177,27 @@ const TOOLS: { id: Tool; icon: LucideIcon; label: string; key: string }[] = [
   { id: 'text', icon: Type, label: 'Text (T): click to add text, drag a text box to move it', key: 't' },
 ]
 
+/** Icons for the Hotwheel bubbles (the glass look shows these instead of words). Actions without one keep their name. */
+const ACTION_ICON: Partial<Record<ActionId, LucideIcon>> = {
+  undo: Undo2,
+  redo: Redo2,
+  rotateLeft: RotateCcw,
+  rotateRight: RotateCw,
+  newLayer: LayersIcon,
+  fill: PaintBucket,
+  clear: Trash2,
+  deselect: X,
+  flipLayerX: FlipHorizontal2,
+  flipLayerY: FlipVertical2,
+  flipView: FlipHorizontal,
+  fit: Scan,
+  importFile: ImagePlus,
+  inputSettings: Settings2,
+  shortcuts: Keyboard,
+  companion: PictureInPicture2,
+}
+const actionIcon = (id: ActionId) => TOOLS.find((t) => t.id === toolOf(id))?.icon ?? ACTION_ICON[id]
+
 const SWATCHES = ['#111111', '#ffffff', '#e5484d', '#f08c2e', '#f5d90a', '#30a46c', '#3e8ef7', '#8e6cf0', '#d6409f', '#8d6e63']
 
 export interface SketchEditorProps {
@@ -1037,8 +1058,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       // Short names fit a half slice: "Smaller", "Turn left".
       const short = (a: ActionId) => actionLabel(a).replace(/ brush$/, '').replace('Turn view ', 'Turn ')
       return pair
-        ? { id, label, halves: [{ label: short(pair[0]), run: () => actionsRef.current(pair[0]) }, { label: short(pair[1]), run: () => actionsRef.current(pair[1]) }] }
-        : { id, label, on: toolOf(id) === tool, run: () => actionsRef.current(id) }
+        ? { id, label, halves: [0, 1].map((h) => ({ label: short(pair[h]), icon: actionIcon(pair[h]), run: () => actionsRef.current(pair[h]) })) as HotAction['halves'] }
+        : { id, label, icon: actionIcon(id), on: toolOf(id) === tool, run: () => actionsRef.current(id) }
     }
     return profile.slots.filter((id): id is ActionId => !!id).map(one)
   }, true, { label: 'Brush size', smaller: () => actionsRef.current('sizeDown'), bigger: () => actionsRef.current('sizeUp') }, () => {

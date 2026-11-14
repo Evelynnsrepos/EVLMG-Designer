@@ -192,12 +192,12 @@
 
 /* --- 6. Hotwheel: liquid glass bubbles (Hotwheel.tsx draws them when the glass look is on) ------------
  * The drops and the middle blob are one "goo" layer, so they flow together; it is see-through as a whole.
- * The hovered drop (and its neck into the middle) fills with the accent; a white arc on each drop is the shine. */
+ * The hovered drop (and its neck into the middle) fills with the accent; a soft rim light is the shine. */
 :root[data-glass] .hotwheel-goo {
-  opacity: 0.86;
+  opacity: 0.74;
 }
 :root[data-glass='light'] .hotwheel-goo {
-  opacity: 0.95;
+  opacity: 0.9;
 }
 :root[data-glass] .hotwheel-goo circle {
   fill: var(--bg-elevated);
@@ -218,20 +218,13 @@
   stroke: var(--accent);
   stroke-linecap: round;
 }
-:root[data-glass] .hotwheel-shine {
-  fill: none;
-  stroke: var(--glass-hi);
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  pointer-events: none;
-}
 :root[data-glass] .hotwheel-rim {
   flood-color: #fff;
-  flood-opacity: 0.5;
+  flood-opacity: 0.32;
 }
 :root[data-glass] .hotwheel-caustic {
   flood-color: var(--accent);
-  flood-opacity: 0.75;
+  flood-opacity: 0.3;
 }
 .hw-drop {
   transform: translate(var(--x), var(--y));
@@ -241,10 +234,10 @@
   stroke: color-mix(in srgb, var(--accent) 60%, transparent);
 }
 :root[data-glass] .hotwheel > svg {
-  filter: drop-shadow(0 10px 24px rgb(0 0 0 / 0.3));
+  filter: drop-shadow(0 6px 16px rgb(0 0 0 / 0.18));
 }
 :root[data-glass][data-theme='light'] .hotwheel > svg {
-  filter: drop-shadow(0 2px 3px rgb(30 20 60 / 0.18)) drop-shadow(0 10px 24px rgb(30 20 60 / 0.22));
+  filter: drop-shadow(0 6px 16px rgb(30 20 60 / 0.12));
 }
 /* The bubbles grow out of the middle; SVG filters re-render cheaply, nothing here is backdrop-blurred. */
 @media (prefers-reduced-motion: no-preference) {

@@ -13,9 +13,16 @@ export interface HotAction {
   icon?: LucideIcon | string
   run?(alt: boolean): void
   /** Two halves in one slice, e.g. Undo | Redo or smaller | bigger. */
-  halves?: [{ label: string; run(): void }, { label: string; run(): void }]
+  halves?: [HotHalf, HotHalf]
   /** Shown as switched on. */
   on?: boolean
+}
+
+/** One half of a two-part slice; the glass look shows its icon instead of the words when it has one. */
+export interface HotHalf {
+  label: string
+  icon?: LucideIcon | string
+  run(): void
 }
 
 export interface HotwheelSource {

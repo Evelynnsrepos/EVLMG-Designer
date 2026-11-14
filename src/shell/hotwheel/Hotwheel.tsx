@@ -1,4 +1,4 @@
-import { ArrowLeftRight, BookOpen, Keyboard, LayoutPanelLeft, Scaling, Search, Settings, Undo2, Waypoints, X } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, ArrowRight, BookOpen, Keyboard, LayoutPanelLeft, Minus, Plus, Redo2, Scaling, Search, Settings, Undo2, Waypoints, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { create } from 'zustand'
 import type { ComponentType, Panel } from '@/core/model'
@@ -98,13 +98,13 @@ export function innerActions(panel: Panel | null): HotAction[] {
   return [
     { id: 'close', label: `Close ${tool}`, icon: X, run: () => panel && void closePanel(panel.id) },
     size
-      ? { id: 'scale', label: size.label, icon: Scaling, halves: [{ label: 'Smaller', run: () => size.smaller() }, { label: 'Bigger', run: () => size.bigger() }] }
-      : { id: 'scale', label: 'Size', icon: Scaling, halves: [{ label: 'Smaller', run: () => scale(-10) }, { label: 'Bigger', run: () => scale(10) }] },
+      ? { id: 'scale', label: size.label, icon: Scaling, halves: [{ label: 'Smaller', icon: Minus, run: () => size.smaller() }, { label: 'Bigger', icon: Plus, run: () => size.bigger() }] }
+      : { id: 'scale', label: 'Size', icon: Scaling, halves: [{ label: 'Smaller', icon: Minus, run: () => scale(-10) }, { label: 'Bigger', icon: Plus, run: () => scale(10) }] },
     { id: 'jump', label: 'Add a jump point', icon: Waypoints, run: () => panel && void addJumpHere(panel.type, panel.documentId) },
     { id: 'layout', label: 'Layout Mode (Esc)', icon: LayoutPanelLeft, run: () => useAppStore.getState().setLayoutMode(!useAppStore.getState().layoutMode) },
-    { id: 'undo', label: 'Undo / Redo', icon: Undo2, halves: [{ label: 'Undo', run: () => pressKeys(el, keysOf('app.undo')[0]) }, { label: 'Redo', run: () => pressKeys(el, keysOf('app.redo')[0]) }] },
+    { id: 'undo', label: 'Undo / Redo', icon: Undo2, halves: [{ label: 'Undo', icon: Undo2, run: () => pressKeys(el, keysOf('app.undo')[0]) }, { label: 'Redo', icon: Redo2, run: () => pressKeys(el, keysOf('app.redo')[0]) }] },
     { id: 'search', label: 'Search everything', icon: Search, run: () => pressKeys(null, keysOf('app.search')[0]) },
-    { id: 'history', label: 'Back / Forward', icon: ArrowLeftRight, halves: [{ label: 'Back', run: () => pressKeys(null, keysOf('app.back')[0]) }, { label: 'Forward', run: () => pressKeys(null, keysOf('app.forward')[0]) }] },
+    { id: 'history', label: 'Back / Forward', icon: ArrowLeftRight, halves: [{ label: 'Back', icon: ArrowLeft, run: () => pressKeys(null, keysOf('app.back')[0]) }, { label: 'Forward', icon: ArrowRight, run: () => pressKeys(null, keysOf('app.forward')[0]) }] },
     { id: 'keys', label: 'Shortcuts for this tool', icon: Keyboard, run: () => el?.querySelector<HTMLButtonElement>('.panel-header [aria-label="Shortcuts"]')?.click() },
     { id: 'help', label: 'This tool in the guide', icon: BookOpen, run: () => useHelp.getState().openGuide(type) },
     { id: 'settings', label: 'Settings', icon: Settings, run: () => openSettings() },
@@ -270,13 +270,12 @@ function bubbles(items: (HotAction | null)[], r0: number, r1: number, hit: Hit, 
     if (!a) return
     const lit = hit?.ring === ring && hit.i === i
     const at = i * step
+    // Icons where there is one (the name shows in the middle on hover); words only for actions without an icon.
     const top = (key: string, x: number, y: number, r: number, text: string, icon?: HotAction['icon'], half = false) => (
       <g key={`t${key}`} className="hw-drop hw-top" style={{ '--x': `${x}px`, '--y': `${y}px`, '--d': `${later(i) + 60}ms` } as React.CSSProperties}>
-        <path className="hotwheel-shine" d={`M${-r * 0.62} ${-r * 0.05}A${r * 0.66} ${r * 0.66} 0 0 1 ${-r * 0.05} ${-r * 0.62}`} />
         <foreignObject x={-r - pad} y={-24} width={2 * r + 2 * pad} height={48}>
-          <div className={half ? 'hotwheel-label half' : 'hotwheel-label'}>
-            {r > 18 && <Icon icon={icon} size={ring === 'in' ? 16 : 14} />}
-            <span>{text}</span>
+          <div className={half ? 'hotwheel-label half' : 'hotwheel-label'} aria-label={text} title={text}>
+            {icon ? <Icon icon={icon} size={Math.round(r * (half ? 0.95 : 0.8))} /> : <span>{text}</span>}
           </div>
         </foreignObject>
       </g>
@@ -291,7 +290,7 @@ function bubbles(items: (HotAction | null)[], r0: number, r1: number, hit: Hit, 
         const r = on ? hr * 1.16 : hr
         drops.push(drop(`d${i}-${h}`, x, y, r, on ? 'lit' : '', later(i)))
         if (on) drops.push(<line key={`n${i}-${h}`} x1={0} y1={0} x2={x} y2={y} strokeWidth={r * 0.7} className="lit" />)
-        tops.push(top(`${i}-${h}`, x, y, r, a.halves![h].label, undefined, true))
+        tops.push(top(`${i}-${h}`, x, y, r, a.halves![h].label, a.halves![h].icon, true))
       })
     } else {
       const [x, y] = polar(mid, at)
@@ -373,20 +372,23 @@ function Wheel({ open }: { open: Open }) {
   const glass = glassMode !== 'off'
   // The lens lighting is the heavy part of the filter; Light glass (the fast setting) skips it.
   const fancy = glassMode === 'full'
+  // The bubbles are drawn a size up from the classic rings; picking scales with them.
+  const g = glass ? 1.18 : 1
+  const hitScale = scale * g
   const [hit, setHit] = useState<Hit>(null)
   const hitRef = useRef<Hit>(null)
   // The sliders' values, kept here so dragging redraws them; written through to the tool live.
   const [values, setValues] = useState(() => open.sliders.map((sl) => sl.get()))
   const dragRef = useRef<number | null>(null)
   const ringOut = open.outer.length > 0 ? OUT : MID
-  const sliderR = ringOut + 26
+  const sliderR = ringOut * g + 26
   const [held, setHeld] = useState(!!open.hold)
   const heldRef = useRef(held)
   useEffect(() => {
     heldRef.current = held
   })
   // Keep it on screen.
-  const r = (open.sliders.length ? sliderR + 40 : OUT) * scale + 6
+  const r = (open.sliders.length ? sliderR + 40 : OUT * g) * scale + 6
   const cx = Math.min(window.innerWidth - r, Math.max(r, open.x))
   const cy = Math.min(window.innerHeight - r, Math.max(r, open.y))
 
@@ -419,7 +421,7 @@ function Wheel({ open }: { open: Open }) {
     const move = (e: PointerEvent) => {
       if (dragRef.current !== null) return slide(e, dragRef.current)
       const onSlider = open.sliders.length > 0 && sliderHit(e.clientX - cx, e.clientY - cy, scale, sliderR, open.sliders.length)
-      const h = onSlider ? null : hitTest(e.clientX - cx, e.clientY - cy, scale, open.inner.length, open.outer.length)
+      const h = onSlider ? null : hitTest(e.clientX - cx, e.clientY - cy, hitScale, open.inner.length, open.outer.length)
       hitRef.current = h
       setHit(h)
     }
@@ -474,11 +476,11 @@ function Wheel({ open }: { open: Open }) {
       window.removeEventListener('keyup', key, true)
       window.removeEventListener('contextmenu', noMenu, true)
     }
-  }, [open, cx, cy, scale, r, sliderR])
+  }, [open, cx, cy, scale, hitScale, r, sliderR])
 
   const current = hit && (hit.ring === 'in' ? open.inner[hit.i] : open.outer[hit.i])
   const name = current ? (current.halves ? current.halves[hit.half].label : current.label) : open.panel ? (getManifest(open.panel.type)?.name ?? '') : ''
-  const w = (open.sliders.length ? sliderR + 40 : OUT) * 2 + 12
+  const w = (open.sliders.length ? sliderR + 40 : OUT * g) * 2 + 12
   const inner = bubbles(open.inner, HOLE + 6, MID, hit, 'in', 0, !open.outer.length)
   // Outer drops are a size smaller than the inner ones: big in the middle, getting smaller outwards.
   const outer = open.outer.length ? bubbles(open.outer, MID + 6, OUT, hit, 'out', 70, true, bubbleLayout(open.inner.length, HOLE + 6, MID).radius * 0.74) : null
@@ -497,7 +499,7 @@ function Wheel({ open }: { open: Open }) {
                     {/* Full glass: light the liquid like a lens. A soft specular highlight from the top left, */}
                     {/* a thin bright rim, and an accent glow caught in the bottom-right edge. */}
                     <feGaussianBlur in="goo" stdDeviation="5" result="soft" />
-                    <feSpecularLighting in="soft" surfaceScale="7" specularConstant="1.1" specularExponent="26" lightingColor="#fff" result="spec">
+                    <feSpecularLighting in="soft" surfaceScale="4" specularConstant="0.55" specularExponent="40" lightingColor="#fff" result="spec">
                       <fePointLight x={-160} y={-240} z={240} />
                     </feSpecularLighting>
                     <feComposite in="spec" in2="goo" operator="in" result="specIn" />
@@ -521,14 +523,16 @@ function Wheel({ open }: { open: Open }) {
               </filter>
             </defs>
             {/* One goo layer for the middle and every ring, so the drops flow out of (and back into) the middle. */}
-            <g className="hotwheel-goo" filter="url(#hotwheel-goo)">
-              <circle r={HOLE + 4} className="hotwheel-core" />
-              {inner.drops}
-              {outer?.drops}
+            <g transform={`scale(${g})`}>
+              <g className="hotwheel-goo" filter="url(#hotwheel-goo)">
+                <circle r={HOLE + 4} className="hotwheel-core" />
+                {inner.drops}
+                {outer?.drops}
+              </g>
+              {inner.tops}
+              {outer?.tops}
+              <circle r={HOLE} className="hotwheel-hole" />
             </g>
-            {inner.tops}
-            {outer?.tops}
-            <circle r={HOLE} className="hotwheel-hole" />
           </>
         ) : (
           <>
