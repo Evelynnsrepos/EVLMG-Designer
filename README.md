@@ -253,7 +253,7 @@ beginner guides.
 | **Quest Designer** | Quests with givers, places, objectives, rewards and chains shown as a graph, plus flags shared with the Dialogue Editor. |
 | **Dialogue Editor** | Branching conversations as a graph with speakers, choices, conditions and flags, a play-through mode, and export to JSON, Yarn Spinner or Ink. |
 | **Writing Principles** | Story and game-writing rules (show, don't tell; save the player from themselves…) and story structures like the Hero's Journey, ready to extend and sort. |
-| **Storyboard** | Plan cutscenes, YouTube videos or anime episodes: scenes, cuts and panels with shot, camera, timing in seconds + frames, action, dialogue, notes and status; draw panels in Draw, link the script in the Writer, play the animatic with sound, and export PDF storyboard sheets, video, shot list or Pitch Deck slides. |
+| **Storyboard** | Plan cutscenes, YouTube videos or anime episodes: scenes, cuts and panels with shot, camera, timing in seconds + frames, action, dialogue, notes and status; draw panels in Draw, link the script in the Writer, play the animatic with sound, and export PDF storyboard sheets, video, shot list or Pitch Deck slides. The layout fits any panel width, also next to another tool. |
 | **Localization** | A string table of every player-facing text in every language, collected from the project, with CSV import and export. Texts whose source changed are marked "needs update", and one language can go to translators as XLIFF or PO (Godot reads PO). |
 | **Ask Your Project** | Optional: search your own notes and find contradictions, with the helper running only on your computer. It only searches and never writes for you. |
 
