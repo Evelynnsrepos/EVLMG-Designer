@@ -145,6 +145,23 @@ export class TileHistory {
     return s
   }
 
+  /**
+   * The working area grew (0.31): every step's tiles move by (dx, dy), and `pad` turns each kept selection mask
+   * into one of the new size. Pixels are unchanged, so the steps still undo exactly.
+   */
+  shift(dx: number, dy: number, pad: (c: HTMLCanvasElement | null) => HTMLCanvasElement | null, mapMeta: (m: unknown) => unknown = (m) => m) {
+    const padded = new Map<HTMLCanvasElement | null, HTMLCanvasElement | null>([[null, null]])
+    const once = (c: HTMLCanvasElement | null) => {
+      if (!padded.has(c)) padded.set(c, pad(c))
+      return padded.get(c)!
+    }
+    for (const s of [...this.undoStack, ...this.redoStack]) {
+      for (const t of s.tiles) t.rect = { ...t.rect, x: t.rect.x + dx, y: t.rect.y + dy }
+      if (s.sel) s.sel = { before: once(s.sel.before), after: once(s.sel.after) }
+      if (s.meta) s.meta = mapMeta(s.meta)
+    }
+  }
+
   dropLayer(layerId: string) {
     const keep = (s: UndoStep) => {
       if (s.layerId !== layerId) return true

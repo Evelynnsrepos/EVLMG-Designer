@@ -11,6 +11,7 @@ import { layerTree, lockedInTree, shownInTree, type LayerNode } from './layers'
 import { mirrored, type InputPoint, type SketchDoc, type SketchLayer, type SymmetryMode } from './model'
 import { applyRelief } from './relief'
 import { runCpu } from './adjust/cpu'
+import { toFrame, type Growth } from './growth'
 import { TileHistory, tilesIn, type Rect } from './tiles'
 
 /**
@@ -51,8 +52,9 @@ type LayerStack = Pick<SketchDoc, 'layers' | 'backgroundColor'>
 export type DocMeta = { before: unknown[]; after: unknown[]; doc?: { before: object; after: object } }
 
 export class SketchEngine {
-  readonly width: number
-  readonly height: number
+  /** The working area (0.31: it can grow past the canvas the person picked, see growth.ts). */
+  width: number
+  height: number
   private layers = new Map<Id, Canvas2D>()
   private composite: Canvas2D
   private scratch: Canvas2D
@@ -125,6 +127,57 @@ export class SketchEngine {
   /** The canvas the GPU shows the picture on (the editor puts it under its overlay), or null. */
   get view(): HTMLCanvasElement | null {
     return this.gpuActive ? this.gpu!.canvas : null
+  }
+
+  /**
+   * Grow the working area (0.31): every layer, the selection, undo steps and lifted pixels move `g.left`, `g.top`
+   * in. Only between strokes. The GPU starts over at the new size (its textures fill from the layers again).
+   */
+  grow(g: Growth, mapMeta?: (m: unknown) => unknown) {
+    if (this.stroking || (g.width === this.width && g.height === this.height)) return
+    const pad = (c: HTMLCanvasElement | null) => {
+      if (!c) return null
+      const n = makeCanvas(g.width, g.height, this.colorSpace)
+      n.ctx.drawImage(c, g.left, g.top)
+      return n.canvas
+    }
+    this.width = g.width
+    this.height = g.height
+    for (const [id, c] of this.layers) {
+      const n = pad(c.canvas)!
+      this.layers.set(id, { canvas: n, ctx: n.getContext('2d')! })
+      this.layerVersions.set(id, (this.layerVersions.get(id) ?? 0) + 1)
+    }
+    const f = this.floating
+    if (f) {
+      const n = pad(f.piece.canvas)!
+      f.piece = { canvas: n, ctx: n.getContext('2d')! }
+      f.rects = f.rects.map((r) => ({ ...r, x: r.x + g.left, y: r.y + g.top }))
+      f.view = null
+    }
+    this.history.shift(g.left, g.top, pad, mapMeta)
+    if (this.selPath) {
+      const p = new Path2D()
+      p.addPath(this.selPath, new DOMMatrix().translateSelf(g.left, g.top))
+      this.selection = p
+    } else if (this.sel) this.selectionMask = pad(this.sel.canvas)
+    this.composite = this.canvas()
+    this.scratch = this.canvas()
+    this.paint = this.canvas()
+    this.pool = []
+    this.groupBases = []
+    this.adjustCache.clear()
+    this.maskCache.clear()
+    this.lastRender = null
+    this.livePreview = null
+    this.onPicture = null
+    this.gpuDirty = null
+    const hadGpu = !!this.gpu
+    this.gpu?.destroy()
+    this.texs.clear()
+    this.gpu = hadGpu ? GpuPainter.create(this.width, this.height, this.colorSpace) : null
+    this.edits++
+    this.version++
   }
 
   /** Wait until the GPU has finished drawing (for timing it). */
@@ -1225,8 +1278,10 @@ export class SketchEngine {
     return toPng(this.ensure(layerId).canvas)
   }
 
+  /** The flattened picture as PNG, cut to the drawing's frame (0.31). */
   flattenedPng(doc: SketchDoc, withBackground = true): Promise<Blob> {
-    return toPng(this.render(doc, withBackground))
+    const pic = this.render(doc, withBackground)
+    return toPng(doc.frame ? toFrame(pic, doc) : pic)
   }
 
   /** True when the layer has no visible pixels (saved as an empty layer instead of a PNG). */

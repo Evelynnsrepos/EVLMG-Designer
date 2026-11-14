@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Id } from '@/core/model'
 import type { SketchEngine } from './engine'
+import type { Growth } from './growth'
 import { renderMesh, type Interpolation } from './meshRender'
 import { alphaBounds } from './selection'
 import type { Selector } from './selector'
@@ -112,6 +113,22 @@ export class Transformer {
     if (p.mode === 'warp' && this.state) this.state = toWarp(this.state)
     if (this.state) this.show()
     else this.changed()
+  }
+
+  /** Where the lifted pixels are now (their outer box), or null when nothing is lifted. */
+  get bounds() {
+    return this.active && this.state ? outerBounds(this.state) : null
+  }
+
+  /** The working area grew (0.31): the lifted pixels moved `g.left`, `g.top` in with everything else. */
+  grow(g: Growth) {
+    if (!this.state || !this.first) return
+    const move = (s: XfState): XfState => ({ ...transformState(s, [1, 0, 0, 1, g.left, g.top]), src: { ...s.src, x: s.src.x + g.left, y: s.src.y + g.top } })
+    this.state = move(this.state)
+    this.first = move(this.first)
+    this.out = this.engine.canvas()
+    this.uploaded = false
+    this.show()
   }
 
   /** Drop the pixels where they are now (moving the selection along). */
