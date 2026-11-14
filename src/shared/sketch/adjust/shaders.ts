@@ -56,15 +56,15 @@ void main() {
 export const LUT = `${HEAD}
 uniform sampler2D lut;
 uniform float byLuma, keepLum, amount;
-float lk(float v, int ch) { return texture(lut, vec2((v * 255.0 + 0.5) / 256.0, 0.5))[ch]; }
+// Channels are picked with .r/.g/.b: indexing a vector with a variable gave the wrong channel on Mesa (AMD, WebKitGTK).
+vec3 lk(float v) { return texture(lut, vec2((v * 255.0 + 0.5) / 256.0, 0.5)).rgb; }
 void main() {
   vec4 c = unpre(texture(src, uv));
   vec3 r;
   if (byLuma > 0.5) {
-    float l = luma(c.rgb);
-    r = mix(c.rgb, vec3(lk(l, 0), lk(l, 1), lk(l, 2)), amount);
+    r = mix(c.rgb, lk(luma(c.rgb)), amount);
   } else {
-    r = vec3(lk(c.r, 0), lk(c.g, 1), lk(c.b, 2));
+    r = vec3(lk(c.r).r, lk(c.g).g, lk(c.b).b);
     if (keepLum > 0.5) r = clamp(r + luma(c.rgb) - luma(r), 0.0, 1.0);
   }
   o = pre(r, c.a);
