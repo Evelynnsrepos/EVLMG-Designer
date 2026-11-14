@@ -9,6 +9,7 @@ import {
   DUAL_MODES,
   FILTERINGS,
   GRAIN_BLENDS,
+  isRibbon,
   normalizeBrush,
   normalizeSettings,
   RENDER_MODES,
@@ -20,7 +21,7 @@ import {
 import { CurveEditor } from './CurveEditor'
 import { DrawingPad } from './DrawingPad'
 import { useBrushLibrary } from './library'
-import { TextureEditor } from './TextureEditor'
+import { blobToMask, TextureEditor } from './TextureEditor'
 import './studio.css'
 
 const PAGES = [
@@ -261,6 +262,18 @@ export function BrushStudio({ brushId, color, onClose }: { brushId: Id; color: s
                 {check('flipX', 'Flip left to right')}
                 {check('flipY', 'Flip upside down')}
                 {choice('shapeFiltering', 'Edges', FILTERINGS)}
+                {s.shapeImage && check('shaded', 'Keep the image’s light and dark (its greys shade the colour)')}
+                {choice('ribbon', 'Ribbon', [
+                  { id: 'off', label: 'Off: stamps' },
+                  { id: 'stretch', label: 'Bend the image along the stroke, stretched' },
+                  { id: 'tile', label: 'Bend the image along the stroke, repeated' },
+                ])}
+                {isRibbon(s) && (
+                  <>
+                    <CapRow label="Start cap" value={s.capStart} onChange={(v) => set({ capStart: v })} />
+                    <CapRow label="End cap" value={s.capEnd} onChange={(v) => set({ capEnd: v })} />
+                  </>
+                )}
               </>
             )}
             {page === 'Grain' && (
@@ -595,6 +608,35 @@ function Signature({ value, onChange }: { value: string | null; onChange: (v: st
 }
 
 type Unit = '%' | 'px' | '°' | 'x' | 'n'
+
+/** A ribbon's cap image: pick a file (see-through PNGs keep their shape and shading) or remove it. */
+function CapRow({ label, value, onChange }: { label: string; value: string | null | undefined; onChange: (v: string | null) => void }) {
+  const file = useRef<HTMLInputElement>(null)
+  return (
+    <Row label={label} hint="Drawn on that end of the ribbon, turned along the stroke, as tall as the ribbon is wide">
+      {value && <img src={value} alt="" className="studio-cap" />}
+      <button className="btn btn-small" onClick={() => file.current?.click()}>
+        {value ? 'Change…' : 'Choose an image…'}
+      </button>
+      {value && (
+        <button className="btn btn-small" onClick={() => onChange(null)}>
+          Remove
+        </button>
+      )}
+      <input
+        ref={file}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          e.target.value = ''
+          if (f) void blobToMask(f).then((url) => url && onChange(url))
+        }}
+      />
+    </Row>
+  )
+}
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (

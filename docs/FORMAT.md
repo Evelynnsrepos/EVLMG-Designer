@@ -81,6 +81,8 @@ Ids are random strings (`newId()` in [`core/model/ids.ts`](../src/core/model/ids
 
 Plugin tools use the type `plugin.<plugin id>` and store their documents the same way ([PLUGINS.md](PLUGINS.md)).
 
+**Brushes** are not in the project: they live in the app's brush library and in `.egdbrush` files, as `BrushSettings` ([`shared/sketch/brushes.ts`](../src/shared/sketch/brushes.ts)). v0.31 added the optional `ribbon` (`'off'`, `'stretch'`, `'tile'`), `shaded` and `capStart`/`capEnd` (image data URLs); missing means off. A see-through shape image is now stored with its greys (alpha = shape, grey = light and dark) instead of as a grey mask. The mobile app shows these only after its EVLMG Designer submodule is bumped to v0.31; older versions ignore the fields and stamp the image as before.
+
 ## Rules for changing the format
 
 1. **Add, don't change.** New fields are optional (`field?: …`) and the code works when they are missing. Old files, teammates on an older version and the mobile app (which reuses this code at a pinned version) must keep opening the project.
