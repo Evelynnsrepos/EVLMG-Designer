@@ -172,10 +172,11 @@ uniform sampler2D src;
 uniform vec2 dir;
 uniform float sigma;
 uniform int radius;
-uniform bool alphaIn;
+uniform bool alphaIn, rgba;
 out vec4 outColor;
 void main() {
   float sum = 0.0, wsum = 0.0;
+  vec4 all4 = vec4(0.0);
   int n = sigma > 0.0 ? min(48, int(ceil(sigma * 3.0))) : radius;
   float step = sigma > 0.0 ? max(1.0, sigma * 3.0 / float(n)) : 1.0;
   for (int i = -48; i <= 48; i++) {
@@ -183,18 +184,79 @@ void main() {
     float w = sigma > 0.0 ? exp(-0.5 * pow(float(i) * step / sigma, 2.0)) : 1.0;
     vec4 t = texture(src, uv + dir * float(i) * step);
     sum += (alphaIn ? t.a : t.r) * w;
+    all4 += t * w;
     wsum += w;
   }
-  outColor = vec4(sum / wsum, 0.0, 0.0, 1.0);
+  outColor = rgba ? all4 / wsum : vec4(sum / wsum, 0.0, 0.0, 1.0);
+}`
+
+/** A pixel-aligned piece of a texture: dst pixel p shows src at p + off (transparent outside src), scaled by `zoom`. */
+const REGION_FRAG = `${HEADER}
+uniform sampler2D src;
+uniform vec2 off, srcSize;
+uniform float zoom;
+out vec4 outColor;
+void main() {
+  vec2 p = gl_FragCoord.xy * zoom + off;
+  outColor = p.x < 0.0 || p.y < 0.0 || p.x > srcSize.x || p.y > srcSize.y ? vec4(0.0) : texture(src, p / srcSize);
+}`
+
+/** a × (1 - k) + b × k, pixel by pixel (the wet brush picking up colour). */
+const MIX_FRAG = `${HEADER}
+uniform sampler2D a, b;
+uniform vec2 size;
+uniform float k;
+out vec4 outColor;
+void main() {
+  vec2 uv = gl_FragCoord.xy / size;
+  outColor = texture(a, uv) * (1.0 - k) + texture(b, uv) * k;
+}`
+
+/** One wet or smudge stamp on the working copy of the layer (brushWet.ts on the GPU). */
+const WET_FRAG = `${HEADER}
+uniform sampler2D work, carry, blurred, tip;
+uniform vec2 doc, box, carrySize;
+uniform float s, k, rot, sx, sy, size, fillA, pull, alpha, grade;
+uniform vec3 color;
+uniform int mode;
+out vec4 outColor;
+${GLSL_BLEND}
+vec4 over(vec4 s, vec4 b, int m) {
+  float ao = s.a + b.a * (1.0 - s.a);
+  vec3 bc = b.a > 0.0 ? b.rgb / b.a : vec3(0.0);
+  vec3 sc = s.a > 0.0 ? s.rgb / s.a : vec3(0.0);
+  vec3 cs = (1.0 - b.a) * sc + b.a * clamp(blendColor(m, bc, sc), 0.0, 1.0);
+  return vec4(s.a * cs + b.a * (1.0 - s.a) * bc, ao);
+}
+void main() {
+  vec2 p = gl_FragCoord.xy;
+  vec2 q = p - box;
+  vec2 l = q - s * 0.5;
+  float c = cos(-rot), n = sin(-rot);
+  vec2 t = vec2(c * l.x - n * l.y, n * l.x + c * l.y) / (vec2(sx, sy) * k) / size + 0.5;
+  float ta = t.x < 0.0 || t.y < 0.0 || t.x > 1.0 || t.y > 1.0 ? 0.0 : texture(tip, t).a;
+  vec4 w = texture(work, p / doc);
+  vec4 cr = texture(carry, q / carrySize);
+  if (mode == 0) {
+    vec4 paint = vec4(color * fillA, fillA);
+    vec4 cp = cr * pull;
+    paint = (cp + paint * (1.0 - cp.a)) * ta;
+    vec4 o = paint * alpha + w * (1.0 - paint.a * alpha);
+    if (grade > 0.0) o = over(paint * alpha * grade * 0.5, o, 2);
+    outColor = o;
+  } else {
+    vec4 paint = (mode == 2 ? texture(blurred, p / doc) : cr) * ta;
+    outColor = w * (1.0 - ta * alpha) + paint * alpha;
+  }
 }`
 
 /** colorStroke + compositeStroke: the stroke mask as paint on the layer below it (dst). */
 const APPLY_FRAG = `${HEADER}
 in vec2 uv;
-uniform sampler2D dst, mask, pred, grain, edges, relief, sel;
+uniform sampler2D dst, mask, pred, grain, edges, relief, sel, wet;
 uniform vec2 doc, grainSize;
 uniform vec3 color, burntColor;
-uniform bool colored, usePred, useGrain, grainGray, useSel, erase, alphaLock, luminance;
+uniform bool colored, usePred, useGrain, grainGray, useSel, erase, alphaLock, luminance, useWet;
 uniform int grainMode, mode;
 uniform float grainScale, grainRot, wetEdges, burntEdges, threshold, height, opacity;
 out vec4 outColor;
@@ -213,21 +275,22 @@ void main() {
   vec4 d = texture(dst, uv);
   vec4 m = texture(mask, uv);
   if (usePred) { vec4 p = texture(pred, uv); m = m + p * (1.0 - m.a); }
-  vec4 p = colored ? m : vec4(color * m.a, m.a);
+  // Wet paint and smudge: the painted working copy of the layer is the paint.
+  vec4 p = useWet ? texture(wet, uv) : colored ? m : vec4(color * m.a, m.a);
   vec2 px = gl_FragCoord.xy;
-  if (useGrain) {
+  if (useGrain && !useWet) {
     float c = cos(-grainRot), n = sin(-grainRot);
     vec2 g = vec2(c * px.x - n * px.y, n * px.x + c * px.y) / grainScale / grainSize;
     vec4 t = texture(grain, g);
     if (grainGray) p = over(t, p, grainMode) * m.a;
     else p *= t.a;
   }
-  if (wetEdges > 0.0 || burntEdges > 0.0) {
+  if (!useWet && (wetEdges > 0.0 || burntEdges > 0.0)) {
     float b = texture(edges, uv).r;
     if (burntEdges > 0.0) p = over(vec4(burntColor, 1.0) * m.a * (1.0 - b) * burntEdges, p, 2);
     if (wetEdges > 0.0) p *= 1.0 - b * wetEdges * 0.6;
   }
-  if (threshold > 0.0) {
+  if (threshold > 0.0 && !useWet) {
     float a = p.a >= threshold && p.a > 0.0 ? 1.0 : 0.0;
     p = vec4((p.a > 0.0 ? p.rgb / p.a : vec3(0.0)) * a, a);
   }
@@ -245,7 +308,9 @@ void main() {
     vec3 c = clamp(p.rgb / p.a * (1.0 + diffuse * 0.8 * height * cover) + spec, 0.0, 1.0);
     p = vec4(c * p.a, p.a);
   }
-  if (useSel) p *= texture(sel, uv).a;
+  float selA = useSel ? texture(sel, uv).a : 1.0;
+  p *= selA;
+  if (useWet) { outColor = p + d * (1.0 - selA) * (1.0 - p.a); return; }
   if (erase) { outColor = d * (1.0 - p.a * opacity); return; }
   if (luminance) {
     float sa = p.a * opacity;
@@ -348,7 +413,7 @@ export class GpuPainter {
     this.empty = this.rawTexture(1, 1)
     this.picture = this.target()
     // Compile everything now, so a driver that can't run them falls back to Canvas 2D right away.
-    for (const p of ['blend', 'copy', 'view', 'dab', 'blur', 'apply']) this.prog(p)
+    for (const p of ['blend', 'copy', 'view', 'dab', 'blur', 'apply', 'region', 'mix', 'wet']) this.prog(p)
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
   }
@@ -363,6 +428,9 @@ export class GpuPainter {
         dab: [DAB_VERT, DAB_FRAG],
         blur: [QUAD_VERT, BLUR_FRAG],
         apply: [QUAD_VERT, APPLY_FRAG],
+        region: [QUAD_VERT, REGION_FRAG],
+        mix: [QUAD_VERT, MIX_FRAG],
+        wet: [QUAD_VERT, WET_FRAG],
       }[name]!
       p = { prog: compile(this.gl, v, f), loc: new Map() }
       this.progs.set(name, p)
@@ -433,9 +501,9 @@ export class GpuPainter {
   }
 
   /** A scratch texture by name, made when first needed. */
-  temp(name: string): Tex {
+  temp(name: string, w = this.width, h = this.height): Tex {
     let t = this.temps.get(name)
-    if (!t) this.temps.set(name, (t = this.target()))
+    if (!t) this.temps.set(name, (t = this.target(w, h)))
     return t
   }
 
@@ -617,12 +685,12 @@ export class GpuPainter {
     const mid = this.temp('blurMid')
     this.into(mid, r)
     this.bind(0, src.tex, p, 'src')
-    this.set(p, { dir: [1 / this.width, 0], sigma, alphaIn: true })
+    this.set(p, { dir: [1 / this.width, 0], sigma, alphaIn: true, rgba: false })
     this.seti(p, 'radius', radius)
     this.drawQuad()
     this.into(out, r)
     this.bind(0, mid.tex, p, 'src')
-    this.set(p, { dir: [0, 1 / this.height], sigma, alphaIn: false })
+    this.set(p, { dir: [0, 1 / this.height], sigma, alphaIn: false, rgba: false })
     this.seti(p, 'radius', radius)
     this.drawQuad()
   }
@@ -631,7 +699,75 @@ export class GpuPainter {
    * out = the layer `dst` with the stroke `mask` (and predicted points) painted on, inside `r`.
    * `sel` is the selection mask, if any.
    */
-  applyStroke(dst: Tex, mask: Tex, pred: Tex | null, out: Tex, look: StrokeLook, r: Rect, sel: { image: TexImageSource; version: number } | null) {
+  /** Gaussian blur of all four channels of `src` into `out`, inside `r`. */
+  blurRgba(src: Tex, out: Tex, r: Rect, sigma: number) {
+    const p = this.prog('blur')
+    const mid = this.temp('blurMid')
+    for (const [from, to, dir] of [
+      [src, mid, [1 / this.width, 0]],
+      [mid, out, [0, 1 / this.height]],
+    ] as const) {
+      this.into(to, r)
+      this.gl.disable(this.gl.BLEND)
+      this.bind(0, from.tex, p, 'src')
+      this.set(p, { dir: [...dir], sigma, alphaIn: false, rgba: true })
+      this.seti(p, 'radius', 0)
+      this.drawQuad()
+    }
+  }
+
+  /** dst[0..w) = src at (x, y), `zoom` src pixels per dst pixel (a piece of the layer under a wet stamp). */
+  region(src: Tex, dst: Tex, x: number, y: number, w: number, h: number, zoom = 1) {
+    const gl = this.gl
+    this.into(dst, { x: 0, y: 0, w, h })
+    gl.disable(gl.BLEND)
+    const p = this.prog('region')
+    this.bind(0, src.tex, p, 'src')
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, zoom === 1 ? gl.NEAREST : gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, zoom === 1 ? gl.NEAREST : gl.LINEAR)
+    this.set(p, { off: [x, y], srcSize: [src.w, src.h], zoom })
+    this.drawQuad()
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+  }
+
+  /** out[0..s) = a × (1 - k) + b × k. */
+  mix(a: Tex, b: Tex, out: Tex, s: number, k: number) {
+    this.into(out, { x: 0, y: 0, w: s, h: s })
+    this.gl.disable(this.gl.BLEND)
+    const p = this.prog('mix')
+    this.bind(0, a.tex, p, 'a')
+    this.bind(1, b.tex, p, 'b')
+    this.set(p, { size: [a.w, a.h], k })
+    this.drawQuad()
+  }
+
+  /** One wet stamp: `work` gets the stamp inside the s×s box at (x0, y0); `spare` is a texture of the same size to draw into. */
+  wetStamp(
+    work: Tex,
+    spare: Tex,
+    carry: Tex,
+    blurred: Tex | null,
+    tip: TexImageSource,
+    filtering: Filtering,
+    o: { x0: number; y0: number; s: number; k: number; rot: number; sx: number; sy: number; size: number; mode: 0 | 1 | 2; color: [number, number, number]; fillA: number; pull: number; alpha: number; grade: number },
+  ) {
+    const r = clip({ x: o.x0, y: o.y0, w: o.s, h: o.s }, this.width, this.height)
+    if (!r) return
+    this.into(spare, r)
+    this.gl.disable(this.gl.BLEND)
+    const p = this.prog('wet')
+    this.bind(0, work.tex, p, 'work')
+    this.bind(1, carry.tex, p, 'carry')
+    this.bind(2, blurred?.tex ?? null, p, 'blurred')
+    this.bind(3, this.image(tip, filtering), p, 'tip')
+    this.set(p, { doc: [this.width, this.height], box: [o.x0, o.y0], carrySize: [carry.w, carry.h], s: o.s, k: o.k, rot: o.rot, sx: o.sx, sy: o.sy, size: o.size, fillA: o.fillA, pull: o.pull, alpha: o.alpha, grade: o.grade, color: o.color })
+    this.seti(p, 'mode', o.mode)
+    this.drawQuad()
+    this.copy(spare, work, r)
+  }
+
+  applyStroke(dst: Tex, mask: Tex, pred: Tex | null, out: Tex, look: StrokeLook, r: Rect, sel: { image: TexImageSource; version: number } | null, wet: Tex | null = null) {
     const grow = (n: number) => clip({ x: r.x - n, y: r.y - n, w: r.w + 2 * n, h: r.h + 2 * n }, this.width, this.height)
     const edges = look.wetEdges > 0 || look.burntEdges > 0
     // The blur passes read the stroke texture around the area too.
@@ -664,6 +800,7 @@ export class GpuPainter {
     this.bind(4, edges ? this.temp('edges').tex : null, p, 'edges')
     this.bind(5, look.height > 0 ? this.temp('relief').tex : null, p, 'relief')
     this.bind(6, sel ? this.image(sel.image, 'mask', false, sel.version) : null, p, 'sel')
+    this.bind(7, wet?.tex ?? null, p, 'wet')
     const gi = g?.image as { width: number; height: number } | undefined
     this.set(p, {
       doc: [this.width, this.height],
@@ -677,6 +814,7 @@ export class GpuPainter {
       grainScale: g?.scale ?? 1,
       grainRot: g ? (g.rotation * Math.PI) / 180 : 0,
       useSel: !!sel,
+      useWet: !!wet,
       erase: look.erase,
       alphaLock: look.alphaLock,
       luminance: look.luminance && !look.erase,
@@ -834,7 +972,8 @@ export class GpuSurface {
     this.canvas = { width: t.w, height: t.h }
   }
 
-  private grow(r: Rect) {
+  /** Note that `r` changed (stamps drawn somewhere else, e.g. on the wet working copy). */
+  mark(r: Rect) {
     const c = this.changed
     if (!c) this.changed = { ...r }
     else {
@@ -857,7 +996,7 @@ export class GpuSurface {
   dab(d: GpuDab) {
     this.batch.push(d)
     const r = d.size * 0.75 + 2
-    this.grow({ x: d.x - r, y: d.y - r, w: 2 * r, h: 2 * r })
+    this.mark({ x: d.x - r, y: d.y - r, w: 2 * r, h: 2 * r })
     if (this.batch.length >= 4096) this.flush()
   }
 
@@ -872,7 +1011,7 @@ export class GpuSurface {
     const r = clip({ x, y, w, h }, this.t.w, this.t.h)
     if (!r) return
     this.painter.clear(this.t, r)
-    this.grow(r)
+    this.mark(r)
   }
 
   /** A blank surface of the same size (one per role, reused between strokes). */
@@ -892,6 +1031,6 @@ export class GpuSurface {
     p.copy(main.t, this.t, r, 'source-over')
     if (tail) p.copy(tail.t, this.t, r, 'source-over')
     if (second) p.copy(second.t, this.t, r, op)
-    this.grow(r)
+    this.mark(r)
   }
 }

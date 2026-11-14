@@ -4,6 +4,7 @@ import { brushReach, colorStroke, compositeStroke, hasColorDynamics, hasGrain, i
 import { shiftColor } from './brushColor'
 import { grainCanvas } from './brushTextures'
 import { WetStamper } from './brushWet'
+import { GpuWetStamper } from './brushWetGpu'
 import { parseHex } from './gl'
 import { clip, GpuPainter, GpuSurface, rgb, type GpuLayer, type StrokeLook, type Tex } from './gpuPaint'
 import { layerTree, type LayerNode } from './layers'
@@ -268,21 +269,31 @@ export class SketchEngine {
     this.strokeBounds = null
     this.g = null
     this.stroke = null
-    const gpu = this.gpuActive && !this.cpuOnly && !opts.smudge && (opts.erase || !isWet(opts.brush)) ? this.gpu! : null
+    const gpu = this.gpuActive && !this.cpuOnly ? this.gpu! : null
     if (gpu) {
-      // Wet paint and Smudge read the layer under every stamp; they still run in Canvas 2D.
       const surf = new GpuSurface(gpu, gpu.temp('stroke'))
       gpu.clear(surf.t, null)
       const preview = gpu.temp('preview')
       gpu.copy(this.tex(opts.layer.id), preview, null)
       this.g = { surf, pred: null, predRect: null, preview, look: this.strokeLook(opts), layerId: opts.layer.id }
-      this.stamper = new StrokeStamper(surf, opts.brush, this.mirrorFor(opts), undefined, opts.color)
+      this.stamper = this.gpuStamper(opts, surf)
     } else {
       this.stroke = this.canvas()
       this.stamper = this.newStamper(opts)
     }
     this.stamper.add(p)
     this.version++
+  }
+
+  /** Wet brushes and the Smudge tool mix with the layer's pixels; other brushes stamp a mask. */
+  private gpuStamper(opts: StrokeOptions, surf: GpuSurface, seed?: number): StrokeStamper {
+    if (opts.smudge || (!opts.erase && isWet(opts.brush))) return new GpuWetStamper(surf, opts.brush, this.mirrorFor(opts), seed, opts.color, this.tex(opts.layer.id), !!opts.smudge)
+    return new StrokeStamper(surf, opts.brush, this.mirrorFor(opts), seed, opts.color)
+  }
+
+  /** The wet working copy, when the GPU stroke is wet paint or smudge. */
+  private get wetWork(): Tex | null {
+    return this.stamper instanceof GpuWetStamper ? this.stamper.work : null
   }
 
   /** colorStroke + compositeStroke's settings, for the GPU. */
@@ -334,7 +345,7 @@ export class SketchEngine {
     const pad = final ? 0 : Math.ceil(Math.max(g.look.wetEdges || g.look.burntEdges ? g.look.edgeBlur * 3 : 0, g.look.height > 0 ? 6 : 0)) + 1
     r = clip({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad }, this.width, this.height)
     if (!r) return
-    this.gpu!.applyStroke(this.tex(g.layerId), g.surf.t, final ? null : (g.pred?.t ?? null), g.preview, g.look, r, this.sel ? { image: this.sel.canvas, version: 0 } : null)
+    this.gpu!.applyStroke(this.tex(g.layerId), g.surf.t, final ? null : (g.pred?.t ?? null), g.preview, g.look, r, this.sel ? { image: this.sel.canvas, version: 0 } : null, this.wetWork)
     this.growDirty(r)
   }
 
@@ -378,7 +389,7 @@ export class SketchEngine {
     const pad = Math.ceil(g.look.wetEdges || g.look.burntEdges ? g.look.edgeBlur * 3 : 0) + 8
     const c = clip({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad }, this.width, this.height)
     if (!c) return
-    this.gpu!.applyStroke(this.tex(g.layerId), g.surf.t, g.pred?.t ?? null, g.preview, g.look, c, this.sel ? { image: this.sel.canvas, version: 0 } : null)
+    this.gpu!.applyStroke(this.tex(g.layerId), g.surf.t, g.pred?.t ?? null, g.preview, g.look, c, this.sel ? { image: this.sel.canvas, version: 0 } : null, this.wetWork)
     this.growDirty(c)
   }
 
@@ -388,7 +399,7 @@ export class SketchEngine {
    * restroke throws them away, so they never reach the layer or undo.
    */
   predict(points: InputPoint[], from: InputPoint | null) {
-    if (this.g && this.strokeOpts) return this.predictGpu(points, from)
+    if (this.g && this.strokeOpts) return this.wetWork ? undefined : this.predictGpu(points, from)
     if (!this.stroke || !this.strokeOpts || this.stamper instanceof WetStamper) return
     if (!points.length) {
       if (this.predicted) this.version++
@@ -424,7 +435,7 @@ export class SketchEngine {
         this.growDirty(r)
       }
       this.strokeBounds = null
-      this.stamper = new StrokeStamper(g.surf, this.strokeOpts.brush, this.mirrorFor(this.strokeOpts), 1, this.strokeOpts.color)
+      this.stamper = this.gpuStamper(this.strokeOpts, g.surf, 1)
       for (const p of points) this.stamper.add(p)
       this.version++
       return
