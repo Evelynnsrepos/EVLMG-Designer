@@ -1,7 +1,7 @@
 import { newId, type Id } from '@/core/model'
 import { CANVAS_BLENDS, type BlendMode } from './blend'
 import { shiftColor } from './brushColor'
-import { PathSmoother } from './brushPath'
+import { CurveFill, PathSmoother } from './brushPath'
 import { applyCurve, hasRealPressure, type CurvePoint } from './pen'
 import { GRAINS, grainCanvas, imageTip, seeded, SHAPES, tipImage, type BrushGrain, type BrushShape } from './brushTextures'
 
@@ -573,6 +573,7 @@ export class StrokeStamper {
   private rngState: number
   private seed: number
   private smoother: PathSmoother<Pt>
+  private curve = new CurveFill<Pt>()
   private lastRaw: (Pt & { time: number }) | null = null
   private dabBuf: HTMLCanvasElement | null = null
   protected strokeColor: string
@@ -632,12 +633,12 @@ export class StrokeStamper {
     }
     const raw = { ...p, speed, time }
     this.lastRaw = raw
-    this.push(this.smoother.push(raw))
+    for (const q of this.curve.push(this.smoother.push(raw))) this.push(q)
   }
 
   /** Clear and draw the whole stroke again with the end taper (the stroke length is known now). */
   finish() {
-    for (const q of this.smoother.flush()) this.push(q, false)
+    for (const q of [...this.smoother.flush().flatMap((q) => this.curve.push(q)), ...this.curve.flush()]) this.push(q, false)
     this.second?.finish()
     if (!this.endTaper() || this.points.length < 2) {
       this.cursor = this.run(this.cursor, Infinity, Infinity, this.main)

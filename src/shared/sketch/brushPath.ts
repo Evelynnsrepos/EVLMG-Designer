@@ -89,3 +89,58 @@ export class PathSmoother<P extends Pt> {
     return { ...w[w.length - 1], x: x / w.length, y: y / w.length, pressure: pressure / w.length }
   }
 }
+
+/**
+ * Round curves between pen points. When points arrive far apart (a fast circle, or a webview that
+ * sends few moves), straight lines between them turn circles into polygons. The stroke instead follows
+ * a Catmull-Rom curve through every pen point, filled in every ~2 px. A segment is drawn once the
+ * point after it is known, so it trails the pen by one move; `flush` draws the rest at the end.
+ */
+export class CurveFill<P extends Pt> {
+  private pts: P[] = []
+
+  push(p: P): P[] {
+    const q = this.pts
+    q.push(p)
+    if (q.length === 1) return [p]
+    if (q.length === 2) return []
+    if (q.length > 4) q.shift()
+    // Segment q[-3] -> q[-2], with the points around it as handles (the first one is its own handle).
+    const [p0, p1, p2, p3] = q.length === 3 ? [q[0], q[0], q[1], q[2]] : q
+    return segment(p0, p1, p2, p3)
+  }
+
+  flush(): P[] {
+    const q = this.pts
+    this.pts = []
+    if (q.length < 2) return []
+    const [p0, p1, p2] = q.length === 2 ? [q[0], q[0], q[1]] : q.slice(-3)
+    return segment(p0, p1, p2, p2)
+  }
+}
+
+function segment<P extends Pt>(p0: P, p1: P, p2: P, p3: P): P[] {
+  const len = Math.hypot(p2.x - p1.x, p2.y - p1.y)
+  // Short segments stay straight: nothing to round, and slow strokes stay exact.
+  if (len < 6) return [p2]
+  const n = Math.min(64, Math.ceil(len / 2))
+  const cr = (a: number, b: number, c: number, d: number, t: number) => 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - a - 3 * c + d) * t * t * t)
+  const out: P[] = []
+  for (let i = 1; i <= n; i++) {
+    const t = i / n
+    // Position follows the curve; pressure, tilt, time and the rest change evenly along it.
+    out.push(i === n ? p2 : { ...mix(p1, p2, t), x: cr(p0.x, p1.x, p2.x, p3.x, t), y: cr(p0.y, p1.y, p2.y, p3.y, t) })
+  }
+  return out
+}
+
+/** `a` to `b` at `t`, for every number the point carries. */
+function mix<P extends Pt>(a: P, b: P, t: number): P {
+  const out = { ...b } as Record<string, unknown>
+  for (const k in b) {
+    const va = (a as Record<string, unknown>)[k]
+    const vb = (b as Record<string, unknown>)[k]
+    if (typeof va === 'number' && typeof vb === 'number') out[k] = va + (vb - va) * t
+  }
+  return out as P
+}
