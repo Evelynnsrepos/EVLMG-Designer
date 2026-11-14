@@ -199,6 +199,10 @@
   background: var(--bg-hover);
   outline: 1px solid var(--accent);
 }
+.sketch-layer.is-pointed {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
 .sketch-layer.is-clip {
   margin-left: 14px;
 }

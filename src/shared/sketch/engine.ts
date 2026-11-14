@@ -7,7 +7,7 @@ import { WetStamper } from './brushWet'
 import { GpuWetStamper } from './brushWetGpu'
 import { parseHex } from './gl'
 import { clip, GpuPainter, GpuSurface, rgb, type GpuLayer, type StrokeLook, type Tex } from './gpuPaint'
-import { layerTree, type LayerNode } from './layers'
+import { layerTree, lockedInTree, shownInTree, type LayerNode } from './layers'
 import { mirrored, type InputPoint, type SketchDoc, type SketchLayer, type SymmetryMode } from './model'
 import { applyRelief } from './relief'
 import { runCpu } from './adjust/cpu'
@@ -954,11 +954,11 @@ export class SketchEngine {
    * Show the picture on the GPU's view canvas: `m` is the view matrix in CSS pixels, `w`×`h` the view's CSS size.
    * Returns false when Canvas 2D has to draw it (no GPU, or adjustment layers).
    */
-  draw(doc: LayerStack, m: [number, number, number, number, number, number], w: number, h: number, dpr: number, smooth: boolean): boolean {
+  draw(doc: LayerStack, m: [number, number, number, number, number, number], w: number, h: number, dpr: number, smooth: boolean, tint?: { id: Id; color: string } | null): boolean {
     if (!this.gpuFor(doc)) return false
     try {
       this.toPicture(doc, true)
-      this.gpu!.present(m, w, h, dpr, smooth)
+      this.gpu!.present(m, w, h, dpr, smooth, tint && this.layers.has(tint.id) ? { tex: this.tex(tint.id), color: rgb(tint.color) } : null)
       return true
     } catch {
       this.gpuFailed()
@@ -1156,6 +1156,43 @@ export class SketchEngine {
         ctx.drawImage(src, 0, 0)
       } else cpuBlend(ctx, src, layer.blend, layer.opacity)
     }
+  }
+
+  /** One pixel of a layer (straight RGBA 0..255), from the GPU when it has the layer. */
+  private pixelOf(id: Id, x: number, y: number): ArrayLike<number> {
+    if (this.gpuActive) return this.gpu!.read(this.tex(id), { x, y, w: 1, h: 1 }).data
+    return this.ensure(id).ctx.getImageData(x, y, 1, 1).data
+  }
+
+  /**
+   * Layer picker: the layer whose paint shows at (x, y), the topmost visible, unlocked pixel layer with
+   * paint there that its mask and clipping base let through. Reads one pixel per layer.
+   */
+  layerAt(layers: SketchLayer[], x: number, y: number): Id | null {
+    x = Math.floor(x)
+    y = Math.floor(y)
+    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return null
+    const stack: { layer: SketchLayer; base: SketchLayer | null; mask?: SketchLayer }[] = []
+    const walk = (nodes: LayerNode[]) => {
+      let base: SketchLayer | null = null
+      for (const { layer, children, mask } of nodes) {
+        if (children) walk(children)
+        else stack.push({ layer, base: layer.clip ? base : null, mask })
+        if (!layer.clip) base = children ? null : layer
+      }
+    }
+    walk(layerTree(layers))
+    for (const { layer, base, mask } of stack.reverse()) {
+      if (layer.kind === 'adjust' || !layer.opacity || !shownInTree(layers, layer.id) || lockedInTree(layers, layer.id)) continue
+      if (!this.pixelOf(layer.id, x, y)[3]) continue
+      if (mask?.visible) {
+        const m = this.pixelOf(mask.id, x, y)
+        if (!((0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) * m[3])) continue
+      }
+      if (base && !this.pixelOf(base.id, x, y)[3]) continue
+      return layer.id
+    }
+    return null
   }
 
   /** The color under a canvas pixel in the flattened picture, as #rrggbb, or null if transparent. */

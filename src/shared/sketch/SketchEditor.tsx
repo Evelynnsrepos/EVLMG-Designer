@@ -12,6 +12,7 @@ import {
   Move,
   PaintBucket,
   Pipette,
+  Layers2,
   Redo2,
   RotateCcw,
   RotateCw,
@@ -130,6 +131,7 @@ const UI = {
   rectSelect: 'Rectangle selection (M)',
   move: 'Move (V): drags the selection, or the whole layer',
   eyedropper: 'Eyedropper (I, or hold Alt)',
+  layerPick: 'Layer picker (K, or hold Ctrl): point at paint to see its layer, click to make it active',
   hand: 'Pan (H, or hold Space)',
   undo: 'Undo (Ctrl+Z)',
   redo: 'Redo (Ctrl+Y)',
@@ -163,7 +165,7 @@ const UI = {
   saving: 'Saving…',
 }
 
-type Tool = 'brush' | 'eraser' | 'smudge' | 'lasso' | 'rect' | 'move' | 'eyedropper' | 'hand' | 'text'
+type Tool = 'brush' | 'eraser' | 'smudge' | 'lasso' | 'rect' | 'move' | 'eyedropper' | 'layerpick' | 'hand' | 'text'
 
 const TOOLS: { id: Tool; icon: LucideIcon; label: string; key: string }[] = [
   { id: 'brush', icon: BrushIcon, label: UI.brush, key: 'b' },
@@ -173,6 +175,7 @@ const TOOLS: { id: Tool; icon: LucideIcon; label: string; key: string }[] = [
   { id: 'rect', icon: SquareDashed, label: UI.rectSelect, key: 'm' },
   { id: 'move', icon: Move, label: UI.move, key: 'v' },
   { id: 'eyedropper', icon: Pipette, label: UI.eyedropper, key: 'i' },
+  { id: 'layerpick', icon: Layers2, label: UI.layerPick, key: 'k' },
   { id: 'hand', icon: Hand, label: UI.hand, key: 'h' },
   { id: 'text', icon: Type, label: 'Text (T): click to add text, drag a text box to move it', key: 't' },
 ]
@@ -319,6 +322,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const [pickingRef, setPickingRef] = useState(false)
   const spaceDown = useRef(false)
   const altDown = useRef(false)
+  const ctrlDown = useRef(false)
+  /** The layer the Layer picker points at. */
+  const [pointed, setPointed] = useState<Id | null>(null)
 
   // Sketch Pro: pen and keys settings, drawing guide, QuickMenu, Edit Shape, touch.
   const input = useInputSettings()
@@ -537,7 +543,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     // Transparent: nothing is drawn behind the picture, so the app's own background and wallpaper show through.
     ctx.imageSmoothingEnabled = view.scale < 1 || !!view.rot
     // With a graphics card the picture is drawn under this canvas, straight from the GPU (0.31).
-    const gpuShown = !assist.mode && engine.draw(doc, viewMatrix(view), w, h, dpr, ctx.imageSmoothingEnabled)
+    const gpuShown = !assist.mode && engine.draw(doc, viewMatrix(view), w, h, dpr, ctx.imageSmoothingEnabled, pointed ? { id: pointed, color: getComputedStyle(canvas).getPropertyValue('--accent').trim() || '#3e8ef7' } : null)
     if (engine.view) engine.view.style.visibility = gpuShown ? '' : 'hidden'
     if (!gpuShown) assist.paint(ctx)
     // Transparent pages are just a white outline over the app's wallpaper.
@@ -578,7 +584,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     | null
   >(null)
 
-  const effectiveTool = (): Tool => (spaceDown.current ? 'hand' : altDown.current && (tool === 'brush' || tool === 'eraser') ? 'eyedropper' : tool)
+  const painting = tool === 'brush' || tool === 'eraser' || tool === 'smudge'
+  const effectiveTool = (): Tool => (spaceDown.current ? 'hand' : altDown.current && (tool === 'brush' || tool === 'eraser') ? 'eyedropper' : ctrlDown.current && painting ? 'layerpick' : tool)
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     // Moves from before the press belong to the hover, not to the new stroke.
@@ -607,6 +614,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     if (drop.continuing && t !== 'hand' && e.button === 0) return drop.fillAt(p, drop.recolor ? color : drop.continuing)
     if (t === 'hand') {
       gesture.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }
+    } else if (t === 'layerpick') {
+      const id = engine.layerAt(doc.layers, p.x, p.y)
+      if (id) setActiveLayerId(id)
     } else if (t === 'eyedropper') {
       const picked = engine.pickColor(doc, p.x, p.y)
       if (picked) setColor(picked)
@@ -681,6 +691,10 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       }
     }
     lastPointer.current = pointIn(viewCanvas.current!, e)
+    if (!gesture.current) {
+      const id = effectiveTool() === 'layerpick' ? engine.layerAt(doc.layers, p.x, p.y) : null
+      if (id !== pointed) setPointed(id)
+    }
     if (isEraserEnd(e) !== hoverEraser) setHoverEraser(!hoverEraser)
     if (e.pointerType === 'touch' && touchMove(e)) return
     if (textTool.move(p)) return
@@ -838,6 +852,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       save((d) => ({ ...d, layers }))
     },
     limit: layerLimit,
+    pointedId: pointed,
     title,
     color,
     selectFrom: (canvas) => sel.fromCanvas(canvas),
@@ -926,6 +941,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     'tool.rect': () => setTool('rect'),
     'tool.move': () => setTool('move'),
     'tool.eyedropper': () => setTool('eyedropper'),
+    'tool.layerpick': () => setTool('layerpick'),
     'tool.hand': () => setTool('hand'),
     'tool.text': () => setTool('text'),
     swapEraser: () => setTool(tool === 'eraser' ? 'brush' : 'eraser'),
@@ -1074,6 +1090,10 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         spaceDown.current = true
         e.preventDefault()
       } else if (k === 'alt') altDown.current = true
+      else if (k === 'control') {
+        ctrlDown.current = true
+        return
+      }
       else {
         // Every other key goes through the shortcut list (Pen and keys settings).
         const id = matchShortcut(e, useInputSettings.getState().shortcuts)
@@ -1089,6 +1109,10 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       }
       if (e.key === ' ') spaceDown.current = false
       if (e.key === 'Alt') altDown.current = false
+      if (e.key === 'Control') {
+        ctrlDown.current = false
+        setPointed(null)
+      }
     }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
@@ -1178,7 +1202,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
               xf.up()
               gesture.current = null
             }}
-            onPointerLeave={() => (flushMove(), setCursor(null))}
+            onPointerLeave={() => (flushMove(), setCursor(null), setPointed(null))}
             onContextMenu={(e) => e.preventDefault()}
           />
           {view && <SelectionMaskView sel={sel} engine={engine} view={view} />}

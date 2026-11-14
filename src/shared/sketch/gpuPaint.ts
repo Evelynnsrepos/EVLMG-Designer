@@ -104,6 +104,14 @@ void main() {
   outColor = vec4(as * cs + ab * (1.0 - as) * bc, ao);
 }`
 
+/** The layer the Layer picker points at, tinted over the picture. */
+const TINT_FRAG = `${HEADER}
+in vec2 uv;
+uniform sampler2D src;
+uniform vec3 color;
+out vec4 outColor;
+void main() { float a = texture(src, uv).a * 0.45; outColor = vec4(color * a, a); }`
+
 const COPY_FRAG = `${HEADER}
 in vec2 uv;
 uniform sampler2D src;
@@ -425,6 +433,7 @@ export class GpuPainter {
         blend: [QUAD_VERT, BLEND_FRAG],
         copy: [QUAD_VERT, COPY_FRAG],
         view: [VIEW_VERT, COPY_FRAG],
+        tint: [VIEW_VERT, TINT_FRAG],
         dab: [DAB_VERT, DAB_FRAG],
         blur: [QUAD_VERT, BLUR_FRAG],
         apply: [QUAD_VERT, APPLY_FRAG],
@@ -904,7 +913,7 @@ export class GpuPainter {
    * Show the picture: `m` is the view matrix in CSS pixels (as for ctx.transform), `w`×`h` the
    * element's CSS size. Smooth when zoomed out or turned, pixel-sharp when zoomed in.
    */
-  present(m: [number, number, number, number, number, number], w: number, h: number, dpr: number, smooth: boolean) {
+  present(m: [number, number, number, number, number, number], w: number, h: number, dpr: number, smooth: boolean, tint: { tex: Tex; color: [number, number, number] } | null = null) {
     const gl = this.gl
     const cw = Math.max(1, Math.round(w * dpr))
     const ch = Math.max(1, Math.round(h * dpr))
@@ -930,8 +939,18 @@ export class GpuPainter {
     const [a, b, c, d, e, ff] = m
     const sx = (2 * dpr) / cw
     const sy = (-2 * dpr) / ch
-    this.set(p, { doc: [this.width, this.height], toClip: [a * sx, b * sy, 0, c * sx, d * sy, 0, e * sx - 1, ff * sy + 1, 1] })
+    const toClip = [a * sx, b * sy, 0, c * sx, d * sy, 0, e * sx - 1, ff * sy + 1, 1]
+    this.set(p, { doc: [this.width, this.height], toClip })
     this.drawQuad()
+    if (tint) {
+      const t = this.prog('tint')
+      this.bind(0, tint.tex.tex, t, 'src')
+      this.set(t, { doc: [this.width, this.height], toClip, color: tint.color })
+      gl.enable(gl.BLEND)
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+      this.drawQuad()
+      gl.disable(gl.BLEND)
+    }
     gl.bindTexture(gl.TEXTURE_2D, this.picture.tex)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)

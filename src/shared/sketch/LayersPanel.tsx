@@ -94,6 +94,8 @@ export interface LayerHost {
   /** v0.17: change the layer list as one undo step together with the pixel edit just made on `layerId`. */
   restructure(layers: SketchLayer[], layerId: Id, pushesBefore: number): void
   limit: number
+  /** The layer the Layer picker points at, highlighted in the list. */
+  pointedId?: Id | null
   title: string
   color: string
   /** Select where a canvas has pixels. */
@@ -397,7 +399,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
           return (
             <div
               key={l.id}
-              className={`sketch-layer${isActive ? ' is-active' : ''}${picked.has(l.id) ? ' is-picked' : ''}${l.clip ? ' is-clip' : ''}${dropClass}`}
+              className={`sketch-layer${isActive ? ' is-active' : ''}${picked.has(l.id) ? ' is-picked' : ''}${l.id === host.pointedId ? ' is-pointed' : ''}${l.clip ? ' is-clip' : ''}${dropClass}`}
               style={{ paddingLeft: 4 + depth * 14 }}
               draggable
               onPointerDownCapture={dragFromRowOnly}

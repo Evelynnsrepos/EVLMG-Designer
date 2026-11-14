@@ -16,6 +16,7 @@ export const ACTIONS = [
   { id: 'tool.rect', label: 'Rectangle selection', keys: ['m'] },
   { id: 'tool.move', label: 'Move', keys: ['v'] },
   { id: 'tool.eyedropper', label: 'Eyedropper', keys: ['i'] },
+  { id: 'tool.layerpick', label: 'Layer picker (or hold Ctrl)', keys: ['k'] },
   { id: 'tool.hand', label: 'Pan', keys: ['h'] },
   { id: 'tool.text', label: 'Text', keys: ['t'] },
   { id: 'swapEraser', label: 'Switch brush / eraser', keys: ['x'] },
