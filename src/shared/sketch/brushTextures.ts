@@ -261,11 +261,30 @@ export function seeded(seed: number): () => number {
  * Turn RGBA pixels into a paint mask (0..255): images with transparency use
  * their alpha, opaque images their brightness (white = paint).
  */
-export function maskFromPixels(data: Uint8ClampedArray | Uint8Array, invert = false): Uint8ClampedArray {
+/** True when an image has real transparency: then its alpha is the shape (else its brightness is). */
+export function usesAlpha(data: Uint8ClampedArray | Uint8Array): boolean {
   const n = data.length / 4
   let clear = 0
   for (let i = 0; i < n; i++) if (data[i * 4 + 3] < 250) clear++
-  const useAlpha = clear > n * 0.01
+  return clear > n * 0.01
+}
+
+/** An image's brightness as an opaque grey canvas: the light and dark a shaded brush keeps. */
+export function shadeCanvas(data: Uint8ClampedArray | Uint8Array, w: number, h: number): HTMLCanvasElement {
+  const c = canvas(w, h)
+  const img = new ImageData(w, h)
+  for (let i = 0; i < w * h; i++) {
+    const o = i * 4
+    img.data[o] = img.data[o + 1] = img.data[o + 2] = 0.299 * data[o] + 0.587 * data[o + 1] + 0.114 * data[o + 2]
+    img.data[o + 3] = 255
+  }
+  c.getContext('2d')!.putImageData(img, 0, 0)
+  return c
+}
+
+export function maskFromPixels(data: Uint8ClampedArray | Uint8Array, invert = false): Uint8ClampedArray {
+  const n = data.length / 4
+  const useAlpha = usesAlpha(data)
   const out = new Uint8ClampedArray(n)
   for (let i = 0; i < n; i++) {
     const o = i * 4
@@ -458,7 +477,8 @@ export function tipImage(shape: BrushShape, hardness: number): HTMLCanvasElement
 
 // ---- Image textures -----------------------------------------------------------
 
-type Loaded = { mask: Uint8ClampedArray; w: number; h: number; canvas: HTMLCanvasElement }
+/** A loaded brush image: its shape as a white alpha mask, and its light and dark as an opaque grey canvas. */
+type Loaded = { mask: Uint8ClampedArray; w: number; h: number; canvas: HTMLCanvasElement; shade: HTMLCanvasElement }
 const images = new Map<string, Loaded | Promise<Loaded | null> | null>()
 
 const MAX_SIDE = 512
@@ -477,8 +497,9 @@ export function loadImageMask(src: string): Promise<Loaded | null> {
       const c = canvas(w, h)
       const g = c.getContext('2d', { willReadFrequently: true })!
       g.drawImage(img, 0, 0, w, h)
-      const mask = maskFromPixels(g.getImageData(0, 0, w, h).data)
-      const out = { mask, w, h, canvas: maskCanvas(mask, w, h) }
+      const data = g.getImageData(0, 0, w, h).data
+      const mask = maskFromPixels(data)
+      const out = { mask, w, h, canvas: maskCanvas(mask, w, h), shade: shadeCanvas(data, w, h) }
       images.set(src, out)
       resolve(out)
     }

@@ -1,5 +1,7 @@
 import { defaultValues } from './adjust/filters'
 import { defaultLibrary } from './brushDefaults'
+import type { BrushSettings } from './brushes'
+import { loadImageMask } from './brushTextures'
 import { SketchEngine } from './engine'
 import { glAllowed } from './gl'
 import { gpuAllowSoftware } from './gpuPaint'
@@ -42,8 +44,34 @@ function diff(name: string, gpu: boolean, a: Uint8ClampedArray, b: Uint8ClampedA
   return { name, gpu, mean: sum / a.length, max }
 }
 
+/** A see-through test image with light and dark (two shaded ovals), for ribbon and shaded brushes. */
+function testImage(w: number, h: number): string {
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  const g = c.getContext('2d')!
+  for (const x of [w / 4, (3 * w) / 4]) {
+    const gr = g.createRadialGradient(x - h / 6, h / 3, 1, x, h / 2, h / 1.6)
+    gr.addColorStop(0, '#fff')
+    gr.addColorStop(1, '#111')
+    g.fillStyle = gr
+    g.beginPath()
+    g.ellipse(x, h / 2, w / 4.2, h / 2.2, 0.4, 0, Math.PI * 2)
+    g.fill()
+  }
+  return c.toDataURL()
+}
+
+let images: { braid: string; bead: string } | null = null
+
+const BRUSHES: Record<string, () => Partial<BrushSettings>> = {
+  'ribbon-shaded-caps': () => ({ shapeImage: images!.braid, ribbon: 'tile', shaded: true, capStart: images!.bead, capEnd: images!.bead }),
+  'stamps-shaded': () => ({ shapeImage: images!.braid, shaded: true, spacing: 0.6 }),
+}
+
 function stroke(brushId: string, gpu: boolean, mode: 'paint' | 'erase' | 'smudge') {
-  const brush = defaultLibrary().brushes.find((b) => b.id === brushId)!
+  const lib = defaultLibrary().brushes
+  const brush = BRUSHES[brushId] ? { ...lib.find((b) => b.id === 'round-brush')!, ...BRUSHES[brushId]() } : lib.find((b) => b.id === brushId)!
   const e = engine(gpu)
   const layer = newLayer('L')
   const doc = { layers: [layer], backgroundColor: '#ffffff' }
@@ -116,6 +144,8 @@ function undoRoundTrip(): GpuDiff[] {
 
 export async function runSketchGpuCheck(): Promise<{ strokes: GpuDiff[]; adjust: GpuDiff[]; undo: GpuDiff[] }> {
   gpuAllowSoftware.value = true
+  images = { braid: testImage(128, 48), bead: testImage(32, 32) }
+  await Promise.all([loadImageMask(images.braid), loadImageMask(images.bead)])
   // Brush tips and grains that are images load in the background: paint once first.
   for (const id of ['bristle-brush', 'grit', 'thick-paint']) stroke(id, false, 'paint')
   await new Promise((r) => setTimeout(r, 1000))
@@ -129,6 +159,8 @@ export async function runSketchGpuCheck(): Promise<{ strokes: GpuDiff[]; adjust:
     ['wet-round', 'paint'],
     ['soft-blender', 'smudge'],
     ['hard-eraser', 'erase'],
+    ['ribbon-shaded-caps', 'paint'],
+    ['stamps-shaded', 'paint'],
   ]
   const strokes = cases.map(([id, mode]) => {
     const g = stroke(id, true, mode)

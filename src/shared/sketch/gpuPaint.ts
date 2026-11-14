@@ -36,6 +36,8 @@ export interface GpuDab {
 /** How a brush's dabs look, the same for every dab of a stroke. */
 export interface DabLook {
   tip: TexImageSource
+  /** The tip image's light and dark (opaque grey): it shades the dab's colour. */
+  shade?: TexImageSource | null
   filtering: Filtering
   /** Moving grain baked into each dab (alpha grain canvas), or null. */
   grain: { image: TexImageSource; scale: number; zoom: number; rotation: number; movement: number; filtering: Filtering } | null
@@ -159,11 +161,12 @@ void main() {
 }`
 
 const DAB_FRAG = `${HEADER}
+${GLSL_BLEND}
 in vec2 q;
 in float alpha, at, dabSize;
 in vec4 col;
-uniform sampler2D tip, grain;
-uniform bool useGrain;
+uniform sampler2D tip, grain, shade;
+uniform bool useGrain, useShade;
 uniform vec2 grainSize;
 uniform float grainScale, grainZoom, grainRot, grainMove;
 out vec4 outColor;
@@ -176,7 +179,32 @@ void main() {
     a *= texture(grain, g / grainSize).a;
   }
   vec3 rgb = col.a > 0.5 ? col.rgb : vec3(1.0);
+  if (useShade) { float g = texture(shade, q).r; rgb = vec3(hard1(rgb.r, g), hard1(rgb.g, g), hard1(rgb.b, g)); }
   outColor = vec4(rgb * a, a);
+}`
+
+/** Ribbon mode: the brush image along a triangle strip (x, y, then u, v, alpha per vertex). */
+const RIBBON_VERT = `${HEADER}
+layout(location = 0) in vec2 pos;
+layout(location = 1) in vec3 a;
+uniform vec2 size;
+out vec2 uv;
+out float alpha;
+void main() { uv = a.xy; alpha = a.z; gl_Position = vec4(pos / size * 2.0 - 1.0, 0.0, 1.0); }`
+
+const RIBBON_FRAG = `${HEADER}
+in vec2 uv;
+in float alpha;
+uniform sampler2D img, shade;
+uniform bool useShade, colored;
+uniform vec3 color;
+out vec4 outColor;
+${GLSL_BLEND}
+void main() {
+  float m = texture(img, uv).a * alpha;
+  vec3 rgb = colored ? color : vec3(1.0);
+  if (useShade) { float g = texture(shade, uv).r; rgb = vec3(hard1(rgb.r, g), hard1(rgb.g, g), hard1(rgb.b, g)); }
+  outColor = vec4(rgb * m, m);
 }`
 
 /** Separable blur of a mask's alpha into r (gaussian when sigma > 0, box of `radius` px otherwise). */
@@ -442,6 +470,7 @@ export class GpuPainter {
         view: [VIEW_VERT, COPY_FRAG],
         tint: [VIEW_VERT, TINT_FRAG],
         dab: [DAB_VERT, DAB_FRAG],
+        ribbon: [RIBBON_VERT, RIBBON_FRAG],
         blur: [QUAD_VERT, BLUR_FRAG],
         apply: [QUAD_VERT, APPLY_FRAG],
         region: [QUAD_VERT, REGION_FRAG],
@@ -658,7 +687,8 @@ export class GpuPainter {
       const gi = g.image as { width: number; height: number }
       this.set(p, { useGrain: true, grainSize: [gi.width, gi.height], grainScale: g.scale, grainZoom: g.zoom, grainRot: (g.rotation * Math.PI) / 180, grainMove: g.movement })
     } else this.set(p, { useGrain: false })
-    this.set(p, { size: [this.width, this.height] })
+    this.bind(2, look.shade ? this.image(look.shade, look.filtering) : null, p, 'shade')
+    this.set(p, { size: [this.width, this.height], useShade: !!look.shade })
     gl.enable(gl.BLEND)
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quad)
@@ -693,6 +723,27 @@ export class GpuPainter {
       gl.vertexAttribDivisor(i, 0)
       gl.disableVertexAttribArray(i)
     }
+    gl.disable(gl.BLEND)
+  }
+
+  /** Ribbon mode: draw the brush image along a triangle strip into `t` (source-over). */
+  ribbon(t: Tex, verts: Float32Array, o: { image: TexImageSource; shade: TexImageSource | null; repeat: boolean; filtering: Filtering; color: [number, number, number] | null }) {
+    const gl = this.gl
+    this.into(t, null)
+    const p = this.prog('ribbon')
+    this.bind(0, this.image(o.image, o.filtering, o.repeat), p, 'img')
+    this.bind(1, o.shade ? this.image(o.shade, o.filtering, o.repeat) : null, p, 'shade')
+    this.set(p, { size: [this.width, this.height], useShade: !!o.shade, colored: !!o.color, color: o.color ?? [1, 1, 1] })
+    gl.enable(gl.BLEND)
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.dabBuf)
+    gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STREAM_DRAW)
+    gl.enableVertexAttribArray(0)
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 20, 0)
+    gl.enableVertexAttribArray(1)
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 20, 8)
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, verts.length / 5)
+    gl.disableVertexAttribArray(1)
     gl.disable(gl.BLEND)
   }
 
@@ -1095,6 +1146,18 @@ export class GpuSurface {
     if (!r) return
     this.painter.clear(this.t, r)
     this.mark(r)
+  }
+
+  /** Ribbon mode: the brush image along a strip (see GpuPainter.ribbon). */
+  ribbon(verts: Float32Array, o: Parameters<GpuPainter['ribbon']>[2]) {
+    this.flush()
+    this.painter.ribbon(this.t, verts, o)
+  }
+
+  /** One stamp of another image (a ribbon's cap). */
+  stamp(image: TexImageSource, shade: TexImageSource | null, d: GpuDab) {
+    this.flush()
+    this.painter.dabs(this.t, { tip: image, shade, filtering: this.look?.filtering ?? 'improved', grain: null }, [d])
   }
 
   /** A blank surface of the same size (one per role, reused between strokes). */

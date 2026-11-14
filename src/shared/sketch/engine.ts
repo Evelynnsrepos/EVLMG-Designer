@@ -1,6 +1,6 @@
 import type { Id } from '@/core/model'
 import { blendPixel, CANVAS_BLENDS, type BlendMode } from './blend'
-import { brushReach, colorStroke, compositeStroke, hasColorDynamics, hasGrain, isWet, strokeAlpha, StrokeStamper, type BrushSettings } from './brushes'
+import { brushReach, colorStroke, compositeStroke, hasColorDynamics, hasGrain, isShaded, isWet, strokeAlpha, StrokeStamper, type BrushSettings } from './brushes'
 import { shiftColor } from './brushColor'
 import { grainCanvas } from './brushTextures'
 import { WetStamper } from './brushWet'
@@ -307,7 +307,7 @@ export class SketchEngine {
     const grain = b.grainMode === 'texturized' && hasGrain(b) ? grainCanvas(b, gray ? 'gray' : 'alpha') : null
     return {
       color: rgb(opts.erase ? '#000000' : opts.color),
-      colored: hasColorDynamics(b),
+      colored: hasColorDynamics(b) || isShaded(b),
       grain: grain && { image: grain, gray, blend: (gray ? b.grainBlend : 'source-over') as BlendMode, scale: b.grainScale * (1 + (b.size / 40 - 1) * b.grainZoom), rotation: b.grainRotation, filtering: b.grainFiltering },
       wetEdges: b.wetEdges,
       burntEdges: b.burntEdges,
