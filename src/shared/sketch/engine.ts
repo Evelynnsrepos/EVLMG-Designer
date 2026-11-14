@@ -76,7 +76,7 @@ export class SketchEngine {
   /** Each layer's GPU texture and the layer version it holds. */
   private texs = new Map<string, { t: Tex; version: number }>()
   /** The stroke being painted on the GPU: its stamps, predicted points, and the layer with the stroke on it. */
-  private g: { surf: GpuSurface; pred: GpuSurface | null; predRect: Rect | null; preview: Tex; look: StrokeLook; layerId: Id } | null = null
+  private g: { surf: GpuSurface; pred: GpuSurface | null; predRect: Rect | null; preview: Tex; look: StrokeLook; layerId: Id; tiles: Map<string, Rect> } | null = null
   /** What the GPU picture shows, so only changes are blended again. */
   private onPicture: { layers: SketchLayer[]; background: string | null | undefined; withBackground: boolean; edits: number } | null = null
   /** Part of the picture the GPU stroke changed since it was last blended. */
@@ -279,7 +279,7 @@ export class SketchEngine {
       gpu.clear(surf.t, null)
       const preview = gpu.temp('preview')
       gpu.copy(this.tex(opts.layer.id), preview, null)
-      this.g = { surf, pred: null, predRect: null, preview, look: this.strokeLook(opts), layerId: opts.layer.id }
+      this.g = { surf, pred: null, predRect: null, preview, look: this.strokeLook(opts), layerId: opts.layer.id, tiles: new Map() }
       this.stamper = this.gpuStamper(opts, surf)
     } else {
       this.stroke = this.canvas()
@@ -343,6 +343,8 @@ export class SketchEngine {
     const p = g.pred?.takeChanged() ?? null
     if (p) g.predRect = g.predRect ? union(g.predRect, p) : p
     const changed = g.surf.takeChanged()
+    // Undo keeps (and reads back) only the tiles the stroke's stamps touched, not the whole box around it.
+    if (changed) for (const t of tilesIn(changed, this.width, this.height)) g.tiles.set(`${t.x},${t.y}`, t)
     let r = final ? this.strokeArea(opts) : union(changed, p)
     if (!r) return
     // Wet and burnt edges and 3D paint look at the mask around a pixel, so a stamp changes a bit more.
@@ -533,7 +535,7 @@ export class SketchEngine {
       if (r && !gpu.lost) {
         g.pred = null
         this.syncGpuStroke(true)
-        const rects = tilesIn(r, this.width, this.height)
+        const rects = g.tiles.size ? [...g.tiles.values()] : tilesIn(r, this.width, this.height)
         const before = this.snapshot(id, rects)
         // The preview (layer + stroke) becomes the layer; the old texture is the next stroke's preview.
         const e = this.texs.get(id)!
