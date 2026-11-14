@@ -190,18 +190,57 @@
   box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.15);
 }
 
-/* --- 6. Hotwheel: glass-coloured slices with a light rim (it opens over canvases, so no blur) -------- */
+/* --- 6. Hotwheel: a liquid glass ring ---------------------------------------------------------------
+ * A see-through disc with a hole sits behind the slices: blurred in Full glass, tinted in Light glass.
+ * The slices are lighter glass on top, the hovered one fills with the accent, and a bright rim catches the light.
+ * It only blurs while it is open, and drawing is paused then, so it never slows the canvas down. */
+:root[data-glass] .hotwheel-glass {
+  display: block;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--r) * 2);
+  height: calc(var(--r) * 2);
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 10%, color-mix(in srgb, var(--bg-elevated) 30%, transparent));
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 2px 0 var(--glass-hi),
+    inset 0 -2px 0 var(--glass-lo),
+    inset 0 0 24px color-mix(in srgb, var(--accent) 14%, transparent),
+    var(--glass-shadow);
+  /* The hole in the middle stays clear. */
+  mask: radial-gradient(circle, transparent calc(var(--hole) - 1px), #000 var(--hole));
+}
+:root[data-glass='full'] .hotwheel-glass {
+  backdrop-filter: blur(14px);
+}
 :root[data-glass] .hotwheel-slice > path {
-  --f: var(--glass-fill-thick);
+  /* Solid colours made see-through as a whole, so the round-corner stroke doesn't double up into a dark rim. */
+  opacity: 0.74;
 }
-:root[data-glass] .hotwheel-slice.on > path {
-  --f: color-mix(in srgb, var(--accent) 28%, var(--glass-fill-thick));
+:root[data-glass='light'] .hotwheel-slice > path {
+  opacity: 0.94;
 }
-:root[data-glass] .hotwheel-slice > path.half:not(.lit) {
-  --f: color-mix(in srgb, var(--accent) 10%, var(--glass-fill-thick));
+:root[data-glass] .hotwheel-slice.on > path,
+:root[data-glass] .hotwheel-slice.lit > path:not(.half),
+:root[data-glass] .hotwheel-slice > path.half.lit {
+  opacity: 0.95;
+}
+:root[data-glass] .hotwheel-hole {
+  fill: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
 }
 :root[data-glass] .hotwheel > svg {
-  filter: drop-shadow(0 0 1px var(--glass-hi)) drop-shadow(0 8px 22px rgb(0 0 0 / 0.35));
+  position: relative; /* above the glass disc */
+  filter: drop-shadow(0 1px 0 var(--glass-hi));
+}
+/* Blurred things must not spin or scale (WebKit can paint them black for a frame), so in Full glass it fades. */
+:root[data-glass='full'] .hotwheel {
+  animation: glass-fade 0.14s var(--ease);
+}
+:root[data-glass='full'] .hotwheel.closing {
+  animation: glass-fade-out 0.12s ease-in forwards;
 }
 
 /* --- 7. Motion (none when the system asks for less) --------------------------------------------------- */
@@ -221,6 +260,11 @@
   }
   :root[data-glass] :is(.project-card, .item-card):hover {
     translate: 0 -2px;
+  }
+}
+@keyframes glass-fade-out {
+  to {
+    opacity: 0;
   }
 }
 @keyframes glass-fade {

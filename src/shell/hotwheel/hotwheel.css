@@ -119,3 +119,8 @@
     0 0 2px var(--bg),
     0 0 3px var(--bg);
 }
+
+/* The glass disc behind the slices; only shown with the glass look (shell/glass.css styles it). */
+.hotwheel-glass {
+  display: none;
+}

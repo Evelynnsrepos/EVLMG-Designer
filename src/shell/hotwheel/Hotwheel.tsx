@@ -310,6 +310,8 @@ function Wheel({ open }: { open: Open }) {
   const w = OUT * 2 + 12
   return (
     <div className={`hotwheel${open.closing ? ' closing' : ''}`} style={{ left: cx, top: cy, '--s': scale } as React.CSSProperties} role="menu" aria-label="Hotwheel">
+      {/* Glass look: a blurred, see-through disc behind the slices (shell/glass.css); hidden otherwise. */}
+      <div className="hotwheel-glass" style={{ '--r': `${open.outer.length > 0 ? OUT + 5 : MID + 3}px`, '--hole': `${HOLE}px` } as React.CSSProperties} />
       <svg width={w} height={w} viewBox={`${-w / 2} ${-w / 2} ${w} ${w}`}>
         <Ring items={open.inner} r0={HOLE + 2} r1={MID - 2} hit={hit} ring="in" />
         {open.outer.length > 0 && <Ring items={open.outer} r0={MID + 2} r1={OUT} hit={hit} ring="out" />}
