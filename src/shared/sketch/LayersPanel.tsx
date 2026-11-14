@@ -434,7 +434,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
                 >
                   {l.visible ? <Eye size={13} /> : <EyeOff size={13} />}
                 </button>
-                {isGroup(l) ? <Folder size={18} className="sketch-group-icon" /> : <Thumb engine={engine} id={l.id} version={engine.version} />}
+                {isGroup(l) ? <Folder size={18} className="sketch-group-icon" /> : <Thumb engine={engine} id={l.id} version={engine.layerVersion(l.id)} />}
                 {mask && (
                   <span
                     className={`sketch-mask-thumb${mask.id === host.activeId ? ' is-active' : ''}${mask.visible ? '' : ' is-off'}`}
@@ -448,7 +448,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
                       set(mask.id, { visible: !mask.visible })
                     }}
                   >
-                    <Thumb engine={engine} id={mask.id} version={engine.version} />
+                    <Thumb engine={engine} id={mask.id} version={engine.layerVersion(mask.id)} />
                   </span>
                 )}
                 <span className="sketch-layer-name">{l.name}</span>

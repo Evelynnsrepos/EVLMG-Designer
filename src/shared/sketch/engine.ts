@@ -189,6 +189,11 @@ export class SketchEngine {
     return e.t
   }
 
+  /** Changes whenever this layer's saved pixels change (not while a stroke is still being drawn). */
+  layerVersion(id: Id): number {
+    return this.layerVersions.get(id) ?? 0
+  }
+
   layerCanvas(id: Id): HTMLCanvasElement {
     return this.ensure(id).canvas
   }
