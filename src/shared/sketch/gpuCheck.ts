@@ -90,7 +90,31 @@ function adjusted(id: LayerAdjust['id'], gpu: boolean) {
   return { px: e.render({ layers: [a, b, adj], backgroundColor: '#ffffff' }).getContext('2d')!.getImageData(0, 0, W, H).data, gpu: e.gpuActive }
 }
 
-export async function runSketchGpuCheck(): Promise<{ strokes: GpuDiff[]; adjust: GpuDiff[] }> {
+/** Paint on the GPU, undo, redo: the picture must come back exactly each time. */
+function undoRoundTrip(): GpuDiff[] {
+  const e = engine(true)
+  const layer = newLayer('L')
+  const doc = { layers: [layer], backgroundColor: '#ffffff' }
+  e.edit(layer.id, (c) => {
+    c.fillStyle = '#3080c0'
+    c.fillRect(60, 0, 80, H)
+  })
+  const picture = () => e.render(doc).getContext('2d')!.getImageData(0, 0, W, H).data.slice()
+  const before = picture()
+  const brush = defaultLibrary().brushes.find((b) => b.id === 'round-brush')!
+  e.beginStroke({ layer, brush: { ...brush, size: 20 }, color: '#c03020', symmetry: 'off', erase: false }, pt(20, 80, 1, 0))
+  for (let i = 1; i <= 20; i++) e.strokeTo(pt(20 + i * 10, 80 + (i % 2) * 20, 1, i * 8))
+  e.render(doc)
+  e.endStroke()
+  const after = picture()
+  e.undo()
+  const undone = picture()
+  e.redo()
+  const redone = picture()
+  return [diff('stroke changed the picture (expect > 0)', e.gpuActive, before, after), diff('undo', e.gpuActive, undone, before), diff('redo', e.gpuActive, redone, after)]
+}
+
+export async function runSketchGpuCheck(): Promise<{ strokes: GpuDiff[]; adjust: GpuDiff[]; undo: GpuDiff[] }> {
   gpuAllowSoftware.value = true
   // Brush tips and grains that are images load in the background: paint once first.
   for (const id of ['bristle-brush', 'grit', 'thick-paint']) stroke(id, false, 'paint')
@@ -114,5 +138,5 @@ export async function runSketchGpuCheck(): Promise<{ strokes: GpuDiff[]; adjust:
     const g = adjusted(id, true)
     return diff(id, g.gpu, g.px, adjusted(id, false).px)
   })
-  return { strokes, adjust }
+  return { strokes, adjust, undo: undoRoundTrip() }
 }
