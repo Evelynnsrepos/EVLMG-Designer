@@ -1,3 +1,4 @@
+import { accentAlpha, accentNow } from '@/shared/canvas/theme'
 import { useRef, useState } from 'react'
 import { encode } from '@/shared/pixel/codec'
 import { celKey, resolveKey, type PixelDoc } from '@/shared/pixel/model'
@@ -151,7 +152,7 @@ export function useShapeTool(h: ShapeToolHost) {
     const at = (q: VPoint) => [(q.x + 0.5) * s, (q.y + 0.5) * s] as const
     const dot = (q: VPoint, on: boolean) => {
       const [x, y] = at(q)
-      g.fillStyle = on ? '#4dabf7' : '#fff'
+      g.fillStyle = on ? accentNow() : '#fff'
       g.strokeStyle = '#000'
       g.lineWidth = 1
       g.fillRect(x - 3.5, y - 3.5, 7, 7)
@@ -161,7 +162,7 @@ export function useShapeTool(h: ShapeToolHost) {
       g.beginPath()
       sh.points.forEach((q, i) => (i ? g.lineTo(...at(q)) : g.moveTo(...at(q))))
       if (sh.closed) g.closePath()
-      g.strokeStyle = sh.id === sel?.id ? 'rgba(77,171,247,0.9)' : 'rgba(255,255,255,0.45)'
+      g.strokeStyle = sh.id === sel?.id ? accentAlpha(0.9) : 'rgba(255,255,255,0.45)'
       g.setLineDash(sh.id === sel?.id ? [] : [3, 3])
       g.stroke()
       g.setLineDash([])
@@ -170,7 +171,7 @@ export function useShapeTool(h: ShapeToolHost) {
     if (pen) {
       g.beginPath()
       pen.forEach((q, i) => (i ? g.lineTo(...at(q)) : g.moveTo(...at(q))))
-      g.strokeStyle = '#4dabf7'
+      g.strokeStyle = accentNow()
       g.stroke()
       pen.forEach((q) => dot(q, false))
     }

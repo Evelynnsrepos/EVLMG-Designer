@@ -178,8 +178,8 @@
   color: #fff;
 }
 .sb-status-clean {
-  background: #1971c2;
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-text);
 }
 .sb-side {
   flex: 0 0 300px;

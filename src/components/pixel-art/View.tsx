@@ -1,3 +1,4 @@
+import { accentAlpha, accentNow } from '@/shared/canvas/theme'
 import { Blend, Brush, PenTool, CircleDashed, Pentagon, Hand, History as HistoryIcon, ImagePlus, Undo2, Redo2, Maximize, Type, Sparkles, Circle, Dices, Download, LassoSelect, Spline, SprayCan, Stamp, Eraser, FlipHorizontal2, FlipVertical2, Grid3x3, Lasso, Layers, Map as MapIcon, Move, PaintBucket, Pipette, RotateCcw, RotateCw, Slash, Square, SquareDashed, SunMoon, Upload, WandSparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { importAssetFromBlob, resolveAssetPath } from '@/core/assets'
@@ -735,7 +736,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
       lines(g, 1)
     }
     if (showGrid && d.kind === 'tileset') {
-      g.strokeStyle = 'rgba(77,171,247,0.6)'
+      g.strokeStyle = accentAlpha(0.6)
       lines(g, ts)
       const S = ts * s
       if (!inMap && d.map) {
@@ -798,7 +799,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
       const pts = [...poly.current.pts, ...(hover.current ? [hover.current] : [])]
       g.beginPath()
       pts.forEach(([x, y], i) => (i ? g.lineTo : g.moveTo).call(g, (x + off[0] + 0.5) * s, (y + off[1] + 0.5) * s))
-      g.strokeStyle = '#4dabf7'
+      g.strokeStyle = accentNow()
       g.lineWidth = 1.5
       g.stroke()
       g.lineWidth = 1
@@ -807,7 +808,7 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
       // Transform handles around what Move would lift.
       const b = mask ? bounds(mask, d.width) : bounds(imgMask(celImg(d.cels[curKey()], d.width, d.height)), d.width)
       if (b) {
-        g.strokeStyle = 'rgba(77,171,247,0.9)'
+        g.strokeStyle = accentAlpha(0.9)
         g.strokeRect((b.x + off[0]) * s + 0.5, (b.y + off[1]) * s + 0.5, b.w * s, b.h * s)
         g.fillStyle = '#fff'
         for (const [cx, cy] of [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]]) {
@@ -2504,11 +2505,11 @@ function TilePicker({ set, ts, stamp, onStamp }: { set: Img; ts: number; stamp: 
     g.imageSmoothingEnabled = false
     g.drawImage(toCanvas(set), 0, 0, c.width, c.height)
     const s = zoom * dpr
-    g.strokeStyle = 'rgba(77,171,247,0.5)'
+    g.strokeStyle = accentAlpha(0.5)
     for (let x = 0; x <= set.width; x += ts) g.strokeRect(x * s, 0, 0, c.height)
     for (let y = 0; y <= set.height; y += ts) g.strokeRect(0, y * s, c.width, 0)
     g.lineWidth = 2
-    g.strokeStyle = '#4dabf7'
+    g.strokeStyle = accentNow()
     g.strokeRect(stamp.col * ts * s, stamp.row * ts * s, stamp.w * ts * s, stamp.h * ts * s)
   }, [set, zoom, ts, stamp])
   const at = (e: React.PointerEvent): Pt => {

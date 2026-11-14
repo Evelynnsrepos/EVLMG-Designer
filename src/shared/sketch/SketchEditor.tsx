@@ -219,7 +219,7 @@ function CardGuides({ g, width, height, scale }: { g: NonNullable<SketchDoc['car
   return (
     <g fill="none" strokeWidth={1.5 / scale} pointerEvents="none">
       <rect x={g.bleed} y={g.bleed} width={width - 2 * g.bleed} height={height - 2 * g.bleed} rx={g.corner} stroke="#e5484d" />
-      <rect x={s} y={s} width={width - 2 * s} height={height - 2 * s} stroke="#3e8ed0" strokeDasharray={`${6 / scale} ${4 / scale}`} />
+      <rect x={s} y={s} width={width - 2 * s} height={height - 2 * s} stroke="var(--accent)" strokeDasharray={`${6 / scale} ${4 / scale}`} />
     </g>
   )
 }

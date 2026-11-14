@@ -1,3 +1,4 @@
+import { accentNow } from '@/shared/canvas/theme'
 import { useEffect, useRef } from 'react'
 import { drawTile } from '@/shared/tileset'
 import type { TileImage } from './images'
@@ -9,7 +10,7 @@ export interface Ghost {
   cells: { x: number; y: number; art?: string; color?: string; skip?: boolean }[]
 }
 
-const OUTLINE: Record<Ghost['tone'], string> = { paint: '#4dabf7', erase: '#ffffff', block: '#e03131', scatter: '#f5a623' }
+const OUTLINE: Record<Ghost['tone'], string> = { paint: '', erase: '#ffffff', block: '#e03131', scatter: '#f5a623' }
 
 interface Props {
   ghost: Ghost | null
@@ -88,7 +89,7 @@ export function Preview({ ghost, iso, width, height, cellPx, sharp, sets, images
         ctx.fill()
       }
       ctx.globalAlpha = cell.skip ? 0.35 : 0.9
-      ctx.strokeStyle = OUTLINE[ghost.tone]
+      ctx.strokeStyle = OUTLINE[ghost.tone] || accentNow()
       ctx.lineWidth = Math.max(1, s / 16)
       shape(cell.x, cell.y)
       ctx.stroke()

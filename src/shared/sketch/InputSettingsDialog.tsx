@@ -1,3 +1,4 @@
+import { accentNow } from '@/shared/canvas/theme'
 import { useEffect, useRef, useState } from 'react'
 import { newId } from '@/core/model'
 import { Modal } from '../ui'
@@ -226,7 +227,7 @@ function TabletTest({ curve }: { curve: CurvePoint[] }) {
     const rect = c.getBoundingClientRect()
     const ctx = c.getContext('2d')!
     const p = e.pointerType === 'pen' ? applyCurve(curve, e.pressure) : 1
-    ctx.fillStyle = e.buttons & PEN_BITS.eraser ? '#e5484d' : '#3e8ef7'
+    ctx.fillStyle = e.buttons & PEN_BITS.eraser ? '#e5484d' : accentNow()
     ctx.globalAlpha = 0.8
     ctx.beginPath()
     ctx.arc(((e.clientX - rect.left) * c.width) / rect.width, ((e.clientY - rect.top) * c.height) / rect.height, 1 + p * 10, 0, Math.PI * 2)

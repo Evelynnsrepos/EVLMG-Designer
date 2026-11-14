@@ -42,12 +42,13 @@ export function themeVars(t: ProjectTheme, base: { bg: string; sunken: string })
   }
   if (t.accent) {
     vars['--accent'] = t.accent
+    vars['--focus'] = t.accent // focus rings follow the project's accent too
     vars['--accent-text'] = isLight(hexToRgb(t.accent)) ? '#15161a' : '#ffffff'
   }
   return vars
 }
 
-const ALL_VARS = ['--bg', '--bg-sunken', '--bg-elevated', '--bg-hover', '--border', '--text', '--text-muted', '--accent', '--accent-text', 'color-scheme']
+const ALL_VARS = ['--bg', '--bg-sunken', '--bg-elevated', '--bg-hover', '--border', '--text', '--text-muted', '--accent', '--accent-text', '--focus', 'color-scheme']
 
 /** Applies the open project's theme to the document while the editor is showing. */
 export function useProjectTheme() {

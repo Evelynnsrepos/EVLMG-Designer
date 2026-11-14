@@ -124,8 +124,8 @@
   color: #f08c2e;
 }
 .pool-status-review {
-  border-color: #3e8ef7;
-  color: #3e8ef7;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .pool-status-done {
   border-color: #30a46c;

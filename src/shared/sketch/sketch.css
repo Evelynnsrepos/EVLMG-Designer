@@ -69,7 +69,7 @@
   vector-effect: non-scaling-stroke;
 }
 .sketch-selection {
-  fill: rgb(62 142 247 / 0.08);
+  fill: color-mix(in srgb, var(--accent) 8%, transparent);
   stroke: var(--accent);
   stroke-width: 1.5;
   stroke-dasharray: 5 4;

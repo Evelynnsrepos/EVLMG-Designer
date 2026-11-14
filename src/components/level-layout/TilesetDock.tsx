@@ -1,3 +1,4 @@
+import { accentNow } from '@/shared/canvas/theme'
 import { ChevronDown, ChevronRight, Grid2x2, Grid3x3, ImagePlus, PanelBottom, PictureInPicture2, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { postIntent } from '@/core/state'
@@ -215,7 +216,7 @@ function Atlas({ set, image, stamp, onStamp, pieces, onPick }: { set: Tileset; i
     }
     for (const s of pieces ?? []) outline(s, '#f5a623')
     const picked = pending ?? stamp
-    if (picked) outline(picked, '#4dabf7')
+    if (picked) outline(picked, accentNow())
   }, [set, image, zoom, stamp, pieces, pending])
 
   const tileAt = (e: React.PointerEvent) => {

@@ -20,6 +20,6 @@
   font-weight: 600;
 }
 .bal-low {
-  color: #3e8ef7;
+  color: var(--accent);
   font-weight: 600;
 }

@@ -46,7 +46,7 @@
   border: 2px solid var(--text-muted);
 }
 .cd-safe {
-  border: 2px dashed #3e8ed0;
+  border: 2px dashed var(--accent);
   opacity: 0.6;
 }
 .cd-panel {

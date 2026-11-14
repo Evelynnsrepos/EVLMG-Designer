@@ -1,3 +1,4 @@
+import { accentNow } from '@/shared/canvas/theme'
 import { Download, Flag as FlagIcon, Play, Plus, Trash2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { Character, Id } from '@/core/model'
@@ -143,7 +144,7 @@ export default function View({ documentId, active }: PanelProps) {
                 label: `${l.id === d.startId ? '▶ ' : ''}${speakerOf(l)}`,
                 sub: shortText(l.text) || '…',
                 muted: lost.has(l.id),
-                color: l.speakerId ? '#3e8ef7' : undefined,
+                color: l.speakerId ? accentNow() : undefined,
               }))}
               edges={d.lines.flatMap((l) => [
                 ...(l.choices.length === 0 && l.next ? [{ from: l.id, to: l.next }] : []),

@@ -1,3 +1,4 @@
+import { accentAlpha, accentNow } from '@/shared/canvas/theme'
 import { ArrowDown, ArrowUp, Ban, Brush, Dices, Download, Eraser, Eye, EyeOff, PaintBucket, Plus, Sparkles, SquareDashed, StickyNote, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PanelProps } from '@/core/registry'
@@ -284,11 +285,11 @@ export default function View({ documentId, active }: PanelProps) {
     if (r) {
       ctx.lineWidth = 2
       ctx.setLineDash([6, 4])
-      ctx.strokeStyle = '#4dabf7'
+      ctx.strokeStyle = accentNow()
       for (let y = Math.min(r.y0, r.y1); y <= Math.max(r.y0, r.y1); y++)
         for (let x = Math.min(r.x0, r.x1); x <= Math.max(r.x0, r.x1); x++) {
           shape(x, y)
-          ctx.fillStyle = 'rgba(77, 171, 247, 0.12)'
+          ctx.fillStyle = accentAlpha(0.12)
           ctx.fill()
         }
       const [ax, ay] = geo.box(Math.min(r.x0, r.x1), Math.min(r.y0, r.y1))

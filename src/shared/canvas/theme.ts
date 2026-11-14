@@ -38,3 +38,27 @@ function useDocumentTheme(): CanvasTheme {
   }, [])
   return theme
 }
+
+let accentCache: string | null = null
+
+/** The accent colour right now (project look or app theme), for code that draws on a canvas. Cached, so it is cheap
+ *  to call every frame; refreshed when the theme or a project look changes. Falls back to the default purple. */
+export function accentNow(): string {
+  if (accentCache) return accentCache
+  if (typeof document === 'undefined') return '#d46cf0'
+  const root = document.documentElement
+  if (!(accentNow as { watching?: boolean }).watching) {
+    ;(accentNow as { watching?: boolean }).watching = true
+    new MutationObserver(() => (accentCache = null)).observe(root, { attributes: true, attributeFilter: ['data-theme', 'style', 'class'] })
+  }
+  accentCache = getComputedStyle(root).getPropertyValue('--accent').trim() || '#d46cf0'
+  return accentCache
+}
+
+/** The accent with an alpha (0–1), as a CSS colour a canvas understands. */
+export function accentAlpha(alpha: number): string {
+  const hex = accentNow().match(/^#([0-9a-f]{6})$/i)?.[1]
+  if (!hex) return accentNow()
+  const n = parseInt(hex, 16)
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
+}

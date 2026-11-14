@@ -1,3 +1,4 @@
+import { accentNow } from '@/shared/canvas/theme'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { isTauri } from '@/core/fs'
@@ -121,7 +122,7 @@ export function ExportDialog({ d, deckId, title, cards, root, currentId, update,
             }
             if (Math.abs(bleed.addedMm) > 0.01) box(bleed.addedMm, '#e5484d', [6, 4])
             box(bleed.totalMm, '#1c1d22', [])
-            box(bleed.totalMm + SAFE_MM, '#3b82f6', [4, 4])
+            box(bleed.totalMm + SAFE_MM, accentNow(), [4, 4])
             if (fold) {
               g.strokeStyle = '#1c1d22'
               g.setLineDash([3, 3])

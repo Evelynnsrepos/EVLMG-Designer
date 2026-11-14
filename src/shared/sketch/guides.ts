@@ -1,3 +1,4 @@
+import { accentNow } from '@/shared/canvas/theme'
 import type { Id } from '@/core/model'
 import type { PenPoint, PointConstraint } from './pen'
 
@@ -43,7 +44,7 @@ export function defaultGuide(width: number, height: number): DrawingGuide {
     kind: 'off',
     visible: true,
     size: Math.max(16, Math.round(Math.min(width, height) / 16)),
-    color: '#3e8ef7',
+    color: accentNow(),
     opacity: 0.5,
     points: 2,
     vanishing: [

@@ -24,7 +24,7 @@
   --accent: #d46cf0;
   --accent-text: #15161a;
   --danger: #ef5d6c;
-  --focus: #8fb4ff;
+  --focus: #e9a8fa; /* focus rings: a light version of the accent, never blue */
   --shadow: 0 8px 30px rgb(0 0 0 / 0.45);
   color-scheme: dark;
 }
@@ -40,12 +40,14 @@
   --accent: #a43bc4;
   --accent-text: #ffffff;
   --danger: #c62f40;
-  --focus: #2f6fe0;
+  --focus: #8a2fb0;
   --shadow: 0 8px 30px rgb(0 0 0 / 0.15);
   color-scheme: light;
 }
 
 :root {
+  /* Checkboxes, radio buttons and other native controls use the accent instead of the system blue. */
+  accent-color: var(--accent);
   --radius: 8px;
   --radius-sm: 5px;
   --font: 'Lexend Deca', system-ui, 'Segoe UI', Ubuntu, Cantarell, 'Noto Sans', sans-serif;
@@ -85,6 +87,11 @@ textarea,
 select {
   font: inherit;
   color: inherit;
+}
+
+/* Selected text uses the accent instead of the system blue. */
+::selection {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
 }
 
 :focus-visible {
