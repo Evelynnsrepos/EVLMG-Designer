@@ -190,57 +190,51 @@
   box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.15);
 }
 
-/* --- 6. Hotwheel: a liquid glass ring ---------------------------------------------------------------
- * A see-through disc with a hole sits behind the slices: blurred in Full glass, tinted in Light glass.
- * The slices are lighter glass on top, the hovered one fills with the accent, and a bright rim catches the light.
- * It only blurs while it is open, and drawing is paused then, so it never slows the canvas down. */
-:root[data-glass] .hotwheel-glass {
-  display: block;
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: calc(var(--r) * 2);
-  height: calc(var(--r) * 2);
-  translate: -50% -50%;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 10%, color-mix(in srgb, var(--bg-elevated) 30%, transparent));
-  border: 1px solid var(--glass-border);
-  box-shadow:
-    inset 0 2px 0 var(--glass-hi),
-    inset 0 -2px 0 var(--glass-lo),
-    inset 0 0 24px color-mix(in srgb, var(--accent) 14%, transparent),
-    var(--glass-shadow);
-  /* The hole in the middle stays clear. */
-  mask: radial-gradient(circle, transparent calc(var(--hole) - 1px), #000 var(--hole));
+/* --- 6. Hotwheel: liquid glass bubbles (Hotwheel.tsx draws them when the glass look is on) ------------
+ * The drops and the middle blob are one "goo" layer, so they flow together; it is see-through as a whole.
+ * The hovered drop (and its neck into the middle) fills with the accent; a white arc on each drop is the shine. */
+:root[data-glass] .hotwheel-goo {
+  opacity: 0.86;
 }
-:root[data-glass='full'] .hotwheel-glass {
-  backdrop-filter: blur(14px);
-}
-:root[data-glass] .hotwheel-slice > path {
-  /* Solid colours made see-through as a whole, so the round-corner stroke doesn't double up into a dark rim. */
-  opacity: 0.74;
-}
-:root[data-glass='light'] .hotwheel-slice > path {
-  opacity: 0.94;
-}
-:root[data-glass] .hotwheel-slice.on > path,
-:root[data-glass] .hotwheel-slice.lit > path:not(.half),
-:root[data-glass] .hotwheel-slice > path.half.lit {
+:root[data-glass='light'] .hotwheel-goo {
   opacity: 0.95;
 }
+:root[data-glass] .hotwheel-goo circle {
+  fill: var(--bg-elevated);
+}
+:root[data-glass] .hotwheel-goo .on {
+  fill: color-mix(in srgb, var(--accent) 35%, var(--bg-elevated));
+}
+:root[data-glass] .hotwheel-goo circle.lit {
+  fill: var(--accent);
+}
+:root[data-glass] .hotwheel-goo line.lit {
+  stroke: var(--accent);
+  stroke-linecap: round;
+}
+:root[data-glass] .hotwheel-shine {
+  fill: none;
+  stroke: var(--glass-hi);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  pointer-events: none;
+}
 :root[data-glass] .hotwheel-hole {
-  fill: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
+  fill: color-mix(in srgb, var(--bg-elevated) 90%, var(--accent));
+  stroke: color-mix(in srgb, var(--accent) 60%, transparent);
 }
 :root[data-glass] .hotwheel > svg {
-  position: relative; /* above the glass disc */
-  filter: drop-shadow(0 1px 0 var(--glass-hi));
+  filter: drop-shadow(0 10px 24px rgb(0 0 0 / 0.3));
 }
-/* Blurred things must not spin or scale (WebKit can paint them black for a frame), so in Full glass it fades. */
-:root[data-glass='full'] .hotwheel {
-  animation: glass-fade 0.14s var(--ease);
+:root[data-glass][data-theme='light'] .hotwheel > svg {
+  filter: drop-shadow(0 2px 3px rgb(30 20 60 / 0.18)) drop-shadow(0 10px 24px rgb(30 20 60 / 0.22));
 }
-:root[data-glass='full'] .hotwheel.closing {
-  animation: glass-fade-out 0.12s ease-in forwards;
+/* The bubbles grow out of the middle; SVG filters re-render cheaply, nothing here is backdrop-blurred. */
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-glass] .hotwheel-goo circle,
+  :root[data-glass] .hotwheel-goo line {
+    transition: r 0.16s var(--ease), stroke-width 0.16s var(--ease);
+  }
 }
 
 /* --- 7. Motion (none when the system asks for less) --------------------------------------------------- */

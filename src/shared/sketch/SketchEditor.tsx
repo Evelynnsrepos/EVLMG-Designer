@@ -1041,7 +1041,17 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         : { id, label, on: toolOf(id) === tool, run: () => actionsRef.current(id) }
     }
     return profile.slots.filter((id): id is ActionId => !!id).map(one)
-  }, true, { label: 'Brush size', smaller: () => actionsRef.current('sizeDown'), bigger: () => actionsRef.current('sizeUp') })
+  }, true, { label: 'Brush size', smaller: () => actionsRef.current('sizeDown'), bigger: () => actionsRef.current('sizeUp') }, () => {
+    // The brush (or eraser) in use, read fresh so the wheel's sliders show and change the current one.
+    const lib = useBrushLibrary.getState()
+    const id = () => (tool === 'eraser' ? useBrushLibrary.getState().eraserId : useBrushLibrary.getState().brushId)
+    const b = () => useBrushLibrary.getState().brushes.find((x) => x.id === id()) ?? lib.brushes[0]
+    const cur = b()
+    return [
+      { id: 'size', label: UI.size, min: cur.minSize, max: cur.maxSize, log: true, get: () => b().size, set: (v) => lib.updateBrush(b().id, { size: Math.round(v) }), format: (v) => `${Math.round(v)} px` },
+      { id: 'opacity', label: UI.opacity, min: cur.minOpacity, max: cur.maxOpacity, get: () => b().opacity, set: (v) => lib.updateBrush(b().id, { opacity: Math.round(v * 100) / 100 }), format: (v) => `${Math.round(v * 100)}%` },
+    ]
+  })
   useEffect(() => {
     drawShapeRef.current = drawShape
     moveRef.current = moveNow

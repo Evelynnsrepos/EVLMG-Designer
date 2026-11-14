@@ -24,19 +24,37 @@ export interface HotwheelSource {
   ownOrder?: boolean
   /** The inner ring's Smaller | Bigger slice changes this instead of the tool's interface size (Draw: brush size). */
   size?: { label: string; smaller(): void; bigger(): void }
+  /** Curved sliders shown around the open wheel (Draw: brush size and opacity). Read when the wheel opens. */
+  sliders?(): HotSlider[]
+}
+
+/** A value the wheel shows as a curved slider; dragging it calls `set` live. */
+export interface HotSlider {
+  id: string
+  label: string
+  min: number
+  max: number
+  /** Spread the values on a log scale (sizes). */
+  log?: boolean
+  get(): number
+  set(value: number): void
+  /** The value as text, e.g. "12 px" or "85%". */
+  format(value: number): string
 }
 
 /** Panel id -> what its tool offers. Read when the wheel opens, so the actions are always current. */
 export const hotwheelSources = new Map<string, HotwheelSource>()
 
 /** Give the Hotwheel this tool's actions (its outer ring). */
-export function useHotwheel(actions: () => HotAction[], ownOrder = false, size?: HotwheelSource['size']) {
+export function useHotwheel(actions: () => HotAction[], ownOrder = false, size?: HotwheelSource['size'], sliders?: () => HotSlider[]) {
   const panel = usePanelContext()
   const ref = useRef(actions)
   const sizeRef = useRef(size)
+  const slidersRef = useRef(sliders)
   useEffect(() => {
     ref.current = actions
     sizeRef.current = size
+    slidersRef.current = sliders
   })
   useEffect(() => {
     if (!panel) return
@@ -46,6 +64,7 @@ export function useHotwheel(actions: () => HotAction[], ownOrder = false, size?:
       get size() {
         return sizeRef.current
       },
+      sliders: () => slidersRef.current?.() ?? [],
     })
     return () => void hotwheelSources.delete(panel.id)
   }, [panel, ownOrder])

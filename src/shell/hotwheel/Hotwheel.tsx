@@ -5,11 +5,12 @@ import type { ComponentType, Panel } from '@/core/model'
 import { getManifest } from '@/core/registry'
 import { formatCombo, isShortcut, keysOf, SHORTCUT_GROUPS } from '@/core/shortcuts'
 import { isTextField, useAppStore, useProjectStore, useSettings } from '@/core/state'
-import { extraHotActions, hotwheelSources, setHotwheelOpener, type HotAction } from '@/shared/hotwheel'
+import { extraHotActions, hotwheelSources, setHotwheelOpener, type HotAction, type HotSlider } from '@/shared/hotwheel'
 import { addJumpHere } from '@/shared/jumps/Jumps'
 import { closePanel } from '../editor/actions'
 import { useHelp } from '../help/help'
 import { openSettings } from '../settings/open'
+import { useGlass } from '../theme'
 import { leaves } from '../workspace/layoutTree'
 import { BOARD_TOOLS, setScale } from '../workspace/ToolHelp'
 import './hotwheel.css'
@@ -119,6 +120,8 @@ interface Open {
   panel: Panel | null
   inner: (HotAction | null)[]
   outer: HotAction[]
+  /** Curved sliders around the wheel (Draw: brush size and opacity). */
+  sliders: HotSlider[]
   /** Held key or mouse button: letting go runs the slice under the pointer. */
   hold?: { key?: string; button?: number }
   at: number
@@ -226,19 +229,147 @@ function Ring({ items, r0, r1, hit, ring }: { items: (HotAction | null)[]; r0: n
   )
 }
 
+
+// ---- Glass look: bubbles instead of slices (Evelynn's sketch) -------------------------
+// A glass blob in the middle with a drop for every action around it. The rings only hold the actions there are
+// (no empty slots), and each drop is as big as its share of the ring allows, so a short list gets big drops and
+// a long one small drops. The drop under the pointer swells and flows into the middle with a liquid neck; a pair
+// (Undo | Redo) is two drops joined at the waist. The joins come from a "goo" filter: blur, then sharpen the edge.
+// Picking still works by direction like the slices (hitTest), so muscle memory carries over.
+
+/** Where a ring's drops sit and how big they are. Exported for the test. */
+export function bubbleLayout(n: number, r0: number, r1: number) {
+  const mid = (r0 + r1) / 2
+  const step = (Math.PI * 2) / Math.max(n, 1)
+  // As big as the ring is thick, but never touching the neighbours (a few px gap so the goo keeps them apart).
+  const radius = Math.max(10, Math.min((r1 - r0) / 2 - 2, n > 1 ? mid * Math.sin(step / 2) - 5 : (r1 - r0) / 2))
+  return { mid, step, radius }
+}
+
+function Bubbles({ items, r0, r1, hit, ring }: { items: (HotAction | null)[]; r0: number; r1: number; hit: Hit; ring: 'in' | 'out' }) {
+  const { mid, step, radius } = bubbleLayout(items.length, r0, r1)
+  const drops: React.ReactNode[] = []
+  const tops: React.ReactNode[] = []
+  items.forEach((a, i) => {
+    if (!a) return
+    const lit = hit?.ring === ring && hit.i === i
+    const at = i * step
+    const label = (text: string, x: number, y: number, r: number, key: number | string, icon?: HotAction['icon'], half = false) => (
+      <foreignObject key={`l${key}`} x={x - r - 8} y={y - 24} width={2 * r + 16} height={48}>
+        <div className={half ? 'hotwheel-label half' : 'hotwheel-label'}>
+          {r > 18 && <Icon icon={icon} size={ring === 'in' ? 16 : 15} />}
+          <span>{text}</span>
+        </div>
+      </foreignObject>
+    )
+    const shine = (x: number, y: number, r: number, key: string) => (
+      <path key={`s${key}`} className="hotwheel-shine" d={`M${x - r * 0.62} ${y - r * 0.05}A${r * 0.66} ${r * 0.66} 0 0 1 ${x - r * 0.05} ${y - r * 0.62}`} />
+    )
+    if (a.halves) {
+      // Two drops side by side along the ring, touching, so the goo joins them at the waist.
+      const hr = Math.min(radius * 0.8, mid * Math.sin(step / 4) - 1)
+      ;[0, 1].forEach((h) => {
+        const ang = at + (h ? 1 : -1) * Math.asin(Math.min(1, (hr * 0.92) / mid))
+        const [x, y] = polar(mid, ang)
+        const on = lit && hit.half === h
+        const r = on ? hr * 1.16 : hr
+        drops.push(<circle key={`d${i}-${h}`} cx={x} cy={y} r={r} className={on ? 'lit' : ''} />)
+        if (on) drops.push(<line key={`n${i}-${h}`} x1={0} y1={0} x2={x} y2={y} strokeWidth={r * 0.7} className="lit" />)
+        tops.push(shine(x, y, r, `${i}-${h}`), label(a.halves![h].label, x, y, r, `${i}-${h}`, undefined, true))
+      })
+      return
+    }
+    const [x, y] = polar(mid, at)
+    const r = lit ? radius * 1.16 : radius
+    drops.push(<circle key={`d${i}`} cx={x} cy={y} r={r} className={lit ? 'lit' : a.on ? 'on' : ''} />)
+    if (lit) drops.push(<line key={`n${i}`} x1={0} y1={0} x2={x} y2={y} strokeWidth={r * 0.7} className="lit" />)
+    tops.push(shine(x, y, r, `${i}`), label(a.label, x, y, r, i, a.icon))
+  })
+  return (
+    <>
+      <g className="hotwheel-goo" filter="url(#hotwheel-goo)">
+        {drops}
+      </g>
+      {tops}
+    </>
+  )
+}
+
+/** Slider arcs: size on the left, opacity on the right, low at the bottom. Angles: 0 = up, clockwise. */
+const SLIDER_SPAN: [number, number][] = [
+  [(Math.PI * 2 * 222) / 360, (Math.PI * 2 * 318) / 360],
+  [(Math.PI * 2 * 138) / 360, (Math.PI * 2 * 42) / 360],
+]
+const toT = (sl: HotSlider, v: number) =>
+  sl.log ? Math.log(v / sl.min) / Math.log(sl.max / sl.min) : (v - sl.min) / (sl.max - sl.min)
+const fromT = (sl: HotSlider, t: number) => {
+  const c = Math.max(0, Math.min(1, t))
+  return sl.log ? sl.min * Math.pow(sl.max / sl.min, c) : sl.min + (sl.max - sl.min) * c
+}
+
+/** Which slider (and where on it, 0–1) a point is on, or null. Exported for the test. */
+export function sliderHit(dx: number, dy: number, scale: number, radius: number, count: number): { i: number; t: number } | null {
+  const d = Math.hypot(dx, dy) / scale
+  if (Math.abs(d - radius) > 18) return null
+  const a = (Math.atan2(dx, -dy) + Math.PI * 2) % (Math.PI * 2)
+  for (let i = 0; i < Math.min(count, 2); i++) {
+    const [a0, a1] = SLIDER_SPAN[i]
+    const lo = Math.min(a0, a1) - 0.08
+    const hi = Math.max(a0, a1) + 0.08
+    if (a >= lo && a <= hi) return { i, t: Math.max(0, Math.min(1, (a - a0) / (a1 - a0))) }
+  }
+  return null
+}
+
+function arc(r: number, a0: number, a1: number) {
+  const [x0, y0] = polar(r, a0)
+  const [x1, y1] = polar(r, a1)
+  return `M${x0} ${y0}A${r} ${r} 0 0 ${a1 > a0 ? 1 : 0} ${x1} ${y1}`
+}
+
+function Sliders({ sliders, values, radius }: { sliders: HotSlider[]; values: number[]; radius: number }) {
+  return (
+    <>
+      {sliders.slice(0, 2).map((sl, i) => {
+        const [a0, a1] = SLIDER_SPAN[i]
+        const t = Math.max(0, Math.min(1, toT(sl, values[i])))
+        const at = a0 + (a1 - a0) * t
+        const [kx, ky] = polar(radius, at)
+        const [tx, ty] = polar(radius + 2, a1 + (a1 > a0 ? 0.2 : -0.2))
+        return (
+          <g key={sl.id} className="hotwheel-slider">
+            <path d={arc(radius, a0, a1)} className="track" />
+            <path d={arc(radius, a0, at)} className="fill" />
+            <circle cx={kx} cy={ky} r={9} className="knob" />
+            <text x={tx} y={ty} textAnchor={i === 0 ? 'end' : 'start'} dominantBaseline="middle">
+              {sl.label} {sl.format(values[i])}
+            </text>
+          </g>
+        )
+      })}
+    </>
+  )
+}
+
 function Wheel({ open }: { open: Open }) {
   const size = useSettings((s) => s.hotwheel.size)
   const toolScale = useSettings((s) => (open.panel ? (s.toolScale[open.panel.type] ?? 100) : 100))
   const scale = SIZES[size] * (toolScale / 100)
+  const glass = useGlass() !== 'off'
   const [hit, setHit] = useState<Hit>(null)
   const hitRef = useRef<Hit>(null)
+  // The sliders' values, kept here so dragging redraws them; written through to the tool live.
+  const [values, setValues] = useState(() => open.sliders.map((sl) => sl.get()))
+  const dragRef = useRef<number | null>(null)
+  const ringOut = open.outer.length > 0 ? OUT : MID
+  const sliderR = ringOut + 26
   const [held, setHeld] = useState(!!open.hold)
   const heldRef = useRef(held)
   useEffect(() => {
     heldRef.current = held
   })
   // Keep it on screen.
-  const r = OUT * scale + 6
+  const r = (open.sliders.length ? sliderR + 40 : OUT) * scale + 6
   const cx = Math.min(window.innerWidth - r, Math.max(r, open.x))
   const cy = Math.min(window.innerHeight - r, Math.max(r, open.y))
 
@@ -258,14 +389,31 @@ function Wheel({ open }: { open: Open }) {
       if (!pick(shift) && performance.now() - open.at > 350) close()
       else if (!hitRef.current) useWheel.setState({ open: { ...open, hold: undefined } })
     }
+    const slide = (e: PointerEvent, i: number) => {
+      const sh = sliderHit(e.clientX - cx, e.clientY - cy, scale, sliderR, open.sliders.length)
+      const [a0, a1] = SLIDER_SPAN[i]
+      // While dragging, follow the angle even when the pointer leaves the arc.
+      const a = (Math.atan2(e.clientX - cx, -(e.clientY - cy)) + Math.PI * 2) % (Math.PI * 2)
+      const t = sh?.i === i ? sh.t : (a - a0) / (a1 - a0)
+      const v = fromT(open.sliders[i], t)
+      open.sliders[i].set(v)
+      setValues((vs) => vs.map((x, k) => (k === i ? v : x)))
+    }
     const move = (e: PointerEvent) => {
-      const h = hitTest(e.clientX - cx, e.clientY - cy, scale, open.inner.length, open.outer.length)
+      if (dragRef.current !== null) return slide(e, dragRef.current)
+      const onSlider = open.sliders.length > 0 && sliderHit(e.clientX - cx, e.clientY - cy, scale, sliderR, open.sliders.length)
+      const h = onSlider ? null : hitTest(e.clientX - cx, e.clientY - cy, scale, open.inner.length, open.outer.length)
       hitRef.current = h
       setHit(h)
     }
     const down = (e: PointerEvent) => {
       e.preventDefault()
       e.stopPropagation()
+      const sh = open.sliders.length > 0 ? sliderHit(e.clientX - cx, e.clientY - cy, scale, sliderR, open.sliders.length) : null
+      if (sh) {
+        dragRef.current = sh.i
+        return slide(e, sh.i)
+      }
       if (heldRef.current) return
       move(e)
       if (Math.hypot(e.clientX - cx, e.clientY - cy) > r + 40 || !hitRef.current) return close()
@@ -273,6 +421,12 @@ function Wheel({ open }: { open: Open }) {
       pick(e.shiftKey, e.shiftKey)
     }
     const up = (e: PointerEvent) => {
+      if (dragRef.current !== null) {
+        dragRef.current = null
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
       if (heldRef.current && open.hold?.button === e.button) {
         e.preventDefault()
         e.stopPropagation()
@@ -303,19 +457,37 @@ function Wheel({ open }: { open: Open }) {
       window.removeEventListener('keyup', key, true)
       window.removeEventListener('contextmenu', noMenu, true)
     }
-  }, [open, cx, cy, scale, r])
+  }, [open, cx, cy, scale, r, sliderR])
 
   const current = hit && (hit.ring === 'in' ? open.inner[hit.i] : open.outer[hit.i])
   const name = current ? (current.halves ? current.halves[hit.half].label : current.label) : open.panel ? (getManifest(open.panel.type)?.name ?? '') : ''
-  const w = OUT * 2 + 12
+  const w = (open.sliders.length ? sliderR + 40 : OUT) * 2 + 12
   return (
-    <div className={`hotwheel${open.closing ? ' closing' : ''}`} style={{ left: cx, top: cy, '--s': scale } as React.CSSProperties} role="menu" aria-label="Hotwheel">
-      {/* Glass look: a blurred, see-through disc behind the slices (shell/glass.css); hidden otherwise. */}
-      <div className="hotwheel-glass" style={{ '--r': `${open.outer.length > 0 ? OUT + 5 : MID + 3}px`, '--hole': `${HOLE}px` } as React.CSSProperties} />
+    <div className={`hotwheel${glass ? ' bubbles' : ''}${open.closing ? ' closing' : ''}`} style={{ left: cx, top: cy, '--s': scale } as React.CSSProperties} role="menu" aria-label="Hotwheel">
       <svg width={w} height={w} viewBox={`${-w / 2} ${-w / 2} ${w} ${w}`}>
-        <Ring items={open.inner} r0={HOLE + 2} r1={MID - 2} hit={hit} ring="in" />
-        {open.outer.length > 0 && <Ring items={open.outer} r0={MID + 2} r1={OUT} hit={hit} ring="out" />}
-        <circle r={HOLE} className="hotwheel-hole" />
+        {glass ? (
+          <>
+            <defs>
+              <filter id="hotwheel-goo" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur" />
+                <feColorMatrix in="blur" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" />
+              </filter>
+            </defs>
+            <g className="hotwheel-goo" filter="url(#hotwheel-goo)">
+              <circle r={HOLE + 4} />
+            </g>
+            <Bubbles items={open.inner} r0={HOLE + 6} r1={MID - 2} hit={hit} ring="in" />
+            {open.outer.length > 0 && <Bubbles items={open.outer} r0={MID + 4} r1={OUT} hit={hit} ring="out" />}
+            <circle r={HOLE} className="hotwheel-hole" />
+          </>
+        ) : (
+          <>
+            <Ring items={open.inner} r0={HOLE + 2} r1={MID - 2} hit={hit} ring="in" />
+            {open.outer.length > 0 && <Ring items={open.outer} r0={MID + 2} r1={OUT} hit={hit} ring="out" />}
+            <circle r={HOLE} className="hotwheel-hole" />
+          </>
+        )}
+        {open.sliders.length > 0 && <Sliders sliders={open.sliders} values={values} radius={sliderR} />}
       </svg>
       <div className="hotwheel-name">{name || 'Hotwheel'}</div>
     </div>
@@ -336,9 +508,15 @@ function openAt(at?: { x: number; y: number }, hold?: Open['hold']) {
   if (isOpen() || !useProjectStore.getState().meta) return
   const panel = activePanel()
   const all = innerActions(panel)
-  const inner = useSettings.getState().hotwheel.inner.map((id) => all.find((a) => a.id === id) ?? null)
+  const sliders = (panel && hotwheelSources.get(panel.id)?.sliders?.()) || []
+  const sized = sliders.some((sl) => sl.id === 'size')
+  let inner = useSettings.getState().hotwheel.inner.map((id) => all.find((a) => a.id === id) ?? null)
+  // The size slider already changes the brush, so its Smaller | Bigger slot would do the same thing twice.
+  if (sized) inner = inner.map((a) => (a?.id === 'scale' ? null : a))
+  // Bubbles only show what is there: no empty drops.
+  if (document.documentElement.dataset.glass) inner = inner.filter(Boolean)
   const p = at ?? pointer
-  useWheel.setState({ open: { x: p.x, y: p.y, panel, inner, outer: panel ? outerRing(panel) : [], hold, at: performance.now() } })
+  useWheel.setState({ open: { x: p.x, y: p.y, panel, inner, outer: panel ? outerRing(panel) : [], sliders, hold, at: performance.now() } })
 }
 
 /** Mount once in the editor: the wheel, and Q / pen button / right-hold / middle button to open it. */

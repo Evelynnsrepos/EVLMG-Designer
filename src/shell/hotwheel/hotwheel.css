@@ -120,7 +120,30 @@
     0 0 3px var(--bg);
 }
 
-/* The glass disc behind the slices; only shown with the glass look (shell/glass.css styles it). */
-.hotwheel-glass {
-  display: none;
+/* Curved sliders around the wheel (brush size and opacity in Draw): drag along the arc. */
+.hotwheel-slider .track,
+.hotwheel-slider .fill {
+  fill: none;
+  stroke-width: 10;
+  stroke-linecap: round;
+}
+.hotwheel-slider .track {
+  stroke: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+}
+.hotwheel-slider .fill {
+  stroke: var(--accent);
+}
+.hotwheel-slider .knob {
+  fill: #fff;
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+.hotwheel-slider text {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 2px;
+  stroke-linejoin: round;
 }

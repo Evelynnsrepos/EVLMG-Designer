@@ -11,3 +11,25 @@ describe('Hotwheel hit test', () => {
     expect(hitTest(0, -50, 2, 6, 8)).toBeNull() // twice the size: 50 px is still the centre
   })
 })
+
+describe('Hotwheel bubbles and sliders', () => {
+  it('makes fewer actions into bigger drops that never touch', async () => {
+    const { bubbleLayout } = await import('./Hotwheel')
+    const few = bubbleLayout(3, 46, 102)
+    const many = bubbleLayout(10, 46, 102)
+    expect(few.radius).toBeGreaterThan(many.radius)
+    expect(few.radius).toBeLessThanOrEqual((102 - 46) / 2)
+    // Neighbours along the ring stay apart: chord between centres > two radii.
+    expect(2 * many.mid * Math.sin(many.step / 2)).toBeGreaterThan(2 * many.radius)
+  })
+  it('finds the slider arcs: size on the left, opacity on the right, low at the bottom', async () => {
+    const { sliderHit } = await import('./Hotwheel')
+    expect(sliderHit(-200, 0, 1, 200, 2)?.i).toBe(0)
+    expect(sliderHit(200, 0, 1, 200, 2)?.i).toBe(1)
+    expect(sliderHit(0, -200, 1, 200, 2)).toBeNull() // top: no slider
+    expect(sliderHit(-100, 0, 1, 200, 2)).toBeNull() // inside the ring: not the slider
+    const low = sliderHit(-150, 130, 1, 200, 2)!
+    const high = sliderHit(-150, -130, 1, 200, 2)!
+    expect(low.t).toBeLessThan(high.t)
+  })
+})
