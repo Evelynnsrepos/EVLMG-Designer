@@ -675,6 +675,17 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     ],
     tips: ['Shortcuts: V select, H pan, S shape, T text, Ctrl+Z undo, Ctrl+D duplicate, Delete removes.'],
   },
+  material: {
+    title: 'Material Lab (experimental)',
+    body: [
+      'Experimental: this is the first part of Material Lab. The Graph view (wire your own nodes) and the Layers view come later. Material Lab makes tiling materials for games: stone, bricks, wood, metal, grass, lava and more. A material is a set of pictures (maps) that game engines put together: Colour, Bumps (normal map), Shininess (roughness), Metal, Shadows in cracks (ambient occlusion), Glow (emission) and Height.',
+      'Start: pick a ready material from the gallery. Search with everyday words like old, floor, dungeon or metal.',
+      'The big preview shows the material lit. Ball: drag to turn it, scroll to zoom. Tiled floor: 3 × 3 copies, so you see right away whether the edges meet. Pixel-art size: the material at 64 × 64 pixels with hard pixels. Light switches between Studio, Sunny day, Overcast, Dungeon torch and Night. The buttons under the preview show one map on its own; Lit shows everything together.',
+      'Sliders on the right: Colour tint, Roughness, Metal, Bumps, Shadows in cracks and Glow. Surprise me rolls a new random variation of the same material; Back to as designed undoes that. Ctrl+Z and Ctrl+Y undo and redo.',
+      'Save as images saves one PNG per map in a ZIP, with your slider settings baked in, at 256 to 2048 pixels. Godot, Unity, Unreal and Blender all take these maps.',
+      'The nodes and ready materials come from Material Maker (MIT licence), the free material program by Rodolphe Suescun and contributors. Materials saved in Material Lab keep Material Maker\'s graph format.',
+    ],
+  },
   'card-designer': {
     title: 'Card Designer',
     body: [
