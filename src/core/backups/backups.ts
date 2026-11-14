@@ -28,7 +28,7 @@ interface Snapshot {
 }
 
 /** Top-level folders that are not part of a snapshot. */
-const SKIPPED_DIRS = new Set(['.backups', 'assets', 'collab'])
+const SKIPPED_DIRS = new Set(['.backups', 'assets', 'collab', '.history'])
 
 const NAME_PATTERN = /^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)_([a-z-]+)_([0-9a-f]{8})\.json$/
 
