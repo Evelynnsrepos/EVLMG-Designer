@@ -133,6 +133,8 @@ export class MaterialRenderer {
   bufferLimit = Infinity
   /** Most rounds an iterate buffer runs, for quick previews. */
   iterationLimit = Infinity
+  /** Random variation of every seed (Material Maker's "variation"); 0 = as designed. */
+  variation = 0
   private vao: WebGLVertexArrayObject
   private fbo: WebGLFramebuffer
 
@@ -223,7 +225,7 @@ export class MaterialRenderer {
     gl.uniform1f(loc('mm_chunk_size'), 1)
     gl.uniform2f(loc('mm_chunk_offset'), 0, 0)
     gl.uniform2f(loc('mm_size'), size, size)
-    gl.uniform1f(loc('variation'), 0)
+    gl.uniform1f(loc('variation'), this.variation)
     gl.uniform1f(loc('elapsed_time'), 0)
     let unit = 0
     for (const u of code.uniforms) setUniform(gl, loc(u.name), u, () => {
@@ -242,7 +244,7 @@ export class MaterialRenderer {
     gl.generateMipmap(gl.TEXTURE_2D)
     gl.bindTexture(gl.TEXTURE_2D, null)
     const values = code.uniforms.filter(u => u.type !== 'sampler2D').map(u => u.value)
-    return `${fragment}|${JSON.stringify(values)}|${[...inputs.values()].map(t => t.key).join('|')}`
+    return `${fragment}|${this.variation}|${JSON.stringify(values)}|${[...inputs.values()].map(t => t.key).join('|')}`
   }
 
   /** The texture a buffer node fills, re-rendered only when its shader, values or inputs changed. */

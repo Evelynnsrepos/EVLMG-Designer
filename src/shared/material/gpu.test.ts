@@ -78,4 +78,18 @@ describe('Material Lab nodes on the GPU', () => {
     const notTiling = results.filter(r => !r.tiles && !MAYBE_TILING.includes(r.id)).map(r => r.id).sort()
     expect(notTiling).toEqual(NOT_TILING.filter(id => !only || only.includes(id)))
   }, 600_000)
+
+  it('every gallery material renders all its maps', async ctx => {
+    if (!browser || !server) return ctx.skip()
+    const page = await browser.newPage()
+    const errors: string[] = []
+    page.on('pageerror', e => errors.push(e.message))
+    if (process.env.MATERIAL_GPU_LOG) page.on('console', m => process.stdout.write(m.text() + '\n'))
+    await page.goto(server.resolvedUrls!.local[0] + 'material-gpu-check')
+    await page.addScriptTag({ type: 'module', content: "import { runGallery } from '/src/shared/material/gpuCheck.ts'; window.runGallery = runGallery" })
+    await page.waitForFunction(() => 'runGallery' in window, null, { timeout: 60_000 })
+    const problems = await page.evaluate(() => (window as unknown as { runGallery: () => string[] }).runGallery())
+    expect(errors).toEqual([])
+    expect(problems).toEqual([])
+  }, 600_000)
 })
