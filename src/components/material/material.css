@@ -187,3 +187,187 @@
     max-height: 45%;
   }
 }
+
+.mat-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+}
+.mat-view-small {
+  flex: none;
+  height: 220px;
+}
+.mat-side[hidden] {
+  display: none;
+}
+.mat-num {
+  width: 64px;
+}
+
+/* Graph view */
+.mat-graph-wrap {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.mat-graph {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  outline: none;
+  background-color: var(--bg-sunken);
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 24px 24px;
+  touch-action: none;
+}
+.mat-graph-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+.mat-wires {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+.mat-wires path {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 2;
+}
+.mat-wires .mat-wire-new {
+  stroke: var(--accent);
+  stroke-dasharray: 6 4;
+}
+.mat-node {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  font-size: 11px;
+  cursor: grab;
+  user-select: none;
+}
+.mat-node-on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.mat-node-material .mat-node-title {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.mat-node-title {
+  height: 24px;
+  padding: 0 8px;
+  overflow: hidden;
+  border-radius: 7px 7px 0 0;
+  line-height: 24px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: var(--bg-sunken);
+}
+.mat-port {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 50%;
+  height: 18px;
+}
+.mat-port-in {
+  left: -6px;
+}
+.mat-port-out {
+  right: -6px;
+  justify-content: flex-end;
+}
+.mat-port-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+}
+.mat-dot {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--bg-elevated);
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: crosshair;
+}
+.mat-node-thumb {
+  position: absolute;
+  left: 50%;
+  width: 64px;
+  height: 64px;
+  margin-left: -32px;
+  background: var(--bg-sunken);
+}
+.mat-node-thumb img {
+  display: block;
+  image-rendering: auto;
+}
+.mat-graph-add {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.mat-add {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  max-height: 360px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+}
+.mat-add .mat-search {
+  margin: 0 0 6px;
+}
+.mat-add-list {
+  overflow-y: auto;
+}
+.mat-add-list button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 4px 6px;
+  text-align: left;
+}
+.mat-graph-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 10px;
+  width: 260px;
+  box-sizing: border-box;
+  padding: 12px;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+.mat-graph-side h4 {
+  margin: 0;
+}
+.mat-graph-big {
+  width: 128px;
+  height: 128px;
+  image-rendering: pixelated;
+}

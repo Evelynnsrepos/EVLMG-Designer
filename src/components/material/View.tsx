@@ -1,6 +1,6 @@
 // EXPERIMENTAL: Material Lab, first screens (gallery, big preview, Simple view). The Graph view comes next.
 import { zipSync } from 'fflate'
-import { Dices, Grid3x3, Image as ImageIcon, LayoutGrid, Loader2, RotateCcw, Save, Search, Undo2, Redo2, Circle } from 'lucide-react'
+import { Dices, Grid3x3, Image as ImageIcon, LayoutGrid, Loader2, RotateCcw, Save, Search, Undo2, Redo2, Circle, SlidersHorizontal, Workflow } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { safeFileName, saveBinaryFile } from '@/core/export'
 import type { PanelProps } from '@/core/registry'
@@ -12,6 +12,7 @@ import {
 } from '@/shared/material/material'
 import { LIGHTS, MaterialPreview, type PreviewShape } from '@/shared/material/preview'
 import { MaterialRenderer } from '@/shared/material/render'
+import { GraphView } from './GraphView'
 import { canvasBytes } from '@/shared/print'
 import './material.css'
 
@@ -20,12 +21,14 @@ const T = {
   startHint: 'Every material can be changed afterwards. Search with everyday words like "old", "floor" or "dungeon".',
   search: 'Search materials',
   empty: 'Empty',
-  emptyHint: 'Only the Material node, for building your own in the Graph view (coming soon)',
+  emptyHint: 'Only the Material node, for building your own in the Graph view',
   noMatch: 'No material matches those words.',
-  experimental: 'Experimental: Material Lab is new. The Graph view and more ready materials come next.',
+  experimental: 'Experimental: Material Lab is new. The Layers view and more ready materials come next.',
   shapes: { ball: 'Ball', tiled: 'Tiled floor', pixel: 'Pixel-art size' } as Record<PreviewShape, string>,
   shapesHint: { ball: 'Drag to turn it, scroll to zoom', tiled: '3 × 3 tiles, so seams show right away', pixel: 'At 64 × 64 pixels, with hard pixels' } as Record<PreviewShape, string>,
   light: 'Light',
+  mode: { simple: 'Simple', graph: 'Graph' },
+  modeHint: { simple: 'Pick and tweak with a few sliders', graph: 'Every node and wire of the material, to change anything' },
   lit: 'Lit',
   litHint: 'The whole material, lit',
   rendering: 'Rendering…',
@@ -165,6 +168,7 @@ export default function View({ documentId, active }: PanelProps) {
   const d = doc.data
   const canvas = useRef<HTMLCanvasElement>(null)
   const preview = useRef<MaterialPreview | null>(null)
+  const [mode, setMode] = useState<'simple' | 'graph'>('simple')
   const [shape, setShape] = useState<PreviewShape>('ball')
   const [light, setLight] = useState(0)
   const [only, setOnly] = useState<MapKey | null>(null)
@@ -279,6 +283,12 @@ export default function View({ documentId, active }: PanelProps) {
     <div className="mat" onKeyDown={onKey} tabIndex={-1}>
       <div className="mat-main">
         <div className="mat-bar" role="toolbar">
+          {(['simple', 'graph'] as const).map(m => (
+            <button key={m} className={mode === m ? 'mat-on' : ''} onClick={() => setMode(m)} title={T.modeHint[m]} aria-pressed={mode === m}>
+              {m === 'simple' ? <SlidersHorizontal size={16} /> : <Workflow size={16} />} {T.mode[m]}
+            </button>
+          ))}
+          <span className="mat-sep" />
           {(['ball', 'tiled', 'pixel'] as PreviewShape[]).map(s => (
             <button key={s} className={shape === s ? 'mat-on' : ''} onClick={() => setShape(s)} title={T.shapesHint[s]} aria-pressed={shape === s}>
               {s === 'ball' ? <Circle size={16} /> : s === 'tiled' ? <Grid3x3 size={16} /> : <LayoutGrid size={16} />} {T.shapes[s]}
@@ -296,7 +306,8 @@ export default function View({ documentId, active }: PanelProps) {
           <button onClick={doc.undo} disabled={!doc.canUndo} title="Undo (Ctrl+Z)" aria-label="Undo"><Undo2 size={16} /></button>
           <button onClick={doc.redo} disabled={!doc.canRedo} title="Redo (Ctrl+Y)" aria-label="Redo"><Redo2 size={16} /></button>
         </div>
-        <div className="mat-view">
+        {mode === 'graph' && <GraphView graph={graph} renderer={renderer} variation={variation} change={(fn, undoable) => doc.update(x => ({ ...x, graph: fn(x.graph) }), { undoable })} />}
+        <div className={`mat-view${mode === 'graph' ? ' mat-view-small' : ''}`}>
           <canvas
             ref={canvas}
             className="mat-canvas"
@@ -328,7 +339,7 @@ export default function View({ documentId, active }: PanelProps) {
           ))}
         </div>
       </div>
-      <aside className="mat-side">
+      <aside className="mat-side" hidden={mode === 'graph'}>
         <h3>{title}</h3>
         <label className="mat-row" title={T.tintHint}>
           <span>{T.tint}</span>
