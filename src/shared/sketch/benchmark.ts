@@ -1,31 +1,17 @@
+import { type GpuInfo } from '../gpu'
 import { defaultLibrary } from './brushDefaults'
 import { SketchEngine } from './engine'
 import { canvas2dFirst } from './gl'
 import { newLayer, type SketchLayer } from './model'
+
+export { gpuInfo, isSoftwareRenderer, type GpuInfo } from '../gpu'
 
 /**
  * Drawing speed test (0.24): plays the same pen stroke on test pictures and times each pen move
  * (paint + blend the layers), so speed fixes can be compared before and after on each computer.
  */
 
-export interface GpuInfo {
-  renderer: string
-  /** The picture is drawn without the graphics card (llvmpipe and the like). */
-  software: boolean
-  webgl2: boolean
-}
 
-export function gpuInfo(): GpuInfo {
-  const c = document.createElement('canvas')
-  const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext | null
-  if (!gl) return { renderer: 'No WebGL', software: true, webgl2: false }
-  const ext = gl.getExtension('WEBGL_debug_renderer_info')
-  const renderer = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER))
-  gl.getExtension('WEBGL_lose_context')?.loseContext()
-  return { renderer, software: isSoftwareRenderer(renderer), webgl2: typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext }
-}
-
-export const isSoftwareRenderer = (renderer: string) => /llvmpipe|softpipe|swiftshader|software|swrast/i.test(renderer)
 
 export interface BenchCase {
   name: string
