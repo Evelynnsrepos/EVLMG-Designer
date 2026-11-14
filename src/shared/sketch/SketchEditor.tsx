@@ -1161,12 +1161,13 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
           ref={boxRef}
           className={`sketch-stage${doc.backgroundColor ? '' : ' see-through'}`}
           onWheel={onWheel}
-          style={{ cursor: tool === 'hand' ? 'grab' : tool === 'brush' || tool === 'eraser' || tool === 'smudge' ? 'none' : 'crosshair' }}
         >
           <canvas
             key={colorSpace}
             ref={viewCanvas}
             className="sketch-canvas"
+            // On the canvas only: toolbars and panels floating over the stage keep the normal pointer.
+            style={{ cursor: tool === 'hand' ? 'grab' : tool === 'brush' || tool === 'eraser' || tool === 'smudge' ? 'none' : 'crosshair' }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
