@@ -668,9 +668,22 @@ export class SketchEngine {
   render(doc: LayerStack, withBackground = true): HTMLCanvasElement {
     const last = this.lastRender
     if (last && last.layers === doc.layers && last.background === doc.backgroundColor && last.withBackground === withBackground && last.version === this.version) return last.canvas
-    const canvas = this.renderNow(doc, withBackground)
+    // While a stroke is drawn and nothing else changed, only the stroke's area of the picture is redone.
+    const area = last && last.canvas === this.composite.canvas && last.layers === doc.layers && last.background === doc.backgroundColor && last.withBackground === withBackground ? this.strokeOnlyArea(doc) : null
+    const canvas = area ? this.renderCanvas2d(doc, withBackground, area) : this.renderNow(doc, withBackground)
     this.lastRender = { layers: doc.layers, background: doc.backgroundColor, withBackground, version: this.version, canvas }
     return canvas
+  }
+
+  /**
+   * The area a Canvas 2D redraw can be limited to: the live stroke's area, when the last render already showed
+   * this stroke. Not with adjustment layers or CPU-blended layers (they read and write the whole picture).
+   */
+  private strokeOnlyArea(doc: LayerStack): Rect | null {
+    if (!this.stroke || !this.strokeOpts || this.stamper instanceof WetStamper || this.livePreview?.stroke !== this.stroke || this.useGpu(doc)) return null
+    if (doc.layers.some((l) => l.kind === 'adjust' || (l.visible && !CANVAS_BLENDS.has(l.blend)))) return null
+    const area = this.strokeArea(this.strokeOpts)
+    return area && clipRect(area, this.width, this.height)
   }
 
   /** GPU or Canvas 2D, whichever is faster here for this picture. */
@@ -732,17 +745,26 @@ export class SketchEngine {
     return out
   }
 
-  private renderCanvas2d(doc: LayerStack, withBackground: boolean): HTMLCanvasElement {
+  private renderCanvas2d(doc: LayerStack, withBackground: boolean, area?: Rect): HTMLCanvasElement {
     const { ctx, canvas } = this.composite
+    const r = area ?? { x: 0, y: 0, w: this.width, h: this.height }
+    ctx.save()
+    if (area) {
+      // Everything outside `area` is still the last render's picture.
+      ctx.beginPath()
+      ctx.rect(r.x, r.y, r.w, r.h)
+      ctx.clip()
+    }
     ctx.globalCompositeOperation = 'source-over'
     ctx.globalAlpha = 1
-    ctx.clearRect(0, 0, this.width, this.height)
+    ctx.clearRect(r.x, r.y, r.w, r.h)
     if (withBackground && doc.backgroundColor) {
       ctx.fillStyle = doc.backgroundColor
-      ctx.fillRect(0, 0, this.width, this.height)
+      ctx.fillRect(r.x, r.y, r.w, r.h)
     }
     this.stackOrder = doc.layers
     this.compose2d(ctx, layerTree(doc.layers), 0)
+    ctx.restore()
     ctx.globalCompositeOperation = 'source-over'
     ctx.globalAlpha = 1
     return canvas

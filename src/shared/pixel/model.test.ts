@@ -115,7 +115,7 @@ describe('composite with a flattened base', () => {
       for (let i = 0; i < out.data.length; i++) out.data[i] = (i * seed * 37 + seed * 11) % 256
       return out
     }
-    const layers = [1, 2, 3, 4].map((n, i) => ({ visible: true, opacity: 0.5 + i * 0.15, blend: (['normal', 'multiply', 'screen', 'normal'] as const)[i], img: img(n) }))
+    const layers = [1, 2, 3, 4].map((n, i) => ({ visible: true, opacity: 0.5 + i * 0.15, blend: (['source-over', 'multiply', 'screen', 'source-over'] as const)[i], img: img(n) }))
     const all = composite(layers, 5, 4)
     const below = composite(layers.slice(0, 2), 5, 4)
     const belowCopy = new Uint8ClampedArray(below.data)
