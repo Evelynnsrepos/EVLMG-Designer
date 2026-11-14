@@ -41,6 +41,9 @@ jobs:
       - name: Rust tests
         working-directory: src-tauri
         run: cargo test --locked
+      - name: Texture Paint core tests
+        working-directory: src-tauri
+        run: cargo test --locked --release -p texpaint
       # Real internet test: two peers talk through the public relay, on each OS.
       - name: Collaboration network test (relay)
         working-directory: src-tauri
