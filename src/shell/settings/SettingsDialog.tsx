@@ -13,6 +13,7 @@ import { HotwheelSection } from '../hotwheel/HotwheelSettings'
 import { GitSettingsSection } from './GitSettingsSection'
 import { PresetsSection } from './PresetsSection'
 import { DrawingSection } from './DrawingSection'
+import { setGlass, useGlass, type Glass } from '../theme'
 
 const UI = {
   title: 'Settings',
@@ -37,6 +38,9 @@ const UI = {
   writer: 'Writer',
   writerSyntax: 'New documents start with Markdown Syntax on',
   writerSyntaxHint: 'Markdown Syntax lets you format by typing symbols, like ==highlight== or > [!note], and turns pasted Markdown into formatting. Each document has its own switch in its header.',
+  glass: 'Glass look',
+  glassLevels: { full: 'Full glass', light: 'Light glass (less blur, faster)', off: 'Off (solid, the classic look)' } as Record<Glass, string>,
+  glassHint: 'Menus, dialogs, the sidebar and panel frames become see-through glass over your project. Canvases always stay solid, and the blur pauses while you draw. Choose Off if the app feels slower.',
   pixels: 'Pictures',
   sharp: 'Sharp pixel art',
   sharpHint: 'Small pictures, like pixel art tiles in Level Layout, are shown with hard square pixels instead of being smoothed. Turn it off for painted or photo tilesets.',
@@ -232,6 +236,9 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
           </section>
           </div>
           <div data-tab="general">
+          <GlassSection />
+          </div>
+          <div data-tab="general">
           <section data-section="pixels">
             <h3>{UI.pixels}</h3>
             <label className="settings-check">
@@ -275,5 +282,22 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </Modal>
+  )
+}
+
+/** Glass look (Liquid Glass style), per machine like light/dark. */
+function GlassSection() {
+  const glass = useGlass()
+  return (
+    <section data-section="glass">
+      <h3>{UI.glass}</h3>
+      {(Object.keys(UI.glassLevels) as Glass[]).map((g) => (
+        <label key={g} className="settings-check">
+          <input type="radio" name="glass" checked={glass === g} onChange={() => setGlass(g)} />
+          {UI.glassLevels[g]}
+        </label>
+      ))}
+      <p className="muted settings-hint">{UI.glassHint}</p>
+    </section>
   )
 }

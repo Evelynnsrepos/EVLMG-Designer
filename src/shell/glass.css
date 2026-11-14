@@ -1,0 +1,126 @@
+/*
+ * Glass look (Liquid Glass style), on when <html data-glass="full|light"> (shell/theme.ts, Settings > General).
+ * Without data-glass nothing here applies, so "Off" is exactly the classic look.
+ * Canvases and panel bodies stay solid: blur over a canvas would be redone for every brush dab.
+ * The fill opacities are checked for readable text over pure white and black in glass.test.ts.
+ */
+:root[data-glass] {
+  --glass-blur: 24px;
+  --glass-fill: color-mix(in srgb, var(--bg-elevated) 62%, transparent);
+  --glass-fill-thick: color-mix(in srgb, var(--bg-elevated) 90%, transparent);
+  --glass-border: rgb(255 255 255 / 0.12);
+  --glass-hi: rgb(255 255 255 / 0.2);
+  --glass-lo: rgb(0 0 0 / 0.18);
+  --radius: 14px;
+  --radius-sm: 9px;
+  --radius-xl: 20px;
+}
+:root[data-glass][data-theme='light'] {
+  --glass-border: rgb(255 255 255 / 0.65);
+  --glass-hi: rgb(255 255 255 / 0.9);
+  --glass-lo: rgb(0 0 0 / 0.06);
+}
+:root[data-glass='light'] {
+  --glass-blur: 10px;
+  --glass-fill: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
+  --glass-fill-thick: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+}
+
+/* Something colourful behind the glass, made from the project's accent. A project wallpaper sits on top of it. */
+:root[data-glass] body {
+  background:
+    radial-gradient(circle at 12% 18%, color-mix(in srgb, var(--accent) 38%, transparent), transparent 42%),
+    radial-gradient(circle at 88% 85%, color-mix(in srgb, var(--focus) 30%, transparent), transparent 48%),
+    radial-gradient(circle at 70% 8%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 35%),
+    var(--bg);
+}
+
+/* --- Glass surfaces ------------------------------------------------------------------------------- */
+:root[data-glass] .sidebar,
+:root[data-glass] .modal,
+:root[data-glass] .menu,
+:root[data-glass] .palette,
+:root[data-glass] .help-tour-card,
+:root[data-glass] .proof-card,
+:root[data-glass] .ref-picker-menu,
+:root[data-glass] .richtext-refmenu,
+:root[data-glass] .writer-menu,
+:root[data-glass] .map-popup,
+:root[data-glass] .custom-color-pop,
+:root[data-glass] .cp-float,
+:root[data-glass] .fp,
+:root[data-glass] .brushlib,
+:root[data-glass] .sketch-floatbars > * {
+  background: var(--glass-fill-thick);
+  backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--glass-hi),
+    inset 0 -1px 0 var(--glass-lo),
+    0 12px 36px rgb(0 0 0 / 0.3);
+}
+/* The sidebar only sits over the app's own background (never over a canvas), so it may be thinner. */
+:root[data-glass] .sidebar {
+  background: var(--glass-fill);
+  margin: 8px 0 8px 8px;
+  border-radius: var(--radius-xl);
+}
+:root[data-glass] .sidebar-top {
+  border-bottom-color: var(--glass-border);
+}
+:root[data-glass] .sidebar-bottom {
+  border-top-color: var(--glass-border);
+}
+:root[data-glass] .modal,
+:root[data-glass] .palette {
+  border-radius: var(--radius-xl);
+}
+
+/* Lighter dimming behind dialogs, so the glass has something to show. */
+:root[data-glass] .modal-backdrop,
+:root[data-glass] .palette-backdrop {
+  background: rgb(0 0 0 / 0.28);
+}
+
+/* Panels float with a gap over the background; their bodies (and canvases) stay solid. */
+:root[data-glass] .workspace {
+  background: transparent;
+  padding: 8px;
+}
+:root[data-glass] .panel {
+  border-color: var(--glass-border);
+  box-shadow:
+    inset 0 1px 0 var(--glass-hi),
+    0 8px 24px rgb(0 0 0 / 0.22);
+}
+:root[data-glass] .panel.active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border));
+}
+
+/* Pill buttons and a highlight edge on the main button. */
+:root[data-glass] .btn {
+  border-radius: 999px;
+}
+:root[data-glass] .btn-primary {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
+}
+
+/* While drawing on a canvas: no blur at all, glass over the canvas turns solid until the pen lifts. */
+:root[data-glass].is-drawing * {
+  backdrop-filter: none !important;
+}
+
+/* Menus and dialogs grow in a little (none when the system asks for less motion). */
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-glass] .modal,
+  :root[data-glass] .menu,
+  :root[data-glass] .palette {
+    animation: glass-in 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+@keyframes glass-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
