@@ -24,18 +24,19 @@ How a node becomes a picture: `gen.getShaderCode('uv', output, new GenContext())
 
 ### What runs and what doesn't yet
 
-- **299 of the 395 bundled nodes run.** Left out for now: 76 3D-only nodes (3D shapes and 3D textures), 7 material
-  output nodes (Material Lab gets its own outputs), 5 nodes that need a 3D model or scene (mesh maps, triplanar brush,
-  raymarching preview), 6 nodes whose parameters need an editor first (polygon, polyline, splines, pixels, lattice),
-  and `bricks_nontileable`, which is broken in Material Maker itself.
+- **380 of the 395 bundled nodes run**, 76 of them 3D shapes and 3D textures, shown as a lit shape or a textured
+  ball (Material Maker's own preview shaders, `preview3d.ts`). Polygon, polyline, splines, pixels and lattice
+  parameters work (their editors come with the screens). Left out: 7 material output nodes (Material Lab gets its
+  own outputs), 6 nodes that need a 3D model or scene (mesh maps, triplanar brushes, raymarching preview), and
+  `bricks_nontileable`, which is written for an older bricks node and is broken in Material Maker itself.
 - **Godot to WebGL:** `godot.ts` rewrites the few things Godot's shader language allows and WebGL2 doesn't
   (`{ … }` array initialisers, whole numbers passed where a float is expected).
-- **Tiling:** 280 nodes tile. The 19 that don't are gradients, centred shapes and fill helpers, listed with reasons in
+- **Tiling:** every 2D node tiles except 19 are gradients, centred shapes and fill helpers, listed with reasons in
   `gpu.test.ts`. Material Maker's nodes look like Material Maker's, not like any other app's.
 - **Tests:** `gen.test.ts` builds the shader of every included node without a GPU. `gpu.test.ts` compiles and
-  renders every included node in headless Chrome/Chromium (small buffers and at most 8 loop rounds, to stay fast on a software GPU) and checks that the picture tiles; it is skipped when no
+  renders every included node in headless Chrome/Chromium (small buffers and at most 8 loop rounds, to stay fast on a software GPU) and checks that the picture tiles (3D previews are one object, so they only have to render cleanly); it is skipped when no
   browser is found, and CI sets `MATERIAL_GPU_TEST=required` so it can't be skipped there.
-- Not built yet: the document type, screens, 3D preview, export. Those are builds 2 to 4.
+- Not built yet: the document type, screens, export. Those are builds 2 to 4.
 
 ## Mobile app
 
