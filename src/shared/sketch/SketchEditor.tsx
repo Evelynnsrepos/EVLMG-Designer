@@ -210,6 +210,8 @@ export interface SketchEditorHandle {
   paintDown(p: InputPoint, time: number): boolean
   paintMove(p: InputPoint, time: number): void
   paintUp(): void
+  /** Draw shapes onto the active layer from outside (Texture Paint's "Fill a part") as one undo step, in the current colour. False when the layer can't take paint. */
+  paintShape(draw: (ctx: CanvasRenderingContext2D, color: string) => void): boolean
 }
 
 /** A raster editor: pressure brushes, layers with blend modes, selection, mirror and references (v0.5). */
@@ -885,7 +887,17 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     markDirty(engine.endStroke())
     files.stroked()
   }
-  useImperativeHandle(editorRef, () => ({ insertImage, setColor, color, engine, render: () => engine.render({ ...docRef.current, layers: exportLayers(docRef.current.layers) }), paintDown, paintMove, paintUp }))
+  const paintShape = (draw: (ctx: CanvasRenderingContext2D, color: string) => void) => {
+    if (!activeLayer || !activeLayer.visible || !hasPixels(activeLayer) || activeLayer.text || lockedInTree(doc.layers, activeLayer.id)) return false
+    markDirty(engine.edit(activeLayer.id, (ctx) => {
+      if (activeLayer.alphaLock) ctx.globalCompositeOperation = 'source-atop'
+      draw(ctx, color)
+    }))
+    setVersion(engine.version)
+    files.stroked()
+    return true
+  }
+  useImperativeHandle(editorRef, () => ({ insertImage, setColor, color, engine, render: () => engine.render({ ...docRef.current, layers: exportLayers(docRef.current.layers) }), paintDown, paintMove, paintUp, paintShape }))
 
   const exportPng = async () => {
     await saveBinaryFile({

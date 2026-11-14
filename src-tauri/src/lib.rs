@@ -8,6 +8,7 @@ mod llm;
 mod plugins;
 mod server_link;
 mod spell;
+mod texpaint_commands;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -19,6 +20,7 @@ pub fn run() {
     .manage(llm::LlmState::default())
     .manage(collab_commands::CollabState::default())
     .manage(server_link::ServerLinks::default())
+    .manage(texpaint_commands::TexpaintState::default())
     .invoke_handler(tauri::generate_handler![
       spell::spell_check,
       spell::spell_suggest,
@@ -43,6 +45,11 @@ pub fn run() {
       server_link::server_send,
       server_link::server_send_text,
       server_link::server_close,
+      texpaint_commands::texpaint_load,
+      texpaint_commands::texpaint_unload,
+      texpaint_commands::texpaint_fill,
+      texpaint_commands::texpaint_pick,
+      texpaint_commands::texpaint_bake,
     ])
     .setup(|app| {
       if let Some(window) = app.get_webview_window("main") {

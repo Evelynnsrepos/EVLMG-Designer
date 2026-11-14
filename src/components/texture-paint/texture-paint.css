@@ -87,3 +87,14 @@
 .tp {
   position: relative;
 }
+
+/* Fill a part and shape maps (Rust core) */
+.tp-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.tp-pick select {
+  max-width: 13em;
+}
