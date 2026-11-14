@@ -127,6 +127,11 @@ export class SketchEngine {
     return this.gpuActive ? this.gpu!.canvas : null
   }
 
+  /** Wait until the GPU has finished drawing (for timing it). */
+  finishGpu() {
+    this.gpu?.gl.finish()
+  }
+
   /** Give the GPU memory back right away (the editor closed). */
   destroy() {
     this.gpu?.destroy()

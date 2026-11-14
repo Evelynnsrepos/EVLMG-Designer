@@ -1,7 +1,8 @@
 import { defaultValues } from './adjust/filters'
 import { defaultLibrary } from './brushDefaults'
 import { SketchEngine } from './engine'
-import { gpuAllowed, gpuAllowSoftware } from './gpuPaint'
+import { glAllowed } from './gl'
+import { gpuAllowSoftware } from './gpuPaint'
 import { newLayer, type InputPoint, type LayerAdjust } from './model'
 
 /** A pen point with a fixed time, so speed-based settings come out the same in both runs. */
@@ -24,9 +25,9 @@ export interface GpuDiff {
 }
 
 function engine(gpu: boolean) {
-  gpuAllowed.value = gpu
+  glAllowed.value = gpu
   const e = new SketchEngine(W, H)
-  gpuAllowed.value = true
+  glAllowed.value = true
   return e
 }
 

@@ -1,6 +1,5 @@
 import { defaultLibrary } from './brushDefaults'
 import { SketchEngine } from './engine'
-import { canvas2dFirst } from './gl'
 import { newLayer, type SketchLayer } from './model'
 
 /**
@@ -49,6 +48,8 @@ export interface BenchResult {
   /** Pen moves slower than one frame at 60 Hz. */
   slow: number
   moves: number
+  /** The picture was painted and shown by the graphics card (else Canvas 2D). */
+  gpu?: boolean
 }
 
 /** The same zigzag stroke every time: `n` pen moves of 4 points each across the middle of the picture. */
@@ -84,7 +85,12 @@ export async function runBenchCase(c: BenchCase, moves = 150): Promise<BenchResu
     }),
   )
   const doc = { layers, backgroundColor: '#ffffff' }
-  engine.render(doc)
+  // What the editor does each frame: on the GPU the picture is drawn to the screen (here a canvas off the page).
+  const show = () => {
+    if (engine.draw(doc, [0.2, 0, 0, 0.2, 0, 0], 800, 800, 1, true)) engine.finishGpu()
+    else engine.render(doc)
+  }
+  show()
   const brush = defaultLibrary().brushes.find((b) => b.id === 'round-brush')!
   const path = benchPath(c.width, c.height, moves)
   const active = layers[layers.length - 1]
@@ -93,20 +99,22 @@ export async function runBenchCase(c: BenchCase, moves = 150): Promise<BenchResu
   for (const move of path) {
     const t0 = performance.now()
     for (const p of move) engine.strokeTo(p)
-    engine.render(doc)
+    show()
     times.push(performance.now() - t0)
     // Lets the window repaint between moves, like real drawing (not timed).
     await nextTask()
   }
   engine.cancelStroke()
-  return summarize(c.name, times)
+  const gpu = engine.gpuActive
+  engine.destroy()
+  return { ...summarize(c.name, times), gpu }
 }
 
 /** Everything as plain text, to paste into a bug report or chat. */
 export function benchReport(gpu: GpuInfo, results: BenchResult[]): string {
   return [
     `Graphics: ${gpu.renderer}${gpu.software ? ' (software, no graphics card)' : ''}${gpu.webgl2 ? '' : ', no WebGL2'}`,
-    `Blending: ${canvas2dFirst.value ? 'Canvas 2D first (Linux)' : 'GPU'}`,
+    `Engine: ${results.length ? (results.every((r) => r.gpu) ? 'graphics card (GPU)' : 'Canvas 2D') : 'not tested yet'}`,
     `Browser engine: ${navigator.userAgent}`,
     ...results.map((r) => `${r.name}: ${r.avgMs.toFixed(1)} ms average, ${r.p95Ms.toFixed(1)} ms slowest 5%, ${r.slow} of ${r.moves} moves over 16.7 ms`),
   ].join('\n')

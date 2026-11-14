@@ -1,6 +1,7 @@
 import { balanceLut, curvesLut, gradientLut, type Balance } from './adjust/color'
 import * as AS from './adjust/shaders'
 import { blendIndex, GLSL_BLEND, type BlendMode } from './blend'
+import { glAllowed } from './gl'
 import type { LayerAdjust } from './model'
 import type { Filtering } from './brushes'
 import type { Rect } from './tiles'
@@ -358,8 +359,6 @@ function compile(gl: WebGL2RenderingContext, vert: string, frag: string) {
   return prog
 }
 
-/** Turn off to test the Canvas 2D engine (Settings → Drawing). */
-export const gpuAllowed = { value: true }
 
 /** Tests turn this on to run the GPU engine on SwiftShader. */
 export const gpuAllowSoftware = { value: false }
@@ -392,7 +391,7 @@ export class GpuPainter {
   private crop: CanvasRenderingContext2D | null = null
 
   static create(width: number, height: number, colorSpace: PredefinedColorSpace = 'srgb'): GpuPainter | null {
-    if (!gpuAllowed.value || typeof document === 'undefined') return null
+    if (!glAllowed.value || typeof document === 'undefined') return null
     try {
       const canvas = document.createElement('canvas')
       canvas.width = canvas.height = 1
