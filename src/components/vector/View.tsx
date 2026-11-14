@@ -9,9 +9,16 @@ import {
   AlignStartVertical,
   AlignVerticalSpaceAround,
   FlipHorizontal2,
+  Brush,
+  Combine,
   FlipVertical2,
   Frame,
+  Group as GroupIcon,
+  Magnet,
+  MousePointer2,
+  PenTool,
   Shapes,
+  Spline,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { safeFileName, saveBinaryFile, saveTextFile } from '@/core/export'
@@ -41,6 +48,7 @@ import { LayersPanel } from '@/shared/moodboard/LayersPanel'
 import type { MoodNode } from '@/shared/moodboard/model'
 import '@/shared/moodboard/moodboard.css'
 import { confirmDialog } from '@/shared/dialogs'
+import { useHotwheel, type HotAction } from '@/shared/hotwheel'
 import { systemFonts } from '@/shared/fontList'
 import { ColorPanel } from '@/shared/sketch/ColorPanel'
 import { anchorsOf, geomReady, loadGeom, offset, outline, type CombineMode } from './geom'
@@ -465,6 +473,10 @@ export default function View({ documentId, active }: PanelProps) {
     return () => clearTimeout(t)
   }, [scene, art])
 
+  // Hotwheel (hold Q): the ring is filled from the current render below, so it always matches the selection.
+  const wheel = useRef<{ actions: HotAction[]; size?: { label: string; smaller(): void; bigger(): void } }>({ actions: [] })
+  useHotwheel(() => wheel.current.actions, true, { label: 'Outline width', smaller: () => wheel.current.size?.smaller(), bigger: () => wheel.current.size?.bigger() })
+
   if (!d) return null
 
   if (!d.presetId) return <StartScreen onPick={(p) => update((x) => startFrom(p, x))} />
@@ -666,6 +678,23 @@ export default function View({ documentId, active }: PanelProps) {
     clipboard = made
     setScene((s) => addNodes(s, made))
     canvas.setSelection(made.map((n) => n.id))
+  }
+
+  const stroke = (dw: number) => patch((n) => ({ strokeWidth: Math.max(0, Math.min(maxStroke, (n.strokeWidth ?? 0) + dw)), strokeColor: n.strokeColor ?? OUTLINE_DARK }))
+  wheel.current = {
+    actions: [
+      { id: 'vec-select', label: 'Select', icon: MousePointer2, on: canvas.toolId === 'select', run: () => canvas.setToolId('select') },
+      { id: 'vec-shape', label: `Draw a ${SHAPE_LABEL[kind].toLowerCase()}`, icon: Shapes, on: canvas.toolId === 'shape', run: () => canvas.setToolId('shape') },
+      { id: 'vec-pen', label: 'Pen', icon: PenTool, on: canvas.toolId === 'pen', run: () => canvas.setToolId('pen') },
+      { id: 'vec-pencil', label: 'Pencil', icon: Brush, on: canvas.toolId === 'pencil', run: () => canvas.setToolId('pencil') },
+      { id: 'vec-points', label: 'Edit points', icon: Spline, on: canvas.toolId === 'points', run: () => (paints.length === 1 ? editPoints(paints[0].id) : canvas.setToolId('points')) },
+      { id: 'vec-builder', label: 'Shape builder', icon: Combine, on: canvas.toolId === 'builder', run: () => canvas.setToolId('builder') },
+      { id: 'vec-combine', label: 'Combine', halves: [{ label: 'Join', run: () => doCombine('unite') }, { label: 'Cut out', run: () => doCombine('minus_front') }] },
+      { id: 'vec-group', label: grouped ? 'Ungroup' : 'Group', icon: GroupIcon, on: grouped, run: () => (grouped ? ungroup() : group()) },
+      { id: 'vec-copy', label: 'Copy and paste', halves: [{ label: 'Copy', run: copy }, { label: 'Paste', run: paste }] },
+      { id: 'vec-snap', label: 'Snap while moving', icon: Magnet, on: snapOn, run: () => update((x) => ({ ...x, snap: !snapOn })) },
+    ],
+    size: { label: 'Outline width', smaller: () => stroke(-1), bigger: () => stroke(1) },
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
