@@ -5,7 +5,7 @@ import { createBackup, type BackupReason } from './backups'
  * When backups are taken [Default]: when a project opens (the state before
  * this session's edits), at most every BACKUP_INTERVAL_MS while edits are
  * being saved, and when it closes. Unchanged snapshots are skipped, so the
- * last 10 backups always differ from each other.
+ * kept backups always differ from each other.
  */
 export const BACKUP_INTERVAL_MS = 5 * 60 * 1000
 /** Wait for a burst of saves to finish before snapshotting. */

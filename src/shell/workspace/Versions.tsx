@@ -32,7 +32,7 @@ function VersionsDialog({ type, id, onClose }: { type: ComponentType; id: Id; on
   return (
     <Modal onClose={onClose}>
       <h3>Earlier versions</h3>
-      <p className="muted">Taken from the project backups (when the project opens, every few minutes while you work, and when it closes; the last 10 are kept). Restore puts this document back as it was, and Ctrl+Z undoes it.</p>
+      <p className="muted">Taken from the project backups (when the project opens, every few minutes while you work, and when it closes; the last 10 are kept, plus one per day for a week and one per week for a month). Restore puts this document back as it was, and Ctrl+Z undoes it.</p>
       {versions === null ? (
         <p className="muted">Looking through the backups…</p>
       ) : versions.length === 0 ? (

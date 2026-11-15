@@ -3,7 +3,7 @@ import { getFs, MemoryFs, setFs } from '../fs'
 import { createEntity } from '../model'
 import { createProject, loadProject, saveCollection, writeDocument } from '../project'
 import { flushAll, useProjectStore } from '../state'
-import { collectProjectFiles, createBackup, fileVersions, installAutoBackup, listBackups, MAX_BACKUPS, restoreBackup, waitForBackups } from '.'
+import { backupsToKeep, collectProjectFiles, createBackup, fileVersions, installAutoBackup, listBackups, MAX_BACKUPS, restoreBackup, retireAssets, sweepRetiredAssets, waitForBackups } from '.'
 
 describe('backups', () => {
   beforeEach(() => setFs(new MemoryFs()))
@@ -114,5 +114,72 @@ describe('automatic backups', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('backups keep days and weeks (0.31.1)', () => {
+  const at = (iso: string) => ({ id: iso, createdAt: iso })
+  it('keeps the newest 10, one per day for a week and one per week for a month', () => {
+    const now = new Date('2026-11-30T12:00:00Z')
+    const list: { id: string; createdAt: string }[] = []
+    // 20 backups today, then 3 a day for 40 days back, newest first.
+    for (let i = 0; i < 20; i++) list.push(at(new Date(now.getTime() - i * 60_000).toISOString()))
+    for (let d = 1; d <= 40; d++) for (let h = 0; h < 3; h++) list.push(at(new Date(now.getTime() - d * 86_400_000 - h * 3_600_000).toISOString()))
+    const keep = backupsToKeep(list, now)
+    expect(list.slice(0, 10).every((b) => keep.has(b.id))).toBe(true)
+    // Newest of days 1-6 (day 0 is in the newest 10) and of weeks 1-3; day 7, 14, 21 start a week.
+    expect(keep.size).toBe(10 + 6 + 3)
+    expect(keep.has(list[20].id)).toBe(true) // newest of yesterday
+    expect(keep.has(list[21].id)).toBe(false) // an older one of yesterday
+    expect([...keep].every((id) => now.getTime() - Date.parse(id) < 28 * 86_400_000)).toBe(true)
+  })
+})
+
+describe('retired assets (a restored backup brings drawings back, 0.31.1)', () => {
+  beforeEach(() => setFs(new MemoryFs()))
+
+  it('keeps a replaced picture while a backup mentions it, then deletes it', async () => {
+    const fs = getFs()
+    const p = await createProject({ name: 'R', description: '', components: ['sketch'] })
+    const png = async (name: string) => {
+      const rel = `assets/images/${name}.png`
+      await fs.writeBinaryAtomic(await fs.join(p.root, ...rel.split('/')), new Uint8Array([1]))
+      return rel
+    }
+    const exists = async (rel: string) => fs.exists(await fs.join(p.root, ...rel.split('/')))
+    const t = (n: number) => new Date(Date.UTC(2026, 0, 1, 0, n))
+
+    const first = await png('aaaaaaaa-0000-0000-0000-000000000001')
+    await writeDocument(p.root, 'sketch', 'd', { layers: [{ id: 'l', image: first }] })
+    await createBackup(p.root, 'open', t(0))
+    // Draw saves the layer again: a new picture, the old one retired.
+    const second = await png('aaaaaaaa-0000-0000-0000-000000000002')
+    await writeDocument(p.root, 'sketch', 'd', { layers: [{ id: 'l', image: second }] })
+    await retireAssets(p.root, [first])
+    await createBackup(p.root, 'autosave', t(1))
+    expect(await exists(first)).toBe(true)
+
+    await restoreBackup(p.root, (await listBackups(p.root)).at(-1)!.id)
+    expect(JSON.stringify((await collectProjectFiles(p.root))['components/sketch/d.json'])).toContain(first)
+    expect(await exists(first)).toBe(true)
+
+    // Once no backup and no document mentions it any more, it goes.
+    await writeDocument(p.root, 'sketch', 'd', { layers: [{ id: 'l', image: second }] })
+    for (let i = 0; i < MAX_BACKUPS + 2; i++) {
+      await writeDocument(p.root, 'wiki', 'index', { n: i })
+      await createBackup(p.root, 'autosave', t(2 + i))
+    }
+    // All backups are within one day, so only the newest 10 stay; none mentions the first picture.
+    expect(await exists(first)).toBe(false)
+    expect(await exists(second)).toBe(true)
+    expect(await sweepRetiredAssets(p.root)).toBe(0)
+  })
+
+  it('never retires anything outside assets/', async () => {
+    const fs = getFs()
+    const p = await createProject({ name: 'S', description: '', components: [] })
+    await retireAssets(p.root, ['project.json', 'assets/images/../project.json', 'assets/images'])
+    await createBackup(p.root, 'open')
+    expect(await fs.exists(await fs.join(p.root, 'project.json'))).toBe(true)
   })
 })

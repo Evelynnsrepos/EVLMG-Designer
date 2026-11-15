@@ -27,6 +27,7 @@ import {
 import { lazy, Suspense, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
 import { importAssetFromBlob, pickAndImportAssets, resolveAssetPath } from '@/core/assets'
 import { getFs } from '@/core/fs'
+import { retireAssets } from '@/core/backups'
 import { newId, type Id } from '@/core/model'
 import { flush as flushSave, IDLE_SAVE_MS, scheduleSave, useProjectStore } from '@/core/state'
 import { saveBinaryFile, safeFileName } from '@/core/export'
@@ -536,7 +537,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     const sticker = await importAssetFromBlob(root, await engine.flattenedPng({ ...docRef.current, layers: exportLayers(docRef.current.layers) }, false), 'image', 'sticker.png')
     const prev = docRef.current.sticker
     save((d) => ({ ...d, sticker: sticker?.path ?? null }))
-    if (prev && prev !== sticker?.path) void resolveAssetPath(root, prev).then((abs) => getFs().remove(abs).catch(() => {}))
+    // Not deleted: a backup may still show it (retired files go once no kept backup mentions them).
+    if (prev && prev !== sticker?.path) void retireAssets(root, [prev])
   }, [root, engine])
 
   const flushNow = useCallback(async () => {
@@ -566,8 +568,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     save((d) => ({ ...d, layers: d.layers.map((l) => (saved.has(l.id) ? { ...l, image: saved.get(l.id)! } : l)) }))
     // The sticker (the whole picture) is made less often: a while after the last stroke, and when the app closes.
     scheduleSave(stickerKey, saveSticker, IDLE_SAVE_MS)
-    // Each save writes a new PNG (assets are write-once); remove the ones this editor replaced.
-    for (const p of old) void resolveAssetPath(root, p).then((abs) => getFs().remove(abs).catch(() => {}))
+    // Each save writes a new PNG (assets are write-once). The replaced ones are retired, not deleted, so restoring a backup brings them back.
+    void retireAssets(root, old)
     void historyFile?.sync(engine)
     setSaving(false)
   }, [root, engine, update])

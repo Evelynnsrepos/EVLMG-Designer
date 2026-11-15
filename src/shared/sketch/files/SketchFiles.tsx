@@ -1,8 +1,8 @@
 import { Crop, Download, FileUp, Film, PictureInPicture2 } from 'lucide-react'
 import { frameOf } from '../growth'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { importAssetFromBlob, resolveAssetPath } from '@/core/assets'
-import { getFs } from '@/core/fs'
+import { importAssetFromBlob } from '@/core/assets'
+import { retireAssets } from '@/core/backups'
 import { newId, type AssetPath, type Id } from '@/core/model'
 import { saveBinaryFile, safeFileName } from '@/core/export'
 import type { SketchEngine } from '../engine'
@@ -164,7 +164,8 @@ export function useSketchFiles(host: FilesHost) {
           frame,
         }
       })
-      for (const p of old.filter(Boolean)) void resolveAssetPath(root, p).then((abs) => getFs().remove(abs).catch(() => {}))
+      // Retired, not deleted: a backup may still show the old picture.
+      void retireAssets(root, old)
       setTimeout(() => hostRef.current.fit(), 50)
     } finally {
       setBusy(false)

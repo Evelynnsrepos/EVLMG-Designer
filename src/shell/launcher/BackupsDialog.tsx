@@ -48,7 +48,7 @@ export function BackupsDialog({ project, onClose, onRestored }: { project: Recen
   return (
     <Modal onClose={onClose}>
       <h3>Backups of "{project.name}"</h3>
-      <p className="muted">The last 10 versions are kept: when the project opens and closes, and every few minutes while you edit.</p>
+      <p className="muted">Taken when the project opens and closes, and every few minutes while you edit. The last 10 are kept, plus one per day for the last week and one per week for the last month.</p>
       {error && <div className="launcher-error">{error}</div>}
       {backups?.length === 0 && <p className="muted">No backups yet. One is made the next time you open the project.</p>}
       {backups && backups.length > 0 && (
