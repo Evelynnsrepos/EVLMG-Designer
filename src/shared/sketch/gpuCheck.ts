@@ -142,6 +142,37 @@ function moved(gpu: boolean) {
   return { px: e.layerCanvas(layer.id).getContext('2d')!.getImageData(0, 0, W, H).data, gpu: e.gpuActive }
 }
 
+/**
+ * Foreign pixels in the GPU copy of a layer (what a test build once saved: other GPU memory) must never reach the
+ * saved layer: a stroke next to them keeps everything outside its own paint as it was. Returns the stray pixel count.
+ */
+function foreignPixels(): { stray: number; gpu: boolean } {
+  const e = engine(true)
+  const layer = newLayer('L')
+  const doc = { layers: [layer], backgroundColor: null }
+  e.render(doc)
+  const internals = e as unknown as { tex(id: string): { fb: WebGLFramebuffer }; gpu: { gl: WebGL2RenderingContext } }
+  const fb = internals.tex(layer.id).fb
+  const gl = internals.gpu.gl
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb)
+  gl.enable(gl.SCISSOR_TEST)
+  gl.scissor(120, 0, 100, H)
+  gl.clearColor(1, 0, 1, 1)
+  gl.clear(gl.COLOR_BUFFER_BIT)
+  gl.disable(gl.SCISSOR_TEST)
+  const brush = defaultLibrary().brushes.find((b) => b.id === 'round-brush')!
+  e.beginStroke({ layer, brush: { ...brush, size: 10 }, color: '#000000', symmetry: 'off', erase: false }, pt(20, 80, 1, 0))
+  for (let i = 1; i <= 5; i++) e.strokeTo(pt(20 + i * 10, 80, 1, i * 8))
+  e.endStroke()
+  const d = e.layerCanvas(layer.id).getContext('2d')!.getImageData(120, 0, 100, H).data
+  let stray = 0
+  for (let i = 3; i < d.length; i += 4) if (d[i]) stray++
+  // and the screen copy was repaired: the flattened picture has nothing there either
+  const pic = e.render(doc, false).getContext('2d')!.getImageData(120, 0, 100, H).data
+  for (let i = 3; i < pic.length; i += 4) if (pic[i]) stray++
+  return { stray, gpu: e.gpuActive }
+}
+
 /** Paint on the GPU, undo, redo: the picture must come back exactly each time. */
 function undoRoundTrip(): GpuDiff[] {
   const e = engine(true)
@@ -166,7 +197,7 @@ function undoRoundTrip(): GpuDiff[] {
   return [diff('stroke changed the picture (expect > 0)', e.gpuActive, before, after), diff('undo', e.gpuActive, undone, before), diff('redo', e.gpuActive, redone, after)]
 }
 
-export async function runSketchGpuCheck(): Promise<{ strokes: GpuDiff[]; adjust: GpuDiff[]; undo: GpuDiff[] }> {
+export async function runSketchGpuCheck(): Promise<{ strokes: GpuDiff[]; adjust: GpuDiff[]; undo: GpuDiff[]; foreign: { stray: number; gpu: boolean } }> {
   gpuAllowSoftware.value = true
   images = { braid: testImage(128, 48), bead: testImage(32, 32) }
   await Promise.all([loadImageMask(images.braid), loadImageMask(images.bead)])
@@ -195,5 +226,5 @@ export async function runSketchGpuCheck(): Promise<{ strokes: GpuDiff[]; adjust:
     return diff(id, g.gpu, g.px, adjusted(id, false).px)
   })
   const g = moved(true)
-  return { strokes: [...strokes, diff('Move tool (turned and moved)', g.gpu, g.px, moved(false).px)], adjust, undo: undoRoundTrip() }
+  return { strokes: [...strokes, diff('Move tool (turned and moved)', g.gpu, g.px, moved(false).px)], adjust, undo: undoRoundTrip(), foreign: foreignPixels() }
 }

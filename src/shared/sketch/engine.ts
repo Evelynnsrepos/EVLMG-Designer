@@ -655,11 +655,35 @@ export class SketchEngine {
         const ctx = this.ensure(id).ctx
         // What the GPU painted is also undo's "after" (putting it back gives the same pixels), so it isn't read twice.
         const after = rects.map((t) => gpu.read(e.t, t, this.colorSpace))
+        // Guard: a brush stroke only changes pixels its own stroke texture covers. Everything else keeps its old
+        // value in the Canvas 2D copy (what is saved), whatever the GPU handed back; if the GPU's copy of the layer
+        // differs there, it is uploaded again from the clean one. (A test build saved other GPU memory into a layer.)
+        let foreign = 0
+        if (!this.wetWork) {
+          rects.forEach((t, i) => {
+            const m = gpu.read(g.surf.t, t).data
+            const a = after[i].data
+            const b = before[i].data
+            for (let p = 0; p < a.length; p += 4) {
+              if (m[p + 3]) continue
+              if (Math.abs(a[p] - b[p]) > 8 || Math.abs(a[p + 1] - b[p + 1]) > 8 || Math.abs(a[p + 2] - b[p + 2]) > 8 || Math.abs(a[p + 3] - b[p + 3]) > 8) foreign++
+              a[p] = b[p]
+              a[p + 1] = b[p + 1]
+              a[p + 2] = b[p + 2]
+              a[p + 3] = b[p + 3]
+            }
+          })
+        }
         rects.forEach((t, i) => ctx.putImageData(after[i], t.x, t.y))
         this.pushTiles(id, rects, before, after)
         this.layerVersions.set(id, (this.layerVersions.get(id) ?? 0) + 1)
         if (!opts.erase && !opts.smudge) this.painted.add(id)
         e.version = this.layerVersions.get(id)!
+        if (foreign) {
+          console.warn(`Draw: the GPU copy of a layer had ${foreign} pixels it shouldn't have; uploading it again from the saved copy`)
+          e.version = -1
+          this.edits++
+        }
         this.growDirty(r)
         this.version++
       }
@@ -1125,11 +1149,20 @@ export class SketchEngine {
    * Show the picture on the GPU's view canvas: `m` is the view matrix in CSS pixels, `w`×`h` the view's CSS size.
    * Returns false when Canvas 2D has to draw it (no GPU, or adjustment layers).
    */
-  draw(doc: LayerStack, m: [number, number, number, number, number, number], w: number, h: number, dpr: number, smooth: boolean, tint?: { id: Id; color: string } | null): boolean {
+  draw(
+    doc: LayerStack,
+    m: [number, number, number, number, number, number],
+    w: number,
+    h: number,
+    dpr: number,
+    smooth: boolean,
+    tint?: { id: Id; color: string } | null,
+    paper?: { image: TexImageSource; version: number; frame: Rect } | null,
+  ): boolean {
     if (!this.gpuFor(doc)) return false
     try {
       this.toPicture(doc, true)
-      this.gpu!.present(m, w, h, dpr, smooth, tint && this.layers.has(tint.id) ? { tex: this.tex(tint.id), color: rgb(tint.color) } : null)
+      this.gpu!.present(m, w, h, dpr, smooth, tint && this.layers.has(tint.id) ? { tex: this.tex(tint.id), color: rgb(tint.color) } : null, paper ?? null)
       return true
     } catch {
       this.gpuFailed()
