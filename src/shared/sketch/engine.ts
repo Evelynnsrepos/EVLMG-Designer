@@ -1453,6 +1453,31 @@ export class SketchEngine {
     return this.ensure(id).canvas
   }
 
+  private paintBounds = new Map<Id, { version: number; r: Rect | null }>()
+
+  /**
+   * Roughly where these layers have paint (to within 1/256 of the working area, padded outwards), or null when
+   * they are empty. Worked out from a small copy, again only when a layer changes.
+   */
+  paintedBounds(ids: Id[]): Rect | null {
+    let out: Rect | null = null
+    for (const id of ids) {
+      const v = this.layerVersion(id)
+      let e = this.paintBounds.get(id)
+      if (!e || e.version !== v) {
+        const s = Math.min(1, 256 / Math.max(this.width, this.height))
+        const w = Math.max(1, Math.round(this.width * s))
+        const h = Math.max(1, Math.round(this.height * s))
+        const c = Object.assign(document.createElement('canvas'), { width: w, height: h })
+        const g = c.getContext('2d', { willReadFrequently: true })!
+        g.drawImage(this.layerThumb(id, w, h), 0, 0, w, h)
+        this.paintBounds.set(id, (e = { version: v, r: alphaBounds(g.getImageData(0, 0, w, h), this.width / w, this.height / h) }))
+      }
+      out = union(out, e.r)
+    }
+    return out
+  }
+
   /** The picture's frame (see growth.ts) shrunk to w×h, for time-lapse frames; transparent where there is no paint. */
   shrunk(doc: SketchDoc, w: number, h: number): HTMLCanvasElement {
     const f = frameOf(doc)
@@ -1503,6 +1528,23 @@ export class SketchEngine {
     for (let i = 3; i < data.length; i += 4) if (data[i] !== 0) return false
     return true
   }
+}
+
+/** The box around pixels with any alpha in a small copy, scaled up by sx, sy and padded by one small pixel. */
+export function alphaBounds(img: ImageData, sx: number, sy: number): Rect | null {
+  let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1
+  for (let y = 0; y < img.height; y++)
+    for (let x = 0; x < img.width; x++)
+      if (img.data[(y * img.width + x) * 4 + 3]) {
+        x0 = Math.min(x0, x)
+        x1 = Math.max(x1, x)
+        y0 = Math.min(y0, y)
+        y1 = Math.max(y1, y)
+      }
+  if (x1 < 0) return null
+  const l = Math.max(0, Math.floor((x0 - 1) * sx))
+  const t = Math.max(0, Math.floor((y0 - 1) * sy))
+  return { x: l, y: t, w: Math.min(Math.ceil((img.width) * sx), Math.ceil((x1 + 2) * sx)) - l, h: Math.min(Math.ceil(img.height * sy), Math.ceil((y1 + 2) * sy)) - t }
 }
 
 /** Mask pixels to alpha: brightness (0.299, 0.587, 0.114) times alpha, like the GPU path. */

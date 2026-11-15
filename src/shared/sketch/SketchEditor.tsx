@@ -737,12 +737,17 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     const px = 1 / view.scale
     const f = doc.frame ?? { x: 0, y: 0, w: doc.width, h: doc.height }
     if (doc.frame) {
-      // 0.31: paint past the canvas's edges stays, dimmed; exports are cut to the canvas.
-      ctx.beginPath()
-      ctx.rect(0, 0, doc.width, doc.height)
-      ctx.rect(f.x, f.y, f.w, f.h)
-      ctx.fillStyle = 'rgba(0,0,0,0.45)'
-      ctx.fill('evenodd')
+      // 0.31: paint past the canvas's edges stays, dimmed; exports are cut to the canvas. Only where there is paint:
+      // the rest of the working area stays invisible.
+      const used = engine.paintedBounds(doc.layers.filter((l) => l.visible && l.kind !== 'group' && l.kind !== 'adjust').map((l) => l.id))
+      const u = used ? { x: Math.min(used.x, f.x), y: Math.min(used.y, f.y), r: Math.max(used.x + used.w, f.x + f.w), b: Math.max(used.y + used.h, f.y + f.h) } : null
+      if (u) {
+        ctx.beginPath()
+        ctx.rect(u.x, u.y, u.r - u.x, u.b - u.y)
+        ctx.rect(f.x, f.y, f.w, f.h)
+        ctx.fillStyle = 'rgba(0,0,0,0.45)'
+        ctx.fill('evenodd')
+      }
     }
     ctx.strokeStyle = doc.backgroundColor ? 'rgba(128,128,128,0.6)' : '#ffffff'
     ctx.lineWidth = (doc.backgroundColor ? 1 : 1.5) * px
