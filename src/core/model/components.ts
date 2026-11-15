@@ -57,6 +57,7 @@ export const COMPONENT_TYPES = [
   'pixel-art',
   'card-designer',
   'vector',
+  'material',
   'custom-list',
 ] as const
 

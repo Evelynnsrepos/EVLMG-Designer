@@ -1,0 +1,373 @@
+.mat {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  outline: none;
+}
+.mat-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.mat-muted {
+  color: var(--text-muted);
+}
+.mat-small {
+  font-size: 12px;
+}
+.mat-bar,
+.mat-strip,
+.mat-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.mat-bar,
+.mat-strip {
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+}
+.mat-bar {
+  border-bottom: 1px solid var(--border);
+}
+.mat-strip {
+  border-top: 1px solid var(--border);
+}
+.mat-bar button,
+.mat-strip button,
+.mat-buttons button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.mat-on {
+  background: var(--accent) !important;
+  color: var(--accent-text) !important;
+}
+.mat-on .mat-muted {
+  color: inherit;
+}
+.mat-gap {
+  flex: 1;
+}
+.mat-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-sunken);
+}
+.mat-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+.mat-canvas:active {
+  cursor: grabbing;
+}
+.mat-busy,
+.mat-hint,
+.mat-note {
+  position: absolute;
+  left: 10px;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+}
+.mat-busy {
+  top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mat-hint {
+  bottom: 10px;
+}
+.mat-note {
+  top: 44px;
+  right: 10px;
+  color: var(--danger);
+}
+.mat-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 12px;
+  width: 280px;
+  box-sizing: border-box;
+  padding: 12px;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+.mat-side h3,
+.mat-side h4 {
+  margin: 0;
+}
+.mat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mat-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mat-slider input {
+  width: 100%;
+}
+.mat-spin {
+  animation: mat-spin 1s linear infinite;
+}
+@keyframes mat-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mat-spin {
+    animation: none;
+  }
+}
+
+.mat-start {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 24px;
+  overflow-y: auto;
+}
+.mat-start h2 {
+  margin-top: 0;
+}
+.mat-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 360px;
+  margin: 12px 0;
+}
+.mat-search input {
+  flex: 1;
+}
+.mat-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+}
+.mat-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+}
+.mat-pick img,
+.mat-pick-wait {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 110px;
+  height: 110px;
+}
+@media (max-width: 640px) {
+  .mat {
+    flex-direction: column;
+  }
+  .mat-side {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    max-height: 45%;
+  }
+}
+
+.mat-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+}
+.mat-view-small {
+  flex: none;
+  height: 220px;
+}
+.mat-side[hidden] {
+  display: none;
+}
+.mat-num {
+  width: 64px;
+}
+
+/* Graph view */
+.mat-graph-wrap {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.mat-graph {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  outline: none;
+  background-color: var(--bg-sunken);
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 24px 24px;
+  touch-action: none;
+}
+.mat-graph-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+.mat-wires {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+.mat-wires path {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 2;
+}
+.mat-wires .mat-wire-new {
+  stroke: var(--accent);
+  stroke-dasharray: 6 4;
+}
+.mat-node {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  font-size: 11px;
+  cursor: grab;
+  user-select: none;
+}
+.mat-node-on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.mat-node-material .mat-node-title {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.mat-node-title {
+  height: 24px;
+  padding: 0 8px;
+  overflow: hidden;
+  border-radius: 7px 7px 0 0;
+  line-height: 24px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: var(--bg-sunken);
+}
+.mat-port {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 50%;
+  height: 18px;
+}
+.mat-port-in {
+  left: -6px;
+}
+.mat-port-out {
+  right: -6px;
+  justify-content: flex-end;
+}
+.mat-port-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+}
+.mat-dot {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--bg-elevated);
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: crosshair;
+}
+.mat-node-thumb {
+  position: absolute;
+  left: 50%;
+  width: 64px;
+  height: 64px;
+  margin-left: -32px;
+  background: var(--bg-sunken);
+}
+.mat-node-thumb img {
+  display: block;
+  image-rendering: auto;
+}
+.mat-graph-add {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.mat-add {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  max-height: 360px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+}
+.mat-add .mat-search {
+  margin: 0 0 6px;
+}
+.mat-add-list {
+  overflow-y: auto;
+}
+.mat-add-list button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 4px 6px;
+  text-align: left;
+}
+.mat-graph-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 10px;
+  width: 260px;
+  box-sizing: border-box;
+  padding: 12px;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+.mat-graph-side h4 {
+  margin: 0;
+}
+.mat-graph-big {
+  width: 128px;
+  height: 128px;
+  image-rendering: pixelated;
+}

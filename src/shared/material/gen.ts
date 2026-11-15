@@ -249,8 +249,39 @@ function curveShader(v: Json, name: string): { uniforms: Uniform[]; code: string
   return { uniforms, code: sh }
 }
 
-/** Parameter types the engine can't turn into shader code yet (they need their own editors first). */
-export const UNSUPPORTED_PARAMETER_TYPES = ['polygon', 'polyline', 'splines', 'pixels', 'lattice']
+/** Pixel picture → `<name>_pixels_fct(ivec2)` reading a packed palette index per pixel (types/pixels.gd). */
+function pixelsShader(v: Json, name: string): { uniforms: Uniform[]; code: string } {
+  const w = Math.max(1, Math.trunc(+v?.w || 1))
+  const h = Math.max(1, Math.trunc(+v?.h || 1))
+  const bpp = Math.max(1, Math.trunc(+v?.bpp || 1))
+  const palette: Color[] = (v?.pl ?? []).map(toColor)
+  // every index the bits can hold gets a colour, so a short palette can't be read past its end
+  while (palette.length < 1 << bpp) palette.push(palette[palette.length - 1] ?? { r: 0, g: 0, b: 0, a: 1 })
+  const perInt = Math.floor(32 / bpp)
+  const ints = Math.ceil((w * h) / perInt)
+  const px: number[] = Array.from({ length: ints }, (_, i) => (+(v?.px ?? [])[i] || 0) | 0)
+  const code = `const ivec2 ${name}_size = ivec2(${w}, ${h});
+vec4 ${name}_pixels_fct(ivec2 v) {
+\tif (v.x < 0 || v.x >= ${w} || v.y < 0 || v.y >= ${h}) {
+\t\treturn p_${name}_palette[0];
+\t} else {
+\t\tint i = v.x+${w}*v.y;
+\t\tint c = ${(1 << bpp) - 1} & (p_${name}_pixels[i/${perInt}] >> (${bpp}*(i%${perInt})));
+\t\treturn p_${name}_palette[c];
+\t}
+}
+`
+  return {
+    code,
+    uniforms: [
+      { name: `p_${name}_palette`, type: 'vec4', value: palette.flatMap(c => [c.r, c.g, c.b, c.a]), size: palette.length },
+      { name: `p_${name}_pixels`, type: 'int', value: px, size: px.length },
+    ],
+  }
+}
+
+/** Parameter types the engine can't turn into shader code yet. */
+export const UNSUPPORTED_PARAMETER_TYPES: string[] = []
 
 // ---------- generators ----------
 
@@ -615,6 +646,34 @@ export class GenShader extends Gen {
             rv.defs += sh.code
           }
           vars[p.name] = `${g}_${p.name}_curve_fct`
+          break
+        }
+        case 'polygon':
+        case 'polyline':
+        case 'lattice': {
+          // types/polygon.gd, types/lattice.gd: the points as one vec2 array
+          const pts: Json[] = v?.points?.length ? v.points : [{ x: 0, y: 0 }]
+          if (declare) rv.addUniform(`p_${g}_${p.name}_pos`, 'vec2', pts.flatMap(q => [+q.x, +q.y]), pts.length)
+          vars[p.name] = `p_${g}_${p.name}_pos`
+          if (p.type === 'lattice') vars[p.name + '_size'] = `ivec2(${Math.trunc(+v?.size?.x || 1)}, ${Math.trunc(+v?.size?.y || 1)})`
+          break
+        }
+        case 'splines': {
+          // types/splines.gd: 4 points of (x, y, width, offset) per bezier, at least one vec4
+          const values: number[] = (v?.values ?? []).map(Number)
+          const packed = values.length >= 4 ? values.slice(0, values.length - (values.length % 4)) : [0, 0, 0, 0]
+          if (declare) rv.addUniform(`p_${g}_${p.name}_points`, 'vec4', packed, packed.length / 4)
+          vars[p.name] = `p_${g}_${p.name}_points`
+          break
+        }
+        case 'pixels': {
+          const sh = pixelsShader(v, `${g}_${p.name}`)
+          if (declare) {
+            rv.addUniforms(sh.uniforms)
+            rv.defs += sh.code
+          }
+          vars[p.name] = `${g}_${p.name}_pixels_fct`
+          vars[p.name + '_size'] = `${g}_${p.name}_size`
           break
         }
         default:

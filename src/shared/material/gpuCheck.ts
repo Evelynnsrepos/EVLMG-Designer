@@ -2,6 +2,7 @@
 import { listNodes } from './library'
 import { checkNode, type NodeCheck } from './nodeCheck'
 import { MaterialRenderer } from './render'
+import { GALLERY, galleryGraph, loadMaterial, renderMaps } from './material'
 
 export function runAll(ids?: string[]): { float: boolean; results: NodeCheck[] } {
   const renderer = new MaterialRenderer()
@@ -17,4 +18,26 @@ export function runAll(ids?: string[]): { float: boolean; results: NodeCheck[] }
   })
   renderer.dispose()
   return { float: renderer.floatTextures, results }
+}
+
+/** Renders every map of every gallery material; returns the problems found (empty = all fine). */
+export function runGallery(limits = true): string[] {
+  const renderer = new MaterialRenderer()
+  if (limits) {
+    renderer.bufferLimit = 128
+    renderer.iterationLimit = 8
+  }
+  const problems: string[] = []
+  for (const e of GALLERY) {
+    const t = performance.now()
+    try {
+      const m = loadMaterial(galleryGraph(e.id))
+      for (const [k, px] of Object.entries(renderMaps(renderer, m, 32))) if (px && !px.every(Number.isFinite)) problems.push(`${e.id}: ${k} has NaN`)
+    } catch (err) {
+      problems.push(`${e.id}: ${err instanceof Error ? err.message.slice(0, 300) : String(err)}`)
+    }
+    console.log(`${e.id} ${Math.round(performance.now() - t)}ms`)
+  }
+  renderer.dispose()
+  return problems
 }

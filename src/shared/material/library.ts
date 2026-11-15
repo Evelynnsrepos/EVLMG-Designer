@@ -33,10 +33,17 @@ export interface NodeInfo {
 }
 
 const OUTPUTS_2D = ['f', 'rgb', 'rgba', 'sdf2d', 'fill']
+// 3D shapes and 3D textures: shown as a lit shape or a textured ball, used as building blocks for 2D nodes
+const OUTPUTS_3D = ['sdf3d', 'sdf3dc', 'tex3d', 'tex3d_gs', 'v4v4']
+export const PICTURE_TYPES = [...OUTPUTS_2D, ...OUTPUTS_3D]
+
+/** True when a node's first output that can be shown is 3D (it makes a 3D preview, not a tiling texture). */
+export const is3dOutput = (type: string) => OUTPUTS_3D.includes(type)
 
 // Nodes that don't work as shipped by Material Maker either, or need a 3D model.
 const BROKEN: Record<string, string> = {
-  bricks_nontileable: 'calls bricks_rb, which bricks.mmg no longer has',
+  bricks_nontileable: 'written for an older bricks node (calls bricks_rb and brick with old arguments)',
+  brush_3d: 'needs a 3D model',
   brush_triplanar: 'needs a 3D model',
   raymarching_preview: 'a 3D preview of 3D shapes',
 }
@@ -61,8 +68,7 @@ export function unsupportedReason(id: string): string | null {
     if (!gen) return 'not a node'
     const outs = gen.getOutputDefs().map(o => o.type)
     if (!outs.length) return 'no outputs'
-    // Material Lab makes flat, tiling textures; the 3D shape and 3D texture nodes come later
-    if (!outs.some(t => OUTPUTS_2D.includes(t))) return '3D only'
+    if (!outs.some(t => PICTURE_TYPES.includes(t))) return 'no output that can be shown'
   } catch (e) {
     if (e instanceof UnsupportedNodeError) return e.message
     throw e
