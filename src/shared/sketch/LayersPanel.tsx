@@ -543,13 +543,18 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
 function Thumb({ engine, id, version }: { engine: SketchEngine; id: Id; version: number }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
-    const c = ref.current
-    if (!c) return
-    const ctx = c.getContext('2d')!
-    ctx.clearRect(0, 0, c.width, c.height)
-    const src = engine.layerCanvas(id)
-    const s = Math.min(c.width / src.width, c.height / src.height)
-    ctx.drawImage(src, (c.width - src.width * s) / 2, (c.height - src.height * s) / 2, src.width * s, src.height * s)
+    // A moment after the layer changed, so a row of quick strokes redraws it once (shrunk on the GPU when there is one).
+    const t = setTimeout(() => {
+      const c = ref.current
+      if (!c) return
+      const ctx = c.getContext('2d')!
+      ctx.clearRect(0, 0, c.width, c.height)
+      const s = Math.min(c.width / engine.width, c.height / engine.height)
+      const w = Math.max(1, Math.round(engine.width * s))
+      const h = Math.max(1, Math.round(engine.height * s))
+      ctx.drawImage(engine.layerThumb(id, w, h), (c.width - w) / 2, (c.height - h) / 2, w, h)
+    }, 300)
+    return () => clearTimeout(t)
   }, [engine, id, version])
   return <canvas ref={ref} width={44} height={32} className="sketch-thumb" />
 }

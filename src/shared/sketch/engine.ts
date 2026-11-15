@@ -270,6 +270,7 @@ export class SketchEngine {
   }
 
   private touched(id: Id) {
+    this.painted.delete(id)
     this.layerVersions.set(id, (this.layerVersions.get(id) ?? 0) + 1)
     this.edits++
     this.version++
@@ -623,6 +624,7 @@ export class SketchEngine {
     const layer = this.ensure(opts.layer.id)
     const area = this.strokeArea(opts)
     this.withUndo(opts.layer.id, area, () => this.applyStroke(layer.ctx, opts))
+    if (!opts.erase && !opts.smudge) this.painted.add(opts.layer.id)
     this.stroke = null
     this.stamper = null
     this.strokeOpts = null
@@ -656,6 +658,7 @@ export class SketchEngine {
         rects.forEach((t, i) => ctx.putImageData(after[i], t.x, t.y))
         this.pushTiles(id, rects, before, after)
         this.layerVersions.set(id, (this.layerVersions.get(id) ?? 0) + 1)
+        if (!opts.erase && !opts.smudge) this.painted.add(id)
         e.version = this.layerVersions.get(id)!
         this.growDirty(r)
         this.version++
@@ -1393,6 +1396,41 @@ export class SketchEngine {
     return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`
   }
 
+  /**
+   * A small copy of a layer (thumbnails), w×h. With a GPU it is shrunk there and only the small copy is read back;
+   * shrinking a big layer on the page took ~60 ms each time.
+   */
+  layerThumb(id: Id, w: number, h: number): CanvasImageSource {
+    if (this.gpuActive) {
+      try {
+        return toCanvas(this.gpu!.shrink(this.tex(id), { x: 0, y: 0, w: this.width, h: this.height }, w, h))
+      } catch {
+        this.gpuFailed()
+      }
+    }
+    return this.ensure(id).canvas
+  }
+
+  /** The picture's frame (see growth.ts) shrunk to w×h, for time-lapse frames; transparent where there is no paint. */
+  shrunk(doc: SketchDoc, w: number, h: number): HTMLCanvasElement {
+    const f = frameOf(doc)
+    if (this.gpuFor(doc)) {
+      try {
+        this.toPicture(doc, false)
+        return toCanvas(this.gpu!.shrink(this.gpu!.picture, f, w, h))
+      } catch {
+        this.gpuFailed()
+      }
+    }
+    const c = document.createElement('canvas')
+    c.width = w
+    c.height = h
+    const g = c.getContext('2d')!
+    g.imageSmoothingQuality = 'high'
+    g.drawImage(this.render(doc, false), f.x, f.y, f.w, f.h, 0, 0, w, h)
+    return c
+  }
+
   /** A layer as PNG (encoded off the page where possible, so saving doesn't freeze drawing). */
   layerPng(layerId: Id): Promise<Blob> {
     return pngOf(this.ensure(layerId).canvas, this.colorSpace)
@@ -1413,8 +1451,12 @@ export class SketchEngine {
     return pngOf(doc.frame ? toFrame(pic, doc) : pic, this.colorSpace)
   }
 
+  /** Layers a brush (not the eraser) just painted on: certainly not empty, so saving skips the full check. */
+  private painted = new Set<Id>()
+
   /** True when the layer has no visible pixels (saved as an empty layer instead of a PNG). */
   isEmpty(layerId: Id): boolean {
+    if (this.painted.has(layerId)) return false
     const data = this.ensure(layerId).ctx.getImageData(0, 0, this.width, this.height).data
     for (let i = 3; i < data.length; i += 4) if (data[i] !== 0) return false
     return true
@@ -1444,6 +1486,14 @@ function cpuBlend(ctx: CanvasRenderingContext2D, src: HTMLCanvasElement, mode: B
     d[i + 3] = o[3] * 255
   }
   ctx.putImageData(dst, 0, 0)
+}
+
+function toCanvas(img: ImageData): HTMLCanvasElement {
+  const c = document.createElement('canvas')
+  c.width = img.width
+  c.height = img.height
+  c.getContext('2d')!.putImageData(img, 0, 0)
+  return c
 }
 
 export function toPng(canvas: HTMLCanvasElement): Promise<Blob> {

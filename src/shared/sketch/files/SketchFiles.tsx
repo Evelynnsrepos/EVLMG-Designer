@@ -104,8 +104,8 @@ export function useSketchFiles(host: FilesHost) {
     const { canvas, ctx } = makeCanvas(size.width, size.height)
     ctx.fillStyle = doc.backgroundColor ?? '#ffffff'
     ctx.fillRect(0, 0, size.width, size.height)
-    ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(engine.render({ ...doc, layers: exportLayers(doc.layers) }, false), f.x, f.y, f.w, f.h, 0, 0, size.width, size.height)
+    // Shrunk on the GPU when there is one: reading back and shrinking the whole picture stalled quick strokes.
+    ctx.drawImage(engine.shrunk({ ...doc, layers: exportLayers(doc.layers) }, size.width, size.height), 0, 0)
     const asset = await importAssetFromBlob(root, await canvasBlob(canvas, 'image/jpeg', 0.8), 'image', 'timelapse.jpg')
     if (asset) update((d) => ({ ...d, timelapse: { ...d.timelapse, frames: [...(d.timelapse?.frames ?? []), asset.path] } }))
   }

@@ -1089,6 +1089,25 @@ export class GpuPainter {
       }
   }
 
+  /** Part `r` of `src` shrunk to w×h (halved step by step, so every pixel counts), as straight pixels. */
+  shrink(src: Tex, r: Rect, w: number, h: number): ImageData {
+    let cur = src
+    let at = { x: r.x, y: r.y, w: r.w, h: r.h }
+    const made: Tex[] = []
+    while (at.w >= w * 2 && at.h >= h * 2) {
+      const t = this.target(Math.ceil(at.w / 2), Math.ceil(at.h / 2))
+      this.region(cur, t, at.x, at.y, t.w, t.h, 2)
+      made.push(t)
+      cur = t
+      at = { x: 0, y: 0, w: t.w, h: t.h }
+    }
+    const out = this.target(w, h)
+    this.region(cur, out, at.x, at.y, w, h, at.w / w)
+    const img = this.read(out, { x: 0, y: 0, w, h })
+    for (const t of [...made, out]) this.free(t)
+    return img
+  }
+
   /** One pixel of the picture, straight RGBA 0..255. */
   pixel(x: number, y: number): [number, number, number, number] {
     const d = this.read(this.picture, { x: Math.floor(x), y: Math.floor(y), w: 1, h: 1 }).data
