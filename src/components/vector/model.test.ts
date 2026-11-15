@@ -49,7 +49,7 @@ describe('Vector document', () => {
     const n = makeShape('l', 'star', 10, 20, 50, 50, { fillColor: '#ff0000' })
     for (const l of LOOKS) {
       const p = l.apply(n, { width: 128, height: 128 })
-      expect(Object.keys(p).every((k) => ['fillColor', 'fill2Color', 'strokeColor', 'strokeWidth', 'shadow', 'opacity'].includes(k)), l.id).toBe(true)
+      expect(Object.keys(p).every((k) => ['fillColor', 'fill2Color', 'gradAngle', 'gradRadial', 'strokeColor', 'strokeWidth', 'shadow', 'glow', 'shadowColor', 'shadowSize', 'opacity'].includes(k)), l.id).toBe(true)
     }
   })
 })
@@ -79,5 +79,22 @@ describe('toSvg', () => {
     d.scene.nodes = [makeShape(d.scene.layers[0].id, 'star', 0, 0, 10, 10)]
     d.scene.layers[0] = { ...d.scene.layers[0], hidden: true }
     expect(toSvg(d)).not.toContain('<path')
+  })
+
+  it('writes point paths, round gradients, glows, dashes and text styles', () => {
+    const d = createVectorDoc()
+    const l = d.scene.layers[0].id
+    d.scene.nodes = [
+      { id: 'p', kind: 'vpath', layerId: l, x: 1, y: 2, width: 10, height: 10, paths: [{ anchors: [{ p: [0, 0] }, { p: [10, 0] }, { p: [10, 10] }], closed: true }], fillColor: '#ff0000', fill2Color: '#0000ff', gradRadial: true, shadow: true, glow: true, strokeColor: '#000000', strokeWidth: 2, strokeDash: true, evenOdd: true },
+      { id: 't', kind: 'text', layerId: l, x: 0, y: 0, text: 'Hi', fontSize: 10, width: 40, fontFamily: 'Bangers', bold: true, align: 'center' },
+    ]
+    const svg = toSvg(d)
+    expect(svg).toContain('d="M 0 0 L 10 0 L 10 10 L 0 0 Z"')
+    expect(svg).toContain('<radialGradient')
+    expect(svg).toContain('dx="0" dy="0"')
+    expect(svg).toContain('stroke-dasharray')
+    expect(svg).toContain('fill-rule="evenodd"')
+    expect(svg).toContain(`font-family="'Bangers', sans-serif"`)
+    expect(svg).toContain('text-anchor="middle"')
   })
 })
