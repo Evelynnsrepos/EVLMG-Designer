@@ -10,8 +10,6 @@ export { gpuInfo, isSoftwareRenderer, type GpuInfo } from '../gpu'
  * (paint + blend the layers), so speed fixes can be compared before and after on each computer.
  */
 
-
-
 export interface BenchCase {
   name: string
   width: number
