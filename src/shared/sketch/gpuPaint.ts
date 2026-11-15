@@ -436,7 +436,9 @@ export class GpuPainter {
     try {
       const canvas = document.createElement('canvas')
       canvas.width = canvas.height = 1
-      const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: false })
+      // preserveDrawingBuffer: WebKitGTK may show the canvas again from its buffer when other layers change (an overlay
+      // like the Hotwheel opening or closing); without it that buffer is empty and the drawing seemed to vanish.
+      const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: true })
       if (!gl) return null
       const max = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number
       if (width > max || height > max) return null
