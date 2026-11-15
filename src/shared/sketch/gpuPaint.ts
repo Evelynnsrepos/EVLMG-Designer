@@ -438,7 +438,6 @@ export class GpuPainter {
   /** The blended picture; only the changed part is blended again. */
   picture: Tex
   private temps = new Map<string, Tex>()
-  private crop: CanvasRenderingContext2D | null = null
 
   static create(width: number, height: number, colorSpace: PredefinedColorSpace = 'srgb'): GpuPainter | null {
     if (!glAllowed.value || typeof document === 'undefined') return null
@@ -670,16 +669,18 @@ export class GpuPainter {
     const gl = this.gl
     gl.bindTexture(gl.TEXTURE_2D, t.tex)
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
-    if (!r) {
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source)
+    const g = context2d(source)
+    if (!g) {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, r?.x ?? 0, r?.y ?? 0, gl.RGBA, gl.UNSIGNED_BYTE, source)
       return
     }
-    // Only the changed part: a whole big canvas each pen move is slow where it goes through the CPU (WebKitGTK).
-    const c = (this.crop ??= document.createElement('canvas').getContext('2d', { colorSpace: this.gl.unpackColorSpace ?? 'srgb' })!)
-    c.canvas.width = r.w
-    c.canvas.height = r.h
-    c.drawImage(source as CanvasImageSource, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h)
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, r.x, r.y, gl.RGBA, gl.UNSIGNED_BYTE, c.canvas)
+    // As bytes, in strips: handing WebKitGTK the canvas itself sometimes uploaded other page pictures (the wallpaper)
+    // instead of the layer. Strips keep a big layer from needing one huge copy.
+    const a = r ?? { x: 0, y: 0, w: g.canvas.width, h: g.canvas.height }
+    for (let y = a.y; y < a.y + a.h; y += 512) {
+      const h = Math.min(512, a.y + a.h - y)
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, a.x, y, gl.RGBA, gl.UNSIGNED_BYTE, g.getImageData(a.x, y, a.w, h))
+    }
   }
 
   /** Straight-alpha pixels of `r` in `t`, as ImageData for the layer's Canvas 2D copy and undo. */
@@ -711,7 +712,8 @@ export class GpuPainter {
       if (e) gl.deleteTexture(e.tex)
       const tex = gl.createTexture()!
       gl.bindTexture(gl.TEXTURE_2D, tex)
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, src)
+      const g = context2d(src)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, g ? g.getImageData(0, 0, g.canvas.width, g.canvas.height) : src)
       gl.generateMipmap(gl.TEXTURE_2D)
       this.images.set(src, (e = { tex, version }))
     }
@@ -1206,6 +1208,13 @@ export class GpuPainter {
   destroy() {
     this.gl.getExtension('WEBGL_lose_context')?.loseContext()
   }
+}
+
+/** The 2D context of a canvas source, so its pixels go up as bytes (see upload); null for other sources. */
+function context2d(src: TexImageSource): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null {
+  if (!(src instanceof HTMLCanvasElement) && !(typeof OffscreenCanvas !== 'undefined' && src instanceof OffscreenCanvas)) return null
+  const g = src.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null
+  return g && src.width > 0 && src.height > 0 ? g : null
 }
 
 let unpremultiplied: Uint8Array | null = null
