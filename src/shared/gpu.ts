@@ -11,7 +11,9 @@ export function gpuInfo(): GpuInfo {
   const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext | null
   if (!gl) return { renderer: 'No WebGL', software: true, webgl2: false }
   const ext = gl.getExtension('WEBGL_debug_renderer_info')
-  const renderer = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER))
+  let renderer = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER))
+  // WebKit (the Linux and Mac web engine) names every graphics card "Apple GPU" to hide which one it is.
+  if (renderer === 'Apple GPU' && !/Mac|iPhone|iPad/.test(navigator.userAgent)) renderer = 'Graphics card (the web engine hides its name)'
   gl.getExtension('WEBGL_lose_context')?.loseContext()
   return { renderer, software: isSoftwareRenderer(renderer), webgl2: typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext }
 }

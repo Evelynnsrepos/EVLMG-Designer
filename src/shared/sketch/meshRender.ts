@@ -14,7 +14,8 @@ uniform vec2 size;
 out vec2 vuv;
 void main() { vuv = uv; gl_Position = vec4(pos.x / size.x * 2.0 - 1.0, 1.0 - pos.y / size.y * 2.0, 0.0, 1.0); }`
 
-const FRAG = `#version 300 es
+/** Shared with the Draw engine's GPU path (gpuPaint.ts), which draws the same mesh in its own context. */
+export const MESH_FRAG = `#version 300 es
 precision highp float;
 in vec2 vuv;
 uniform sampler2D src;
@@ -62,7 +63,7 @@ function setup(): typeof gl {
     const g = canvas.getContext('webgl2', { premultipliedAlpha: true, preserveDrawingBuffer: true, antialias: false })
     if (!g) return (gl = null)
     const prog = g.createProgram()!
-    for (const [type, text] of [[g.VERTEX_SHADER, VERT], [g.FRAGMENT_SHADER, FRAG]] as const) {
+    for (const [type, text] of [[g.VERTEX_SHADER, VERT], [g.FRAGMENT_SHADER, MESH_FRAG]] as const) {
       const sh = g.createShader(type)!
       g.shaderSource(sh, text)
       g.compileShader(sh)

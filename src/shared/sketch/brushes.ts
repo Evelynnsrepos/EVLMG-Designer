@@ -3,7 +3,8 @@ import { CANVAS_BLENDS, type BlendMode } from './blend'
 import { shiftColor } from './brushColor'
 import { CurveFill, PathSmoother } from './brushPath'
 import { applyCurve, hasRealPressure, type CurvePoint } from './pen'
-import { GRAINS, grainCanvas, imageTip, seeded, SHAPES, tipImage, type BrushGrain, type BrushShape } from './brushTextures'
+import { GRAINS, grainCanvas, imageMask, imageTip, seeded, SHAPES, tipImage, type BrushGrain, type BrushShape } from './brushTextures'
+import { GpuSurface, rgb, type DabLook } from './gpuPaint'
 
 /**
  * Brushes (v0.5, extended for Sketch Pro), with a Brush Library and Brush Studio:
@@ -122,6 +123,13 @@ export interface BrushSettings {
   rotation: 'follow' | 'random' | number
   /** 0..1 random extra turn of each stamp. */
   rotationJitter: number
+  /** 0.31: bend the shape image along the stroke as one strip, stretched over its length or repeated, instead of stamping it. */
+  ribbon?: 'off' | 'stretch' | 'tile'
+  /** 0.31: the shape image keeps its own light and dark: its greys shade the brush colour (darker below mid-grey, lighter above). */
+  shaded?: boolean
+  /** 0.31: images at the start and end of a ribbon (a bead, a band, a tip), as data URLs. */
+  capStart?: string | null
+  capEnd?: string | null
   /** Turn stamps with the pen's direction (azimuth). */
   azimuth: boolean
   /** Flip each stamp at random. */
@@ -306,6 +314,10 @@ export const BASE_BRUSH: BrushSettings = {
   roundness: 1,
   rotation: 'follow',
   rotationJitter: 0,
+  ribbon: 'off',
+  shaded: false,
+  capStart: null,
+  capEnd: null,
   azimuth: false,
   randomize: false,
   flipX: false,
@@ -410,6 +422,10 @@ export function normalizeSettings(b: Partial<BrushSettings>): BrushSettings {
     s[k] = Array.isArray(c) && c.length >= 2 && c.every((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y)) ? c.map((p) => ({ x: p.x, y: p.y })) : LINEAR()
   }
   s.shapeImage = typeof s.shapeImage === 'string' && s.shapeImage ? s.shapeImage : null
+  if (s.ribbon !== 'stretch' && s.ribbon !== 'tile') s.ribbon = 'off'
+  s.shaded = s.shaded === true
+  s.capStart = typeof s.capStart === 'string' && s.capStart ? s.capStart : null
+  s.capEnd = typeof s.capEnd === 'string' && s.capEnd ? s.capEnd : null
   s.grainImage = typeof s.grainImage === 'string' && s.grainImage ? s.grainImage : null
   s.count = Math.max(1, Math.round(s.count))
   s.minSize = Math.max(0.5, s.minSize)
@@ -451,6 +467,17 @@ export function isWet(b: BrushSettings): boolean {
   return b.dilution > 0 || b.pull > 0 || b.charge < 1 || b.grade > 0 || b.wetBlur > 0 || b.attack < 1
 }
 
+/** True when the brush's image keeps its own light and dark (needs a shape image). */
+export const isShaded = (b: BrushSettings) => !!b.shaded && !!b.shapeImage
+
+/** True when the brush bends its image along the stroke instead of stamping it. */
+export const isRibbon = (b: BrushSettings) => b.ribbon === 'stretch' || b.ribbon === 'tile'
+
+/** The light and dark of a brush image (opaque grey), or null. */
+export function imageShade(src: string | null | undefined): HTMLCanvasElement | null {
+  return (src && imageMask(src)?.shade) || null
+}
+
 /** True when each stamp gets its own colour (colour dynamics). */
 export function hasColorDynamics(b: BrushSettings): boolean {
   return !!(
@@ -469,7 +496,7 @@ export function hasColorDynamics(b: BrushSettings): boolean {
   )
 }
 
-const hasGrain = (b: BrushSettings) => !!b.grainImage || b.grain !== 'none'
+export const hasGrain = (b: BrushSettings) => !!b.grainImage || b.grain !== 'none'
 const isBlending = (b: BrushSettings) => b.renderMode === 'uniform-blending' || b.renderMode === 'intense-blending'
 
 /** The opacity a finished stroke is drawn with onto the layer. */
@@ -481,7 +508,9 @@ export function strokeAlpha(b: BrushSettings): number {
 /** How far paint can land from the stroke's path (px), for undo areas. */
 export function brushReach(b: BrushSettings): number {
   const grow = (1 + b.sizeJitter + b.scatter * Math.max(1, b.count)) * (1 + b.tiltSize * 2) * (1 + Math.max(0, b.speedSize))
-  return b.size * grow * Math.max(1, b.dual ? b.dualScale * (1 + b.dual.scatter) : 1) + 4
+  // shortcut: ribbon caps are counted as up to 3 brush sizes long; a much longer cap image could be cut off by undo.
+  const caps = isRibbon(b) && (b.capStart || b.capEnd) ? 3 : 1
+  return b.size * grow * caps * Math.max(1, b.dual ? b.dualScale * (1 + b.dual.scatter) : 1) + 4
 }
 
 // ---- Stamps -----------------------------------------------------------------
@@ -552,6 +581,20 @@ export function brushTip(b: BrushSettings): HTMLCanvasElement {
   return (b.shapeImage && imageTip(b.shapeImage, b.shapeInvert)) || tipImage(b.shapeImage ? 'round' : b.shape, b.hardness)
 }
 
+/** What every GPU dab of this brush looks like: its tip and moving grain. */
+export function dabLook(b: BrushSettings): DabLook {
+  const grain = b.grainMode === 'moving' && hasGrain(b) ? grainCanvas(b) : null
+  return {
+    tip: brushTip(b),
+    shade: isShaded(b) ? imageShade(b.shapeImage) : null,
+    filtering: b.shapeFiltering,
+    grain: grain && { image: grain, scale: b.grainScale, zoom: b.grainZoom, rotation: b.grainRotation, movement: b.grainMovement, filtering: b.grainFiltering },
+  }
+}
+
+/** Where stamps go: a Canvas 2D canvas or a GPU stroke texture. */
+type Surface = CanvasRenderingContext2D | GpuSurface
+
 /**
  * Stamps one stroke into an alpha mask. Keeps the distance travelled so taper
  * and spacing are right; `finish` replays all points once the end is known.
@@ -561,10 +604,10 @@ export class StrokeStamper {
   protected points: Pt[] = []
   protected brush: BrushSettings
   protected mirror: (p: { x: number; y: number }) => { x: number; y: number }[]
-  protected out: CanvasRenderingContext2D
+  protected out: Surface
   /** Where final stamps go: `out` itself, or a canvas of its own when the output is assembled. */
-  protected main: CanvasRenderingContext2D
-  private tail: CanvasRenderingContext2D | null = null
+  protected main: Surface
+  private tail: Surface | null = null
   private tailRect: Rect | null = null
   private second: StrokeStamper | null = null
   private dirty: Rect | null = null
@@ -580,7 +623,7 @@ export class StrokeStamper {
   protected colored: boolean
 
   constructor(
-    ctx: CanvasRenderingContext2D,
+    ctx: Surface,
     brush: BrushSettings,
     mirror: (p: { x: number; y: number }) => { x: number; y: number }[] = (p) => [p],
     seed = Math.floor(Math.random() * 1e9),
@@ -597,12 +640,14 @@ export class StrokeStamper {
     const r = seeded(this.seed ^ 0x5bd1e995)
     const j = (amount: number) => (amount ? (r() * 2 - 1) * amount : 0)
     this.strokeColor = shiftColor(color, j(brush.strokeHueJitter), j(brush.strokeSatJitter), j(brush.strokeBrightJitter))
-    this.colored = forceColor || hasColorDynamics(brush)
-    const animate = brush.tipAnimation && (brush.taperEnd > 0 || brush.touchTaperEnd > 0)
-    this.main = animate || brush.dual ? makeCanvas(ctx.canvas.width, ctx.canvas.height).getContext('2d')! : ctx
-    if (animate) this.tail = makeCanvas(ctx.canvas.width, ctx.canvas.height).getContext('2d')!
+    this.colored = forceColor || hasColorDynamics(brush) || isShaded(brush)
+    const animate = brush.tipAnimation && (brush.taperEnd > 0 || brush.touchTaperEnd > 0) && !isRibbon(brush)
+    const like = (role: string) => (ctx instanceof GpuSurface ? ctx.like(role) : makeCanvas(ctx.canvas.width, ctx.canvas.height).getContext('2d')!)
+    if (ctx instanceof GpuSurface) ctx.look = dabLook(brush)
+    this.main = animate || brush.dual ? like('stroke-main') : ctx
+    if (animate) this.tail = like('stroke-tail')
     if (brush.dual) {
-      const second = makeCanvas(ctx.canvas.width, ctx.canvas.height).getContext('2d')!
+      const second = like('stroke-second')
       const d = { ...brush.dual, size: brush.size * brush.dualScale, dual: null, tipAnimation: false, stabilization: 0, motionFilter: 0 }
       this.second = new StrokeStamper(second, d, mirror, this.seed + 7, this.strokeColor, this.colored)
     }
@@ -640,6 +685,11 @@ export class StrokeStamper {
   finish() {
     for (const q of [...this.smoother.flush().flatMap((q) => this.curve.push(q)), ...this.curve.flush()]) this.push(q, false)
     this.second?.finish()
+    if (isRibbon(this.brush)) {
+      this.drawRibbon(this.pathLength, this.main)
+      this.compose()
+      return
+    }
     if (!this.endTaper() || this.points.length < 2) {
       this.cursor = this.run(this.cursor, Infinity, Infinity, this.main)
     } else if (this.tail) {
@@ -659,6 +709,11 @@ export class StrokeStamper {
     this.points.push(p)
     this.second?.push(p, live)
     if (!live) return
+    if (isRibbon(this.brush)) {
+      this.drawRibbon(Infinity, this.main)
+      this.compose()
+      return
+    }
     if (this.tail && this.endTaper()) {
       // Stamps far enough from the pen are final; the rest is redrawn on the tail each time.
       this.cursor = this.run(this.cursor, Infinity, this.pathLength - this.endTaper(), this.main)
@@ -716,6 +771,11 @@ export class StrokeStamper {
     const w = Math.min(this.out.canvas.width, Math.ceil(box.x1)) - x
     const h = Math.min(this.out.canvas.height, Math.ceil(box.y1)) - y
     if (w <= 0 || h <= 0) return
+    if (this.out instanceof GpuSurface) {
+      const op = this.second ? DUAL_MODES.find((m) => m.id === this.brush.dualMode)!.op : 'source-over'
+      this.out.assemble({ x, y, w, h }, this.main as GpuSurface, this.tail as GpuSurface | null, (this.second?.out as GpuSurface | undefined) ?? null, op)
+      return
+    }
     const o = this.out
     o.save()
     o.beginPath()
@@ -724,11 +784,11 @@ export class StrokeStamper {
     o.globalAlpha = 1
     o.globalCompositeOperation = 'source-over'
     o.clearRect(x, y, w, h)
-    o.drawImage(this.main.canvas, x, y, w, h, x, y, w, h)
-    if (this.tail) o.drawImage(this.tail.canvas, x, y, w, h, x, y, w, h)
+    o.drawImage((this.main as CanvasRenderingContext2D).canvas, x, y, w, h, x, y, w, h)
+    if (this.tail) o.drawImage((this.tail as CanvasRenderingContext2D).canvas, x, y, w, h, x, y, w, h)
     if (this.second) {
       o.globalCompositeOperation = DUAL_MODES.find((m) => m.id === this.brush.dualMode)!.op
-      o.drawImage(this.second.out.canvas, x, y, w, h, x, y, w, h)
+      o.drawImage((this.second.out as CanvasRenderingContext2D).canvas, x, y, w, h, x, y, w, h)
     }
     o.restore()
   }
@@ -737,7 +797,7 @@ export class StrokeStamper {
    * Stamp along the points from `c`, stopping before the first stamp past
    * `limit`. Returns where it stopped, so stamping can go on from there.
    */
-  private run(c: Cursor, total: number, limit: number, to: CanvasRenderingContext2D): Cursor {
+  private run(c: Cursor, total: number, limit: number, to: Surface): Cursor {
     const pts = this.points
     if (!pts.length) return c
     let { i, t, dist } = c
@@ -812,7 +872,7 @@ export class StrokeStamper {
     return Math.max(0.4, size * this.brush.spacing * (1 + (this.rand() - 0.5) * 2 * this.brush.spacingJitter))
   }
 
-  private stampPoint(p: Pt, angle: number, at: number, total: number, to: CanvasRenderingContext2D) {
+  private stampPoint(p: Pt, angle: number, at: number, total: number, to: Surface) {
     const b = this.brush
     const { pressure, tilt, speed } = this.inputs(p)
     const k = this.taper(at, total)
@@ -857,8 +917,104 @@ export class StrokeStamper {
     }
   }
 
+  private ribbonBox: Rect | null = null
+
+  /**
+   * Ribbon mode: the shape image bent along the whole stroke as one strip, as wide as the brush (pressure and
+   * taper included), redrawn as the stroke grows. 'stretch' spreads the image over the stroke, 'tile' repeats it
+   * every image length without seams. Cap images go on the two ends.
+   */
+  private drawRibbon(total: number, to: Surface) {
+    const b = this.brush
+    const pts = this.points
+    const old = this.ribbonBox
+    if (old) {
+      to.clearRect(old.x0, old.y0, old.x1 - old.x0, old.y1 - old.y0)
+      this.grow(old)
+    }
+    this.ribbonBox = null
+    if (pts.length < 2) return
+    const tip = brushTip(b)
+    const tileLen = Math.max(1, (b.size * tip.width) / tip.height)
+    const length = Number.isFinite(total) ? total : this.pathLength
+    const verts: number[] = []
+    const box = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity }
+    const halves: number[] = []
+    let at = 0
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i]
+      if (i) at += Math.hypot(p.x - pts[i - 1].x, p.y - pts[i - 1].y)
+      const a = pts[Math.max(0, i - 1)]
+      const c = pts[Math.min(pts.length - 1, i + 1)]
+      const dl = Math.hypot(c.x - a.x, c.y - a.y) || 1
+      const nx = -(c.y - a.y) / dl
+      const ny = (c.x - a.x) / dl
+      const half = this.sizeAt(p, at, total) / 2
+      halves.push(half)
+      const k = this.taper(at, total)
+      const alpha = clamp01(b.flow * lerp(1, Math.max(0.02, this.inputs(p).pressure), b.pressureOpacity) * lerp(1, b.taperTip + (1 - b.taperTip) * k, b.taperOpacity))
+      const u = b.ribbon === 'tile' ? at / tileLen : at / Math.max(1, length)
+      verts.push(p.x + nx * half, p.y + ny * half, u, 0, alpha, p.x - nx * half, p.y - ny * half, u, 1, alpha)
+      box.x0 = Math.min(box.x0, p.x - half)
+      box.y0 = Math.min(box.y0, p.y - half)
+      box.x1 = Math.max(box.x1, p.x + half)
+      box.y1 = Math.max(box.y1, p.y + half)
+    }
+    const color = this.colored ? this.strokeColor : null
+    const shade = isShaded(b) ? imageShade(b.shapeImage) : null
+    // One strip per mirror copy (symmetry); mirroring each point also records how far the stroke reaches.
+    const strips: number[][] = []
+    for (let i = 0; i < verts.length; i += 5)
+      this.mirror({ x: verts[i], y: verts[i + 1] }).forEach((m, k) => {
+        ;(strips[k] ??= []).push(m.x, m.y, verts[i + 2], verts[i + 3], verts[i + 4])
+        box.x0 = Math.min(box.x0, m.x)
+        box.y0 = Math.min(box.y0, m.y)
+        box.x1 = Math.max(box.x1, m.x)
+        box.y1 = Math.max(box.y1, m.y)
+      })
+    for (const strip of strips) {
+      if (to instanceof GpuSurface) to.ribbon(Float32Array.from(strip), { image: tip, shade, repeat: b.ribbon === 'tile', filtering: b.shapeFiltering, color: color ? rgb(color) : null })
+      else ribbon2d(to, strip, painted(tip, shade, color), b.ribbon === 'tile')
+    }
+    // Caps: centred on the ends, turned to point out of the stroke, as tall as the ribbon is wide there.
+    const n = pts.length - 1
+    const caps: [string | null | undefined, number, number, number][] = [
+      [b.capStart, 0, 1, halves[0]],
+      [b.capEnd, n, n - 1, halves[n]],
+    ]
+    for (const [src, i, j, half] of caps) {
+      const img = src ? imageTip(src, false) : null
+      if (!img) continue
+      const h = Math.max(1, half * 2)
+      const w = (h * img.width) / img.height
+      const capShade = isShaded(b) ? imageShade(src) : null
+      const ends = this.mirror(pts[i])
+      this.mirror(pts[j]).forEach((q, k) => {
+        const e = ends[k]
+        if (!e) return
+        const rot = Math.atan2(e.y - q.y, e.x - q.x)
+        if (to instanceof GpuSurface) to.stamp(img, capShade, { x: e.x, y: e.y, size: h, rot, sx: w / h, sy: 1, alpha: 1, at: 0, color: color ? rgb(color) : null })
+        else {
+          to.save()
+          to.translate(e.x, e.y)
+          to.rotate(rot)
+          to.drawImage(painted(img, capShade, color), -w / 2, -h / 2, w, h)
+          to.restore()
+        }
+        const r = Math.max(w, h)
+        box.x0 = Math.min(box.x0, e.x - r)
+        box.y0 = Math.min(box.y0, e.y - r)
+        box.x1 = Math.max(box.x1, e.x + r)
+        box.y1 = Math.max(box.y1, e.y + r)
+      })
+    }
+    this.ribbonBox = { x0: box.x0 - 2, y0: box.y0 - 2, x1: box.x1 + 2, y1: box.y1 + 2 }
+    this.grow(this.ribbonBox)
+    if (to instanceof GpuSurface) to.mark({ x: box.x0 - 2, y: box.y0 - 2, w: box.x1 - box.x0 + 4, h: box.y1 - box.y0 + 4 })
+  }
+
   /** Mark the area a stamp covers, so only that part is assembled. */
-  protected touch(x: number, y: number, size: number, to: CanvasRenderingContext2D) {
+  protected touch(x: number, y: number, size: number, to: Surface) {
     const r = size * 0.75 + 2
     const box = { x0: x - r, y0: y - r, x1: x + r, y1: y + r }
     this.grow(box)
@@ -884,6 +1040,19 @@ export class StrokeStamper {
     g.globalCompositeOperation = 'copy'
     smoothing(g, b.shapeFiltering)
     g.drawImage(tip, 0, 0, s, s)
+    if (d.color) {
+      g.globalCompositeOperation = 'source-in'
+      g.fillStyle = d.color
+      g.fillRect(0, 0, s, s)
+      const shade = isShaded(b) ? imageShade(b.shapeImage) : null
+      if (shade) {
+        // The image's greys shade the colour (hard light), then the tip's shape is cut out again.
+        g.globalCompositeOperation = 'hard-light'
+        g.drawImage(shade, 0, 0, s, s)
+        g.globalCompositeOperation = 'destination-in'
+        g.drawImage(tip, 0, 0, s, s)
+      }
+    }
     if (moving) {
       const grain = grainCanvas(b)
       if (grain) {
@@ -896,16 +1065,19 @@ export class StrokeStamper {
         g.fillRect(0, 0, s, s)
       }
     }
-    if (d.color) {
-      g.globalCompositeOperation = 'source-in'
-      g.fillStyle = d.color
-      g.fillRect(0, 0, s, s)
-    }
     g.restore()
     return { image: this.dabBuf, w: s, h: s }
   }
 
-  protected drawDab(d: Dab, to: CanvasRenderingContext2D) {
+  protected drawDab(d: Dab, to: Surface) {
+    if (to instanceof GpuSurface) {
+      const color = d.color ? rgb(d.color) : null
+      for (const m of this.mirror({ x: d.x, y: d.y })) {
+        to.dab({ x: m.x, y: m.y, size: d.size, rot: d.rot, sx: d.sx, sy: d.round * d.sy, alpha: d.alpha, at: d.at, color })
+        this.touch(m.x, m.y, d.size, to)
+      }
+      return
+    }
     const { image, w, h } = this.dabImage(d)
     to.globalAlpha = d.alpha
     smoothing(to, this.brush.shapeFiltering)
@@ -919,6 +1091,64 @@ export class StrokeStamper {
       this.touch(m.x, m.y, d.size, to)
     }
     to.globalAlpha = 1
+  }
+}
+
+/** An image (white alpha mask) in a colour, shaded by `shade`'s greys; the mask itself without a colour. */
+function painted(img: HTMLCanvasElement, shade: HTMLCanvasElement | null, color: string | null): HTMLCanvasElement {
+  if (!color) return img
+  const c = makeCanvas(img.width, img.height)
+  const g = c.getContext('2d')!
+  g.drawImage(img, 0, 0)
+  g.globalCompositeOperation = 'source-in'
+  g.fillStyle = color
+  g.fillRect(0, 0, c.width, c.height)
+  if (shade) {
+    g.globalCompositeOperation = 'hard-light'
+    g.drawImage(shade, 0, 0, c.width, c.height)
+    g.globalCompositeOperation = 'destination-in'
+    g.drawImage(img, 0, 0)
+  }
+  return c
+}
+
+/**
+ * Canvas 2D ribbon: each quad of the strip is two triangles, each filled with the image under the affine
+ * transform that maps its image corners onto it. Slower than the GPU strip, same picture apart from faint seams.
+ */
+function ribbon2d(ctx: CanvasRenderingContext2D, v: number[], img: HTMLCanvasElement, repeat: boolean) {
+  const W = img.width
+  const H = img.height
+  const pattern = ctx.createPattern(img, repeat ? 'repeat-x' : 'no-repeat')
+  if (!pattern) return
+  const tri = (i: number, j: number, k: number) => {
+    const [x0, y0, u0, v0, a0] = v.slice(i * 5, i * 5 + 5)
+    const [x1, y1, u1, v1, a1] = v.slice(j * 5, j * 5 + 5)
+    const [x2, y2, u2, v2, a2] = v.slice(k * 5, k * 5 + 5)
+    // Image space (u·W, v·H) to canvas space.
+    const sx0 = u0 * W, sy0 = v0 * H, sx1 = u1 * W, sy1 = v1 * H, sx2 = u2 * W, sy2 = v2 * H
+    const det = (sx1 - sx0) * (sy2 - sy0) - (sx2 - sx0) * (sy1 - sy0)
+    if (!det) return
+    const a = ((x1 - x0) * (sy2 - sy0) - (x2 - x0) * (sy1 - sy0)) / det
+    const c = ((x2 - x0) * (sx1 - sx0) - (x1 - x0) * (sx2 - sx0)) / det
+    const b = ((y1 - y0) * (sy2 - sy0) - (y2 - y0) * (sy1 - sy0)) / det
+    const d = ((y2 - y0) * (sx1 - sx0) - (y1 - y0) * (sx2 - sx0)) / det
+    ctx.save()
+    ctx.beginPath()
+    ctx.moveTo(x0, y0)
+    ctx.lineTo(x1, y1)
+    ctx.lineTo(x2, y2)
+    ctx.closePath()
+    ctx.clip()
+    ctx.globalAlpha = (a0 + a1 + a2) / 3
+    ctx.transform(a, b, c, d, x0 - a * sx0 - c * sy0, y0 - b * sx0 - d * sy0)
+    ctx.fillStyle = pattern
+    ctx.fillRect(Math.min(sx0, sx1, sx2) - 1, -1, Math.abs(Math.max(sx0, sx1, sx2) - Math.min(sx0, sx1, sx2)) + 2, H + 2)
+    ctx.restore()
+  }
+  for (let i = 0; i + 3 < v.length / 5; i += 2) {
+    tri(i, i + 1, i + 2)
+    tri(i + 1, i + 3, i + 2)
   }
 }
 
@@ -959,7 +1189,7 @@ export function colorStroke(mask: HTMLCanvasElement, out: CanvasRenderingContext
   out.globalAlpha = 1
   out.clearRect(0, 0, W, H)
   out.drawImage(mask, 0, 0)
-  if (!hasColorDynamics(brush)) {
+  if (!hasColorDynamics(brush) && !isShaded(brush)) {
     out.globalCompositeOperation = 'source-in'
     out.fillStyle = color
     out.fillRect(0, 0, W, H)

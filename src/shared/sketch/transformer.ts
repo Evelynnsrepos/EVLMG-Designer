@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Id } from '@/core/model'
 import type { SketchEngine } from './engine'
+import type { Growth } from './growth'
 import { renderMesh, type Interpolation } from './meshRender'
 import { alphaBounds } from './selection'
 import type { Selector } from './selector'
@@ -96,10 +97,18 @@ export class Transformer {
   private show() {
     const piece = this.engine.floatingPiece
     if (!piece || !this.state || !this.out) return
+    // With a GPU the engine draws the mesh itself; the picture is only made when the pixels are dropped.
+    if (!this.engine.setFloatingMesh(this.state, this.interp)) this.bake()
+    this.changed()
+  }
+
+  /** Render the transformed pixels into a picture the engine can drop onto the layer. */
+  private bake() {
+    const piece = this.engine.floatingPiece
+    if (!piece || !this.state || !this.out) return
     renderMesh(piece, this.state, this.out.ctx, this.interp, !this.uploaded)
     this.uploaded = true
     this.engine.setFloatingView(this.out.canvas)
-    this.changed()
   }
 
   set(state: XfState) {
@@ -114,10 +123,28 @@ export class Transformer {
     else this.changed()
   }
 
+  /** Where the lifted pixels are now (their outer box), or null when nothing is lifted. */
+  get bounds() {
+    return this.active && this.state ? outerBounds(this.state) : null
+  }
+
+  /** The working area grew (0.31): the lifted pixels moved `g.left`, `g.top` in with everything else. */
+  grow(g: Growth) {
+    if (!this.state || !this.first) return
+    const move = (s: XfState): XfState => ({ ...transformState(s, [1, 0, 0, 1, g.left, g.top]), src: { ...s.src, x: s.src.x + g.left, y: s.src.y + g.top } })
+    this.state = move(this.state)
+    this.first = move(this.first)
+    this.out = this.engine.canvas()
+    this.uploaded = false
+    this.show()
+  }
+
   /** Drop the pixels where they are now (moving the selection along). */
   commit(sel: Selector | null): Id | null {
     if (!this.active) return this.reset()
     const s = this.state!
+    // Lost the GPU while moving: make the picture to drop the usual way.
+    if (this.engine.floatingOnGpu && !this.engine.gpuActive) this.bake()
     const id = this.engine.endMove()
     if (sel && id) {
       const first = this.first!

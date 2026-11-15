@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { flushAll, hasPendingSaves, scheduleSave } from './autosave'
+import { flushAll, flushOn, hasPendingSaves, IDLE_SAVE_MS, onWriting, scheduleSave } from './autosave'
 import { History } from './history'
 
 describe('autosave', () => {
@@ -52,5 +52,39 @@ describe('History', () => {
     expect(h.redo(1)).toBe(2)
     h.record(2)
     expect(h.canRedo).toBe(false)
+  })
+})
+
+describe('saving at good moments (0.31)', () => {
+  it('writes what waits for the safety-net timer when the window is left, and says when it writes', async () => {
+    const leave = new EventTarget()
+    const stop = flushOn(leave, ['blur'])
+    const states: boolean[] = []
+    const off = onWriting((w) => states.push(w))
+    let saved = 0
+    scheduleSave('test|moment', async () => void saved++, IDLE_SAVE_MS)
+    expect(saved).toBe(0)
+    leave.dispatchEvent(new Event('blur'))
+    await flushAll('test|')
+    expect(saved).toBe(1)
+    expect(states).toEqual([true, false])
+    off()
+    stop()
+  })
+})
+
+describe('drawing without a pause', () => {
+  afterEach(() => vi.useRealTimers())
+  it('still saves a minute after the first unsaved change', async () => {
+    vi.useFakeTimers()
+    const run = vi.fn(async () => {})
+    for (let t = 0; t < 59; t++) {
+      scheduleSave('busy', run, IDLE_SAVE_MS)
+      await vi.advanceTimersByTimeAsync(1000)
+    }
+    expect(run).not.toHaveBeenCalled()
+    scheduleSave('busy', run, IDLE_SAVE_MS)
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(run).toHaveBeenCalledTimes(1)
   })
 })

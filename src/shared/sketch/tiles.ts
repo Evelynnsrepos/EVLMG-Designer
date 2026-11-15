@@ -5,6 +5,9 @@
  */
 
 export const TILE = 256
+
+/** A name for an undo step that stays unique across sessions (its saved file). */
+const stepId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 export const MAX_UNDO = 250
 /** Memory for undo pixels; the oldest steps go first when it is full. */
 export const UNDO_BUDGET = 768 * 1024 * 1024
@@ -55,6 +58,8 @@ export interface TilePatch {
 }
 
 export interface UndoStep {
+  /** 0.31: names the step's file in the saved history; given when the step is made. */
+  id?: string
   layerId: string
   tiles: TilePatch[]
   bytes: number
@@ -94,7 +99,7 @@ export class TileHistory {
     if (!tiles.length) return false
     const bytes = tiles.reduce((n, t) => n + t.before.data.byteLength * 2, 0)
     this.pushes++
-    this.undoStack.push({ layerId, tiles, bytes })
+    this.undoStack.push({ id: stepId(), layerId, tiles, bytes })
     this.bytes += bytes
     for (const s of this.redoStack) this.bytes -= s.bytes
     this.redoStack = []
@@ -117,7 +122,7 @@ export class TileHistory {
   pushSelection(before: HTMLCanvasElement | null, after: HTMLCanvasElement | null) {
     const bytes = after ? after.width * after.height * 4 : 0
     this.pushes++
-    this.undoStack.push({ layerId: '', tiles: [], bytes, sel: { before, after } })
+    this.undoStack.push({ id: stepId(), layerId: '', tiles: [], bytes, sel: { before, after } })
     this.bytes += bytes
     for (const s of this.redoStack) this.bytes -= s.bytes
     this.redoStack = []
@@ -127,7 +132,7 @@ export class TileHistory {
   /** A step that only changes the layer list (no pixels changed). */
   pushMeta(layerId: string, meta: unknown) {
     this.pushes++
-    this.undoStack.push({ layerId, tiles: [], bytes: 0, meta })
+    this.undoStack.push({ id: stepId(), layerId, tiles: [], bytes: 0, meta })
     for (const s of this.redoStack) this.bytes -= s.bytes
     this.redoStack = []
     if (this.undoStack.length > this.maxSteps) this.bytes -= this.undoStack.shift()!.bytes
@@ -143,6 +148,35 @@ export class TileHistory {
     const s = this.redoStack.pop()
     if (s) this.undoStack.push(s)
     return s
+  }
+
+  /**
+   * The working area grew (0.31): every step's tiles move by (dx, dy), and `pad` turns each kept selection mask
+   * into one of the new size. Pixels are unchanged, so the steps still undo exactly.
+   */
+  shift(dx: number, dy: number, pad: (c: HTMLCanvasElement | null) => HTMLCanvasElement | null, mapMeta: (m: unknown) => unknown = (m) => m) {
+    const padded = new Map<HTMLCanvasElement | null, HTMLCanvasElement | null>([[null, null]])
+    const once = (c: HTMLCanvasElement | null) => {
+      if (!padded.has(c)) padded.set(c, pad(c))
+      return padded.get(c)!
+    }
+    for (const s of [...this.undoStack, ...this.redoStack]) {
+      for (const t of s.tiles) t.rect = { ...t.rect, x: t.rect.x + dx, y: t.rect.y + dy }
+      if (s.sel) s.sel = { before: once(s.sel.before), after: once(s.sel.after) }
+      if (s.meta) s.meta = mapMeta(s.meta)
+    }
+  }
+
+  /** The steps, for saving (0.31): undo oldest first, redo with the next one last. */
+  get stacks(): { undo: readonly UndoStep[]; redo: readonly UndoStep[] } {
+    return { undo: this.undoStack, redo: this.redoStack }
+  }
+
+  /** Put back steps saved in an earlier session. */
+  load(undo: UndoStep[], redo: UndoStep[]) {
+    this.undoStack = undo
+    this.redoStack = redo
+    this.bytes = [...undo, ...redo].reduce((n, s) => n + s.bytes, 0)
   }
 
   dropLayer(layerId: string) {

@@ -97,6 +97,13 @@ export class Selector {
     this.changed()
   }
 
+  /** The working area grew: redraw the outline from the engine's moved mask. */
+  refresh() {
+    const mask = this.engine.selectionMask
+    this.edges = mask ? edgePath(mask) : ''
+    this.changed()
+  }
+
   /** Pick up the selection undo or redo put back on the engine. */
   sync() {
     if (!this.engine.selectionRestored) return

@@ -81,6 +81,12 @@ Ids are random strings (`newId()` in [`core/model/ids.ts`](../src/core/model/ids
 
 Plugin tools use the type `plugin.<plugin id>` and store their documents the same way ([PLUGINS.md](PLUGINS.md)).
 
+**Draw past the canvas (v0.31):** a `sketch` document may have an optional `frame` (`{ x, y, w, h }`): the canvas the person picked, inside a working area of `width` × `height` that grew because paint or moved pixels went past its edges. Layer PNGs are saved at the working size; exports are cut to the frame. Missing `frame` means the whole working area is the canvas. Older versions and the mobile app before its submodule bump ignore it and show the whole working area as the picture.
+
+**Undo history between sessions (v0.31)** lives in `.history/` (Pixel Art: `.history/pixel-art/<id>.json`; Draw: `.history/sketch/<id>/index.json` plus one compressed file of changed tiles per step). It stays on this computer: git sync, project zips and rolling backups leave it out, and the document files are unchanged. A history that no longer matches its document is ignored.
+
+**Brushes** are not in the project: they live in the app's brush library and in `.egdbrush` files, as `BrushSettings` ([`shared/sketch/brushes.ts`](../src/shared/sketch/brushes.ts)). v0.31 added the optional `ribbon` (`'off'`, `'stretch'`, `'tile'`), `shaded` and `capStart`/`capEnd` (image data URLs); missing means off. A see-through shape image is now stored with its greys (alpha = shape, grey = light and dark) instead of as a grey mask. The mobile app shows these only after its EVLMG Designer submodule is bumped to v0.31; older versions ignore the fields and stamp the image as before.
+
 ## Rules for changing the format
 
 1. **Add, don't change.** New fields are optional (`field?: …`) and the code works when they are missing. Old files, teammates on an older version and the mobile app (which reuses this code at a pinned version) must keep opening the project.

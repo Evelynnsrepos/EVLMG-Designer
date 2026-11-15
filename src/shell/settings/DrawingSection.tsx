@@ -7,6 +7,9 @@ const T = {
   title: 'Drawing speed',
   graphics: 'Graphics',
   software: 'Drawing without the graphics card: drawing on big pictures will be slow.',
+  engine: 'Painting engine',
+  engineGpu: 'graphics card',
+  engineCpu: 'Canvas 2D (without the graphics card)',
   run: 'Run drawing test',
   running: (n: number, of: number) => `Testing ${n} of ${of}…`,
   hint: 'Paints the same stroke on three test pictures and times every pen move. Takes about a minute; nothing is saved or sent.',
@@ -66,6 +69,11 @@ export function DrawingSection() {
           </button>
         )}
       </div>
+      {results.length > 0 && !step && (
+        <p>
+          <span className="muted">{T.engine}:</span> {results.every((r) => r.gpu) ? T.engineGpu : T.engineCpu}
+        </p>
+      )}
       {results.map((r) => (
         <p key={r.name}>
           <strong>{r.name}</strong> <span className="muted">· {r.avgMs.toFixed(1)} ms average · {r.p95Ms.toFixed(1)} ms slowest 5% · {r.slow} of {r.moves} moves too slow</span>

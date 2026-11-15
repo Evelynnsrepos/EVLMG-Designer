@@ -42,7 +42,7 @@ let networkMs = NETWORK_MS
 const CLOSE_PUSH_MS = 30_000
 const WARN_BYTES = 50 * 1024 * 1024
 const MAX_BYTES = 100 * 1024 * 1024
-const IGNORED = ['.backups/', 'collab/']
+const IGNORED = ['.backups/', 'collab/', '.history/']
 
 let runner: GitRunner = async (cwd, args, timeoutMs, input) => {
   const { invoke } = await import('@tauri-apps/api/core')
@@ -217,7 +217,7 @@ const branch = (root: string) => must(root, ['symbolic-ref', '--short', 'HEAD'])
 export async function commitAll(root: string): Promise<boolean> {
   await ensureGitignore(root)
   // Ones already committed earlier (by hand) leave the repository too; the files stay on disk.
-  await must(root, ['rm', '-r', '-q', '--cached', '--ignore-unmatch', '--', ':(top,glob)**/.backups/**', ':(top,glob)**/collab/**'])
+  await must(root, ['rm', '-r', '-q', '--cached', '--ignore-unmatch', '--', ':(top,glob)**/.backups/**', ':(top,glob)**/collab/**', ':(top,glob)**/.history/**'])
   await must(root, ['add', '-A'])
   if ((await git(root, ['diff', '--cached', '--quiet'])).code === 0) return false
   // Commits need a name; people who never set one up in git get the app's.

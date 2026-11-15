@@ -94,6 +94,8 @@ export interface LayerHost {
   /** v0.17: change the layer list as one undo step together with the pixel edit just made on `layerId`. */
   restructure(layers: SketchLayer[], layerId: Id, pushesBefore: number): void
   limit: number
+  /** The layer the Layer picker points at, highlighted in the list. */
+  pointedId?: Id | null
   title: string
   color: string
   /** Select where a canvas has pixels. */
@@ -397,7 +399,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
           return (
             <div
               key={l.id}
-              className={`sketch-layer${isActive ? ' is-active' : ''}${picked.has(l.id) ? ' is-picked' : ''}${l.clip ? ' is-clip' : ''}${dropClass}`}
+              className={`sketch-layer${isActive ? ' is-active' : ''}${picked.has(l.id) ? ' is-picked' : ''}${l.id === host.pointedId ? ' is-pointed' : ''}${l.clip ? ' is-clip' : ''}${dropClass}`}
               style={{ paddingLeft: 4 + depth * 14 }}
               draggable
               onPointerDownCapture={dragFromRowOnly}
@@ -434,7 +436,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
                 >
                   {l.visible ? <Eye size={13} /> : <EyeOff size={13} />}
                 </button>
-                {isGroup(l) ? <Folder size={18} className="sketch-group-icon" /> : <Thumb engine={engine} id={l.id} version={engine.version} />}
+                {isGroup(l) ? <Folder size={18} className="sketch-group-icon" /> : <Thumb engine={engine} id={l.id} version={engine.layerVersion(l.id)} />}
                 {mask && (
                   <span
                     className={`sketch-mask-thumb${mask.id === host.activeId ? ' is-active' : ''}${mask.visible ? '' : ' is-off'}`}
@@ -448,7 +450,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
                       set(mask.id, { visible: !mask.visible })
                     }}
                   >
-                    <Thumb engine={engine} id={mask.id} version={engine.version} />
+                    <Thumb engine={engine} id={mask.id} version={engine.layerVersion(mask.id)} />
                   </span>
                 )}
                 <span className="sketch-layer-name">{l.name}</span>
@@ -541,13 +543,18 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
 function Thumb({ engine, id, version }: { engine: SketchEngine; id: Id; version: number }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
-    const c = ref.current
-    if (!c) return
-    const ctx = c.getContext('2d')!
-    ctx.clearRect(0, 0, c.width, c.height)
-    const src = engine.layerCanvas(id)
-    const s = Math.min(c.width / src.width, c.height / src.height)
-    ctx.drawImage(src, (c.width - src.width * s) / 2, (c.height - src.height * s) / 2, src.width * s, src.height * s)
+    // A moment after the layer changed, so a row of quick strokes redraws it once (shrunk on the GPU when there is one).
+    const t = setTimeout(() => {
+      const c = ref.current
+      if (!c) return
+      const ctx = c.getContext('2d')!
+      ctx.clearRect(0, 0, c.width, c.height)
+      const s = Math.min(c.width / engine.width, c.height / engine.height)
+      const w = Math.max(1, Math.round(engine.width * s))
+      const h = Math.max(1, Math.round(engine.height * s))
+      ctx.drawImage(engine.layerThumb(id, w, h), (c.width - w) / 2, (c.height - h) / 2, w, h)
+    }, 300)
+    return () => clearTimeout(t)
   }, [engine, id, version])
   return <canvas ref={ref} width={44} height={32} className="sketch-thumb" />
 }

@@ -1,21 +1,29 @@
 import type { Id } from '@/core/model'
 import { blendPixel, CANVAS_BLENDS, type BlendMode } from './blend'
-import { brushReach, colorStroke, compositeStroke, isWet, StrokeStamper, type BrushSettings } from './brushes'
+import { brushReach, colorStroke, compositeStroke, hasColorDynamics, hasGrain, isShaded, isWet, strokeAlpha, StrokeStamper, type BrushSettings } from './brushes'
+import { shiftColor } from './brushColor'
+import { grainCanvas } from './brushTextures'
 import { WetStamper } from './brushWet'
-import { canvas2dFirst, GlCompositor, parseHex, type GlLayer, type GlSource } from './gl'
-import { layerTree, type LayerNode } from './layers'
+import { GpuWetStamper } from './brushWetGpu'
+import { parseHex } from './gl'
+import { clip, GpuPainter, GpuSurface, rgb, type GpuLayer, type StrokeLook, type Tex } from './gpuPaint'
+import { layerTree, lockedInTree, shownInTree, type LayerNode } from './layers'
 import { mirrored, type InputPoint, type SketchDoc, type SketchLayer, type SymmetryMode } from './model'
 import { applyRelief } from './relief'
 import { runCpu } from './adjust/cpu'
-import { TileHistory, tilesIn, type Rect } from './tiles'
+import { pngOf } from './encode'
+import { frameOf, toFrame, type Growth } from './growth'
+import { buildMesh, outerBounds, type XfState } from './transform'
+import { TileHistory, tilesIn, type Rect, type UndoStep } from './tiles'
 
 /**
  * The raster painting engine behind SketchEditor: one offscreen canvas per
  * layer, a stroke buffer so a stroke never gets darker than its opacity
  * (overlapping dabs inside one stroke don't stack), clipping masks, alpha
  * lock, symmetry, a selection that clips painting, and tile-diff undo (250 steps).
- * Layers are blended on the GPU with every blend mode (Sketch Pro); without
- * WebGL2 they are blended in Canvas 2D.
+ * With a graphics card (0.31) layers live on the GPU too: strokes are painted, blended
+ * and shown there (gpuPaint.ts), and the Canvas 2D copy of a layer is brought up to
+ * date when the stroke ends. Without WebGL2 everything runs in Canvas 2D.
  */
 
 type Canvas2D = { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D }
@@ -46,8 +54,9 @@ type LayerStack = Pick<SketchDoc, 'layers' | 'backgroundColor'>
 export type DocMeta = { before: unknown[]; after: unknown[]; doc?: { before: object; after: object } }
 
 export class SketchEngine {
-  readonly width: number
-  readonly height: number
+  /** The working area (0.31: it can grow past the canvas the person picked, see growth.ts). */
+  width: number
+  height: number
   private layers = new Map<Id, Canvas2D>()
   private composite: Canvas2D
   private scratch: Canvas2D
@@ -63,12 +72,27 @@ export class SketchEngine {
   /** The stroke colored, ready to composite. */
   private paint: Canvas2D
   /** Pixels being moved with the Move tool, lifted off their layer. */
-  private floating: { layerId: Id; piece: Canvas2D; rects: Rect[]; before: ImageData[]; dx: number; dy: number; view?: HTMLCanvasElement | null } | null = null
+  private floating: { layerId: Id; piece: Canvas2D; rects: Rect[]; before: ImageData[]; dx: number; dy: number; view?: HTMLCanvasElement | null; mesh?: { state: XfState; mode: 0 | 1 | 2; box: Rect } | null } | null = null
   private history = new TileHistory()
   /** Bumped per layer whenever its pixels change, so the GPU only uploads changed layers. */
   private layerVersions = new Map<Id, number>()
-  private previewVersion = 0
-  private gpu: GlCompositor | null
+  private gpu: GpuPainter | null
+  /** Each layer's GPU texture and the layer version it holds. */
+  private texs = new Map<string, { t: Tex; version: number }>()
+  /** The stroke being painted on the GPU: its stamps, predicted points, and the layer with the stroke on it. */
+  private g: { surf: GpuSurface; pred: GpuSurface | null; predRect: Rect | null; preview: Tex; look: StrokeLook; layerId: Id; tiles: Map<string, Rect>; points: InputPoint[]; seed: number } | null = null
+  /** The GPU worked once here: after a reset it is tried again (a few times, at most once a second). */
+  private gpuRetry: { at: number; left: number } | null = null
+  /** What the GPU picture shows, so only changes are blended again. */
+  private onPicture: { layers: SketchLayer[]; background: string | null | undefined; withBackground: boolean; edits: number } | null = null
+  /** Part of the picture the GPU stroke changed since it was last blended. */
+  private gpuDirty: Rect | null = null
+  /** Counts lifts with the Move tool, so the GPU uploads each lifted piece once. */
+  private moves = 0
+  /** The part of the picture being blended right now (null = all of it). */
+  private composeRect: Rect | null = null
+  /** Bumped by every change that isn't the GPU stroke (CPU edits, moves, layer changes). */
+  private edits = 0
   private selPath: Path2D | null = null
   /** The selection as an alpha mask (soft edges allowed); null = everything. */
   private sel: Canvas2D | null = null
@@ -103,7 +127,91 @@ export class SketchEngine {
     this.composite = this.canvas()
     this.scratch = this.canvas()
     this.paint = this.canvas()
-    this.gpu = GlCompositor.create(width, height, colorSpace)
+    this.gpu = GpuPainter.create(width, height, colorSpace)
+    if (this.gpu) this.gpuRetry = { at: 0, left: 5 }
+  }
+
+  /** The canvas the GPU shows the picture on (the editor puts it under its overlay), or null. */
+  get view(): HTMLCanvasElement | null {
+    return this.gpuActive ? this.gpu!.canvas : null
+  }
+
+  /**
+   * Grow the working area (0.31): every layer, the selection, undo steps and lifted pixels move `g.left`, `g.top`
+   * in. Only between strokes. The GPU starts over at the new size (its textures fill from the layers again).
+   */
+  grow(g: Growth, mapMeta?: (m: unknown) => unknown) {
+    if (this.stroking || (g.width === this.width && g.height === this.height)) return
+    const pad = (c: HTMLCanvasElement | null) => {
+      if (!c) return null
+      const n = makeCanvas(g.width, g.height, this.colorSpace)
+      n.ctx.drawImage(c, g.left, g.top)
+      return n.canvas
+    }
+    this.width = g.width
+    this.height = g.height
+    for (const [id, c] of this.layers) {
+      const n = pad(c.canvas)!
+      this.layers.set(id, { canvas: n, ctx: n.getContext('2d')! })
+      this.layerVersions.set(id, (this.layerVersions.get(id) ?? 0) + 1)
+    }
+    const f = this.floating
+    if (f) {
+      const n = pad(f.piece.canvas)!
+      f.piece = { canvas: n, ctx: n.getContext('2d')! }
+      f.rects = f.rects.map((r) => ({ ...r, x: r.x + g.left, y: r.y + g.top }))
+      f.view = null
+      f.mesh = null
+    }
+    this.history.shift(g.left, g.top, pad, mapMeta)
+    if (this.selPath) {
+      const p = new Path2D()
+      p.addPath(this.selPath, new DOMMatrix().translateSelf(g.left, g.top))
+      this.selection = p
+    } else if (this.sel) this.selectionMask = pad(this.sel.canvas)
+    this.composite = this.canvas()
+    this.scratch = this.canvas()
+    this.paint = this.canvas()
+    this.pool = []
+    this.groupBases = []
+    this.adjustCache.clear()
+    this.maskCache.clear()
+    this.lastRender = null
+    this.livePreview = null
+    this.onPicture = null
+    this.gpuDirty = null
+    if (this.gpu && !this.gpu.lost) {
+      // The layers' GPU copies move along on the GPU: no new context, no shaders built again, nothing uploaded.
+      const ids = [...this.texs.keys()].filter((k) => this.layers.has(k))
+      for (const k of [...this.texs.keys()]) if (!this.layers.has(k)) this.gpu.free(this.texs.get(k)!.t)
+      const moved = this.gpu.resize(g, ids.map((k) => this.texs.get(k)!.t))
+      this.texs.clear()
+      ids.forEach((k, i) => this.texs.set(k, { t: moved[i], version: this.layerVersions.get(k) ?? 0 }))
+    } else this.texs.clear()
+    this.edits++
+    this.version++
+  }
+
+  /** Wait until the GPU has finished drawing (for timing it). */
+  finishGpu() {
+    this.gpu?.gl.finish()
+  }
+
+  /** Give the GPU memory back right away (the editor closed). */
+  destroy() {
+    this.gpu?.destroy()
+    this.gpu = null
+  }
+
+  /** The GPU failed or its context was lost: carry on in Canvas 2D (each layer's Canvas 2D copy is up to date). */
+  private gpuFailed() {
+    // The stroke being painted carries on in Canvas 2D, painted again from its points.
+    if (this.g) this.strokeToCpu()
+    this.gpu = null
+    this.texs.clear()
+    this.onPicture = null
+    this.edits++
+    this.version++
   }
 
   /** A blank canvas at document size in the document's colour space. */
@@ -121,14 +229,69 @@ export class SketchEngine {
     ctx.restore()
   }
 
-  /** True when layers are blended on the GPU. */
+  /** True when layers are painted and blended on the GPU. */
   get gpuActive() {
     return !!this.gpu && !this.gpu.lost
   }
 
+  private gpuFor(_doc: LayerStack) {
+    if (this.gpu?.lost) this.gpuFailed()
+    const r = this.gpuRetry
+    if (!this.gpu && r && r.left > 0 && performance.now() - r.at > 1000) {
+      // A reset GPU (driver restart, graphics switch, sleep) usually works again a moment later.
+      r.at = performance.now()
+      r.left--
+      this.gpu = GpuPainter.create(this.width, this.height, this.colorSpace)
+      if (this.gpu) {
+        r.left = 5
+        this.edits++
+        this.version++
+      }
+    }
+    return this.gpuActive
+  }
+
+  /** The GPU went away in the middle of a stroke: paint the stroke again in Canvas 2D (same points, same random numbers) and go on there. */
+  private strokeToCpu() {
+    const g = this.g!
+    const opts = this.strokeOpts
+    this.g = null
+    if (!opts) return
+    this.stroke = this.canvas()
+    this.strokeBounds = null
+    this.livePreview = null
+    this.stamper = this.newStamper(opts, g.seed)
+    for (const p of g.points) this.stamper.add(p)
+  }
+
+  /** A point with the time it arrived, so a stroke painted again comes out the same. */
+  private timed(p: InputPoint): InputPoint {
+    return (p as { time?: number }).time === undefined ? ({ ...p, time: performance.now() } as InputPoint) : p
+  }
+
   private touched(id: Id) {
+    this.painted.delete(id)
     this.layerVersions.set(id, (this.layerVersions.get(id) ?? 0) + 1)
+    this.edits++
     this.version++
+  }
+
+  /** A layer's pixels on the GPU, uploaded from its Canvas 2D copy when that changed. */
+  private tex(id: Id): Tex {
+    const gpu = this.gpu!
+    let e = this.texs.get(id)
+    if (!e) this.texs.set(id, (e = { t: gpu.target(), version: -1 }))
+    const v = this.layerVersions.get(id) ?? 0
+    if (e.version !== v) {
+      gpu.upload(e.t, this.ensure(id).canvas)
+      e.version = v
+    }
+    return e.t
+  }
+
+  /** Changes whenever this layer's saved pixels change (not while a stroke is still being drawn). */
+  layerVersion(id: Id): number {
+    return this.layerVersions.get(id) ?? 0
   }
 
   layerCanvas(id: Id): HTMLCanvasElement {
@@ -163,6 +326,11 @@ export class SketchEngine {
   }
 
   dropLayer(id: Id) {
+    for (const k of [id, `${id}:live`, `${id}:piece`]) {
+      this.gpu?.free(this.texs.get(k)?.t)
+      this.texs.delete(k)
+    }
+    this.edits++
     this.layers.delete(id)
     this.layerVersions.delete(id)
     this.history.dropLayer(id)
@@ -195,19 +363,145 @@ export class SketchEngine {
   }
 
   beginStroke(opts: StrokeOptions, p: InputPoint) {
-    this.stroke = this.canvas()
     this.predicted = null
     this.strokeOpts = opts
     this.strokeBounds = null
-    this.stamper = this.newStamper(opts)
+    this.g = null
+    this.stroke = null
+    const gpu = this.gpuActive ? this.gpu! : null
+    if (gpu) {
+      const surf = new GpuSurface(gpu, gpu.temp('stroke'))
+      gpu.clear(surf.t, null)
+      const preview = gpu.temp('preview')
+      gpu.copy(this.tex(opts.layer.id), preview, null)
+      const seed = Math.floor(Math.random() * 1e9)
+      p = this.timed(p)
+      this.g = { surf, pred: null, predRect: null, preview, look: this.strokeLook(opts), layerId: opts.layer.id, tiles: new Map(), points: [p], seed }
+      this.stamper = this.gpuStamper(opts, surf, seed)
+    } else {
+      this.stroke = this.canvas()
+      this.stamper = this.newStamper(opts)
+    }
     this.stamper.add(p)
     this.version++
   }
 
+  /** Wet brushes and the Smudge tool mix with the layer's pixels; other brushes stamp a mask. */
+  private gpuStamper(opts: StrokeOptions, surf: GpuSurface, seed?: number): StrokeStamper {
+    if (opts.smudge || (!opts.erase && isWet(opts.brush))) return new GpuWetStamper(surf, opts.brush, this.mirrorFor(opts), seed, opts.color, this.tex(opts.layer.id), !!opts.smudge)
+    return new StrokeStamper(surf, opts.brush, this.mirrorFor(opts), seed, opts.color)
+  }
+
+  /** The wet working copy, when the GPU stroke is wet paint or smudge. */
+  private get wetWork(): Tex | null {
+    return this.stamper instanceof GpuWetStamper ? this.stamper.work : null
+  }
+
+  /** colorStroke + compositeStroke's settings, for the GPU. */
+  private strokeLook(opts: StrokeOptions): StrokeLook {
+    const b = opts.brush
+    const gray = b.grainBlend !== 'alpha'
+    const grain = b.grainMode === 'texturized' && hasGrain(b) ? grainCanvas(b, gray ? 'gray' : 'alpha') : null
+    return {
+      color: rgb(opts.erase ? '#000000' : opts.color),
+      colored: hasColorDynamics(b) || isShaded(b),
+      grain: grain && { image: grain, gray, blend: (gray ? b.grainBlend : 'source-over') as BlendMode, scale: b.grainScale * (1 + (b.size / 40 - 1) * b.grainZoom), rotation: b.grainRotation, filtering: b.grainFiltering },
+      wetEdges: b.wetEdges,
+      burntEdges: b.burntEdges,
+      burntColor: rgb(shiftColor(opts.color, 0, 0.1, -0.35)),
+      edgeBlur: Math.max(1.5, b.size * 0.12),
+      alphaThreshold: b.alphaThreshold,
+      height: opts.erase ? 0 : b.height,
+      opacity: strokeAlpha(b),
+      erase: opts.erase,
+      alphaLock: opts.layer.alphaLock,
+      luminance: b.luminanceBlend,
+      blend: b.blend,
+    }
+  }
+
+  private growDirty(r: Rect | null) {
+    if (!r) return
+    const d = this.gpuDirty
+    if (!d) return void (this.gpuDirty = { ...r })
+    const x1 = Math.max(d.x + d.w, r.x + r.w)
+    const y1 = Math.max(d.y + d.h, r.y + r.h)
+    d.x = Math.min(d.x, r.x)
+    d.y = Math.min(d.y, r.y)
+    d.w = x1 - d.x
+    d.h = y1 - d.y
+  }
+
+  /** Paint what the GPU stroke stamped since last time onto its preview layer. */
+  private syncGpuStroke(final = false) {
+    const g = this.g
+    const opts = this.strokeOpts
+    if (!g || !opts) return
+    const p = g.pred?.takeChanged() ?? null
+    if (p) g.predRect = g.predRect ? union(g.predRect, p) : p
+    const changed = g.surf.takeChanged()
+    // Undo keeps (and reads back) only the tiles the stroke's stamps touched, not the whole box around it.
+    if (changed) for (const t of tilesIn(changed, this.width, this.height)) g.tiles.set(`${t.x},${t.y}`, t)
+    // At the end the last predicted points' area is painted again too, so none of them stay on the layer.
+    let r = final ? union(this.strokeArea(opts), g.predRect) : union(changed, p)
+    if (!r) return
+    // Wet and burnt edges and 3D paint look at the mask around a pixel, so a stamp changes a bit more.
+    const pad = final ? 0 : Math.ceil(Math.max(g.look.wetEdges || g.look.burntEdges ? g.look.edgeBlur * 3 : 0, g.look.height > 0 ? 6 : 0)) + 1
+    r = clip({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad }, this.width, this.height)
+    if (!r) return
+    this.gpu!.applyStroke(this.tex(g.layerId), g.surf.t, final ? null : (g.pred?.t ?? null), g.preview, g.look, r, this.sel?.canvas ?? null, this.wetWork)
+    this.growDirty(r)
+  }
+
   strokeTo(p: InputPoint) {
     if (!this.stamper) return
-    this.stamper.add(p)
+    if (this.g) {
+      if (this.gpu?.lost) this.gpuFailed()
+      else {
+        p = this.timed(p)
+        this.g.points.push(p)
+      }
+    }
+    this.stamper!.add(p)
     this.version++
+  }
+
+  /** The predicted points of a GPU stroke: stamped into their own texture, which is cleared again each time. */
+  private predictGpu(points: InputPoint[], from: InputPoint | null) {
+    const g = this.g!
+    const opts = this.strokeOpts!
+    const gpu = this.gpu!
+    if (g.pred && g.predRect) {
+      // Where the last guess was must be painted again without it.
+      g.pred.clearRect(g.predRect.x, g.predRect.y, g.predRect.w, g.predRect.h)
+      this.repaint(g.predRect)
+      g.predRect = null
+    }
+    if (!points.length) {
+      if (g.pred) this.version++
+      g.pred = null
+      return
+    }
+    if (!g.pred) {
+      g.pred = new GpuSurface(gpu, gpu.temp('pred'))
+      gpu.clear(g.pred.t, null)
+    }
+    const mirror = (q: { x: number; y: number }) => (opts.mirror ? opts.mirror(q) : mirrored(q, this.width, this.height, opts.symmetry))
+    const s = new StrokeStamper(g.pred, { ...opts.brush, dual: null, tipAnimation: false, stabilization: 0, motionFilter: 0 }, mirror, 3, opts.color)
+    if (from) s.add(from)
+    for (const p of points) s.add(p)
+    g.pred.flush()
+    this.version++
+  }
+
+  /** Paint the GPU stroke again inside `r` (after predicted points there went away). */
+  private repaint(r: Rect) {
+    const g = this.g!
+    const pad = Math.ceil(g.look.wetEdges || g.look.burntEdges ? g.look.edgeBlur * 3 : 0) + 8
+    const c = clip({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad }, this.width, this.height)
+    if (!c) return
+    this.gpu!.applyStroke(this.tex(g.layerId), g.surf.t, g.pred?.t ?? null, g.preview, g.look, c, this.sel?.canvas ?? null, this.wetWork)
+    this.growDirty(c)
   }
 
   /**
@@ -216,6 +510,7 @@ export class SketchEngine {
    * restroke throws them away, so they never reach the layer or undo.
    */
   predict(points: InputPoint[], from: InputPoint | null) {
+    if (this.g && this.strokeOpts) return this.wetWork ? undefined : this.predictGpu(points, from)
     if (!this.stroke || !this.strokeOpts || this.stamper instanceof WetStamper) return
     if (!points.length) {
       if (this.predicted) this.version++
@@ -235,6 +530,29 @@ export class SketchEngine {
 
   /** Replace the stroke being drawn with new points (QuickShape). */
   restroke(points: InputPoint[]) {
+    const g = this.g
+    if (g && this.strokeOpts) {
+      // Start the stroke over: its texture and preview go back to the plain layer where it was.
+      const old = union(this.strokeArea(this.strokeOpts), g.predRect)
+      const r = old && clip(old, this.width, this.height)
+      const gpu = this.gpu!
+      gpu.clear(g.surf.t, null)
+      g.surf.changed = null
+      if (g.pred) gpu.clear(g.pred.t, null)
+      g.pred = null
+      g.predRect = null
+      if (r) {
+        gpu.copy(this.tex(g.layerId), g.preview, r)
+        this.growDirty(r)
+      }
+      this.strokeBounds = null
+      g.points = points.map((p) => this.timed(p))
+      g.seed = 1
+      this.stamper = this.gpuStamper(this.strokeOpts, g.surf, 1)
+      for (const p of g.points) this.stamper.add(p)
+      this.version++
+      return
+    }
     if (!this.stroke || !this.strokeOpts) return
     this.stroke.ctx.clearRect(0, 0, this.width, this.height)
     this.predicted = null
@@ -298,12 +616,15 @@ export class SketchEngine {
   /** Finish the stroke: merge it into the layer and record undo. Returns the changed layer. */
   endStroke(): Id | null {
     const opts = this.strokeOpts
+    if (this.g && this.gpu?.lost) this.gpuFailed()
+    if (this.g && opts) return this.endGpuStroke(opts)
     if (!this.stroke || !opts) return null
     this.predicted = null
     this.stamper?.finish()
     const layer = this.ensure(opts.layer.id)
     const area = this.strokeArea(opts)
     this.withUndo(opts.layer.id, area, () => this.applyStroke(layer.ctx, opts))
+    if (!opts.erase && !opts.smudge) this.painted.add(opts.layer.id)
     this.stroke = null
     this.stamper = null
     this.strokeOpts = null
@@ -311,7 +632,53 @@ export class SketchEngine {
     return opts.layer.id
   }
 
+  /** The GPU stroke lands on its layer; the touched tiles are read back into the Canvas 2D copy and undo. */
+  private endGpuStroke(opts: StrokeOptions): Id | null {
+    const g = this.g!
+    const gpu = this.gpu!
+    const id = opts.layer.id
+    try {
+      this.stamper?.finish()
+      const area = this.strokeArea(opts)
+      const r = area && clip(area, this.width, this.height)
+      if (r && !gpu.lost) {
+        g.pred = null
+        this.syncGpuStroke(true)
+        // Touched tiles side by side are read and written as one strip: far fewer calls than tile by tile.
+        const rects = rowRuns(g.tiles.size ? [...g.tiles.values()] : tilesIn(r, this.width, this.height))
+        const before = this.snapshot(id, rects)
+        // The preview (layer + stroke) becomes the layer; the old texture is the next stroke's preview.
+        const e = this.texs.get(id)!
+        const old = e.t
+        e.t = g.preview
+        gpu.swapTemp('preview', old)
+        const ctx = this.ensure(id).ctx
+        // What the GPU painted is also undo's "after" (putting it back gives the same pixels), so it isn't read twice.
+        const after = rects.map((t) => gpu.read(e.t, t, this.colorSpace))
+        rects.forEach((t, i) => ctx.putImageData(after[i], t.x, t.y))
+        this.pushTiles(id, rects, before, after)
+        this.layerVersions.set(id, (this.layerVersions.get(id) ?? 0) + 1)
+        if (!opts.erase && !opts.smudge) this.painted.add(id)
+        e.version = this.layerVersions.get(id)!
+        this.growDirty(r)
+        this.version++
+      }
+    } catch {
+      this.gpuFailed()
+    }
+    this.g = null
+    this.stamper = null
+    this.strokeOpts = null
+    this.strokeBounds = null
+    return id
+  }
+
   cancelStroke() {
+    if (this.g && this.strokeOpts) {
+      const a = this.strokeArea(this.strokeOpts)
+      this.growDirty(a && clip(a, this.width, this.height))
+      this.g = null
+    }
     this.predicted = null
     this.stroke = null
     this.stamper = null
@@ -321,7 +688,7 @@ export class SketchEngine {
   }
 
   get stroking() {
-    return !!this.stroke
+    return !!this.stroke || !!this.g
   }
 
   // ---- Pixel edits ----------------------------------------------------------
@@ -341,8 +708,8 @@ export class SketchEngine {
   }
 
   /** Record a pixel step; it remembers the selection, so undoing the edit brings that selection back. */
-  private pushTiles(layerId: Id, rects: Rect[], before: ImageData[]) {
-    if (!this.history.push(layerId, rects, before, this.snapshot(layerId, rects))) return
+  private pushTiles(layerId: Id, rects: Rect[], before: ImageData[], after = this.snapshot(layerId, rects)) {
+    if (!this.history.push(layerId, rects, before, after)) return
     this.history.last!.sel = { before: this.selectionMask, after: this.selectionMask }
     this.freshPush = true
     queueMicrotask(() => (this.freshPush = false))
@@ -446,6 +813,7 @@ export class SketchEngine {
     } else layer.ctx.clearRect(0, 0, this.width, this.height)
     layer.ctx.restore()
     this.floating = { layerId, piece, rects, before, dx: 0, dy: 0 }
+    this.moves++
     this.touched(layerId)
   }
 
@@ -453,6 +821,7 @@ export class SketchEngine {
     if (!this.floating) return
     this.floating.dx = dx
     this.floating.dy = dy
+    this.edits++
     this.version++
   }
 
@@ -462,7 +831,22 @@ export class SketchEngine {
     if (!f) return null
     this.floating = null
     const layer = this.ensure(f.layerId)
-    if (!f.dx && !f.dy && !f.view) {
+    const live = this.texs.get(`${f.layerId}:live`)
+    if (f.mesh && live && this.gpuActive) {
+      // The GPU already shows the dropped pixels: they become the layer, and only where they landed is read back.
+      const gpu = this.gpu!
+      const r = clip(f.mesh.box, this.width, this.height)
+      if (r) layer.ctx.putImageData(gpu.read(live.t, r, this.colorSpace), r.x, r.y)
+      this.pushTiles(f.layerId, f.rects, f.before)
+      this.touched(f.layerId)
+      const e = this.texs.get(f.layerId)
+      if (e) {
+        gpu.copy(live.t, e.t, null)
+        e.version = this.layerVersions.get(f.layerId) ?? 0
+      }
+      return f.layerId
+    }
+    if (!f.dx && !f.dy && !f.view && !f.mesh) {
       f.rects.forEach((r, i) => layer.ctx.putImageData(f.before[i], r.x, r.y))
       this.touched(f.layerId)
       return null
@@ -487,7 +871,31 @@ export class SketchEngine {
   setFloatingView(view: HTMLCanvasElement | null) {
     if (!this.floating) return
     this.floating.view = view
+    this.floating.mesh = null
+    this.edits++
     this.version++
+  }
+
+  /**
+   * Show the lifted pixels through a transform (Move tool) on the GPU: only where they were and where they are now
+   * is drawn again. False without a GPU; the transformer then renders a picture for setFloatingView.
+   */
+  setFloatingMesh(state: XfState, interp: 'nearest' | 'bilinear' | 'bicubic'): boolean {
+    const f = this.floating
+    if (!f || !this.gpuActive) return false
+    const b = outerBounds(state)
+    const box = { x: b.x - 2, y: b.y - 2, w: b.w + 4, h: b.h + 4 }
+    this.growDirty(f.mesh ? union(f.mesh.box, box) : box)
+    if (!f.mesh) this.edits++
+    f.mesh = { state, mode: interp === 'nearest' ? 0 : interp === 'bilinear' ? 1 : 2, box }
+    f.view = null
+    this.version++
+    return true
+  }
+
+  /** True while the lifted pixels are only drawn on the GPU (dropping them needs a picture first). */
+  get floatingOnGpu() {
+    return !!this.floating?.mesh
   }
 
   /** Put the lifted pixels back where they were, without an undo step. */
@@ -616,6 +1024,22 @@ export class SketchEngine {
   get canUndo() {
     return this.history.canUndo
   }
+
+  /** The undo and redo steps, for saving them between sessions (0.31). */
+  get historyStacks() {
+    return this.history.stacks
+  }
+
+  /** Put back undo steps from an earlier session. */
+  loadHistory(undo: UndoStep[], redo: UndoStep[]) {
+    this.history.load(undo, redo)
+    this.version++
+  }
+
+  /** Pixels of part of a layer (its Canvas 2D copy), e.g. to check a saved undo step still fits. */
+  layerPixels(id: Id, r: Rect): ImageData {
+    return this.ensure(id).ctx.getImageData(r.x, r.y, r.w, r.h)
+  }
   get canRedo() {
     return this.history.canRedo
   }
@@ -668,9 +1092,20 @@ export class SketchEngine {
   render(doc: LayerStack, withBackground = true): HTMLCanvasElement {
     const last = this.lastRender
     if (last && last.layers === doc.layers && last.background === doc.backgroundColor && last.withBackground === withBackground && last.version === this.version) return last.canvas
+    if (this.gpuFor(doc)) {
+      // ponytail: the whole picture comes back from the GPU; only exports, merges and onion skins ask for it.
+      try {
+        this.toPicture(doc, withBackground)
+        this.composite.ctx.putImageData(this.gpu!.read(this.gpu!.picture, { x: 0, y: 0, w: this.width, h: this.height }, this.colorSpace), 0, 0)
+        this.lastRender = { layers: doc.layers, background: doc.backgroundColor, withBackground, version: this.version, canvas: this.composite.canvas }
+        return this.composite.canvas
+      } catch {
+        this.gpuFailed()
+      }
+    }
     // While a stroke is drawn and nothing else changed, only the stroke's area of the picture is redone.
     const area = last && last.canvas === this.composite.canvas && last.layers === doc.layers && last.background === doc.backgroundColor && last.withBackground === withBackground ? this.strokeOnlyArea(doc) : null
-    const canvas = area ? this.renderCanvas2d(doc, withBackground, area) : this.renderNow(doc, withBackground)
+    const canvas = this.renderCanvas2d(doc, withBackground, area ?? undefined)
     this.lastRender = { layers: doc.layers, background: doc.backgroundColor, withBackground, version: this.version, canvas }
     return canvas
   }
@@ -680,63 +1115,107 @@ export class SketchEngine {
    * this stroke. Not with adjustment layers or CPU-blended layers (they read and write the whole picture).
    */
   private strokeOnlyArea(doc: LayerStack): Rect | null {
-    if (!this.stroke || !this.strokeOpts || this.stamper instanceof WetStamper || this.livePreview?.stroke !== this.stroke || this.useGpu(doc)) return null
+    if (!this.stroke || !this.strokeOpts || this.stamper instanceof WetStamper || this.livePreview?.stroke !== this.stroke) return null
     if (doc.layers.some((l) => l.kind === 'adjust' || (l.visible && !CANVAS_BLENDS.has(l.blend)))) return null
     const area = this.strokeArea(this.strokeOpts)
     return area && clipRect(area, this.width, this.height)
   }
 
-  /** GPU or Canvas 2D, whichever is faster here for this picture. */
-  private useGpu(doc: LayerStack) {
-    // ponytail: adjustment layers run on the CPU, so a picture with one is blended in Canvas 2D; move them to GLSL if big canvases lag.
-    if (!this.gpu || this.gpu.lost || doc.layers.some((l) => l.kind === 'adjust')) return false
-    return !canvas2dFirst.value || doc.layers.some((l) => l.visible && !CANVAS_BLENDS.has(l.blend))
-  }
-
-  private renderNow(doc: LayerStack, withBackground: boolean): HTMLCanvasElement {
-    if (this.useGpu(doc)) {
-      try {
-        return this.renderGpu(doc, withBackground)
-      } catch {
-        this.gpu = null
-      }
+  /**
+   * Show the picture on the GPU's view canvas: `m` is the view matrix in CSS pixels, `w`×`h` the view's CSS size.
+   * Returns false when Canvas 2D has to draw it (no GPU, or adjustment layers).
+   */
+  draw(doc: LayerStack, m: [number, number, number, number, number, number], w: number, h: number, dpr: number, smooth: boolean, tint?: { id: Id; color: string } | null): boolean {
+    if (!this.gpuFor(doc)) return false
+    try {
+      this.toPicture(doc, true)
+      this.gpu!.present(m, w, h, dpr, smooth, tint && this.layers.has(tint.id) ? { tex: this.tex(tint.id), color: rgb(tint.color) } : null)
+      return true
+    } catch {
+      this.gpuFailed()
+      return false
     }
-    return this.renderCanvas2d(doc, withBackground)
   }
 
-  private renderGpu(doc: LayerStack, withBackground: boolean): HTMLCanvasElement {
+  /** Blend the layers into the GPU picture: only what the stroke changed, or everything after other changes. */
+  private toPicture(doc: LayerStack, withBackground: boolean) {
     const gpu = this.gpu!
-    const keys = new Set(doc.layers.map((l) => l.id))
-    const stack = this.glNodes(layerTree(doc.layers), keys)
-    gpu.prune(keys)
-    const bg = withBackground && doc.backgroundColor ? parseHex(doc.backgroundColor) : null
-    return gpu.render(stack, bg)
+    this.syncGpuStroke()
+    const s = this.onPicture
+    // Canvas 2D strokes (wet paint, smudge) and moved pixels come from the CPU each frame.
+    const live = !!this.stroke || (!!this.floating && !this.floating.mesh)
+    const full = live || !s || s.layers !== doc.layers || s.background !== doc.backgroundColor || s.withBackground !== withBackground || s.edits !== this.edits
+    const r = full ? null : this.gpuDirty && clip(this.gpuDirty, this.width, this.height)
+    this.composeRect = r
+    if (full || r) {
+      const keys = new Set<string>()
+      const stack = this.gpuNodes(layerTree(doc.layers), keys)
+      gpu.pruneGroups(keys)
+      gpu.compose(stack, withBackground && doc.backgroundColor ? parseHex(doc.backgroundColor) : null, r, (doc as { frame?: Rect }).frame ?? null)
+    }
+    this.gpuDirty = null
+    this.onPicture = { layers: doc.layers, background: doc.backgroundColor, withBackground, edits: this.edits }
   }
 
-  /** A layer's (or mask's) pixels as a GPU source; the live preview has its own texture so the layer's own stays valid. */
-  private glSource(layer: SketchLayer, keys: Set<string>): GlSource {
-    const { canvas, live, dirty } = this.livePixels(layer)
-    const key = live ? `${layer.id}:live` : layer.id
-    keys.add(key)
-    return { source: canvas, key, version: live ? ++this.previewVersion : (this.layerVersions.get(layer.id) ?? 0), dirty }
+  /** A layer's pixels on the GPU as they look right now (with the stroke being painted, or lifted pixels). */
+  private gpuSource(layer: SketchLayer): Tex {
+    if (this.g?.layerId === layer.id) return this.g.preview
+    const stroking = this.stroke && this.strokeOpts?.layer.id === layer.id
+    if (!stroking && this.floating?.layerId !== layer.id) return this.tex(layer.id)
+    const gpu = this.gpu!
+    const live = (k: string) => {
+      let e = this.texs.get(`${layer.id}:${k}`)
+      if (!e) this.texs.set(`${layer.id}:${k}`, (e = { t: gpu.target(), version: -1 }))
+      return e
+    }
+    const f = this.floating
+    if (f && !f.view) {
+      // Moving: the lifted pixels go up once, then are drawn at their new place each frame.
+      const piece = live('piece')
+      if (piece.version !== this.moves) {
+        gpu.upload(piece.t, f.piece.canvas)
+        piece.version = this.moves
+      }
+      const out = live('live').t
+      if (f.mesh) {
+        // Only the part being blended again (where the pixels were and are now) is redrawn.
+        const r = this.composeRect
+        gpu.copy(this.tex(layer.id), out, r)
+        gpu.mesh(piece.t, out, buildMesh(f.mesh.state, f.mesh.state.warp ? 32 : 16), f.mesh.state.src, f.mesh.mode, r)
+        return out
+      }
+      gpu.copy(this.tex(layer.id), out, null)
+      gpu.region(piece.t, out, -f.dx, -f.dy, this.width, this.height, 1, true)
+      return out
+    }
+    const { canvas, dirty } = this.livePixels(layer)
+    const e = live('live')
+    gpu.upload(e.t, canvas, dirty)
+    return e.t
   }
 
-  private glNodes(nodes: LayerNode[], keys: Set<string>): GlLayer[] {
-    const out: GlLayer[] = []
-    let base: GlLayer | null = null
+  private gpuNodes(nodes: LayerNode[], keys: Set<string>): GpuLayer[] {
+    const out: GpuLayer[] = []
+    let base: GpuLayer | null = null
     for (const { layer, children, mask } of nodes) {
-      const m = mask?.visible ? this.glSource(mask, keys) : null
+      const m = mask?.visible ? this.gpuSource(mask) : null
       // Clipped layers follow the base's pixels, mask, opacity and visibility (v0.13).
       if (layer.clip && base) base.clipBase = true
-      const clip = layer.clip && base ? { clipTo: base.key, clipMask: base.mask, clipOpacity: base.opacity } : { clipTo: null }
+      const clipTo = layer.clip && base ? { clipTo: base.key, clipMask: base.mask, clipOpacity: base.opacity } : { clipTo: null }
       if (children) {
-        // v0.13: a group can be a clipping base too. A hidden one stays in the stack, invisible, for its clipped layers.
-        const entry: GlLayer = { source: this.scratch.canvas, version: 0, key: layer.id, opacity: layer.visible ? layer.opacity : 0, blend: layer.blend, mask: m, ...clip, children: this.glNodes(children, keys) }
+        // A hidden group stays in the stack, invisible, for its clipped layers.
+        keys.add(layer.id)
+        const entry: GpuLayer = { tex: this.gpu!.picture, key: layer.id, opacity: layer.visible ? layer.opacity : 0, blend: layer.blend, mask: m, ...clipTo, children: this.gpuNodes(children, keys) }
         if (!layer.clip) base = entry
         out.push(entry)
         continue
       }
-      const entry: GlLayer = { ...this.glSource(layer, keys), opacity: layer.opacity, blend: layer.blend, mask: m, ...clip }
+      if (layer.kind === 'adjust') {
+        // An adjustment layer is the picture below, recoloured; it is never a clipping base.
+        if (layer.visible && layer.adjust) out.push({ tex: this.gpu!.picture, key: layer.id, opacity: layer.opacity, blend: layer.blend, mask: m, ...clipTo, adjust: layer.adjust })
+        continue
+      }
+      const entry: GpuLayer = { tex: this.gpuSource(layer), key: layer.id, opacity: layer.opacity, blend: layer.blend, mask: m, ...clipTo }
       // A clipping base must be in the stack even when hidden, with no effect of its own.
       const shown = layer.visible ? entry : { ...entry, opacity: 0 }
       if (!layer.clip) base = shown
@@ -759,8 +1238,17 @@ export class SketchEngine {
     ctx.globalAlpha = 1
     ctx.clearRect(r.x, r.y, r.w, r.h)
     if (withBackground && doc.backgroundColor) {
+      // Only the canvas (the frame) gets the background colour, not paint past its edges.
+      const f = (doc as { frame?: Rect }).frame
+      ctx.save()
+      if (f) {
+        ctx.beginPath()
+        ctx.rect(f.x, f.y, f.w, f.h)
+        ctx.clip()
+      }
       ctx.fillStyle = doc.backgroundColor
       ctx.fillRect(r.x, r.y, r.w, r.h)
+      ctx.restore()
     }
     this.stackOrder = doc.layers
     this.compose2d(ctx, layerTree(doc.layers), 0)
@@ -863,25 +1351,121 @@ export class SketchEngine {
     }
   }
 
+  /** One pixel of a layer (straight RGBA 0..255), from the GPU when it has the layer. */
+  private pixelOf(id: Id, x: number, y: number): ArrayLike<number> {
+    if (this.gpuActive) return this.gpu!.read(this.tex(id), { x, y, w: 1, h: 1 }).data
+    return this.ensure(id).ctx.getImageData(x, y, 1, 1).data
+  }
+
+  /**
+   * Layer picker: the layer whose paint shows at (x, y), the topmost visible, unlocked pixel layer with
+   * paint there that its mask and clipping base let through. Reads one pixel per layer.
+   */
+  layerAt(layers: SketchLayer[], x: number, y: number): Id | null {
+    x = Math.floor(x)
+    y = Math.floor(y)
+    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return null
+    const stack: { layer: SketchLayer; base: SketchLayer | null; mask?: SketchLayer }[] = []
+    const walk = (nodes: LayerNode[]) => {
+      let base: SketchLayer | null = null
+      for (const { layer, children, mask } of nodes) {
+        if (children) walk(children)
+        else stack.push({ layer, base: layer.clip ? base : null, mask })
+        if (!layer.clip) base = children ? null : layer
+      }
+    }
+    walk(layerTree(layers))
+    for (const { layer, base, mask } of stack.reverse()) {
+      if (layer.kind === 'adjust' || !layer.opacity || !shownInTree(layers, layer.id) || lockedInTree(layers, layer.id)) continue
+      if (!this.pixelOf(layer.id, x, y)[3]) continue
+      if (mask?.visible) {
+        const m = this.pixelOf(mask.id, x, y)
+        if (!((0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) * m[3])) continue
+      }
+      if (base && !this.pixelOf(base.id, x, y)[3]) continue
+      return layer.id
+    }
+    return null
+  }
+
   /** The color under a canvas pixel in the flattened picture, as #rrggbb, or null if transparent. */
   pickColor(doc: SketchDoc, x: number, y: number): string | null {
-    const canvas = this.render(doc)
-    const [r, g, b, a] =
-      canvas === this.gpu?.canvas ? this.gpu.readPixel(x, y) : canvas.getContext('2d')!.getImageData(Math.floor(x), Math.floor(y), 1, 1).data
+    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return null
+    let px: number[] | Uint8ClampedArray | null = null
+    if (this.gpuFor(doc)) {
+      try {
+        this.toPicture(doc, true)
+        px = this.gpu!.pixel(x, y)
+      } catch {
+        this.gpuFailed()
+      }
+    }
+    const [r, g, b, a] = px ?? this.render(doc).getContext('2d')!.getImageData(Math.floor(x), Math.floor(y), 1, 1).data
     if (a === 0) return null
     return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`
   }
 
-  layerPng(layerId: Id): Promise<Blob> {
-    return toPng(this.ensure(layerId).canvas)
+  /**
+   * A small copy of a layer (thumbnails), w×h. With a GPU it is shrunk there and only the small copy is read back;
+   * shrinking a big layer on the page took ~60 ms each time.
+   */
+  layerThumb(id: Id, w: number, h: number): CanvasImageSource {
+    if (this.gpuActive) {
+      try {
+        return toCanvas(this.gpu!.shrink(this.tex(id), { x: 0, y: 0, w: this.width, h: this.height }, w, h))
+      } catch {
+        this.gpuFailed()
+      }
+    }
+    return this.ensure(id).canvas
   }
 
-  flattenedPng(doc: SketchDoc, withBackground = true): Promise<Blob> {
-    return toPng(this.render(doc, withBackground))
+  /** The picture's frame (see growth.ts) shrunk to w×h, for time-lapse frames; transparent where there is no paint. */
+  shrunk(doc: SketchDoc, w: number, h: number): HTMLCanvasElement {
+    const f = frameOf(doc)
+    if (this.gpuFor(doc)) {
+      try {
+        this.toPicture(doc, false)
+        return toCanvas(this.gpu!.shrink(this.gpu!.picture, f, w, h))
+      } catch {
+        this.gpuFailed()
+      }
+    }
+    const c = document.createElement('canvas')
+    c.width = w
+    c.height = h
+    const g = c.getContext('2d')!
+    g.imageSmoothingQuality = 'high'
+    g.drawImage(this.render(doc, false), f.x, f.y, f.w, f.h, 0, 0, w, h)
+    return c
   }
+
+  /** A layer as PNG (encoded off the page where possible, so saving doesn't freeze drawing). */
+  layerPng(layerId: Id): Promise<Blob> {
+    return pngOf(this.ensure(layerId).canvas, this.colorSpace)
+  }
+
+  /** The flattened picture as PNG, cut to the drawing's frame (0.31). */
+  flattenedPng(doc: SketchDoc, withBackground = true): Promise<Blob> {
+    if (this.gpuFor(doc)) {
+      try {
+        // Straight from the GPU picture, only the frame, encoded off the page.
+        this.toPicture(doc, withBackground)
+        return pngOf(this.gpu!.read(this.gpu!.picture, frameOf(doc), this.colorSpace), this.colorSpace)
+      } catch {
+        this.gpuFailed()
+      }
+    }
+    const pic = this.render(doc, withBackground)
+    return pngOf(doc.frame ? toFrame(pic, doc) : pic, this.colorSpace)
+  }
+
+  /** Layers a brush (not the eraser) just painted on: certainly not empty, so saving skips the full check. */
+  private painted = new Set<Id>()
 
   /** True when the layer has no visible pixels (saved as an empty layer instead of a PNG). */
   isEmpty(layerId: Id): boolean {
+    if (this.painted.has(layerId)) return false
     const data = this.ensure(layerId).ctx.getImageData(0, 0, this.width, this.height).data
     for (let i = 3; i < data.length; i += 4) if (data[i] !== 0) return false
     return true
@@ -913,11 +1497,39 @@ function cpuBlend(ctx: CanvasRenderingContext2D, src: HTMLCanvasElement, mode: B
   ctx.putImageData(dst, 0, 0)
 }
 
+function toCanvas(img: ImageData): HTMLCanvasElement {
+  const c = document.createElement('canvas')
+  c.width = img.width
+  c.height = img.height
+  c.getContext('2d')!.putImageData(img, 0, 0)
+  return c
+}
+
 export function toPng(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not encode PNG'))), 'image/png'))
 }
 
 /** The part of `r` inside the canvas, in whole pixels; null when nothing is left. */
+/** Tiles in the same row that touch, joined into strips (fewer, larger reads and writes). */
+export function rowRuns(tiles: Rect[]): Rect[] {
+  const sorted = [...tiles].sort((a, b) => a.y - b.y || a.x - b.x)
+  const out: Rect[] = []
+  for (const t of sorted) {
+    const last = out.at(-1)
+    if (last && last.y === t.y && last.h === t.h && last.x + last.w === t.x) last.w += t.w
+    else out.push({ ...t })
+  }
+  return out
+}
+
+/** The smallest rectangle around both (either may be null). */
+function union(a: Rect | null, b: Rect | null): Rect | null {
+  if (!a || !b) return a ?? b
+  const x = Math.min(a.x, b.x)
+  const y = Math.min(a.y, b.y)
+  return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y }
+}
+
 export function clipRect(r: Rect, w: number, h: number): Rect | null {
   const x0 = Math.max(0, Math.floor(r.x))
   const y0 = Math.max(0, Math.floor(r.y))

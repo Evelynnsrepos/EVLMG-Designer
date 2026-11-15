@@ -1,4 +1,5 @@
 import { Crop, Download, FileUp, Film, PictureInPicture2 } from 'lucide-react'
+import { frameOf } from '../growth'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { importAssetFromBlob, resolveAssetPath } from '@/core/assets'
 import { getFs } from '@/core/fs'
@@ -98,12 +99,13 @@ export function useSketchFiles(host: FilesHost) {
   const recordFrame = async () => {
     const { doc, engine, root, update } = hostRef.current
     if (!root) return
-    const size = fitSize(doc.width, doc.height)
+    const f = frameOf(doc)
+    const size = fitSize(f.w, f.h)
     const { canvas, ctx } = makeCanvas(size.width, size.height)
     ctx.fillStyle = doc.backgroundColor ?? '#ffffff'
     ctx.fillRect(0, 0, size.width, size.height)
-    ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(engine.render({ ...doc, layers: exportLayers(doc.layers) }, false), 0, 0, size.width, size.height)
+    // Shrunk on the GPU when there is one: reading back and shrinking the whole picture stalled quick strokes.
+    ctx.drawImage(engine.shrunk({ ...doc, layers: exportLayers(doc.layers) }, size.width, size.height), 0, 0)
     const asset = await importAssetFromBlob(root, await canvasBlob(canvas, 'image/jpeg', 0.8), 'image', 'timelapse.jpg')
     if (asset) update((d) => ({ ...d, timelapse: { ...d.timelapse, frames: [...(d.timelapse?.frames ?? []), asset.path] } }))
   }
@@ -138,6 +140,16 @@ export function useSketchFiles(host: FilesHost) {
         (doc.selections ?? []).map(async (s) => ({ ...s, image: (await save(applyChange(await readAssetImage(root, s.image), c))) ?? s.image })),
       )
       const guide = doc.guide && { ...doc.guide, center: mapPoint(c, doc.guide.center), vanishing: doc.guide.vanishing.map((p) => mapPoint(c, p)) }
+      // 0.31: the frame (the picked canvas inside a grown working area) goes along, kept inside the new canvas.
+      const frame = doc.frame && (() => {
+        const a = mapPoint(c, { x: doc.frame.x, y: doc.frame.y })
+        const b = mapPoint(c, { x: doc.frame.x + doc.frame.w, y: doc.frame.y + doc.frame.h })
+        const x = Math.max(0, Math.min(a.x, b.x))
+        const y = Math.max(0, Math.min(a.y, b.y))
+        const w = Math.min(c.width, Math.max(a.x, b.x)) - x
+        const h = Math.min(c.height, Math.max(a.y, b.y)) - y
+        return w >= 1 && h >= 1 ? { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) } : undefined
+      })()
       const old: string[] = []
       h.update((d) => {
         old.push(...d.layers.map((l) => l.image ?? ''), d.sticker ?? '', ...(d.selections ?? []).map((s) => s.image))
@@ -149,6 +161,7 @@ export function useSketchFiles(host: FilesHost) {
           sticker,
           ...(d.selections ? { selections } : {}),
           ...(guide ? { guide } : {}),
+          frame,
         }
       })
       for (const p of old.filter(Boolean)) void resolveAssetPath(root, p).then((abs) => getFs().remove(abs).catch(() => {}))

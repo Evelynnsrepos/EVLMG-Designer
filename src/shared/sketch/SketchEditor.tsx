@@ -12,6 +12,7 @@ import {
   Move,
   PaintBucket,
   Pipette,
+  Layers2,
   Redo2,
   RotateCcw,
   RotateCw,
@@ -23,11 +24,11 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
 import { importAssetFromBlob, pickAndImportAssets, resolveAssetPath } from '@/core/assets'
 import { getFs } from '@/core/fs'
 import { newId, type Id } from '@/core/model'
-import { flush as flushSave, scheduleSave, useProjectStore } from '@/core/state'
+import { flush as flushSave, IDLE_SAVE_MS, scheduleSave, useProjectStore } from '@/core/state'
 import { saveBinaryFile, safeFileName } from '@/core/export'
 import { SketchEngine } from './engine'
 import { drawPreview } from './brushes'
@@ -46,7 +47,9 @@ import { ReferencePicker } from './ReferencePicker'
 import { ReferenceWindow } from './ReferenceWindow'
 import { ShortcutSheet } from './ShortcutSheet'
 import { FloatingPanel, useSpot } from './FloatingPanel'
-import { maxLayers } from './tiles'
+import { growDoc, growFor, shiftDocData } from './growth'
+import { SketchHistoryFile } from './historyFile'
+import { boundsOf, maxLayers, type Rect } from './tiles'
 import './sketch.css'
 // Sketch Pro: layers, selections (feat/sketch-layers)
 import { exportLayers, hasPixels, insertAbove, isGroup, lockedInTree } from './layers'
@@ -130,6 +133,7 @@ const UI = {
   rectSelect: 'Rectangle selection (M)',
   move: 'Move (V): drags the selection, or the whole layer',
   eyedropper: 'Eyedropper (I, or hold Alt)',
+  layerPick: 'Layer picker (K, or hold Ctrl): point at paint to see its layer, click to make it active',
   hand: 'Pan (H, or hold Space)',
   undo: 'Undo (Ctrl+Z)',
   redo: 'Redo (Ctrl+Y)',
@@ -163,7 +167,17 @@ const UI = {
   saving: 'Saving…',
 }
 
-type Tool = 'brush' | 'eraser' | 'smudge' | 'lasso' | 'rect' | 'move' | 'eyedropper' | 'hand' | 'text'
+type Tool = 'brush' | 'eraser' | 'smudge' | 'lasso' | 'rect' | 'move' | 'eyedropper' | 'layerpick' | 'hand' | 'text'
+
+/** The app's background colour as #rrggbb (the theme's --bg), for the cursor's contrast over see-through areas. */
+function appBackground(): string {
+  const c = document.createElement('canvas').getContext('2d')!
+  c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#000000'
+  return c.fillStyle.startsWith('#') ? c.fillStyle : '#000000'
+}
+
+/** Tools that paint: switching between them doesn't save (switching to any other tool does). */
+const PAINT_TOOLS = new Set<Tool>(['brush', 'eraser', 'smudge'])
 
 const TOOLS: { id: Tool; icon: LucideIcon; label: string; key: string }[] = [
   { id: 'brush', icon: BrushIcon, label: UI.brush, key: 'b' },
@@ -173,6 +187,7 @@ const TOOLS: { id: Tool; icon: LucideIcon; label: string; key: string }[] = [
   { id: 'rect', icon: SquareDashed, label: UI.rectSelect, key: 'm' },
   { id: 'move', icon: Move, label: UI.move, key: 'v' },
   { id: 'eyedropper', icon: Pipette, label: UI.eyedropper, key: 'i' },
+  { id: 'layerpick', icon: Layers2, label: UI.layerPick, key: 'k' },
   { id: 'hand', icon: Hand, label: UI.hand, key: 'h' },
   { id: 'text', icon: Type, label: 'Text (T): click to add text, drag a text box to move it', key: 't' },
 ]
@@ -216,6 +231,10 @@ export interface SketchEditorProps {
   panel?: ReactNode
   /** Imperative access for the host tool. */
   editorRef?: Ref<SketchEditorHandle>
+  /** 0.31: paint and moved pixels can go past the canvas's edges (the working area grows); Draw only. */
+  growable?: boolean
+  /** 0.31: keep the undo history between sessions under this document id (Draw). */
+  historyId?: Id
 }
 
 export interface SketchEditorHandle {
@@ -245,11 +264,20 @@ function CardGuides({ g, width, height, scale }: { g: NonNullable<SketchDoc['car
   )
 }
 
-export function SketchEditor({ doc, update: save, active, title, actions, swatches = SWATCHES, panel, editorRef }: SketchEditorProps) {
+export function SketchEditor({ doc, update: save, active, title, actions, swatches = SWATCHES, panel, editorRef, growable = false, historyId }: SketchEditorProps) {
   const root = useProjectStore((s) => s.root)
   const engineRef = useRef<SketchEngine | null>(null)
   const colorSpace = doc.colorSpace ?? 'srgb'
-  if (!engineRef.current || engineRef.current.width !== doc.width || engineRef.current.height !== doc.height || engineRef.current.colorSpace !== colorSpace) {
+  // A new engine only when the drawing's size was changed from outside (Canvas dialog, another file): when the
+  // working area grows, the engine grows first and the drawing follows a moment later.
+  const docSize = useRef({ w: doc.width, h: doc.height })
+  // oxlint-disable-next-line react/refs -- compared during render on purpose, see above
+  const resized = docSize.current.w !== doc.width || docSize.current.h !== doc.height
+  // oxlint-disable-next-line react/refs
+  docSize.current = { w: doc.width, h: doc.height }
+  const mismatch = engineRef.current && (engineRef.current.width !== doc.width || engineRef.current.height !== doc.height)
+  // oxlint-disable-next-line react/refs
+  if (!engineRef.current || (mismatch && resized) || engineRef.current.colorSpace !== colorSpace) {
     // oxlint-disable-next-line react/refs -- the engine is a mutable drawing surface, created once per canvas size
     engineRef.current = new SketchEngine(doc.width, doc.height, colorSpace)
   }
@@ -340,6 +368,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const [pickingRef, setPickingRef] = useState(false)
   const spaceDown = useRef(false)
   const altDown = useRef(false)
+  const ctrlDown = useRef(false)
+  /** The layer the Layer picker points at. */
+  const [pointed, setPointed] = useState<Id | null>(null)
 
   // Sketch Pro: pen and keys settings, drawing guide, QuickMenu, Edit Shape, touch.
   const input = useInputSettings()
@@ -385,6 +416,14 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const resave = useRef(() => {})
   /** Pixel saves go through the app's auto-save, so closing the app or project writes them too. */
   const saveKey = useRef(`${root}|sketch-pixels/${newId()}`).current
+  const historyFile = useMemo(() => (root && historyId ? new SketchHistoryFile(root, historyId) : null), [root, historyId, engine])
+  const historyTried = useRef<SketchHistoryFile | null>(null)
+  /** Once every layer is loaded: put back the undo steps from the last session (0.31). */
+  const loadHistory = () => {
+    if (!historyFile || historyTried.current === historyFile || loading.current.size) return
+    historyTried.current = historyFile
+    void historyFile.load(engine, new Set(docRef.current.layers.map((l) => l.id))).then((n) => n && setVersion(engine.version))
+  }
 
   useEffect(() => {
     if (!root) return
@@ -418,8 +457,10 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
           loading.current.delete(layer.id)
           // Paint that waited for the picture can be saved now.
           if (dirty.current.has(layer.id)) resave.current()
+          loadHistory()
         })
     }
+    loadHistory()
     for (const id of [...loaded.current.keys()]) {
       if (!doc.layers.some((l) => l.id === id)) {
         loaded.current.delete(id)
@@ -427,6 +468,16 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       }
     }
   }, [doc.layers, root, engine])
+
+  const stickerKey = useRef(`${root}|sketch-sticker/${newId()}`).current
+  /** The sticker: the whole picture without background, for Storyboard, Moodboards and pickers. */
+  const saveSticker = useCallback(async () => {
+    if (!root) return
+    const sticker = await importAssetFromBlob(root, await engine.flattenedPng({ ...docRef.current, layers: exportLayers(docRef.current.layers) }, false), 'image', 'sticker.png')
+    const prev = docRef.current.sticker
+    save((d) => ({ ...d, sticker: sticker?.path ?? null }))
+    if (prev && prev !== sticker?.path) void resolveAssetPath(root, prev).then((abs) => getFs().remove(abs).catch(() => {}))
+  }, [root, engine])
 
   const flushNow = useCallback(async () => {
     if (!root || !dirty.current.size) return
@@ -452,12 +503,12 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       if (prev && prev !== path) old.push(prev)
       loaded.current.set(id, path)
     }
-    // The sticker: the whole picture without background.
-    const sticker = await importAssetFromBlob(root, await engine.flattenedPng({ ...docRef.current, layers: exportLayers(docRef.current.layers) }, false), 'image', 'sticker.png')
-    if (docRef.current.sticker) old.push(docRef.current.sticker)
-    save((d) => ({ ...d, sticker: sticker?.path ?? null, layers: d.layers.map((l) => (saved.has(l.id) ? { ...l, image: saved.get(l.id)! } : l)) }))
+    save((d) => ({ ...d, layers: d.layers.map((l) => (saved.has(l.id) ? { ...l, image: saved.get(l.id)! } : l)) }))
+    // The sticker (the whole picture) is made less often: a while after the last stroke, and when the app closes.
+    scheduleSave(stickerKey, saveSticker, IDLE_SAVE_MS)
     // Each save writes a new PNG (assets are write-once); remove the ones this editor replaced.
     for (const p of old) void resolveAssetPath(root, p).then((abs) => getFs().remove(abs).catch(() => {}))
+    void historyFile?.sync(engine)
     setSaving(false)
   }, [root, engine, update])
   // Sketch Pro: one save at a time, so an older save never lands after a newer one (and reloads old pixels).
@@ -472,10 +523,33 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       if (!id) return
       dirty.current.add(id)
       setVersion(engine.version)
-      scheduleSave(saveKey, flush, 1200)
+      scheduleSave(saveKey, flush, IDLE_SAVE_MS)
     },
     [engine, flush, saveKey],
   )
+
+  /**
+   * 0.31: make room past the canvas's edge before paint or moved pixels reach the working area's edge.
+   * Only between strokes; the view moves along so nothing jumps, and every layer is saved again at the new size.
+   */
+  const growTo = (r: Rect, margin: number) => {
+    if (!growable || engine.stroking) return null
+    const g = growFor(engine.width, engine.height, r, margin)
+    if (!g) return null
+    engine.grow(g, (m) => shiftDocData(m, g))
+    xf.grow(g)
+    sel.refresh()
+    const v = viewRef.current
+    if (v) {
+      const [a, b, c, d] = viewMatrix(v)
+      const next = { ...v, x: v.x - (a * g.left + c * g.top), y: v.y - (b * g.left + d * g.top) }
+      viewRef.current = next
+      setView(next)
+    }
+    save((d) => growDoc(d, g))
+    for (const l of doc.layers) if (hasPixels(l)) markDirty(l.id)
+    return g
+  }
 
   // ColorDrop: drag the colour onto the canvas to fill (Sketch Pro).
   const drop = useColorDrop(
@@ -516,9 +590,10 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const fit = useCallback(() => {
     const box = boxRef.current
     if (!box) return
-    const scale = Math.min((box.clientWidth - 40) / doc.width, (box.clientHeight - 40) / doc.height, 1)
-    setView({ scale, x: (box.clientWidth - doc.width * scale) / 2, y: (box.clientHeight - doc.height * scale) / 2 })
-  }, [doc.width, doc.height])
+    const f = doc.frame ?? { x: 0, y: 0, w: doc.width, h: doc.height }
+    const scale = Math.min((box.clientWidth - 40) / f.w, (box.clientHeight - 40) / f.h, 1)
+    setView({ scale, x: (box.clientWidth - f.w * scale) / 2 - f.x * scale, y: (box.clientHeight - f.h * scale) / 2 - f.y * scale })
+  }, [doc.width, doc.height, doc.frame])
 
   useEffect(() => {
     if (!view) fit()
@@ -526,6 +601,23 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
 
   // Sketch Pro: canvas changes, stats, time-lapse, import/export, Reference Companion.
   const files = useSketchFiles({ doc, update, engine, root, title, activeId: activeLayer?.id, setActive: setActiveLayerId, flush, fit })
+
+  // 0.31: good moments to save (a short pause doesn't matter there): the layer list changed, or a tool other than
+  // a brush was picked. Otherwise only after IDLE_SAVE_MS, on leaving the window or the tool, and on closing.
+  const layerOrder = doc.layers.map((l) => l.id).join('|')
+  useEffect(() => void flushSave(saveKey), [layerOrder, saveKey])
+  useEffect(() => {
+    if (!PAINT_TOOLS.has(tool)) void flushSave(saveKey)
+  }, [tool, saveKey])
+
+  // The GPU's view of the picture sits under the visible canvas (a new one after the working area grew).
+  const gpuView = engine.view
+  useEffect(() => {
+    const box = boxRef.current
+    if (!gpuView || !box) return
+    box.prepend(gpuView)
+    return () => gpuView.remove()
+  }, [gpuView])
 
   // Redraw the visible canvas.
   useEffect(() => {
@@ -548,12 +640,24 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     ctx.transform(...viewMatrix(view))
     // Transparent: nothing is drawn behind the picture, so the app's own background and wallpaper show through.
     ctx.imageSmoothingEnabled = view.scale < 1 || !!view.rot
-    assist.paint(ctx)
+    // With a graphics card the picture is drawn under this canvas, straight from the GPU (0.31).
+    const gpuShown = !assist.mode && engine.draw(doc, viewMatrix(view), w, h, dpr, ctx.imageSmoothingEnabled, pointed ? { id: pointed, color: getComputedStyle(canvas).getPropertyValue('--accent').trim() || '#3e8ef7' } : null)
+    if (engine.view) engine.view.style.visibility = gpuShown ? '' : 'hidden'
+    if (!gpuShown) assist.paint(ctx)
     // Transparent pages are just a white outline over the app's wallpaper.
     const px = 1 / view.scale
+    const f = doc.frame ?? { x: 0, y: 0, w: doc.width, h: doc.height }
+    if (doc.frame) {
+      // 0.31: paint past the canvas's edges stays, dimmed; exports are cut to the canvas.
+      ctx.beginPath()
+      ctx.rect(0, 0, doc.width, doc.height)
+      ctx.rect(f.x, f.y, f.w, f.h)
+      ctx.fillStyle = 'rgba(0,0,0,0.45)'
+      ctx.fill('evenodd')
+    }
     ctx.strokeStyle = doc.backgroundColor ? 'rgba(128,128,128,0.6)' : '#ffffff'
     ctx.lineWidth = (doc.backgroundColor ? 1 : 1.5) * px
-    ctx.strokeRect(-0.5 * px, -0.5 * px, doc.width + px, doc.height + px)
+    ctx.strokeRect(f.x - 0.5 * px, f.y - 0.5 * px, f.w + px, f.h + px)
     ctx.restore()
   })
 
@@ -587,7 +691,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     | null
   >(null)
 
-  const effectiveTool = (): Tool => (spaceDown.current ? 'hand' : altDown.current && (tool === 'brush' || tool === 'eraser') ? 'eyedropper' : tool)
+  const painting = tool === 'brush' || tool === 'eraser' || tool === 'smudge'
+  const effectiveTool = (): Tool => (spaceDown.current ? 'hand' : altDown.current && (tool === 'brush' || tool === 'eraser') ? 'eyedropper' : ctrlDown.current && painting ? 'layerpick' : tool)
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     // Moves from before the press belong to the hover, not to the new stroke.
@@ -616,6 +721,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     if (drop.continuing && t !== 'hand' && e.button === 0) return drop.fillAt(p, drop.recolor ? color : drop.continuing)
     if (t === 'hand') {
       gesture.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }
+    } else if (t === 'layerpick') {
+      const id = engine.layerAt(doc.layers, p.x, p.y)
+      if (id) setActiveLayerId(id)
     } else if (t === 'eyedropper') {
       const picked = engine.pickColor(doc, p.x, p.y)
       if (picked) setColor(picked)
@@ -636,7 +744,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         tether: (strokeBrush.tether * 150) / view.scale,
         constraint: assistFor(liveGuide, activeLayer.id, 8 / view.scale),
       })
-      const pt = pipeline.push({ ...p, ...penData(e.nativeEvent, input.pressureCurve) }, e.timeStamp)[0] ?? { ...p, pressure: 1 }
+      // Near the working area's edge: grow it first, so the stroke can go past the canvas.
+      const at = growTo({ x: p.x - strokeBrush.size, y: p.y - strokeBrush.size, w: strokeBrush.size * 2, h: strokeBrush.size * 2 }, 128) ? toDoc(e) : p
+      const pt = pipeline.push({ ...at, ...penData(e.nativeEvent, input.pressureCurve) }, e.timeStamp)[0] ?? { ...at, pressure: 1 }
       const opts = { layer: activeLayer, brush: strokeBrush, color, symmetry: 'off' as const, erase: t === 'eraser', smudge: t === 'smudge', mirror: symmetryMirror(liveGuide, activeLayer.id) }
       engine.beginStroke(opts, pt)
       gesture.current = { kind: 'paint', pipeline, last: pt, rect: e.currentTarget.getBoundingClientRect(), opts, pts: [pt], rest: pt }
@@ -683,13 +793,17 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     const p = toDoc(e)
     setCursor(p)
     if (!gesture.current && (tool === 'brush' || tool === 'eraser' || tool === 'smudge')) {
-      const under = engine.pickColor(doc, p.x, p.y)
-      if (under) {
-        const [r, g, b] = hexToRgb(under)
-        setCursorOnLight(0.299 * r + 0.587 * g + 0.114 * b > 140)
-      }
+      // Over see-through areas (past the canvas, or a transparent canvas) the app's own background is what's behind.
+      const under = engine.pickColor(doc, p.x, p.y) ?? appBackground()
+      const [r, g, b] = hexToRgb(under)
+      const light = 0.299 * r + 0.587 * g + 0.114 * b > 140
+      if (light !== cursorOnLight) setCursorOnLight(light)
     }
     lastPointer.current = pointIn(viewCanvas.current!, e)
+    if (!gesture.current) {
+      const id = effectiveTool() === 'layerpick' ? engine.layerAt(doc.layers, p.x, p.y) : null
+      if (id !== pointed) setPointed(id)
+    }
     if (isEraserEnd(e) !== hoverEraser) setHoverEraser(!hoverEraser)
     if (e.pointerType === 'touch' && touchMove(e)) return
     if (textTool.move(p)) return
@@ -754,6 +868,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       if (!g.snapped) for (const q of g.pipeline.flush()) engine.strokeTo(q)
       markDirty(engine.endStroke())
       files.stroked()
+      // Room for the next stroke when this one came near the edge.
+      const b = boundsOf(g.pts, g.opts.brush.size)
+      if (b) growTo(b, Math.max(256, g.opts.brush.size * 2))
       if (g.snapped?.drawn && lastPointer.current) {
         setShapeOffer({ shape: g.snapped.drawn, opts: g.opts, pressure: g.snapped.pressure, start: g.pts[0], at: lastPointer.current, editing: false })
       }
@@ -762,6 +879,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       sel.up(viewRef.current?.scale ?? 1)
     } else if (g.kind === 'move') {
       xf.up()
+      // Pixels moved near or past the edge keep their room, so they aren't cut when they are dropped.
+      const b = xf.bounds
+      if (b) growTo(b, 128)
     }
   }
 
@@ -847,6 +967,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       save((d) => ({ ...d, layers }))
     },
     limit: layerLimit,
+    pointedId: pointed,
     title,
     color,
     selectFrom: (canvas) => sel.fromCanvas(canvas),
@@ -935,6 +1056,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     'tool.rect': () => setTool('rect'),
     'tool.move': () => setTool('move'),
     'tool.eyedropper': () => setTool('eyedropper'),
+    'tool.layerpick': () => setTool('layerpick'),
     'tool.hand': () => setTool('hand'),
     'tool.text': () => setTool('text'),
     swapEraser: () => setTool(tool === 'eraser' ? 'brush' : 'eraser'),
@@ -1093,6 +1215,10 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         spaceDown.current = true
         e.preventDefault()
       } else if (k === 'alt') altDown.current = true
+      else if (k === 'control') {
+        ctrlDown.current = true
+        return
+      }
       else {
         // Every other key goes through the shortcut list (Pen and keys settings).
         const id = matchShortcut(e, useInputSettings.getState().shortcuts)
@@ -1108,6 +1234,10 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       }
       if (e.key === ' ') spaceDown.current = false
       if (e.key === 'Alt') altDown.current = false
+      if (e.key === 'Control') {
+        ctrlDown.current = false
+        setPointed(null)
+      }
     }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
@@ -1180,12 +1310,13 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
           ref={boxRef}
           className={`sketch-stage${doc.backgroundColor ? '' : ' see-through'}`}
           onWheel={onWheel}
-          style={{ cursor: tool === 'hand' ? 'grab' : tool === 'brush' || tool === 'eraser' || tool === 'smudge' ? 'none' : 'crosshair' }}
         >
           <canvas
             key={colorSpace}
             ref={viewCanvas}
             className="sketch-canvas"
+            // On the canvas only: toolbars and panels floating over the stage keep the normal pointer.
+            style={{ cursor: tool === 'hand' ? 'grab' : tool === 'brush' || tool === 'eraser' || tool === 'smudge' ? 'none' : 'crosshair' }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -1196,7 +1327,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
               xf.up()
               gesture.current = null
             }}
-            onPointerLeave={() => (flushMove(), setCursor(null))}
+            onPointerLeave={() => (flushMove(), setCursor(null), setPointed(null))}
             onContextMenu={(e) => e.preventDefault()}
           />
           {view && <SelectionMaskView sel={sel} engine={engine} view={view} />}
@@ -1236,7 +1367,11 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
           {view && (
             <svg className="sketch-overlay">
               <g transform={`matrix(${viewMatrix(view).join(' ')})`}>
-                {doc.cardGuides && doc.cardGuides.visible !== false && <CardGuides g={doc.cardGuides} width={doc.width} height={doc.height} scale={view.scale} />}
+                {doc.cardGuides && doc.cardGuides.visible !== false && (
+                  <g transform={`translate(${doc.frame?.x ?? 0} ${doc.frame?.y ?? 0})`}>
+                    <CardGuides g={doc.cardGuides} width={doc.frame?.w ?? doc.width} height={doc.frame?.h ?? doc.height} scale={view.scale} />
+                  </g>
+                )}
                 {liveGuide && <GuideOverlay guide={liveGuide} width={doc.width} height={doc.height} scale={view.scale} editing={editingGuide} toDoc={toDoc} onChange={setGuide} />}
                 <SelectionOutline sel={sel} />
                 <TextBoxes layers={doc.layers} activeId={activeLayer?.id} scale={view.scale} all={tool === 'text'} />

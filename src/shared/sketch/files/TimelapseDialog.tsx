@@ -1,4 +1,5 @@
 import { Pause, Play } from 'lucide-react'
+import { frameOf } from '../growth'
 import { useEffect, useRef, useState } from 'react'
 import { resolveAssetPath } from '@/core/assets'
 import { getFs } from '@/core/fs'
@@ -74,12 +75,13 @@ export function TimelapseDialog({ host, onClose }: { host: FilesHost; onClose: (
     if (!root || !frames.length) return
     const { engine, title } = host
     const plan = replayPlan(frames.length, mode)
-    const size = fitSize(doc.width, doc.height)
+    const f = frameOf(doc)
+    const size = fitSize(f.w, f.h)
     const final = () => {
-      const { canvas, ctx } = makeCanvas(doc.width, doc.height)
+      const { canvas, ctx } = makeCanvas(f.w, f.h)
       ctx.fillStyle = doc.backgroundColor ?? '#ffffff'
-      ctx.fillRect(0, 0, doc.width, doc.height)
-      ctx.drawImage(engine.render({ ...doc, layers: exportLayers(doc.layers) }, false), 0, 0)
+      ctx.fillRect(0, 0, f.w, f.h)
+      ctx.drawImage(engine.render({ ...doc, layers: exportLayers(doc.layers) }, false), -f.x, -f.y)
       return canvas
     }
     setProgress(UI.progress(0, plan.length))

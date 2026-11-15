@@ -1,9 +1,10 @@
 // Compiles and renders every included Material Maker node in a real browser (WebGL2).
 // Needs Chrome or Chromium: set MATERIAL_TEST_BROWSER to its path, or have Chrome installed.
 // Skipped when no browser is found, unless MATERIAL_GPU_TEST=required (CI sets that).
-import { chromium, type Browser } from 'playwright-core'
+import type { Browser } from 'playwright-core'
 import { createServer, type ViteDevServer } from 'vite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { launchTestBrowser } from '../testBrowser'
 import type { NodeCheck } from './nodeCheck'
 
 // Nodes that make a picture that isn't meant to repeat (one shape, a gradient across, a picture that fades out).
@@ -26,26 +27,8 @@ const MAYBE_TILING = ['auto_tones']
 let browser: Browser | null = null
 let server: ViteDevServer | null = null
 
-async function launch(): Promise<Browser | null> {
-  const args = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
-  const tries = [
-    process.env.MATERIAL_TEST_BROWSER && { executablePath: process.env.MATERIAL_TEST_BROWSER },
-    { executablePath: '/opt/pw-browsers/chromium' },
-    { channel: 'chrome' },
-    { channel: 'chromium' },
-  ].filter(Boolean) as object[]
-  for (const t of tries) {
-    try {
-      return await chromium.launch({ ...t, args })
-    } catch {
-      // try the next one
-    }
-  }
-  return null
-}
-
 beforeAll(async () => {
-  browser = await launch()
+  browser = await launchTestBrowser()
   if (!browser) {
     if (process.env.MATERIAL_GPU_TEST === 'required') throw new Error('No Chrome/Chromium found for the Material Lab GPU test')
     return

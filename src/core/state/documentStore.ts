@@ -3,9 +3,10 @@ import { create } from 'zustand'
 import { getFs } from '../fs'
 import type { ComponentType, Id } from '../model'
 import { projectPaths, readDocument, writeDocument } from '../project'
-import { flush, scheduleSave } from './autosave'
+import { flush, IDLE_SAVE_MS, scheduleSave } from './autosave'
 import { collabNames, documentBinding } from './collabBinding'
 import { History } from './history'
+import { packHistory, SAVED_HISTORY, unpackHistory } from './savedHistory'
 import { useProjectStore } from './projectStore'
 
 /**
@@ -35,13 +36,51 @@ async function ensureLoaded<T>(root: string, type: ComponentType, id: Id, create
   if (!loading.has(key)) {
     loading.set(
       key,
-      loadDocument(root, type, id, createDefault).then((data) => {
+      loadDocument(root, type, id, createDefault).then(async (data) => {
+        await loadSavedHistory(root, type, id, data)
         useDocs.setState((s) => ({ docs: { ...s.docs, [key]: data } }))
         loading.delete(key)
       }),
     )
   }
   await loading.get(key)
+}
+
+/** 0.31: undo steps kept from the last session, when they belong to the document as it is now. */
+async function loadSavedHistory(root: string, type: ComponentType, id: Id, data: unknown) {
+  if (!SAVED_HISTORY.has(type) || documentBinding(root, type)) return
+  try {
+    const path = await projectPaths.history(root, type, id)
+    if (!(await getFs().exists(path))) return
+    const saved = unpackHistory(await getFs().readText(path), data)
+    if (saved) historyFor(keyOf(root, type, id)).load(saved.past, saved.future)
+  } catch {
+    // no history then
+  }
+}
+
+/** Write the undo steps a few seconds after the last one, in the background. */
+function saveHistorySoon(root: string, type: ComponentType, id: Id) {
+  if (!SAVED_HISTORY.has(type)) return
+  const key = keyOf(root, type, id)
+  scheduleSave(
+    `${key}|history`,
+    async () => {
+      const h = histories.get(key)
+      const current = useDocs.getState().docs[key]
+      if (!h || current === undefined) return
+      const fs = getFs()
+      const path = await projectPaths.history(root, type, id)
+      const text = packHistory(current, h.pastStates, h.futureStates)
+      if (!text) {
+        if (await fs.exists(path)) await fs.remove(path)
+        return
+      }
+      await fs.mkdir(await fs.join(await projectPaths.historyDir(root), type))
+      await fs.writeTextAtomic(path, text)
+    },
+    3000,
+  )
 }
 
 /** In a shared project the shared copy wins; a file that is not shared yet is added to it. */
@@ -55,10 +94,13 @@ async function loadDocument<T>(root: string, type: ComponentType, id: Id, create
   return data
 }
 
+/** Big documents saved at good moments instead of a second after each change (see IDLE_SAVE_MS). */
+const SAVE_AT_MOMENTS = new Set<string>(['pixel-art'])
+
 function setDoc(root: string, type: ComponentType, id: Id, data: unknown) {
   const key = keyOf(root, type, id)
   useDocs.setState((s) => ({ docs: { ...s.docs, [key]: data } }))
-  scheduleSave(key, () => writeDocument(root, type, id, useDocs.getState().docs[key]))
+  scheduleSave(key, () => writeDocument(root, type, id, useDocs.getState().docs[key]), SAVE_AT_MOMENTS.has(type) ? IDLE_SAVE_MS : undefined)
 }
 
 export interface UseDocumentResult<T> {
@@ -125,7 +167,10 @@ export function updateDocument<T>(
   if (next === current) return
   const collab = documentBinding(root, type)
   if (collab) collab.write(collabNames.document(type, id), current, next, options)
-  else if (options?.undoable !== false) historyFor(key).record(current)
+  else if (options?.undoable !== false) {
+    historyFor(key).record(current)
+    saveHistorySoon(root, type, id)
+  }
   setDoc(root, type, id, next)
 }
 
@@ -134,7 +179,10 @@ export function undoDocument(root: string, type: ComponentType, id: Id) {
   if (collab) return collab.undo(collabNames.document(type, id))
   const key = keyOf(root, type, id)
   const prev = historyFor(key).undo(useDocs.getState().docs[key])
-  if (prev !== undefined) setDoc(root, type, id, prev)
+  if (prev !== undefined) {
+    setDoc(root, type, id, prev)
+    saveHistorySoon(root, type, id)
+  }
 }
 
 export function redoDocument(root: string, type: ComponentType, id: Id) {
@@ -142,7 +190,10 @@ export function redoDocument(root: string, type: ComponentType, id: Id) {
   if (collab) return collab.redo(collabNames.document(type, id))
   const key = keyOf(root, type, id)
   const next = historyFor(key).redo(useDocs.getState().docs[key])
-  if (next !== undefined) setDoc(root, type, id, next)
+  if (next !== undefined) {
+    setDoc(root, type, id, next)
+    saveHistorySoon(root, type, id)
+  }
 }
 
 /** Load a document outside React (tests, background work). */

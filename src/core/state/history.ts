@@ -33,6 +33,12 @@ export class History<T> {
   get canRedo() {
     return this.future.length > 0
   }
+  /** Put back steps kept from an earlier session (0.31). */
+  load(past: T[], future: T[]) {
+    this.past = past.slice(-this.limit)
+    this.future = future
+  }
+
   /** Saved states, oldest first (for an undo history list). */
   get pastStates(): readonly T[] {
     return this.past

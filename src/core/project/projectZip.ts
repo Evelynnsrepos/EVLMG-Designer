@@ -10,7 +10,7 @@ import { readVersioned, writeVersioned } from './versioned'
  * and is per computer) and so is `collab/` (sharing keys and members of a
  * shared project must never travel in a file someone passes around).
  */
-const SKIPPED_DIRS = new Set(['.backups', 'collab'])
+const SKIPPED_DIRS = new Set(['.backups', 'collab', '.history'])
 
 /** Unpacked size limit; protects against zip bombs. */
 export const MAX_IMPORT_BYTES = 4 * 1024 ** 3

@@ -199,6 +199,10 @@
   background: var(--bg-hover);
   outline: 1px solid var(--accent);
 }
+.sketch-layer.is-pointed {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
 .sketch-layer.is-clip {
   margin-left: 14px;
 }
@@ -633,4 +637,12 @@
 .sketch-shortcuts:hover {
   color: var(--text);
   border-color: var(--accent);
+}
+
+/* The picture drawn by the graphics card, under the canvas that takes the pen (0.31). */
+.sketch-gpu {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
 }

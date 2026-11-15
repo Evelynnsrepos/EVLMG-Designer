@@ -106,7 +106,9 @@ export class CurveFill<P extends Pt> {
     if (q.length === 2) return []
     if (q.length > 4) q.shift()
     // Segment q[-3] -> q[-2], with the points around it as handles (the first one is its own handle).
-    const [p0, p1, p2, p3] = q.length === 3 ? [q[0], q[0], q[1], q[2]] : q
+    // The first segment has no point before it: one is guessed from the bend of the next three (a parabola),
+    // so a fast circle's start curves like the rest instead of running straight.
+    const [p0, p1, p2, p3] = q.length === 3 ? [beyond(q[2], q[1], q[0]), q[0], q[1], q[2]] : q
     return segment(p0, p1, p2, p3)
   }
 
@@ -115,8 +117,14 @@ export class CurveFill<P extends Pt> {
     this.pts = []
     if (q.length < 2) return []
     const [p0, p1, p2] = q.length === 2 ? [q[0], q[0], q[1]] : q.slice(-3)
-    return segment(p0, p1, p2, p2)
+    // Likewise past the last point, so the end curves too.
+    return segment(p0, p1, p2, q.length === 2 ? p2 : beyond(p0, p1, p2))
   }
+}
+
+/** The point after c on the parabola through a, b, c (equally spaced): c's missing neighbour. */
+function beyond<P extends Pt>(a: P, b: P, c: P): P {
+  return { ...c, x: a.x - 3 * b.x + 3 * c.x, y: a.y - 3 * b.y + 3 * c.y }
 }
 
 function segment<P extends Pt>(p0: P, p1: P, p2: P, p3: P): P[] {

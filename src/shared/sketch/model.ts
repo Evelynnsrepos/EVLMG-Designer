@@ -91,6 +91,11 @@ export interface SketchDoc {
   fonts?: { id: Id; family: string; file: AssetPath }[]
   /** Animation Assist: every top-level layer or group is a frame (Sketch Pro). */
   animation?: AnimationSettings
+  /**
+   * 0.31: the canvas the person picked, inside a working area (width × height) that grew so paint and moved
+   * pixels can go past its edges. Exports are cut to it and the view dims the rest. Missing = the whole area.
+   */
+  frame?: { x: number; y: number; w: number; h: number }
   /** Page Assist: every top-level layer or group is a page (Sketch Pro). */
   pages?: PageSettings
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BASE_BRUSH, defaultLibrary, normalizeBrush, strokeAlpha } from './brushes'
+import { BASE_BRUSH, defaultLibrary, isRibbon, isShaded, normalizeBrush, strokeAlpha } from './brushes'
 import { V05_BUILTIN_IDS } from './brushDefaults'
 import { mergeBuiltIns } from './library'
 
@@ -49,5 +49,17 @@ describe('brush settings', () => {
     expect(sets.some((s) => s.id === 'comics')).toBe(true)
     expect(sets[0].id).toBe('mine')
     for (const s of sets) for (const id of s.brushIds) expect(brushes.some((b) => b.id === id)).toBe(true)
+  })
+})
+
+describe('ribbon, shading and caps (0.31)', () => {
+  it('are off for older brushes and keep only sensible values', () => {
+    const old = normalizeBrush({ id: 'x', name: 'Old' })
+    expect([old.ribbon, old.shaded, old.capStart, old.capEnd]).toEqual(['off', false, null, null])
+    const odd = normalizeBrush({ id: 'y', name: 'Odd', ribbon: 'zigzag', shaded: 'yes', capStart: '', capEnd: 'data:image/png;base64,x' } as never)
+    expect([odd.ribbon, odd.shaded, odd.capStart, odd.capEnd]).toEqual(['off', false, null, 'data:image/png;base64,x'])
+    expect(isShaded({ ...BASE_BRUSH, shaded: true })).toBe(false)
+    expect(isShaded({ ...BASE_BRUSH, shaded: true, shapeImage: 'data:x' })).toBe(true)
+    expect(isRibbon({ ...BASE_BRUSH, ribbon: 'tile' })).toBe(true)
   })
 })

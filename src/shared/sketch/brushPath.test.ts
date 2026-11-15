@@ -39,9 +39,9 @@ describe('CurveFill', () => {
     const c = new CurveFill<(typeof pen)[number]>()
     const out = [...pen.flatMap((p) => c.push(p)), ...c.flush()]
     const off = (p: { x: number; y: number }) => Math.abs(Math.hypot(p.x, p.y) - r)
-    // Straight lines between the 12 points sag ~10 px inside the circle at their middles.
-    // Away from the stroke's two ends (no point beyond them to aim the curve), it stays on the circle.
-    expect(Math.max(...out.filter((p) => { const a = (Math.atan2(p.y, p.x) + Math.PI * 2) % (Math.PI * 2); return a > Math.PI / 6 && a < Math.PI * 2 - Math.PI / 6 }).map(off))).toBeLessThan(1.5)
+    // Straight lines between the 12 points sag ~10 px inside the circle at their middles; the curve stays on it,
+    // also on the first and last segment (0.31: their missing neighbour is guessed from the bend).
+    expect(Math.max(...out.map(off))).toBeLessThan(2)
     expect(out.length).toBeGreaterThan(200)
     expect(out.at(-1)).toEqual(pen.at(-1))
   })

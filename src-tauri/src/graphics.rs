@@ -27,6 +27,8 @@ pub fn apply_env() {
   let vars: &[&str] = match read_mode().as_str() {
     "no-dmabuf" => &["WEBKIT_DISABLE_DMABUF_RENDERER"],
     "software" => &["WEBKIT_DISABLE_DMABUF_RENDERER", "WEBKIT_DISABLE_COMPOSITING_MODE", "LIBGL_ALWAYS_SOFTWARE"],
+    // NVIDIA's own driver often shows a blank window with WebKitGTK's DMA-BUF renderer; the older handover works there.
+    _ if std::path::Path::new("/proc/driver/nvidia/version").exists() => &["WEBKIT_DISABLE_DMABUF_RENDERER"],
     _ => &[],
   };
   for v in vars {
@@ -56,24 +58,61 @@ pub fn apply_webview(window: &tauri::WebviewWindow) {
 pub fn forward_pen(window: &tauri::WebviewWindow) {
   let _ = window.with_webview(|w| {
     use gtk::{gdk, glib, prelude::*};
+    use std::{cell::Cell, rc::Rc, time::Duration};
     use webkit2gtk::WebViewExt;
-    fn send(view: &webkit2gtk::WebView, e: &gdk::Event) {
+    /// A pen sends ~200 moves a second (also while hovering); each one used to run its own script in the page,
+    /// which flooded the page and made hovering and drawing lag. Now at most one update every 10 ms goes over,
+    /// except that touching down, lifting and button presses go at once, so a stroke starts with its real pressure.
+    #[derive(Default)]
+    struct Pending {
+      latest: Cell<Option<(f64, f64, f64)>>,
+      scheduled: Cell<bool>,
+      down: Cell<bool>,
+    }
+    fn post(view: &webkit2gtk::WebView, (pressure, tx, ty): (f64, f64, f64)) {
+      let js = format!("window.__nativePen={{pressure:{pressure},tiltX:{tx},tiltY:{ty},t:performance.now()}}");
+      view.evaluate_javascript(&js, None, None, None::<&gtk::gio::Cancellable>, |_| {});
+    }
+    fn send(view: &webkit2gtk::WebView, e: &gdk::Event, st: &Rc<Pending>, now: bool) {
       let pen = e.source_device().map(|d| matches!(d.source(), gdk::InputSource::Pen | gdk::InputSource::Eraser)).unwrap_or(false);
       let Some(pressure) = e.axis(gdk::AxisUse::Pressure).filter(|_| pen) else { return };
       // GTK gives tilt as -1..1 on some backends and in degrees on others.
       let deg = |t: f64| if t.abs() <= 1.0 { t * 90.0 } else { t };
-      let tx = deg(e.axis(gdk::AxisUse::Xtilt).unwrap_or(0.0));
-      let ty = deg(e.axis(gdk::AxisUse::Ytilt).unwrap_or(0.0));
-      let js = format!("window.__nativePen={{pressure:{pressure},tiltX:{tx},tiltY:{ty},t:performance.now()}}");
-      view.evaluate_javascript(&js, None, None, None::<&gtk::gio::Cancellable>, |_| {});
+      let value = (pressure, deg(e.axis(gdk::AxisUse::Xtilt).unwrap_or(0.0)), deg(e.axis(gdk::AxisUse::Ytilt).unwrap_or(0.0)));
+      let down = pressure > 0.0;
+      if now || down != st.down.replace(down) {
+        st.latest.set(None);
+        return post(view, value);
+      }
+      st.latest.set(Some(value));
+      if st.scheduled.replace(true) {
+        return;
+      }
+      let (view, st) = (view.clone(), st.clone());
+      glib::timeout_add_local_once(Duration::from_millis(10), move || {
+        st.scheduled.set(false);
+        if let Some(v) = st.latest.take() {
+          post(&view, v);
+        }
+      });
     }
     let view = w.inner();
-    view.connect_motion_notify_event(|v, e| {
-      send(v, e);
+    let st = Rc::new(Pending::default());
+    let s = st.clone();
+    let uncompressed = Cell::new(false);
+    view.connect_motion_notify_event(move |v, e| {
+      // GTK squashes mouse and pen moves to about one per screen frame (fewer while it is busy), so fast strokes
+      // reached the page as a few points with straight lines between them. Drawing needs every sample.
+      if !uncompressed.replace(true) {
+        if let Some(win) = e.window() {
+          win.set_event_compression(false);
+        }
+      }
+      send(v, e, &s, false);
       glib::Propagation::Proceed
     });
-    view.connect_button_press_event(|v, e| {
-      send(v, e);
+    view.connect_button_press_event(move |v, e| {
+      send(v, e, &st, true);
       glib::Propagation::Proceed
     });
   });

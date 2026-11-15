@@ -393,3 +393,72 @@
 .versions-list li > span:first-child {
   flex: 1;
 }
+
+/* 0.31: saving, a thin bar along the bottom of the tool's top bar (SaveBar.tsx). */
+.save-bar {
+  position: absolute;
+  top: 21px;
+  left: 0;
+  height: 3px;
+  width: 0;
+  background: var(--accent);
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+}
+.save-bar.is-saving {
+  width: 85%;
+  opacity: 1;
+  transition: width 2.5s cubic-bezier(0.1, 0.7, 0.3, 1);
+}
+.save-bar.is-done {
+  width: 100%;
+  opacity: 0;
+  transition: width 0.15s ease-out, opacity 0.4s ease-in 0.2s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .save-bar.is-saving,
+  .save-bar.is-done {
+    transition: none;
+    width: 100%;
+  }
+  .save-bar.is-done {
+    opacity: 0;
+  }
+}
+/* Every other tool: a tiny dot in the top bar's corner that swells and shrinks while saving. */
+.save-dot {
+  position: absolute;
+  top: 8px;
+  right: 26px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.save-dot.is-saving {
+  opacity: 1;
+  animation: save-dot-pulse 0.9s ease-in-out infinite;
+}
+@keyframes save-dot-pulse {
+  50% {
+    transform: scale(1.8);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .save-dot.is-saving {
+    animation: none;
+  }
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

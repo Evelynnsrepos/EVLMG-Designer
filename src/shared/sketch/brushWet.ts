@@ -148,10 +148,11 @@ export class WetStamper extends StrokeStamper {
       w.restore()
       // 3D paint needs to know where the paint went: keep the stamps in the stroke mask too.
       if (b.height > 0) {
-        this.main.save()
-        this.main.globalAlpha = d.alpha
-        this.main.drawImage(t.canvas, x0, y0)
-        this.main.restore()
+        const main = this.main as Ctx
+        main.save()
+        main.globalAlpha = d.alpha
+        main.drawImage(t.canvas, x0, y0)
+        main.restore()
       }
       // The brush keeps part of what it carried and picks up the rest.
       mix(carry, this.sample.canvas, this.smudge ? 1 - Math.min(0.97, b.opacity) : 0.35, s)

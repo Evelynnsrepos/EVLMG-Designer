@@ -404,3 +404,12 @@
   margin: 4px 0 0;
   font-size: 12px;
 }
+
+/* A ribbon's cap image in the Shape page (0.31). */
+.studio-cap {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  background: var(--placeholder);
+  border-radius: 4px;
+}

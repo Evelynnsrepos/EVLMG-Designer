@@ -13,6 +13,9 @@ export const projectPaths = {
   imagesDir: (root: string) => getFs().join(root, 'assets', 'images'),
   audioDir: (root: string) => getFs().join(root, 'assets', 'audio'),
   backupsDir: (root: string) => getFs().join(root, '.backups'),
+  /** 0.31: undo history kept between sessions (Draw, Pixel Art); stays on this computer, never shared or committed. */
+  historyDir: (root: string) => getFs().join(root, '.history'),
+  history: (root: string, type: ComponentType, id: string, ext = 'json') => getFs().join(root, '.history', type, `${id}.${ext}`),
   /** Collaboration state of a shared project (Yjs), see core/collab. */
   collabDir: (root: string) => getFs().join(root, 'collab'),
   collabState: (root: string) => getFs().join(root, 'collab', 'state.bin'),

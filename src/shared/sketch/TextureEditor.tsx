@@ -1,7 +1,7 @@
 import { Brush, ClipboardPaste, Crop, FlipVertical2, ImageUp, Repeat, RotateCw, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { brushTip, type BrushSettings } from './brushes'
-import { grainCanvas, GRAINS, loadImageMask, makeTileable, maskFromPixels, SHAPES, tipImage, type BrushGrain, type BrushShape } from './brushTextures'
+import { grainCanvas, GRAINS, loadImageMask, makeTileable, maskFromPixels, SHAPES, tipImage, usesAlpha, type BrushGrain, type BrushShape } from './brushTextures'
 
 const UI = {
   shapeLibrary: 'Shape library',
@@ -43,8 +43,8 @@ function maskToDataUrl(src: CanvasImageSource & { width: number; height: number 
   return c.toDataURL('image/png')
 }
 
-/** Any image file or blob → a paint mask data URL. */
-async function blobToMask(blob: Blob): Promise<string | null> {
+/** Any image file or blob → a brush image data URL (a mask, or alpha + greys for see-through images). */
+export async function blobToMask(blob: Blob): Promise<string | null> {
   const url = URL.createObjectURL(blob)
   try {
     const img = new Image()
@@ -54,13 +54,27 @@ async function blobToMask(blob: Blob): Promise<string | null> {
     const c = canvas(Math.max(1, Math.round(img.naturalWidth * s)), Math.max(1, Math.round(img.naturalHeight * s)))
     const g = c.getContext('2d', { willReadFrequently: true })!
     g.drawImage(img, 0, 0, c.width, c.height)
-    const mask = maskFromPixels(g.getImageData(0, 0, c.width, c.height).data)
-    return grayUrl(mask, c.width, c.height)
+    const data = g.getImageData(0, 0, c.width, c.height).data
+    // A see-through image keeps its greys too (as alpha + grey), for brushes that keep the image's light and dark.
+    if (usesAlpha(data)) return shadedUrl(data, c.width, c.height)
+    return grayUrl(maskFromPixels(data), c.width, c.height)
   } catch {
     return null
   } finally {
     URL.revokeObjectURL(url)
   }
+}
+
+function shadedUrl(data: Uint8ClampedArray, w: number, h: number) {
+  const c = canvas(w, h)
+  const img = new ImageData(w, h)
+  for (let i = 0; i < w * h; i++) {
+    const o = i * 4
+    img.data[o] = img.data[o + 1] = img.data[o + 2] = 0.299 * data[o] + 0.587 * data[o + 1] + 0.114 * data[o + 2]
+    img.data[o + 3] = data[o + 3]
+  }
+  c.getContext('2d')!.putImageData(img, 0, 0)
+  return c.toDataURL('image/png')
 }
 
 function grayUrl(mask: Uint8ClampedArray, w: number, h: number) {
