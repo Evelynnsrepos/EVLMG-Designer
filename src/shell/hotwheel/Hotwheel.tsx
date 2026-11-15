@@ -531,7 +531,6 @@ function Wheel({ open }: { open: Open }) {
               </g>
               {inner.tops}
               {outer?.tops}
-              <circle r={HOLE} className="hotwheel-hole" />
             </g>
           </>
         ) : (

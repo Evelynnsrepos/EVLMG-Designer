@@ -229,10 +229,6 @@
 .hw-drop {
   transform: translate(var(--x), var(--y));
 }
-:root[data-glass] .hotwheel-hole {
-  fill: color-mix(in srgb, var(--bg-elevated) 90%, var(--accent));
-  stroke: color-mix(in srgb, var(--accent) 60%, transparent);
-}
 :root[data-glass] .hotwheel > svg {
   filter: drop-shadow(0 6px 16px rgb(0 0 0 / 0.18));
 }
