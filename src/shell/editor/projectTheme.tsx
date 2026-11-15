@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { pickAndImportAssets, useAssetUrl } from '@/core/assets'
+import { useEffect, useState } from 'react'
+import { assetBlobUrl, pickAndImportAssets, useAssetUrl } from '@/core/assets'
 import { DEFAULT_PROJECT_THEME, type ProjectTheme } from '@/core/model'
 import { useProjectStore } from '@/core/state'
 import { Modal } from '@/shared/ui'
@@ -70,6 +70,16 @@ export function useProjectTheme() {
 export function ProjectWallpaper() {
   const theme = useProjectStore((s) => s.meta?.theme)
   const url = useAssetUrl(theme?.wallpaper)
+  // Draw's paper reads the wallpaper into a canvas the GPU uploads; an asset-protocol picture would taint it.
+  const root = useProjectStore((s) => s.root)
+  const [blob, setBlob] = useState<string | null>(null)
+  useEffect(() => {
+    let off = false
+    if (root && theme?.wallpaper) void assetBlobUrl(root, theme.wallpaper).then((u) => !off && setBlob(u), () => {})
+    return () => {
+      off = true
+    }
+  }, [root, theme?.wallpaper])
   if (!theme || !url) return null
   const shade = [
     theme.tint && `linear-gradient(rgb(${hexToRgb(theme.tint).join(' ')} / ${theme.tintStrength / 100}), transparent 0)`,
@@ -77,7 +87,7 @@ export function ProjectWallpaper() {
   ].filter(Boolean)
   return (
     <>
-      <WallpaperVars url={url} shade={shade.join(', ')} blur={theme.blur} contrast={theme.contrast} />
+      {blob && <WallpaperVars url={blob} shade={shade.join(', ')} blur={theme.blur} contrast={theme.contrast} />}
     <div className="project-wallpaper" aria-hidden>
       <div
         className="project-wallpaper-image"

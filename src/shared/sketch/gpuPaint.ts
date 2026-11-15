@@ -1177,10 +1177,16 @@ export class GpuPainter {
     const sy = (-2 * dpr) / ch
     const toClip = [a * sx, b * sy, 0, c * sx, d * sy, 0, e * sx - 1, ff * sy + 1, 1]
     const whole = [0, 0, this.width, this.height]
-    if (paper) {
+    let paperTex: WebGLTexture | null = null
+    try {
+      if (paper) paperTex = this.image(paper.image, 'classic', false, paper.version)
+    } catch {
+      // A picture the GPU may not read (another origin): no paper, rather than no GPU drawing at all.
+    }
+    if (paper && paperTex) {
       // In the same canvas as the drawing, so the page has no extra layer that could flicker or cover it.
       const pp = this.prog('paper')
-      this.bind(1, this.image(paper.image, 'classic', false, paper.version), pp, 'paper')
+      this.bind(1, paperTex, pp, 'paper')
       this.set(pp, { doc: [this.width, this.height], rect: [paper.frame.x, paper.frame.y, paper.frame.w, paper.frame.h], toClip, screen: [cw, ch] })
       this.drawQuad()
       gl.enable(gl.BLEND)
