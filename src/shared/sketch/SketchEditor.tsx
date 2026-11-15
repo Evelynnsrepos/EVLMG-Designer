@@ -169,6 +169,13 @@ const UI = {
 
 type Tool = 'brush' | 'eraser' | 'smudge' | 'lasso' | 'rect' | 'move' | 'eyedropper' | 'layerpick' | 'hand' | 'text'
 
+/** The app's background colour as #rrggbb (the theme's --bg), for the cursor's contrast over see-through areas. */
+function appBackground(): string {
+  const c = document.createElement('canvas').getContext('2d')!
+  c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#000000'
+  return c.fillStyle.startsWith('#') ? c.fillStyle : '#000000'
+}
+
 /** Tools that paint: switching between them doesn't save (switching to any other tool does). */
 const PAINT_TOOLS = new Set<Tool>(['brush', 'eraser', 'smudge'])
 
@@ -765,11 +772,11 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     const p = toDoc(e)
     setCursor(p)
     if (!gesture.current && (tool === 'brush' || tool === 'eraser' || tool === 'smudge')) {
-      const under = engine.pickColor(doc, p.x, p.y)
-      if (under) {
-        const [r, g, b] = hexToRgb(under)
-        setCursorOnLight(0.299 * r + 0.587 * g + 0.114 * b > 140)
-      }
+      // Over see-through areas (past the canvas, or a transparent canvas) the app's own background is what's behind.
+      const under = engine.pickColor(doc, p.x, p.y) ?? appBackground()
+      const [r, g, b] = hexToRgb(under)
+      const light = 0.299 * r + 0.587 * g + 0.114 * b > 140
+      if (light !== cursorOnLight) setCursorOnLight(light)
     }
     lastPointer.current = pointIn(viewCanvas.current!, e)
     if (!gesture.current) {

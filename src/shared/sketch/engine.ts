@@ -1151,7 +1151,7 @@ export class SketchEngine {
       const keys = new Set<string>()
       const stack = this.gpuNodes(layerTree(doc.layers), keys)
       gpu.pruneGroups(keys)
-      gpu.compose(stack, withBackground && doc.backgroundColor ? parseHex(doc.backgroundColor) : null, r)
+      gpu.compose(stack, withBackground && doc.backgroundColor ? parseHex(doc.backgroundColor) : null, r, (doc as { frame?: Rect }).frame ?? null)
     }
     this.gpuDirty = null
     this.onPicture = { layers: doc.layers, background: doc.backgroundColor, withBackground, edits: this.edits }
@@ -1238,8 +1238,17 @@ export class SketchEngine {
     ctx.globalAlpha = 1
     ctx.clearRect(r.x, r.y, r.w, r.h)
     if (withBackground && doc.backgroundColor) {
+      // Only the canvas (the frame) gets the background colour, not paint past its edges.
+      const f = (doc as { frame?: Rect }).frame
+      ctx.save()
+      if (f) {
+        ctx.beginPath()
+        ctx.rect(f.x, f.y, f.w, f.h)
+        ctx.clip()
+      }
       ctx.fillStyle = doc.backgroundColor
       ctx.fillRect(r.x, r.y, r.w, r.h)
+      ctx.restore()
     }
     this.stackOrder = doc.layers
     this.compose2d(ctx, layerTree(doc.layers), 0)

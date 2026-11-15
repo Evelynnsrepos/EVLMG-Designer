@@ -987,23 +987,30 @@ export class GpuPainter {
   // ---- Layers into the picture ---------------------------------------------------
 
   /** Blend the layers (bottom to top) over the background into `picture`, only inside `r` (null = all). */
-  compose(layers: GpuLayer[], background: [number, number, number, number] | null, r: Rect | null) {
+  compose(layers: GpuLayer[], background: [number, number, number, number] | null, r: Rect | null, frame: Rect | null = null) {
     const byKey = new Map<string, GpuLayer>()
     const index = (ls: GpuLayer[]) => ls.forEach((l) => (byKey.set(l.key, l), l.children && index(l.children)))
     index(layers)
-    const result = this.composeLevel(layers, 0, background, byKey, r)
+    const result = this.composeLevel(layers, 0, background, byKey, r, frame)
     this.copy(result, this.picture, r)
   }
 
-  private composeLevel(layers: GpuLayer[], depth: number, background: [number, number, number, number] | null, byKey: Map<string, GpuLayer>, r: Rect | null): Tex {
+  private composeLevel(layers: GpuLayer[], depth: number, background: [number, number, number, number] | null, byKey: Map<string, GpuLayer>, r: Rect | null, frame: Rect | null = null): Tex {
     const gl = this.gl
     const targets = this.level(depth)
     let cur = 0
     this.into(targets[cur], r)
     gl.disable(gl.BLEND)
-    if (background) gl.clearColor(background[0] * background[3], background[1] * background[3], background[2] * background[3], background[3])
-    else gl.clearColor(0, 0, 0, 0)
+    gl.clearColor(0, 0, 0, 0)
     gl.clear(gl.COLOR_BUFFER_BIT)
+    // The background colour only fills the canvas (the frame), not paint past its edges.
+    const bg = background && (frame ? (r ? intersect(r, frame) : frame) : (r ?? { x: 0, y: 0, w: this.width, h: this.height }))
+    if (background && bg) {
+      this.into(targets[cur], bg)
+      gl.clearColor(background[0] * background[3], background[1] * background[3], background[2] * background[3], background[3])
+      gl.clear(gl.COLOR_BUFFER_BIT)
+      this.into(targets[cur], r)
+    }
     for (const layer of layers) {
       const src = layer.children ? this.composeLevel(layer.children, depth + 1, null, byKey, r) : layer.adjust ? this.adjusted(targets[cur], layer.adjust, r) : layer.tex
       if (layer.children && layer.clipBase) this.keepGroup(layer.key, src, r)
@@ -1186,6 +1193,15 @@ export function clip(r: Rect, w: number, h: number): Rect | null {
   const x1 = Math.min(w, Math.ceil(r.x + r.w))
   const y1 = Math.min(h, Math.ceil(r.y + r.h))
   return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null
+}
+
+/** The overlap of two rectangles, or null. */
+function intersect(a: Rect, b: Rect): Rect | null {
+  const x = Math.max(a.x, b.x)
+  const y = Math.max(a.y, b.y)
+  const w = Math.min(a.x + a.w, b.x + b.w) - x
+  const h = Math.min(a.y + a.h, b.y + b.h) - y
+  return w > 0 && h > 0 ? { x, y, w, h } : null
 }
 
 /** '#rrggbb' to 0..1 RGB. */
