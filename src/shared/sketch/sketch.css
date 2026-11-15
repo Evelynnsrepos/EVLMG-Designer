@@ -646,3 +646,20 @@
   top: 0;
   pointer-events: none;
 }
+
+/* 0.31: Blurred paper (SketchEditor): under the picture, over the app. */
+.sketch-paper {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+/* Blurred: what is behind the window part shows through frosted, tinted with the paper colour. Only a CSS
+   backdrop blur on this one element, so painting costs nothing extra. */
+.sketch-paper.is-blurred {
+  display: block;
+  background: color-mix(in srgb, var(--paper-tint, #ffffff) 30%, transparent);
+  backdrop-filter: blur(18px) saturate(1.2);
+}

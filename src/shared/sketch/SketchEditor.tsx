@@ -37,7 +37,10 @@ import { useBrushLibrary } from './library'
 import {
   newLayer,
   nextLayerName,
+  paperMode,
+  withPaper,
   type InputPoint,
+  type PaperMode,
   type SketchDoc,
   type SketchLayer,
   type SymmetryMode,
@@ -163,6 +166,9 @@ const UI = {
   rename: 'Rename layer',
   background: 'Background',
   transparent: 'Transparent',
+  solid: 'Solid',
+  blurred: 'Blurred',
+  paperColor: 'Paper colour (with Blurred: its tint)',
   color: 'Color',
   saving: 'Saving…',
 }
@@ -296,8 +302,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const update = (fn: (d: SketchDoc) => SketchDoc) =>
     save((d) => {
       const next = fn(d)
-      const docChanged = next.guide !== d.guide || next.backgroundColor !== d.backgroundColor
-      const doc = docChanged ? { before: { guide: d.guide, backgroundColor: d.backgroundColor }, after: { guide: next.guide, backgroundColor: next.backgroundColor } } : undefined
+      const docChanged = next.guide !== d.guide || next.backgroundColor !== d.backgroundColor || next.frosted !== d.frosted
+      const doc = docChanged ? { before: { guide: d.guide, backgroundColor: d.backgroundColor, frosted: d.frosted }, after: { guide: next.guide, backgroundColor: next.backgroundColor, frosted: next.frosted } } : undefined
       if (next.layers !== d.layers || doc) engine.layersChanged(d.layers, next.layers, doc)
       return next
     })
@@ -624,8 +630,12 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   useEffect(() => {
     const box = boxRef.current
     if (!gpuView || !box) return
-    box.prepend(gpuView)
-    return () => gpuView.remove()
+    // Right under the canvas that takes the pen, over the Blurred paper.
+    box.insertBefore(gpuView, viewCanvas.current)
+    // A lost GPU is replaced on the next draw (at most once a second): draw again then, so the picture comes back.
+    const lost = () => setTimeout(() => setVersion((v) => v + 1), 1100)
+    gpuView.addEventListener('webglcontextlost', lost)
+    return () => (gpuView.removeEventListener('webglcontextlost', lost), gpuView.remove())
   }, [gpuView])
 
   // Redraw the visible canvas.
@@ -1370,6 +1380,17 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
           className={`sketch-stage${doc.backgroundColor ? '' : ' see-through'}`}
           onWheel={onWheel}
         >
+          {/* Blurred paper: what is behind the canvas, blurred and tinted (a CSS backdrop blur, free while painting).
+              Always there (hidden otherwise), so it stays first, under the GPU picture placed before the canvas. */}
+          <div
+            className={`sketch-paper${view && paperMode(doc) === 'blurred' ? ' is-blurred' : ''}`}
+            style={{
+              width: doc.frame?.w ?? doc.width,
+              height: doc.frame?.h ?? doc.height,
+              transform: view ? `matrix(${viewMatrix(view).join(',')}) translate(${doc.frame?.x ?? 0}px, ${doc.frame?.y ?? 0}px)` : undefined,
+              ...(doc.frosted ? { ['--paper-tint' as string]: doc.frosted } : {}),
+            }}
+          />
           <canvas
             key={colorSpace}
             ref={viewCanvas}
@@ -1494,11 +1515,18 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
           {/* Background colour at the top of the panel, where it is easy to find. */}
           <div className="sketch-row sketch-background">
             <span>{UI.background}</span>
-            <input type="color" value={doc.backgroundColor ?? '#ffffff'} onChange={(e) => update((d) => ({ ...d, backgroundColor: e.target.value }))} disabled={!doc.backgroundColor} />
-            <label className="sketch-check">
-              <input type="checkbox" checked={!doc.backgroundColor} onChange={(e) => update((d) => ({ ...d, backgroundColor: e.target.checked ? null : '#ffffff' }))} />
-              {UI.transparent}
-            </label>
+            <input
+              type="color"
+              title={UI.paperColor}
+              value={doc.backgroundColor ?? doc.frosted ?? '#ffffff'}
+              onChange={(e) => update((d) => (paperMode(d) === 'blurred' ? { ...d, frosted: e.target.value } : { ...d, backgroundColor: e.target.value }))}
+              disabled={paperMode(doc) === 'transparent'}
+            />
+            <select className="input" aria-label={UI.background} value={paperMode(doc)} onChange={(e) => update((d) => withPaper(d, e.target.value as PaperMode))}>
+              <option value="solid">{UI.solid}</option>
+              <option value="transparent">{UI.transparent}</option>
+              <option value="blurred">{UI.blurred}</option>
+            </select>
           </div>
           {panel}
           <ColorPanel color={color} setColor={setColor} swatches={swatches === SWATCHES ? [] : swatches} drop={drop} colorSpace={colorSpace} onColorSpace={(cs) => void setColorSpace(cs)} />
