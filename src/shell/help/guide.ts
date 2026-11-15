@@ -708,6 +708,23 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'The nodes and ready materials come from Material Maker (MIT licence), the free material program by Rodolphe Suescun and contributors. Materials saved in Material Lab keep Material Maker\'s graph format.',
     ],
   },
+  code: {
+    title: 'Code (experimental)',
+    body: [
+      'Experimental: this is the first part of the Code tool, for Godot 4 games written in GDScript. Unity, Unreal and other engines come later.',
+      'Start: click Open game folder and pick the folder of your Godot game (the one with project.godot). Your code stays in that folder. Nothing is copied into the project, so Git and Godot keep working as before. Teammates each pick their own folder; that choice is remembered per computer.',
+      'Files are on the left, open files are tabs. A dot on a tab means it is not saved yet. Ctrl+S saves; files are also saved when you switch to another window, close a tab or run the game. Ctrl+Z and Ctrl+Y undo and redo, for each file on its own. When Godot changes a file you have open, the new text shows up when you come back, and Ctrl+Z brings yours back.',
+      '## Godot connects by itself',
+      'The pill in the toolbar shows whether Godot is connected. With Godot open on the same game, the Code tool talks to it directly. Without it, the tool starts Godot hidden in the background. Then you get completion while typing, help when you hover a word, errors underlined as you type, F12 or Ctrl+click to jump to where something is defined, and F2 to rename a variable or function everywhere. All of that comes from your own Godot version. If Godot is not found, click Find Godot and pick the Godot program.',
+      '## Run the game',
+      'F5 runs the game, F6 runs the scene of the open file (a .tscn file, or the scene with the same name next to a script), F8 stops it. What the game prints shows below the code. Click an error like res://player.gd:12 to jump to that line.',
+      '## Your design data inside the code',
+      'After Export to engine (Godot), the game reads your items, characters, towns, enemies, quests and data tools through Egd. The Code tool knows them: inside Egd.find("items", "…") and Egd.tool("skill-tree", "…") the lists and ids complete as you type, hovering an id shows the entry, Ctrl+click opens it in its tool, and an id that does not exist (a typo, or an entry that was renamed or deleted) is underlined with a "Did you mean" fix. Inside tr("…") your Localization keys complete, and hovering one shows its translations.',
+      '## Combo mode',
+      'For fun: pick Subtle or Full at the top right, and typing throws sparks, shakes the editor a little and counts a combo that grows while you keep typing. The speaker button adds blip sounds. It is off until you turn it on, and with the system setting for less motion there is no shake.',
+    ],
+    tips: ['Tab indents, Ctrl+/ turns lines into comments, Ctrl+F finds and replaces in the file, Alt+click adds another cursor.'],
+  },
   'card-designer': {
     title: 'Card Designer',
     body: [
