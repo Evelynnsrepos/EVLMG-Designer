@@ -647,19 +647,21 @@
   pointer-events: none;
 }
 
-/* 0.31: Blurred paper (SketchEditor): under the picture, over the app. */
+/* 0.31: Blurred paper (SketchEditor): a copy of the app's wallpaper (projectTheme.tsx) pinned to the window,
+   blurred more and tinted with the paper colour, cut to the canvas by clip-path. Under the picture, over the app.
+   No backdrop-filter: WebKitGTK flashed the unblurred wallpaper through it while the drawing above changed. */
 .sketch-paper {
   display: none;
   position: absolute;
-  left: 0;
-  top: 0;
-  transform-origin: 0 0;
+  inset: 0;
   pointer-events: none;
 }
-/* Blurred: what is behind the window part shows through frosted, tinted with the paper colour. Only a CSS
-   backdrop blur on this one element, so painting costs nothing extra. */
 .sketch-paper.is-blurred {
   display: block;
-  background: color-mix(in srgb, var(--paper-tint, #ffffff) 30%, transparent);
-  backdrop-filter: blur(18px) saturate(1.2);
+  background:
+    linear-gradient(color-mix(in srgb, var(--paper-tint, #ffffff) 30%, transparent), transparent 0) fixed,
+    var(--wallpaper-shade, linear-gradient(transparent, transparent)) fixed,
+    var(--wallpaper-image, none) center / cover fixed,
+    var(--bg);
+  filter: blur(calc(var(--wallpaper-blur, 0px) + 18px)) contrast(var(--wallpaper-contrast, 100%)) saturate(1.2);
 }

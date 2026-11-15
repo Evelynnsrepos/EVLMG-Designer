@@ -76,6 +76,8 @@ export function ProjectWallpaper() {
     `linear-gradient(rgb(0 0 0 / ${theme.dim / 100}), transparent 0)`,
   ].filter(Boolean)
   return (
+    <>
+      <WallpaperVars url={url} shade={shade.join(', ')} blur={theme.blur} contrast={theme.contrast} />
     <div className="project-wallpaper" aria-hidden>
       <div
         className="project-wallpaper-image"
@@ -83,7 +85,24 @@ export function ProjectWallpaper() {
       />
       <div className="project-wallpaper-image" style={{ background: shade.join(', ') }} />
     </div>
+    </>
   )
+}
+
+/**
+ * The wallpaper as CSS variables on the page, so something can show it blurred without a backdrop blur
+ * (Draw's Blurred paper: a backdrop blur flickered in WebKitGTK while the drawing above it changed).
+ */
+function WallpaperVars({ url, shade, blur, contrast }: { url: string; shade: string; blur: number; contrast: number }) {
+  useEffect(() => {
+    const s = document.documentElement.style
+    s.setProperty('--wallpaper-image', `url("${url}")`)
+    s.setProperty('--wallpaper-shade', shade)
+    s.setProperty('--wallpaper-blur', `${blur}px`)
+    s.setProperty('--wallpaper-contrast', `${contrast}%`)
+    return () => ['--wallpaper-image', '--wallpaper-shade', '--wallpaper-blur', '--wallpaper-contrast'].forEach((v) => s.removeProperty(v))
+  }, [url, shade, blur, contrast])
+  return null
 }
 
 export function ProjectThemeDialog({ onClose }: { onClose: () => void }) {

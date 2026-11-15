@@ -182,6 +182,13 @@ function appBackground(): string {
   return c.fillStyle.startsWith('#') ? c.fillStyle : '#000000'
 }
 
+/** The canvas frame's outline on screen (view coordinates), as a CSS clip-path. */
+function paperClip(view: View, f: { x: number; y: number; w: number; h: number }): string {
+  const [a, b, c, d, e, g] = viewMatrix(view)
+  const at = (x: number, y: number) => `${a * x + c * y + e}px ${b * x + d * y + g}px`
+  return `polygon(${at(f.x, f.y)}, ${at(f.x + f.w, f.y)}, ${at(f.x + f.w, f.y + f.h)}, ${at(f.x, f.y + f.h)})`
+}
+
 /** Tools that paint: switching between them doesn't save (switching to any other tool does). */
 const PAINT_TOOLS = new Set<Tool>(['brush', 'eraser', 'smudge'])
 
@@ -1380,16 +1387,12 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
           className={`sketch-stage${doc.backgroundColor ? '' : ' see-through'}`}
           onWheel={onWheel}
         >
-          {/* Blurred paper: what is behind the canvas, blurred and tinted (a CSS backdrop blur, free while painting).
+          {/* Blurred paper: the app's wallpaper (or background) behind the canvas, blurred and tinted, cut to the canvas.
+              A plain blur of its own copy, not a backdrop blur: that flickered in WebKitGTK under the drawing.
               Always there (hidden otherwise), so it stays first, under the GPU picture placed before the canvas. */}
           <div
             className={`sketch-paper${view && paperMode(doc) === 'blurred' ? ' is-blurred' : ''}`}
-            style={{
-              width: doc.frame?.w ?? doc.width,
-              height: doc.frame?.h ?? doc.height,
-              transform: view ? `matrix(${viewMatrix(view).join(',')}) translate(${doc.frame?.x ?? 0}px, ${doc.frame?.y ?? 0}px)` : undefined,
-              ...(doc.frosted ? { ['--paper-tint' as string]: doc.frosted } : {}),
-            }}
+            style={{ clipPath: view ? paperClip(view, doc.frame ?? { x: 0, y: 0, w: doc.width, h: doc.height }) : undefined, ...(doc.frosted ? { ['--paper-tint' as string]: doc.frosted } : {}) }}
           />
           <canvas
             key={colorSpace}
