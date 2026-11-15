@@ -88,10 +88,22 @@ export function parseChecklist(text: string): string[] {
     .filter(Boolean)
 }
 
-/** One step forward; Done stays Done, so a stray click can't throw finished work back to Needed. */
-export function nextStatus(s: Status): Status {
-  const i = STATUSES.findIndex((x) => x.id === s)
-  return STATUSES[Math.min(i + 1, STATUSES.length - 1)].id
+/** Words that give away what an asset is, checked in this order ("Button click sound" is a Sound, not UI). */
+const KIND_WORDS: [AssetKind, RegExp][] = [
+  ['Music', /\b(music|song|theme|soundtrack|ost|melody|jingle)\b/],
+  ['Sound', /\b(sounds?|sfx|voice|noise|audio|footsteps?)\b/],
+  ['3D model', /\b(3d|models?|mesh|rig)\b/],
+  ['Animation', /\b(animations?|anim|cycle|cutscene)\b/],
+  ['VFX', /\b(vfx|effects?|particles?|explosion|sparks?|glow|smoke)\b/],
+  ['UI', /\b(ui|hud|button|menu|screen|panel|bar|font|cursor)\b/],
+  ['Icon', /\b(icons?|logo|emblem|badge)\b/],
+  ['Sprite', /\b(sprites?|spritesheet|tileset|tiles?|portrait)\b/],
+]
+
+/** Best guess of the kind from a name like "Forest music" or "Hero idle sprite"; `fallback` when nothing fits. */
+export function guessKind(name: string, fallback: AssetKind = '2D art'): AssetKind {
+  const n = name.toLowerCase()
+  return KIND_WORDS.find(([, re]) => re.test(n))?.[0] ?? fallback
 }
 
 /** Move picture `i` to the front, making it the main picture. */

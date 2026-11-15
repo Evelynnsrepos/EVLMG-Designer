@@ -1,4 +1,29 @@
-import { ExternalLink, FileUp, FolderOpen, ImagePlus, ListPlus, Paperclip, Plus, Search, SquareKanban, Star, Trash2, X } from 'lucide-react'
+import {
+  Box,
+  Check,
+  Clapperboard,
+  ExternalLink,
+  FolderOpen,
+  Gem,
+  LayoutGrid,
+  LayoutList,
+  ListPlus,
+  Music,
+  Palette,
+  PanelsTopLeft,
+  Paperclip,
+  PersonStanding,
+  Plus,
+  Search,
+  Shapes,
+  Sparkles,
+  SquareKanban,
+  Star,
+  Trash2,
+  Volume2,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { dragHasFiles, importAssetsFromDataTransfer, pickAndImportAssets, resolveAssetPath, useAssetUrls, type ImportedAsset } from '@/core/assets'
 import { getFs } from '@/core/fs'
@@ -12,10 +37,10 @@ import { Modal } from '@/shared/ui'
 import {
   ASSET_KINDS,
   createPool,
+  guessKind,
   isLate,
   makeMain,
   newEntry,
-  nextStatus,
   parseChecklist,
   PRIORITIES,
   progress,
@@ -31,11 +56,10 @@ import './asset-pool.css'
 import { ProofTextarea } from '@/shared/spell'
 
 const UI = {
-  title: 'Asset Pool',
   add: 'New asset',
   bulk: 'Add many…',
   search: 'Search assets',
-  allStatus: 'Any status',
+  all: 'All',
   allKinds: 'Any kind',
   empty: 'Nothing to make yet. Add assets one by one, or use Add many… to add one for every item, character, town or enemy, or paste a checklist.',
   noMatch: 'No assets match the filters.',
@@ -44,30 +68,31 @@ const UI = {
   kind: 'Kind',
   status: 'Status',
   notes: 'Notes',
-  notesHint: 'Style, size, who makes it, references…',
-  pictures: 'Pictures',
-  addPicture: 'Add picture',
-  dropHint: 'Drop images here',
+  notesHint: 'Style, size, references…',
+  files: 'Pictures and files',
+  filesHint: 'Pictures, the sound, the model, the source file (.psd, .blend…). Drop anything onto this panel.',
+  add1: 'Add picture or file',
+  dropHere: 'Drop a picture or file here',
   for: 'For',
   openSource: 'Open',
   deleted: '(deleted)',
   delete: 'Delete asset',
-  cycle: (next: string) => `Click to move it on to ${next}`,
-  isDone: 'Done. To change it, pick another status on the right.',
   owner: 'Who makes it',
   ownerHint: 'A name, or leave empty',
   anyone: 'Anyone',
+  team: 'Who, when, priority',
   due: 'Due',
   priority: 'Priority',
-  files: 'Files',
-  filesHint: 'The sound, the model, the source file (.psd, .blend…). Drop any file here.',
-  attach: 'Attach file',
   show: 'Show in folder',
   makeMain: 'Make this the main picture',
+  main: 'Main picture, shown in the list',
   makeTask: 'Make a task',
   makeTaskHint: 'Adds a task on the Task Board with this name, who, due date and picture',
   openTask: 'Open its task',
   late: 'late',
+  rows: 'List',
+  tiles: 'Pictures',
+  statusOf: (name: string) => `Status of ${name}`,
 }
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -76,8 +101,58 @@ const isAudio = (path: string) => path.startsWith('assets/audio/')
 const ENTITY_LABEL: Record<EntityType, string> = { item: 'Items', character: 'Characters', town: 'Towns', enemy: 'Enemies' }
 const ENTITY_ONE: Record<EntityType, string> = { item: 'Item', character: 'Character', town: 'Town', enemy: 'Enemy' }
 
+/** Shown instead of a picture until the asset has one, so the list says what each asset is at a glance. */
+const KIND_ICON: Record<AssetKind, LucideIcon> = {
+  '2D art': Palette,
+  Icon: Gem,
+  Sprite: PersonStanding,
+  '3D model': Box,
+  Animation: Clapperboard,
+  Sound: Volume2,
+  Music: Music,
+  UI: PanelsTopLeft,
+  VFX: Sparkles,
+  Other: Shapes,
+}
+
+const VIEW_KEY = 'egd-asset-pool-view'
+type ViewMode = 'rows' | 'tiles'
+const loadView = (): ViewMode => {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'tiles' ? 'tiles' : 'rows'
+  } catch {
+    return 'rows'
+  }
+}
+
+/** The main picture, or the kind's icon when there is none yet. */
+function Thumb({ e, url, className }: { e: AssetEntry; url?: string; className: string }) {
+  const Icon = KIND_ICON[e.kind] ?? Shapes
+  return <div className={`${className} pool-kind-${e.status}`}>{e.images[0] && url ? <img src={url} alt="" /> : <Icon size={className === 'pool-thumb' ? 18 : 36} />}</div>
+}
+
+/** A status pill that opens the four statuses (a native menu, so it works with keys and touch), never a blind click-to-cycle. */
+function StatusPick({ e, label, onChange }: { e: AssetEntry; label: string; onChange: (s: Status) => void }) {
+  return (
+    <select
+      className={`pool-status pool-status-${e.status}`}
+      aria-label={label}
+      title={label}
+      value={e.status}
+      onClick={(ev) => ev.stopPropagation()}
+      onChange={(ev) => onChange(ev.target.value as Status)}
+    >
+      {STATUSES.map((s) => (
+        <option key={s.id} value={s.id}>
+          {s.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 /**
- * Asset Pool (v0.5). Intents: `select` ({ id }) shows one entry; `add-image` ({ path, name }) attaches a picture to the
+ * Asset Pool (v0.5, redesigned v0.32). Intents: `select` ({ id }) shows one entry; `add-image` ({ path, name }) attaches a picture to the
  * selected asset, or makes a new asset from it when none is selected.
  */
 export default function View({ active }: PanelProps) {
@@ -86,14 +161,26 @@ export default function View({ active }: PanelProps) {
   const root = useProjectStore((s) => s.root)
   const entities = useProjectStore((s) => s.entities)
   const [selectedId, setSelectedId] = useState<Id | null>(null)
+  const [justAdded, setJustAdded] = useState<Id | null>(null)
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<Status | ''>('')
   const [kindFilter, setKindFilter] = useState<AssetKind | ''>('')
   const [ownerFilter, setOwnerFilter] = useState('')
   const [bulkOpen, setBulkOpen] = useState(false)
+  const [view, setViewState] = useState<ViewMode>(loadView)
+  const [dropping, setDropping] = useState(false)
   const pool = doc.data
   const urlOf = useAssetUrls(pool?.entries.flatMap((e) => [...e.images, ...(e.files ?? []).filter((f) => isAudio(f.path)).map((f) => f.path)]) ?? [])
   const owners = [...new Set((pool?.entries ?? []).map((e) => e.owner?.trim() ?? '').filter(Boolean))].sort()
+
+  const setView = (v: ViewMode) => {
+    setViewState(v)
+    try {
+      localStorage.setItem(VIEW_KEY, v)
+    } catch {
+      // no storage: the choice lasts until the tool closes
+    }
+  }
 
   const nameOf = (e: AssetEntry) => {
     if (!e.sourceType || !e.sourceId) return e.name
@@ -121,28 +208,33 @@ export default function View({ active }: PanelProps) {
     !!pool,
   )
 
-  const shown = useMemo(() => {
+  // Everything but the status filter; the status chips count from this.
+  const matching = useMemo(() => {
     if (!pool) return []
     const q = query.trim().toLowerCase()
     return pool.entries.filter(
       (e) =>
-        (!statusFilter || e.status === statusFilter) &&
         (!kindFilter || e.kind === kindFilter) &&
         (!ownerFilter || (e.owner?.trim() ?? '') === ownerFilter) &&
         (!q || nameOf(e).toLowerCase().includes(q) || e.notes.toLowerCase().includes(q) || (e.owner ?? '').toLowerCase().includes(q)),
     )
     // nameOf reads entities, which are in the deps.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [pool, query, statusFilter, kindFilter, ownerFilter, entities])
+  }, [pool, query, kindFilter, ownerFilter, entities])
 
   if (!pool) return null
   const selected = pool.entries.find((e) => e.id === selectedId) ?? null
   const { done, total } = progress(pool.entries)
+  const groups = STATUSES.filter((s) => !statusFilter || s.id === statusFilter)
+    .map((s) => ({ ...s, entries: matching.filter((e) => e.status === s.id) }))
+    .filter((g) => g.entries.length)
 
   const add = () => {
     const entry = newEntry('New asset', kindFilter || '2D art')
     doc.update((p) => ({ ...p, entries: [...p.entries, entry] }))
     setSelectedId(entry.id)
+    setJustAdded(entry.id)
+    setStatusFilter('')
   }
 
   const remove = async (e: AssetEntry) => {
@@ -151,17 +243,14 @@ export default function View({ active }: PanelProps) {
     setSelectedId(null)
   }
 
-  const addPictures = async (e: AssetEntry, paths: string[]) => {
-    if (paths.length) edit(e.id, { images: [...e.images, ...paths] })
-  }
-
-  /** Pictures go to Pictures, everything else (sounds, models, source files) to Files. */
+  /** Pictures go to the pictures, everything else (sounds, models, source files) to the file list. */
   const attach = (e: AssetEntry, assets: ImportedAsset[]) => {
     if (!assets.length) return
     const pics = assets.filter((a) => a.kind === 'image').map((a) => a.path)
     const files = assets.filter((a) => a.kind !== 'image').map((a) => ({ path: a.path, name: a.name }))
-    edit(e.id, { images: [...e.images, ...pics], files: [...(e.files ?? []), ...files] })
+    edit(e.id, { images: [...e.images, ...pics], ...(files.length ? { files: [...(e.files ?? []), ...files] } : {}) })
   }
+  const pickFiles = async (e: AssetEntry) => root && attach(e, await pickAndImportAssets(root, 'file', UI.add1))
 
   const reveal = async (path: string) => {
     if (root) await getFs().revealInFolder(await resolveAssetPath(root, path))
@@ -188,6 +277,23 @@ export default function View({ active }: PanelProps) {
     openComponent('tasks')
   }
 
+  const meta = (e: AssetEntry) => (
+    <>
+      {e.kind}
+      {e.sourceType && ` · ${ENTITY_ONE[e.sourceType]}${sourceExists(e) ? '' : ` ${UI.deleted}`}`}
+      {e.owner?.trim() && ` · ${e.owner.trim()}`}
+      {e.due && <span className={isLate(e, today()) ? 'pool-late' : undefined}>{` · ${UI.due} ${e.due}${isLate(e, today()) ? ` (${UI.late})` : ''}`}</span>}
+      {(e.files?.length ?? 0) > 0 && (
+        <span title={e.files!.map((f) => f.name).join(', ')}>
+          {' · '}
+          <Paperclip size={11} /> {e.files!.length}
+        </span>
+      )}
+    </>
+  )
+
+  const teamUsed = !!selected && !!(selected.owner?.trim() || selected.due || (selected.priority && selected.priority !== 'Normal') || selected.taskId)
+
   return (
     <div className="pool">
       <div className="pool-main">
@@ -202,14 +308,6 @@ export default function View({ active }: PanelProps) {
             <Search size={14} />
             <input className="input" placeholder={UI.search} value={query} onChange={(e) => setQuery(e.target.value)} />
           </label>
-          <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as Status | '')}>
-            <option value="">{UI.allStatus}</option>
-            {STATUSES.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
           <select className="input" value={kindFilter} onChange={(e) => setKindFilter(e.target.value as AssetKind | '')}>
             <option value="">{UI.allKinds}</option>
             {ASSET_KINDS.map((k) => (
@@ -224,49 +322,76 @@ export default function View({ active }: PanelProps) {
               ))}
             </select>
           )}
-          <span className="pool-progress" title={UI.done(done, total)}>
-            <span className="pool-progress-bar">
-              <span style={{ width: total ? `${(done / total) * 100}%` : 0 }} />
-            </span>
-            {UI.done(done, total)}
-          </span>
+          <div className="pool-segmented" role="group" aria-label="View">
+            <button className={`icon-btn${view === 'rows' ? ' on' : ''}`} title={UI.rows} aria-pressed={view === 'rows'} onClick={() => setView('rows')}>
+              <LayoutList size={15} />
+            </button>
+            <button className={`icon-btn${view === 'tiles' ? ' on' : ''}`} title={UI.tiles} aria-pressed={view === 'tiles'} onClick={() => setView('tiles')}>
+              <LayoutGrid size={15} />
+            </button>
+          </div>
         </div>
+
+        {pool.entries.length > 0 && (
+          <div className="pool-statusbar">
+            <button className={`pool-chip${statusFilter === '' ? ' is-on' : ''}`} onClick={() => setStatusFilter('')}>
+              {UI.all} <b>{matching.length}</b>
+            </button>
+            {STATUSES.map((s) => (
+              <button
+                key={s.id}
+                className={`pool-chip pool-chip-${s.id}${statusFilter === s.id ? ' is-on' : ''}`}
+                onClick={() => setStatusFilter(statusFilter === s.id ? '' : s.id)}
+              >
+                {s.label} <b>{matching.filter((e) => e.status === s.id).length}</b>
+              </button>
+            ))}
+            <span className="pool-progress" title={UI.done(done, total)}>
+              <span className="pool-progress-bar">
+                <span style={{ width: total ? `${(done / total) * 100}%` : 0 }} />
+              </span>
+              {UI.done(done, total)}
+            </span>
+          </div>
+        )}
 
         {pool.entries.length === 0 ? (
           <p className="pool-empty muted">{UI.empty}</p>
-        ) : shown.length === 0 ? (
+        ) : groups.length === 0 ? (
           <p className="pool-empty muted">{UI.noMatch}</p>
         ) : (
           <div className="pool-list">
-            {shown.map((e) => (
-              <div key={e.id} className={`pool-row${e.id === selectedId ? ' is-selected' : ''}`} onClick={() => setSelectedId(e.id)}>
-                <div className="pool-thumb">{e.images[0] && urlOf(e.images[0]) ? <img src={urlOf(e.images[0])} alt="" /> : <div className="placeholder-image" />}</div>
-                <div className="pool-row-main">
-                  <div className="pool-row-name">{nameOf(e)}</div>
-                  <div className="pool-row-meta">
-                    {e.kind}
-                    {e.sourceType && ` · ${ENTITY_ONE[e.sourceType]}${sourceExists(e) ? '' : ` ${UI.deleted}`}`}
-                    {e.owner?.trim() && ` · ${e.owner.trim()}`}
-                    {e.due && <span className={isLate(e, today()) ? 'pool-late' : undefined}>{` · ${UI.due} ${e.due}${isLate(e, today()) ? ` (${UI.late})` : ''}`}</span>}
-                    {(e.files?.length ?? 0) > 0 && (
-                      <span title={e.files!.map((f) => f.name).join(', ')}>
-                        {' · '}
-                        <Paperclip size={11} /> {e.files!.length}
-                      </span>
-                    )}
-                  </div>
+            {groups.map((g) => (
+              <section key={g.id} className="pool-group">
+                <h4 className={`pool-group-head pool-chip-${g.id}`}>
+                  {g.label} <span className="muted">{g.entries.length}</span>
+                </h4>
+                <div className={view === 'tiles' ? 'pool-tiles' : 'pool-rows'}>
+                  {g.entries.map((e) =>
+                    view === 'tiles' ? (
+                      <div key={e.id} className={`pool-tile${e.id === selectedId ? ' is-selected' : ''}`} onClick={() => setSelectedId(e.id)}>
+                        <Thumb e={e} url={e.images[0] ? urlOf(e.images[0]) : undefined} className="pool-tile-pic" />
+                        <div className="pool-row-name" title={nameOf(e)}>
+                          {nameOf(e)}
+                        </div>
+                        <div className="pool-tile-foot">
+                          <span className="pool-row-meta">{e.kind}</span>
+                          <StatusPick e={e} label={UI.statusOf(nameOf(e))} onChange={(status) => edit(e.id, { status })} />
+                        </div>
+                      </div>
+                    ) : (
+                      <div key={e.id} className={`pool-row${e.id === selectedId ? ' is-selected' : ''}`} onClick={() => setSelectedId(e.id)}>
+                        <Thumb e={e} url={e.images[0] ? urlOf(e.images[0]) : undefined} className="pool-thumb" />
+                        <div className="pool-row-main">
+                          <div className="pool-row-name">{nameOf(e)}</div>
+                          <div className="pool-row-meta">{meta(e)}</div>
+                        </div>
+                        <StatusPick e={e} label={UI.statusOf(nameOf(e))} onChange={(status) => edit(e.id, { status })} />
+                      </div>
+                    ),
+                  )}
                 </div>
-                <button
-                  className={`pool-status pool-status-${e.status}`}
-                  title={e.status === 'done' ? UI.isDone : UI.cycle(STATUSES.find((s) => s.id === nextStatus(e.status))!.label)}
-                  onClick={(ev) => {
-                    ev.stopPropagation()
-                    edit(e.id, { status: nextStatus(e.status) })
-                  }}
-                >
-                  {STATUSES.find((s) => s.id === e.status)!.label}
-                </button>
-              </div>
+              </section>
             ))}
           </div>
         )}
@@ -274,25 +399,35 @@ export default function View({ active }: PanelProps) {
 
       {selected && (
         <aside
-          className="pool-detail"
-          onDragOver={(e) => dragHasFiles(e.dataTransfer) && e.preventDefault()}
+          className={`pool-detail${dropping ? ' is-dropping' : ''}`}
+          onDragOver={(e) => {
+            if (!dragHasFiles(e.dataTransfer)) return
+            e.preventDefault()
+            setDropping(true)
+          }}
+          onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setDropping(false)}
           onDrop={async (e) => {
+            setDropping(false)
             if (!root || !dragHasFiles(e.dataTransfer)) return
             e.preventDefault()
             attach(selected, await importAssetsFromDataTransfer(root, e.dataTransfer, 'file'))
           }}
         >
           <div className="pool-detail-head">
-            <h3>{nameOf(selected)}</h3>
-            <button className="icon-btn" title="Close" onClick={() => setSelectedId(null)}>
+            <button className="pool-hero" title={selected.images[0] ? UI.main : UI.add1} onClick={() => !selected.images[0] && void pickFiles(selected)}>
+              <Thumb e={selected} url={selected.images[0] ? urlOf(selected.images[0]) : undefined} className="pool-hero-pic" />
+              {!selected.images[0] && <span className="muted">{UI.dropHere}</span>}
+            </button>
+            <button className="icon-btn pool-close" title="Close" onClick={() => setSelectedId(null)}>
               <X size={14} />
             </button>
           </div>
+
           {selected.sourceType && selected.sourceId ? (
             <div className="pool-field">
-              {UI.for}
-              <span className="pool-source">
-                {ENTITY_ONE[selected.sourceType]}: {nameOf(selected)}
+              <h3 className="pool-title">{nameOf(selected)}</h3>
+              <span className="pool-source muted">
+                {UI.for} {ENTITY_ONE[selected.sourceType]}
                 {sourceExists(selected) ? (
                   <button className="btn btn-ghost" onClick={() => openEntity(selected.sourceType!, selected.sourceId!)}>
                     <ExternalLink size={13} /> {UI.openSource}
@@ -305,9 +440,38 @@ export default function View({ active }: PanelProps) {
           ) : (
             <label className="pool-field">
               {UI.name}
-              <input className="input" value={selected.name} onChange={(e) => edit(selected.id, { name: e.target.value })} />
+              <input
+                key={selected.id}
+                className="input pool-name"
+                autoFocus={selected.id === justAdded}
+                onFocus={(e) => selected.id === justAdded && e.target.select()}
+                value={selected.name}
+                onChange={(e) => edit(selected.id, { name: e.target.value })}
+              />
             </label>
           )}
+
+          <div className="pool-field">
+            {UI.status}
+            <div className="pool-steps" role="radiogroup" aria-label={UI.status}>
+              {STATUSES.map((s, i) => {
+                const at = STATUSES.findIndex((x) => x.id === selected.status)
+                return (
+                  <button
+                    key={s.id}
+                    role="radio"
+                    aria-checked={s.id === selected.status}
+                    className={`pool-step pool-chip-${s.id}${s.id === selected.status ? ' is-on' : ''}${i < at ? ' is-past' : ''}`}
+                    onClick={() => edit(selected.id, { status: s.id })}
+                  >
+                    {i < at && <Check size={12} />}
+                    {s.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           <label className="pool-field">
             {UI.kind}
             <select className="input" value={selected.kind} onChange={(e) => edit(selected.id, { kind: e.target.value as AssetKind })}>
@@ -316,77 +480,30 @@ export default function View({ active }: PanelProps) {
               ))}
             </select>
           </label>
-          <label className="pool-field">
-            {UI.status}
-            <select className="input" value={selected.status} onChange={(e) => edit(selected.id, { status: e.target.value as Status })}>
-              {STATUSES.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="pool-field">
-            {UI.owner}
-            <input className="input" list="pool-owners" placeholder={UI.ownerHint} value={selected.owner ?? ''} onChange={(e) => edit(selected.id, { owner: e.target.value })} />
-            <datalist id="pool-owners">
-              {owners.map((o) => (
-                <option key={o} value={o} />
-              ))}
-            </datalist>
-          </label>
-          <div className="pool-field-row">
-            <label className="pool-field">
-              {UI.due}
-              <input className="input" type="date" value={selected.due ?? ''} onChange={(e) => edit(selected.id, { due: e.target.value })} />
-            </label>
-            <label className="pool-field">
-              {UI.priority}
-              <select className="input" value={selected.priority ?? 'Normal'} onChange={(e) => edit(selected.id, { priority: e.target.value as Priority })}>
-                {PRIORITIES.map((p) => (
-                  <option key={p}>{p}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <button className="btn" title={selected.taskId ? undefined : UI.makeTaskHint} onClick={() => makeTask(selected)}>
-            <SquareKanban size={14} /> {selected.taskId ? UI.openTask : UI.makeTask}
-          </button>
-          <label className="pool-field">
-            {UI.notes}
-            <ProofTextarea className="input pool-notes" placeholder={UI.notesHint} value={selected.notes} onChange={(e) => edit(selected.id, { notes: e.target.value })} />
-          </label>
-          <div className="pool-field">
-            {UI.pictures}
-            <div className="pool-pictures">
-              {selected.images.map((p, i) => (
-                <div key={`${p}-${i}`} className={`pool-picture${i === 0 && selected.images.length > 1 ? ' is-main' : ''}`}>
-                  {urlOf(p) ? <img src={urlOf(p)} alt="" /> : <div className="placeholder-image" />}
-                  <button className="icon-btn" title="Remove picture" onClick={() => edit(selected.id, { images: selected.images.filter((_, j) => j !== i) })}>
-                    <X size={12} />
-                  </button>
-                  {i > 0 && (
-                    <button className="icon-btn pool-make-main" title={UI.makeMain} onClick={() => edit(selected.id, { images: makeMain(selected.images, i) })}>
-                      <Star size={12} />
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button
-                className="pool-picture pool-add-picture"
-                title={UI.addPicture}
-                onClick={async () => root && addPictures(selected, (await pickAndImportAssets(root, 'image')).map((a) => a.path))}
-              >
-                <ImagePlus size={18} />
-              </button>
-            </div>
-            <span className="muted pool-hint">{UI.dropHint}</span>
-          </div>
+
           <div className="pool-field">
             {UI.files}
+            {selected.images.length > 0 && (
+              <div className="pool-pictures">
+                {selected.images.map((p, i) => (
+                  <div key={`${p}-${i}`} className={`pool-picture${i === 0 ? ' is-main' : ''}`} title={i === 0 ? UI.main : undefined}>
+                    {urlOf(p) ? <img src={urlOf(p)} alt="" /> : <div className="placeholder-image" />}
+                    <button className="icon-btn" title="Remove picture" onClick={() => edit(selected.id, { images: selected.images.filter((_, j) => j !== i) })}>
+                      <X size={12} />
+                    </button>
+                    {i > 0 && (
+                      <button className="icon-btn pool-make-main" title={UI.makeMain} onClick={() => edit(selected.id, { images: makeMain(selected.images, i) })}>
+                        <Star size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             {(selected.files ?? []).map((f, i) => (
               <div key={`${f.path}-${i}`} className="pool-file">
                 <div className="pool-file-head">
+                  <Paperclip size={12} />
                   <span className="pool-file-name" title={f.name}>
                     {f.name}
                   </span>
@@ -400,11 +517,47 @@ export default function View({ active }: PanelProps) {
                 {isAudio(f.path) && urlOf(f.path) && <audio controls preload="none" src={urlOf(f.path)} />}
               </div>
             ))}
-            <button className="btn btn-ghost" onClick={async () => root && attach(selected, await pickAndImportAssets(root, 'file', UI.attach))}>
-              <FileUp size={14} /> {UI.attach}
+            <button className="btn" onClick={() => void pickFiles(selected)}>
+              <Plus size={14} /> {UI.add1}
             </button>
             <span className="muted pool-hint">{UI.filesHint}</span>
           </div>
+
+          <label className="pool-field">
+            {UI.notes}
+            <ProofTextarea className="input pool-notes" placeholder={UI.notesHint} value={selected.notes} onChange={(e) => edit(selected.id, { notes: e.target.value })} />
+          </label>
+
+          <details key={selected.id} className="pool-team" open={teamUsed || undefined}>
+            <summary>{UI.team}</summary>
+            <label className="pool-field">
+              {UI.owner}
+              <input className="input" list="pool-owners" placeholder={UI.ownerHint} value={selected.owner ?? ''} onChange={(e) => edit(selected.id, { owner: e.target.value })} />
+              <datalist id="pool-owners">
+                {owners.map((o) => (
+                  <option key={o} value={o} />
+                ))}
+              </datalist>
+            </label>
+            <div className="pool-field-row">
+              <label className="pool-field">
+                {UI.due}
+                <input className="input" type="date" value={selected.due ?? ''} onChange={(e) => edit(selected.id, { due: e.target.value })} />
+              </label>
+              <label className="pool-field">
+                {UI.priority}
+                <select className="input" value={selected.priority ?? 'Normal'} onChange={(e) => edit(selected.id, { priority: e.target.value as Priority })}>
+                  {PRIORITIES.map((p) => (
+                    <option key={p}>{p}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <button className="btn" title={selected.taskId ? undefined : UI.makeTaskHint} onClick={() => makeTask(selected)}>
+              <SquareKanban size={14} /> {selected.taskId ? UI.openTask : UI.makeTask}
+            </button>
+          </details>
+
           <button className="btn btn-ghost pool-delete" onClick={() => void remove(selected)}>
             <Trash2 size={14} /> {UI.delete}
           </button>
@@ -435,6 +588,7 @@ const BULK = {
   allTracked: (what: string, kind: string) => `Every ${what.toLowerCase()} already has a ${kind} asset.`,
   noEntities: (what: string) => `This project has no ${what.toLowerCase()} yet.`,
   checklistHint: 'One asset per line. Bullets and checkboxes like "- [ ] Sword icon" are fine.',
+  guess: 'Guess from the name',
   add: (n: number) => (n === 1 ? 'Add 1 asset' : `Add ${n} assets`),
   cancel: 'Cancel',
 }
@@ -444,6 +598,8 @@ function BulkAdd({ pool, onClose, onAdd }: { pool: AssetPool; onClose: () => voi
   const [mode, setMode] = useState<'entities' | 'checklist'>('entities')
   const [type, setType] = useState<EntityType>('item')
   const [kind, setKind] = useState<AssetKind>('Icon')
+  // A checklist mixes kinds ("Forest music", "Sword icon"), so by default each line gets its own guess.
+  const [listKind, setListKind] = useState<AssetKind | ''>('')
   const [text, setText] = useState('')
   const tracked = trackedIds(pool, type, kind)
   const candidates = (entities[type] as { id: Id; name: string }[]).filter((e) => !tracked.has(e.id))
@@ -463,7 +619,7 @@ function BulkAdd({ pool, onClose, onAdd }: { pool: AssetPool; onClose: () => voi
     onAdd(
       mode === 'entities'
         ? candidates.filter((c) => chosen.has(c.id)).map((c) => newEntry(c.name, kind, { type, id: c.id }))
-        : lines.map((l) => newEntry(l, kind)),
+        : lines.map((l) => newEntry(l, listKind || guessKind(l))),
     )
 
   return (
@@ -480,18 +636,27 @@ function BulkAdd({ pool, onClose, onAdd }: { pool: AssetPool; onClose: () => voi
         </div>
         <label className="pool-field">
           {BULK.kind}
-          <select
-            className="input"
-            value={kind}
-            onChange={(e) => {
-              setKind(e.target.value as AssetKind)
-              setPicked(null)
-            }}
-          >
-            {ASSET_KINDS.map((k) => (
-              <option key={k}>{k}</option>
-            ))}
-          </select>
+          {mode === 'entities' ? (
+            <select
+              className="input"
+              value={kind}
+              onChange={(e) => {
+                setKind(e.target.value as AssetKind)
+                setPicked(null)
+              }}
+            >
+              {ASSET_KINDS.map((k) => (
+                <option key={k}>{k}</option>
+              ))}
+            </select>
+          ) : (
+            <select className="input" value={listKind} onChange={(e) => setListKind(e.target.value as AssetKind | '')}>
+              <option value="">{BULK.guess}</option>
+              {ASSET_KINDS.map((k) => (
+                <option key={k}>{k}</option>
+              ))}
+            </select>
+          )}
         </label>
         {mode === 'entities' ? (
           <>
@@ -538,6 +703,16 @@ function BulkAdd({ pool, onClose, onAdd }: { pool: AssetPool; onClose: () => voi
           <>
             <p className="muted">{BULK.checklistHint}</p>
             <textarea className="input pool-checklist" value={text} onChange={(e) => setText(e.target.value)} autoFocus />
+            {lines.length > 0 && (
+              <div className="pool-bulk-list pool-bulk-preview">
+                {lines.map((l, i) => (
+                  <div key={i} className="pool-check">
+                    <span className="pool-bulk-kind">{listKind || guessKind(l)}</span>
+                    {l}
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
         <div className="modal-actions">

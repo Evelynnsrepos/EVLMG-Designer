@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createPool, isLate, makeMain, newEntry, nextStatus, parseChecklist, progress, trackedIds } from './model'
+import { createPool, guessKind, isLate, makeMain, newEntry, parseChecklist, progress, trackedIds } from './model'
 
 describe('asset pool', () => {
   it('reads checklists with bullets, numbers and checkboxes', () => {
@@ -13,9 +13,14 @@ describe('asset pool', () => {
     expect(trackedIds(pool, 'item', '3D model').size).toBe(0)
   })
 
-  it('steps status forward, stops at done, and counts progress', () => {
-    expect(nextStatus('needed')).toBe('in-progress')
-    expect(nextStatus('done')).toBe('done')
+  it('guesses the kind from the name', () => {
+    expect(['Hero idle sprite', 'Sword icon', 'Forest music', 'Coin pickup sound', 'Boss model', 'Title screen UI', 'Button click sound', 'Fire explosion', 'Castle'].map((n) => guessKind(n))).toEqual([
+      'Sprite', 'Icon', 'Music', 'Sound', '3D model', 'UI', 'Sound', 'VFX', '2D art',
+    ])
+    expect(guessKind('Castle', 'Other')).toBe('Other')
+  })
+
+  it('counts progress', () => {
     const done = { ...newEntry('x', 'Other'), status: 'done' as const }
     expect(progress([done, newEntry('y', 'Other')])).toEqual({ done: 1, total: 2 })
   })
