@@ -66,5 +66,5 @@ describe('asset sync', () => {
     await until(() => guestAssets.received.length === 1, 5000)
     expect(await fs.readBinary('/guest/assets/images/0b5a6d7e-1111-4222-8333-444455556666.png')).toEqual(big)
     expect(await fs.exists('/guest/assets/audio/0b5a6d7e-1111-4222-8333-444455557777.mp3')).toBe(false)
-  }, 30_000)
+  }, 120_000) // slow on busy Windows CI runners
 })

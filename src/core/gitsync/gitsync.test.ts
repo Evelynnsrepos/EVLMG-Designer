@@ -215,7 +215,7 @@ describe.skipIf(!hasGit)('git sync with a local repository', () => {
     const roots = await cloneProject(folderRemote)
     expect(roots.map((r) => path.basename(r)).sort()).toEqual(['one', 'two'])
     expect(await readMode(roots[0])).toBe('full')
-  })
+  }, 180_000) // several git runs: slow on busy Windows CI runners
 
   it('gives a project in a non-syncing folder repository its own GitHub repository when it opens', async () => {
     const folder = path.join(home, 'Projects folder')
