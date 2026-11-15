@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { onWriting } from '@/core/state'
 
 /**
- * 0.31: a thin bar along the bottom of a tool's top bar while files are being written: it grows during the save
- * and fades when done. Screen readers hear "Saved".
+ * 0.31: while files are being written, a thin bar along the bottom of a tool's top bar that grows and fades when
+ * done, or (`dot`) a tiny dot in its corner that swells and shrinks. Screen readers hear "Saved".
  */
-export function SaveBar() {
+export function SaveBar({ dot = false }: { dot?: boolean }) {
   const [state, setState] = useState<'idle' | 'saving' | 'done'>('idle')
   useEffect(() => {
     let fade: ReturnType<typeof setTimeout> | undefined
@@ -19,7 +19,7 @@ export function SaveBar() {
   }, [])
   return (
     <>
-      <span className={`save-bar is-${state}`} aria-hidden />
+      <span className={`${dot ? 'save-dot' : 'save-bar'} is-${state}`} aria-hidden />
       <span className="sr-only" aria-live="polite">
         {state === 'done' ? 'Saved' : ''}
       </span>

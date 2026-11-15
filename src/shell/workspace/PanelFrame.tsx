@@ -54,8 +54,8 @@ export function PanelFrame({ panel }: { panel: Panel }) {
         openComponent(p.type, p.documentId, { targetId: panel.id, side: dropSide(e) })
       }}
     >
-      {/* For now only in Draw, where saves are big enough to notice. */}
-      {panel.type === 'sketch' && <SaveBar />}
+      {/* Draw shows a bar under its top bar; every other tool a tiny pulsing dot. */}
+      <SaveBar dot={panel.type !== 'sketch'} />
       <header className="panel-header">
         {manifest && <manifest.icon size={13} />}
         <span className="panel-title">{title}</span>

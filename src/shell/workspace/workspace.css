@@ -426,6 +426,34 @@
     opacity: 0;
   }
 }
+/* Every other tool: a tiny dot in the top bar's corner that swells and shrinks while saving. */
+.save-dot {
+  position: absolute;
+  top: 8px;
+  right: 26px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.save-dot.is-saving {
+  opacity: 1;
+  animation: save-dot-pulse 0.9s ease-in-out infinite;
+}
+@keyframes save-dot-pulse {
+  50% {
+    transform: scale(1.8);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .save-dot.is-saving {
+    animation: none;
+  }
+}
 .sr-only {
   position: absolute;
   width: 1px;
