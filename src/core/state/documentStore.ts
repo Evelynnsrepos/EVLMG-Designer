@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import { getFs } from '../fs'
 import type { ComponentType, Id } from '../model'
 import { projectPaths, readDocument, writeDocument } from '../project'
-import { flush, scheduleSave } from './autosave'
+import { flush, IDLE_SAVE_MS, scheduleSave } from './autosave'
 import { collabNames, documentBinding } from './collabBinding'
 import { History } from './history'
 import { packHistory, SAVED_HISTORY, unpackHistory } from './savedHistory'
@@ -94,10 +94,13 @@ async function loadDocument<T>(root: string, type: ComponentType, id: Id, create
   return data
 }
 
+/** Big documents saved at good moments instead of a second after each change (see IDLE_SAVE_MS). */
+const SAVE_AT_MOMENTS = new Set<string>(['pixel-art'])
+
 function setDoc(root: string, type: ComponentType, id: Id, data: unknown) {
   const key = keyOf(root, type, id)
   useDocs.setState((s) => ({ docs: { ...s.docs, [key]: data } }))
-  scheduleSave(key, () => writeDocument(root, type, id, useDocs.getState().docs[key]))
+  scheduleSave(key, () => writeDocument(root, type, id, useDocs.getState().docs[key]), SAVE_AT_MOMENTS.has(type) ? IDLE_SAVE_MS : undefined)
 }
 
 export interface UseDocumentResult<T> {

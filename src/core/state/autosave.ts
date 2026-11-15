@@ -4,18 +4,31 @@
  * component closes (ED-8) or the project/app closes.
  */
 export const AUTOSAVE_DELAY_MS = 1000
+/**
+ * 0.31: heavy documents (Draw's pixels, Pixel Art) are not saved right after each stroke: they save at moments
+ * where a short pause doesn't matter (a layer added or moved, another tool picked, leaving the window or the tool,
+ * closing), and after this long without changes as a safety net.
+ */
+export const IDLE_SAVE_MS = 20_000
+/** Drawing without a pause still saves this long after the first unsaved change. */
+export const MAX_SAVE_WAIT_MS = 60_000
 
-type Job = { timer: ReturnType<typeof setTimeout>; run: () => Promise<void> }
+type Job = { timer: ReturnType<typeof setTimeout>; run: () => Promise<void>; since: number }
 
 const pending = new Map<string, Job>()
 const listeners = new Set<(saving: boolean, error: unknown) => void>()
 const savedListeners = new Set<(key: string) => void>()
+const writingListeners = new Set<(writing: boolean) => void>()
+const writing = (on: boolean) => writingListeners.forEach((fn) => fn(on))
 
 export function scheduleSave(key: string, run: () => Promise<void>, delay = AUTOSAVE_DELAY_MS) {
   const existing = pending.get(key)
   if (existing) clearTimeout(existing.timer)
+  const since = existing?.since ?? Date.now()
+  // Long waits restart with every change, but never past MAX_SAVE_WAIT_MS since the first unsaved one.
+  if (delay >= IDLE_SAVE_MS) delay = Math.max(0, Math.min(delay, since + MAX_SAVE_WAIT_MS - Date.now()))
   const timer = setTimeout(() => void flush(key), delay)
-  pending.set(key, { timer, run })
+  pending.set(key, { timer, run, since })
   notify(true, null)
 }
 
@@ -33,6 +46,7 @@ export async function flush(key: string): Promise<void> {
     await job.run()
   })()
   running.set(key, run)
+  writing(true)
   try {
     await run
     notify(pending.size > 0, null)
@@ -42,6 +56,7 @@ export async function flush(key: string): Promise<void> {
     notify(pending.size > 0, error)
   } finally {
     if (running.get(key) === run) running.delete(key)
+    if (!running.size) writing(false)
   }
 }
 
@@ -59,6 +74,19 @@ export async function flushAll(prefix = ''): Promise<void> {
 
 export function hasPendingSaves() {
   return pending.size > 0
+}
+
+/** Called with true when files start being written and false when all writes are done (the save bar). */
+export function onWriting(fn: (writing: boolean) => void) {
+  writingListeners.add(fn)
+  return () => void writingListeners.delete(fn)
+}
+
+/** Save everything waiting when `target` fires one of `events` (the window losing focus or being hidden). */
+export function flushOn(target: EventTarget, events: string[]) {
+  const go = () => void flushAll()
+  for (const e of events) target.addEventListener(e, go)
+  return () => events.forEach((e) => target.removeEventListener(e, go))
 }
 
 /** Subscribe to save state for a status indicator. */
