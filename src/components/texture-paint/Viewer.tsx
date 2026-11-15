@@ -31,11 +31,22 @@ export interface ViewerHandle {
  * ponytail: paint follows the UV under the pointer (no screen-space projection), so a stroke crossing a
  * seam is split there; projection painting is the upgrade if seams need painting across.
  */
-export function Viewer({ bytes, path, target, onOriginal, handleRef }: { bytes: ArrayBuffer | null; path: string; target: PaintTarget; onOriginal(img: CanvasImageSource): void; handleRef: Ref<ViewerHandle> }) {
+export function Viewer({ bytes, path, target, onOriginal, onModel, filling, onFillAt, handleRef }: {
+  bytes: ArrayBuffer | null
+  path: string
+  target: PaintTarget
+  onOriginal(img: CanvasImageSource): void
+  /** The model is in place (world space), with the materials its meshes had in the file. */
+  onModel(meshes: THREE.Mesh[], materials: (THREE.Material | THREE.Material[])[]): void
+  /** "Fill a part" is on: a left click fills instead of painting. */
+  filling: boolean
+  onFillAt(origin: THREE.Vector3, dir: THREE.Vector3): void
+  handleRef: Ref<ViewerHandle>
+}) {
   const box = useRef<HTMLDivElement>(null)
-  const live = useRef({ target, onOriginal })
+  const live = useRef({ target, onOriginal, onModel, filling, onFillAt })
   useEffect(() => {
-    live.current = { target, onOriginal }
+    live.current = { target, onOriginal, onModel, filling, onFillAt }
   })
   const scene = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; controls: OrbitControls; texture: THREE.CanvasTexture; model: THREE.Object3D | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -98,6 +109,16 @@ export function Viewer({ bytes, path, target, onOriginal, handleRef }: { bytes: 
     const pressure = (e: PointerEvent) => (e.pointerType === 'pen' ? Math.max(0.05, e.pressure) : 1)
     const down = (e: PointerEvent) => {
       if (e.button !== 0 || e.altKey) return
+      if (live.current.filling) {
+        if (!scene.current?.model) return
+        const r = renderer.domElement.getBoundingClientRect()
+        ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera)
+        // A click on the model fills; a drag next to it still turns the view.
+        if (!ray.intersectObjects(meshesOf(scene.current.model), false).length) return
+        e.stopImmediatePropagation()
+        live.current.onFillAt(ray.ray.origin.clone(), ray.ray.direction.clone())
+        return
+      }
       const p = uvAt(e)
       if (!p || !live.current.target.down({ ...p, pressure: pressure(e) }, e.timeStamp)) return
       // Ours, not a view turn.
@@ -167,6 +188,7 @@ export function Viewer({ bytes, path, target, onOriginal, handleRef }: { bytes: 
         sc.texture.needsUpdate = true
         const material = new THREE.MeshStandardMaterial({ map: sc.texture, roughness: 0.85, metalness: 0 })
         const meshes = meshesOf(object)
+        const materials = meshes.map((m) => m.material)
         if (!meshes.some((m) => m.geometry.getAttribute('uv'))) setError('This model has no UV layout, so it cannot hold a texture. Unwrap it in your 3D program first (in Blender: UV > Smart UV Project), then import it again.')
         for (const m of meshes) {
           m.material = material
@@ -185,6 +207,8 @@ export function Viewer({ bytes, path, target, onOriginal, handleRef }: { bytes: 
         sc.camera.far = radius * 100
         sc.camera.updateProjectionMatrix()
         sc.controls.target.set(0, 0, 0)
+        object.updateMatrixWorld(true)
+        live.current.onModel(meshes, materials)
         if (original) live.current.onOriginal(original)
       })
       .catch(() => !gone && setError('This model file could not be read. GLB works best (in Blender: File > Export > glTF Binary).'))

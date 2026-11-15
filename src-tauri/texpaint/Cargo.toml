@@ -1,0 +1,12 @@
+[package]
+name = "texpaint"
+version = "0.1.0"
+description = "Texture Paint's Rust core: mesh topology, part picking and mesh-map baking (parts ported from Material Painter)"
+license = "GPL-3.0-only"
+edition = "2024"
+rust-version = "1.90"
+publish = false
+
+[dependencies]
+glam = "0.30"
+rayon = "1.10"

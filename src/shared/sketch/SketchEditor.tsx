@@ -52,7 +52,7 @@ import { SketchHistoryFile } from './historyFile'
 import { boundsOf, maxLayers, type Rect } from './tiles'
 import './sketch.css'
 // Sketch Pro: layers, selections (feat/sketch-layers)
-import { exportLayers, hasPixels, insertAbove, isGroup, lockedInTree } from './layers'
+import { addMask, exportLayers, hasPixels, insertAbove, isGroup, lockedInTree } from './layers'
 import { LayersPanel, type LayerHost } from './LayersPanel'
 import { SelectionBar, SelectionMaskView, SelectionOutline } from './SelectionTools'
 import { useSelector } from './selector'
@@ -250,6 +250,15 @@ export interface SketchEditorHandle {
   paintDown(p: InputPoint, time: number): boolean
   paintMove(p: InputPoint, time: number): void
   paintUp(): void
+  /** Draw shapes onto the active layer from outside (Texture Paint's "Fill a part") as one undo step, in the current colour. False when the layer can't take paint. */
+  paintShape(draw: (ctx: CanvasRenderingContext2D, color: string) => void): boolean
+  /**
+   * A new layer above the active one, filled with a picture (stretched over the canvas) or a colour, with an
+   * optional mask (bright = shown): one undo step. Returns the new layer's and mask's ids.
+   */
+  insertPicture(picture: CanvasImageSource | string, name: string, opts?: { layer?: Partial<SketchLayer>; mask?: CanvasImageSource }): { layerId: Id; maskId: Id | null }
+  /** Replace a layer's (or mask's) pixels with a picture stretched over the canvas, as one undo step. */
+  replacePixels(layerId: Id, picture: CanvasImageSource): void
 }
 
 /** A raster editor: pressure brushes, layers with blend modes, selection, mirror and references (v0.5). */
@@ -996,6 +1005,46 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     markDirty(layer.id)
   }
 
+  const insertPicture = (picture: CanvasImageSource | string, name: string, opts: { layer?: Partial<SketchLayer>; mask?: CanvasImageSource } = {}) => {
+    const layer = { ...newLayer(name), ...opts.layer }
+    const stretch = (ctx: CanvasRenderingContext2D, img: CanvasImageSource) => ctx.drawImage(img, 0, 0, doc.width, doc.height)
+    loaded.current.set(layer.id, null)
+    engine.setLayerImage(layer.id, null)
+    engine.edit(layer.id, (ctx) => {
+      if (typeof picture !== 'string') return stretch(ctx, picture)
+      ctx.fillStyle = picture
+      ctx.fillRect(0, 0, doc.width, doc.height)
+    })
+    let layers = insertAbove(docRef.current.layers, layer, activeLayer?.id)
+    let maskId: Id | null = null
+    if (opts.mask) {
+      const m = addMask(layers, layer.id)
+      layers = m.layers
+      maskId = m.mask?.id ?? null
+      if (maskId) {
+        loaded.current.set(maskId, null)
+        // A brand-new mask: no pixel undo of its own, the layer-list change below takes it away again.
+        const full = Object.assign(document.createElement('canvas'), { width: doc.width, height: doc.height })
+        stretch(full.getContext('2d')!, opts.mask)
+        engine.setLayerImage(maskId, full)
+      }
+    }
+    // Joins the pixel step above, so the layer and its mask come and go with one Ctrl+Z.
+    update((d) => ({ ...d, layers }))
+    markDirty(layer.id)
+    if (maskId) markDirty(maskId)
+    return { layerId: layer.id, maskId }
+  }
+  const replacePixels = (layerId: Id, picture: CanvasImageSource) => {
+    markDirty(
+      engine.edit(layerId, (ctx) => {
+        ctx.clearRect(0, 0, doc.width, doc.height)
+        ctx.drawImage(picture, 0, 0, doc.width, doc.height)
+      }),
+    )
+    setVersion(engine.version)
+  }
+
   const insertFromFile = async () => {
     if (!root) return
     for (const a of await pickAndImportAssets(root, 'image')) await insertImage(a.path, a.name.replace(/\.[^.]+$/, ''))
@@ -1027,7 +1076,17 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     markDirty(engine.endStroke())
     files.stroked()
   }
-  useImperativeHandle(editorRef, () => ({ insertImage, setColor, color, engine, render: () => engine.render({ ...docRef.current, layers: exportLayers(docRef.current.layers) }), paintDown, paintMove, paintUp }))
+  const paintShape = (draw: (ctx: CanvasRenderingContext2D, color: string) => void) => {
+    if (!activeLayer || !activeLayer.visible || !hasPixels(activeLayer) || activeLayer.text || lockedInTree(doc.layers, activeLayer.id)) return false
+    markDirty(engine.edit(activeLayer.id, (ctx) => {
+      if (activeLayer.alphaLock) ctx.globalCompositeOperation = 'source-atop'
+      draw(ctx, color)
+    }))
+    setVersion(engine.version)
+    files.stroked()
+    return true
+  }
+  useImperativeHandle(editorRef, () => ({ insertImage, setColor, color, engine, render: () => engine.render({ ...docRef.current, layers: exportLayers(docRef.current.layers) }), paintDown, paintMove, paintUp, paintShape, insertPicture, replacePixels }))
 
   const exportPng = async () => {
     await saveBinaryFile({

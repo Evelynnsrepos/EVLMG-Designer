@@ -8,6 +8,9 @@ repository = ""
 edition = "2024"
 rust-version = "1.90"
 
+[workspace]
+members = ["texpaint"]
+
 [lib]
 name = "egd_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -34,8 +37,17 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rustls-platform-verifier = "0.7"
 sha2 = "0.10"
 futures-util = "0.3"
+# Texture Paint's Rust core (model analysis, Fill a part, baking).
+texpaint = { path = "texpaint" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Already in the build through wry; used to turn the webview's graphics card use on for good (graphics.rs).
 webkit2gtk = "2.0"
 gtk = "0.18"
+
+# Baking runs millions of rays: keep Texture Paint's core fast in development builds too.
+[profile.dev.package.texpaint]
+opt-level = 3
+
+[profile.dev.package.glam]
+opt-level = 3
