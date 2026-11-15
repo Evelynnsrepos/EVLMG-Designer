@@ -7,7 +7,7 @@ import { newId } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
 import { isShortcut, keysOf } from '@/core/shortcuts'
 import { keyHint } from '@/shared/hotkeyHints'
-import { loadDocumentNow, postIntent, updateDocument, useDocument, useIntentHandler, useProjectStore, isTextField, useUndoRedoKeys, type UseDocumentResult } from '@/core/state'
+import { flushDocument, loadDocumentNow, postIntent, updateDocument, useDocument, useIntentHandler, useProjectStore, isTextField, useUndoRedoKeys, type UseDocumentResult } from '@/core/state'
 import { NumberInput } from '@/shared/calculators'
 import { confirmDialog, promptDialog } from '@/shared/dialogs'
 import { cssFamily, GENERIC_FONTS, systemFonts } from '@/shared/fontList'
@@ -410,7 +410,7 @@ const MAP_TOOLS: { id: Tool; icon: typeof Brush; label: string }[] = [
 
 type Live = { key: string; base: Img; img: Img; start: Pt; path: Pt[]; button: number; press?: number[]; ctrl?: Pt; from?: string; float?: { piece: Img; mask: Mask; x: number; y: number; rest: Img }; at?: Pt; snap?: { shape: Shape; at: Pt; perfect?: boolean; drawn?: Shape }; end?: Pt; xform?: { kind: 'scale' | 'rotate'; fixed: Pt; box: { x: number; y: number; w: number; h: number }; mask?: Mask; placed?: Mask } }
 
-function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { data: PixelDoc }; documentId: string; title: string; active: boolean }) {
+function Editor({ doc, title, active, documentId }: { doc: UseDocumentResult<PixelDoc> & { data: PixelDoc }; documentId: string; title: string; active: boolean }) {
   const d = doc.data
   useUndoRedoKeys(doc, active)
   useEffect(() => maybeStartTour('pixel'), [])
@@ -425,6 +425,9 @@ function Editor({ doc, title, active }: { doc: UseDocumentResult<PixelDoc> & { d
   }
 
   const [tool, setTool] = useState<Tool>('pencil')
+  // 0.31: saved at good moments (layers added, removed or moved, another tool picked), not after every stroke.
+  const layerOrder = d.layers.map((l) => l.id).join('|')
+  useEffect(() => void flushDocument('pixel-art', documentId), [layerOrder, tool, documentId])
   // The main colour is this file's; the second colour is shared with Draw's colour panel, so both tools agree.
   const [main, setMain] = useState(d.palette[1] ?? '#ffffff')
   const second = usePalettes((p) => p.secondary)

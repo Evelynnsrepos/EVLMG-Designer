@@ -5,6 +5,7 @@ import { getManifest } from '@/core/registry'
 import { PanelContext, useAppStore, useProjectStore } from '@/core/state'
 import { ReviewButton } from '@/shared/reviews'
 import { PanelJumps } from '@/shared/jumps/Jumps'
+import { SaveBar } from './SaveBar'
 import { closePanel, DRAG_MIME, movePanel, openComponent, type DragPayload } from '../editor/actions'
 import { neighbor, sideFromPoint, type Direction, type DropSide } from './layoutTree'
 import { startLayoutDrag, useLayoutDrag } from './layoutDrag'
@@ -53,6 +54,7 @@ export function PanelFrame({ panel }: { panel: Panel }) {
         openComponent(p.type, p.documentId, { targetId: panel.id, side: dropSide(e) })
       }}
     >
+      <SaveBar />
       <header className="panel-header">
         {manifest && <manifest.icon size={13} />}
         <span className="panel-title">{title}</span>

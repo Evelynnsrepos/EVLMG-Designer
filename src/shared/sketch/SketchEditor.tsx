@@ -28,7 +28,7 @@ import { lazy, Suspense, useCallback, useEffect, useImperativeHandle, useMemo, u
 import { importAssetFromBlob, pickAndImportAssets, resolveAssetPath } from '@/core/assets'
 import { getFs } from '@/core/fs'
 import { newId, type Id } from '@/core/model'
-import { flush as flushSave, scheduleSave, useProjectStore } from '@/core/state'
+import { flush as flushSave, IDLE_SAVE_MS, scheduleSave, useProjectStore } from '@/core/state'
 import { saveBinaryFile, safeFileName } from '@/core/export'
 import { SketchEngine } from './engine'
 import { drawPreview } from './brushes'
@@ -168,6 +168,9 @@ const UI = {
 }
 
 type Tool = 'brush' | 'eraser' | 'smudge' | 'lasso' | 'rect' | 'move' | 'eyedropper' | 'layerpick' | 'hand' | 'text'
+
+/** Tools that paint: switching between them doesn't save (switching to any other tool does). */
+const PAINT_TOOLS = new Set<Tool>(['brush', 'eraser', 'smudge'])
 
 const TOOLS: { id: Tool; icon: LucideIcon; label: string; key: string }[] = [
   { id: 'brush', icon: BrushIcon, label: UI.brush, key: 'b' },
@@ -474,7 +477,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     }
     save((d) => ({ ...d, layers: d.layers.map((l) => (saved.has(l.id) ? { ...l, image: saved.get(l.id)! } : l)) }))
     // The sticker (the whole picture) is made less often: a while after the last stroke, and when the app closes.
-    scheduleSave(stickerKey, saveSticker, 6000)
+    scheduleSave(stickerKey, saveSticker, IDLE_SAVE_MS)
     // Each save writes a new PNG (assets are write-once); remove the ones this editor replaced.
     for (const p of old) void resolveAssetPath(root, p).then((abs) => getFs().remove(abs).catch(() => {}))
     void historyFile?.sync(engine)
@@ -492,7 +495,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       if (!id) return
       dirty.current.add(id)
       setVersion(engine.version)
-      scheduleSave(saveKey, flush, 1200)
+      scheduleSave(saveKey, flush, IDLE_SAVE_MS)
     },
     [engine, flush, saveKey],
   )
@@ -570,6 +573,14 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
 
   // Sketch Pro: canvas changes, stats, time-lapse, import/export, Reference Companion.
   const files = useSketchFiles({ doc, update, engine, root, title, activeId: activeLayer?.id, setActive: setActiveLayerId, flush, fit })
+
+  // 0.31: good moments to save (a short pause doesn't matter there): the layer list changed, or a tool other than
+  // a brush was picked. Otherwise only after IDLE_SAVE_MS, on leaving the window or the tool, and on closing.
+  const layerOrder = doc.layers.map((l) => l.id).join('|')
+  useEffect(() => void flushSave(saveKey), [layerOrder, saveKey])
+  useEffect(() => {
+    if (!PAINT_TOOLS.has(tool)) void flushSave(saveKey)
+  }, [tool, saveKey])
 
   // The GPU's view of the picture sits under the visible canvas (a new one after the working area grew).
   const gpuView = engine.view
