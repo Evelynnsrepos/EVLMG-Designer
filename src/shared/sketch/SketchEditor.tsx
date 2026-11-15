@@ -182,11 +182,47 @@ function appBackground(): string {
   return c.fillStyle.startsWith('#') ? c.fillStyle : '#000000'
 }
 
-/** The canvas frame's outline on screen (view coordinates), as a CSS clip-path. */
-function paperClip(view: View, f: { x: number; y: number; w: number; h: number }): string {
-  const [a, b, c, d, e, g] = viewMatrix(view)
-  const at = (x: number, y: number) => `${a * x + c * y + e}px ${b * x + d * y + g}px`
-  return `polygon(${at(f.x, f.y)}, ${at(f.x + f.w, f.y)}, ${at(f.x + f.w, f.y + f.h)}, ${at(f.x, f.y + f.h)})`
+const wallpapers = new Map<string, HTMLImageElement>()
+
+/**
+ * Draw's Blurred paper as one picture the size of the view: the app background and wallpaper (projectTheme.tsx puts
+ * them in CSS variables) where they sit behind the view, blurred and tinted. Made again only when those change; the
+ * GPU draws it under the drawing inside the canvas outline, in the same canvas (no extra page layer to flicker).
+ * Returns the key it was made for, or null while the wallpaper image is still loading.
+ */
+function paperPicture(c: HTMLCanvasElement, w: number, h: number, dpr: number, at: DOMRect, tint: string, loaded: () => void): string | null {
+  const css = getComputedStyle(document.documentElement)
+  const url = /url\("?(.*?)"?\)/.exec(css.getPropertyValue('--wallpaper-image'))?.[1]
+  const blur = parseFloat(css.getPropertyValue('--wallpaper-blur')) || 0
+  const bg = css.getPropertyValue('--bg').trim() || '#000000'
+  let img = url ? wallpapers.get(url) : undefined
+  if (url && !img) {
+    img = new Image()
+    img.onload = loaded
+    img.src = url
+    wallpapers.set(url, img)
+  }
+  const ready = !img || (img.complete && img.naturalWidth > 0)
+  const key = `${w}x${h}@${dpr}|${at.left},${at.top}|${innerWidth}x${innerHeight}|${bg}|${url}|${blur}|${tint}|${ready}`
+  c.width = Math.max(1, Math.round(w * dpr))
+  c.height = Math.max(1, Math.round(h * dpr))
+  const g = c.getContext('2d')!
+  g.fillStyle = bg
+  g.fillRect(0, 0, c.width, c.height)
+  if (img && ready) {
+    // The wallpaper covers the window; this view shows the part of it behind the view.
+    const s = Math.max(innerWidth / img.naturalWidth, innerHeight / img.naturalHeight)
+    const iw = img.naturalWidth * s
+    const ih = img.naturalHeight * s
+    g.filter = `blur(${(blur + 18) * dpr}px)`
+    g.drawImage(img, ((innerWidth - iw) / 2 - at.left) * dpr, ((innerHeight - ih) / 2 - at.top) * dpr, iw * dpr, ih * dpr)
+    g.filter = 'none'
+  }
+  g.globalAlpha = 0.3
+  g.fillStyle = tint
+  g.fillRect(0, 0, c.width, c.height)
+  g.globalAlpha = 1
+  return key
 }
 
 /** Tools that paint: switching between them doesn't save (switching to any other tool does). */
@@ -321,6 +357,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
 
   const boxRef = useRef<HTMLDivElement>(null)
   const viewCanvas = useRef<HTMLCanvasElement>(null)
+  /** The Blurred paper picture and what it was made for (see paperPicture). */
+  const paperRef = useRef<{ canvas: HTMLCanvasElement; key: string; version: number; theme?: string } | null>(null)
   const [view, setView] = useState<View | null>(null)
   const viewRef = useRef<View | null>(null)
   useEffect(() => {
@@ -667,9 +705,34 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     // Transparent: nothing is drawn behind the picture, so the app's own background and wallpaper show through.
     ctx.imageSmoothingEnabled = view.scale < 1 || !!view.rot
     // With a graphics card the picture is drawn under this canvas, straight from the GPU (0.31).
-    const gpuShown = !assist.mode && engine.draw(doc, viewMatrix(view), w, h, dpr, ctx.imageSmoothingEnabled, pointed ? { id: pointed, color: getComputedStyle(canvas).getPropertyValue('--accent').trim() || '#3e8ef7' } : null)
+    const frame = doc.frame ?? { x: 0, y: 0, w: doc.width, h: doc.height }
+    let paper: { image: HTMLCanvasElement; version: number; frame: typeof frame } | null = null
+    if (paperMode(doc) === 'blurred') {
+      const p = (paperRef.current ??= { canvas: document.createElement('canvas'), key: '', version: 0 })
+      const at = box.getBoundingClientRect()
+      const probe = `${w}x${h}@${dpr}|${at.left},${at.top}|${innerWidth}x${innerHeight}|${doc.frosted}`
+      if (!p.key.includes(probe) || p.key.endsWith('|false') || p.theme !== document.documentElement.style.cssText) {
+        p.key = paperPicture(p.canvas, w, h, dpr, at, doc.frosted ?? '#ffffff', () => setVersion((v) => v + 1)) ?? ''
+        p.theme = document.documentElement.style.cssText
+        p.version++
+      }
+      paper = { image: p.canvas, version: p.version, frame }
+    }
+    const gpuShown = !assist.mode && engine.draw(doc, viewMatrix(view), w, h, dpr, ctx.imageSmoothingEnabled, pointed ? { id: pointed, color: getComputedStyle(canvas).getPropertyValue('--accent').trim() || '#3e8ef7' } : null, paper)
     if (engine.view) engine.view.style.visibility = gpuShown ? '' : 'hidden'
-    if (!gpuShown) assist.paint(ctx)
+    if (!gpuShown) {
+      if (paper) {
+        // Canvas 2D: the same paper, cut to the canvas outline, under the picture.
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(frame.x, frame.y, frame.w, frame.h)
+        ctx.clip()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.drawImage(paper.image, 0, 0)
+        ctx.restore()
+      }
+      assist.paint(ctx)
+    }
     // Transparent pages are just a white outline over the app's wallpaper.
     const px = 1 / view.scale
     const f = doc.frame ?? { x: 0, y: 0, w: doc.width, h: doc.height }
@@ -1387,13 +1450,6 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
           className={`sketch-stage${doc.backgroundColor ? '' : ' see-through'}`}
           onWheel={onWheel}
         >
-          {/* Blurred paper: the app's wallpaper (or background) behind the canvas, blurred and tinted, cut to the canvas.
-              A plain blur of its own copy, not a backdrop blur: that flickered in WebKitGTK under the drawing.
-              Always there (hidden otherwise), so it stays first, under the GPU picture placed before the canvas. */}
-          <div
-            className={`sketch-paper${view && paperMode(doc) === 'blurred' ? ' is-blurred' : ''}`}
-            style={{ clipPath: view ? paperClip(view, doc.frame ?? { x: 0, y: 0, w: doc.width, h: doc.height }) : undefined, ...(doc.frosted ? { ['--paper-tint' as string]: doc.frosted } : {}) }}
-          />
           <canvas
             key={colorSpace}
             ref={viewCanvas}

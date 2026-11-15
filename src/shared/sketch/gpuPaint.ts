@@ -131,13 +131,22 @@ void main() { outColor = texture(src, uv); }`
 const VIEW_VERT = `${HEADER}
 in vec2 pos;
 uniform vec2 doc;
+uniform vec4 rect;
 uniform mat3 toClip;
 out vec2 uv;
 void main() {
-  uv = pos * 0.5 + 0.5;
-  vec3 p = toClip * vec3(uv * doc, 1.0);
+  vec2 d = rect.xy + (pos * 0.5 + 0.5) * rect.zw;
+  uv = d / doc;
+  vec3 p = toClip * vec3(d, 1.0);
   gl_Position = vec4(p.xy, 0.0, 1.0);
 }`
+
+/** Draw's Blurred paper: a picture the size of the view, pinned to the screen, under the drawing. */
+const PAPER_FRAG = `${HEADER}
+uniform sampler2D paper;
+uniform vec2 screen;
+out vec4 outColor;
+void main() { outColor = texture(paper, vec2(gl_FragCoord.x / screen.x, 1.0 - gl_FragCoord.y / screen.y)); }`
 
 /** Move/transform: the lifted pixels through the transform mesh (meshRender.ts's shader, drawn in document pixels). */
 const MESH_VERT = `${HEADER}
@@ -484,6 +493,7 @@ export class GpuPainter {
         copy: [QUAD_VERT, COPY_FRAG],
         view: [VIEW_VERT, COPY_FRAG],
         tint: [VIEW_VERT, TINT_FRAG],
+        paper: [VIEW_VERT, PAPER_FRAG],
         dab: [DAB_VERT, DAB_FRAG],
         ribbon: [RIBBON_VERT, RIBBON_FRAG],
         mesh: [MESH_VERT, MESH_FRAG],
@@ -1129,7 +1139,15 @@ export class GpuPainter {
    * Show the picture: `m` is the view matrix in CSS pixels (as for ctx.transform), `w`×`h` the
    * element's CSS size. Smooth when zoomed out or turned, pixel-sharp when zoomed in.
    */
-  present(m: [number, number, number, number, number, number], w: number, h: number, dpr: number, smooth: boolean, tint: { tex: Tex; color: [number, number, number] } | null = null) {
+  present(
+    m: [number, number, number, number, number, number],
+    w: number,
+    h: number,
+    dpr: number,
+    smooth: boolean,
+    tint: { tex: Tex; color: [number, number, number] } | null = null,
+    paper: { image: TexImageSource; version: number; frame: Rect } | null = null,
+  ) {
     const gl = this.gl
     const cw = Math.max(1, Math.round(w * dpr))
     const ch = Math.max(1, Math.round(h * dpr))
@@ -1156,12 +1174,24 @@ export class GpuPainter {
     const sx = (2 * dpr) / cw
     const sy = (-2 * dpr) / ch
     const toClip = [a * sx, b * sy, 0, c * sx, d * sy, 0, e * sx - 1, ff * sy + 1, 1]
-    this.set(p, { doc: [this.width, this.height], toClip })
+    const whole = [0, 0, this.width, this.height]
+    if (paper) {
+      // In the same canvas as the drawing, so the page has no extra layer that could flicker or cover it.
+      const pp = this.prog('paper')
+      this.bind(1, this.image(paper.image, 'classic', false, paper.version), pp, 'paper')
+      this.set(pp, { doc: [this.width, this.height], rect: [paper.frame.x, paper.frame.y, paper.frame.w, paper.frame.h], toClip, screen: [cw, ch] })
+      this.drawQuad()
+      gl.enable(gl.BLEND)
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+      this.prog('view')
+    }
+    this.set(p, { doc: [this.width, this.height], rect: whole, toClip })
     this.drawQuad()
+    gl.disable(gl.BLEND)
     if (tint) {
       const t = this.prog('tint')
       this.bind(0, tint.tex.tex, t, 'src')
-      this.set(t, { doc: [this.width, this.height], toClip, color: tint.color })
+      this.set(t, { doc: [this.width, this.height], rect: whole, toClip, color: tint.color })
       gl.enable(gl.BLEND)
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
       this.drawQuad()
