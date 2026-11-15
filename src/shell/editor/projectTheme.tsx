@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { pickAndImportAssets, useAssetUrl } from '@/core/assets'
+import { useEffect, useState } from 'react'
+import { assetBlobUrl, pickAndImportAssets, useAssetUrl } from '@/core/assets'
 import { DEFAULT_PROJECT_THEME, type ProjectTheme } from '@/core/model'
 import { useProjectStore } from '@/core/state'
 import { Modal } from '@/shared/ui'
@@ -70,12 +70,24 @@ export function useProjectTheme() {
 export function ProjectWallpaper() {
   const theme = useProjectStore((s) => s.meta?.theme)
   const url = useAssetUrl(theme?.wallpaper)
+  // Draw's paper reads the wallpaper into a canvas the GPU uploads; an asset-protocol picture would taint it.
+  const root = useProjectStore((s) => s.root)
+  const [blob, setBlob] = useState<string | null>(null)
+  useEffect(() => {
+    let off = false
+    if (root && theme?.wallpaper) void assetBlobUrl(root, theme.wallpaper).then((u) => !off && setBlob(u), () => {})
+    return () => {
+      off = true
+    }
+  }, [root, theme?.wallpaper])
   if (!theme || !url) return null
   const shade = [
     theme.tint && `linear-gradient(rgb(${hexToRgb(theme.tint).join(' ')} / ${theme.tintStrength / 100}), transparent 0)`,
     `linear-gradient(rgb(0 0 0 / ${theme.dim / 100}), transparent 0)`,
   ].filter(Boolean)
   return (
+    <>
+      {blob && <WallpaperVars url={blob} shade={shade.join(', ')} blur={theme.blur} contrast={theme.contrast} />}
     <div className="project-wallpaper" aria-hidden>
       <div
         className="project-wallpaper-image"
@@ -83,7 +95,24 @@ export function ProjectWallpaper() {
       />
       <div className="project-wallpaper-image" style={{ background: shade.join(', ') }} />
     </div>
+    </>
   )
+}
+
+/**
+ * The wallpaper as CSS variables on the page, so something can show it blurred without a backdrop blur
+ * (Draw's Blurred paper: a backdrop blur flickered in WebKitGTK while the drawing above it changed).
+ */
+function WallpaperVars({ url, shade, blur, contrast }: { url: string; shade: string; blur: number; contrast: number }) {
+  useEffect(() => {
+    const s = document.documentElement.style
+    s.setProperty('--wallpaper-image', `url("${url}")`)
+    s.setProperty('--wallpaper-shade', shade)
+    s.setProperty('--wallpaper-blur', `${blur}px`)
+    s.setProperty('--wallpaper-contrast', `${contrast}%`)
+    return () => ['--wallpaper-image', '--wallpaper-shade', '--wallpaper-blur', '--wallpaper-contrast'].forEach((v) => s.removeProperty(v))
+  }, [url, shade, blur, contrast])
+  return null
 }
 
 export function ProjectThemeDialog({ onClose }: { onClose: () => void }) {

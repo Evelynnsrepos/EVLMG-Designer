@@ -33,7 +33,7 @@ describe('Draw on the GPU', () => {
     await page.goto(server.resolvedUrls!.local[0] + 'sketch-gpu-check')
     await page.addScriptTag({ type: 'module', content: "import { runSketchGpuCheck } from '/src/shared/sketch/gpuCheck.ts'; window.runSketchGpuCheck = runSketchGpuCheck" })
     await page.waitForFunction(() => 'runSketchGpuCheck' in window, null, { timeout: 60_000 })
-    const { strokes, adjust, undo } = (await page.evaluate(() => (window as unknown as { runSketchGpuCheck: () => unknown }).runSketchGpuCheck())) as { strokes: GpuDiff[]; adjust: GpuDiff[]; undo: GpuDiff[] }
+    const { strokes, adjust, undo, foreign } = (await page.evaluate(() => (window as unknown as { runSketchGpuCheck: () => unknown }).runSketchGpuCheck())) as { strokes: GpuDiff[]; adjust: GpuDiff[]; undo: GpuDiff[]; foreign: { stray: number; gpu: boolean } }
     expect(errors).toEqual([])
     if (process.env.SKETCH_GPU_LOG) console.table([...strokes, ...adjust])
     for (const d of [...strokes, ...adjust]) expect(d.gpu, `${d.name} ran on the GPU`).toBe(true)
@@ -43,5 +43,7 @@ describe('Draw on the GPU', () => {
     expect(undo[0].max, undo[0].name).toBeGreaterThan(0)
     expect(undo[1].max, 'undo brings the picture back exactly').toBe(0)
     expect(undo[2].max, 'redo brings the stroke back exactly').toBe(0)
+    expect(foreign.gpu).toBe(true)
+    expect(foreign.stray, 'foreign GPU pixels never reach the saved layer or the picture').toBe(0)
   }, 300_000)
 })

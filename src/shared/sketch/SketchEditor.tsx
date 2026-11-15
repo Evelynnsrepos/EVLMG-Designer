@@ -37,7 +37,10 @@ import { useBrushLibrary } from './library'
 import {
   newLayer,
   nextLayerName,
+  paperMode,
+  withPaper,
   type InputPoint,
+  type PaperMode,
   type SketchDoc,
   type SketchLayer,
   type SymmetryMode,
@@ -163,6 +166,9 @@ const UI = {
   rename: 'Rename layer',
   background: 'Background',
   transparent: 'Transparent',
+  solid: 'Solid',
+  blurred: 'Blurred',
+  paperColor: 'Paper colour (with Blurred: its tint)',
   color: 'Color',
   saving: 'Saving…',
 }
@@ -174,6 +180,49 @@ function appBackground(): string {
   const c = document.createElement('canvas').getContext('2d')!
   c.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#000000'
   return c.fillStyle.startsWith('#') ? c.fillStyle : '#000000'
+}
+
+const wallpapers = new Map<string, HTMLImageElement>()
+
+/**
+ * Draw's Blurred paper as one picture the size of the view: the app background and wallpaper (projectTheme.tsx puts
+ * them in CSS variables) where they sit behind the view, blurred and tinted. Made again only when those change; the
+ * GPU draws it under the drawing inside the canvas outline, in the same canvas (no extra page layer to flicker).
+ * Returns the key it was made for, or null while the wallpaper image is still loading.
+ */
+function paperPicture(c: HTMLCanvasElement, w: number, h: number, dpr: number, at: DOMRect, tint: string, loaded: () => void): string | null {
+  const css = getComputedStyle(document.documentElement)
+  const url = /url\("?(.*?)"?\)/.exec(css.getPropertyValue('--wallpaper-image'))?.[1]
+  const blur = parseFloat(css.getPropertyValue('--wallpaper-blur')) || 0
+  const bg = css.getPropertyValue('--bg').trim() || '#000000'
+  let img = url ? wallpapers.get(url) : undefined
+  if (url && !img) {
+    img = new Image()
+    img.onload = loaded
+    img.src = url
+    wallpapers.set(url, img)
+  }
+  const ready = !img || (img.complete && img.naturalWidth > 0)
+  const key = `${w}x${h}@${dpr}|${at.left},${at.top}|${innerWidth}x${innerHeight}|${bg}|${url}|${blur}|${tint}|${ready}`
+  c.width = Math.max(1, Math.round(w * dpr))
+  c.height = Math.max(1, Math.round(h * dpr))
+  const g = c.getContext('2d')!
+  g.fillStyle = bg
+  g.fillRect(0, 0, c.width, c.height)
+  if (img && ready) {
+    // The wallpaper covers the window; this view shows the part of it behind the view.
+    const s = Math.max(innerWidth / img.naturalWidth, innerHeight / img.naturalHeight)
+    const iw = img.naturalWidth * s
+    const ih = img.naturalHeight * s
+    g.filter = `blur(${(blur + 18) * dpr}px)`
+    g.drawImage(img, ((innerWidth - iw) / 2 - at.left) * dpr, ((innerHeight - ih) / 2 - at.top) * dpr, iw * dpr, ih * dpr)
+    g.filter = 'none'
+  }
+  g.globalAlpha = 0.3
+  g.fillStyle = tint
+  g.fillRect(0, 0, c.width, c.height)
+  g.globalAlpha = 1
+  return key
 }
 
 /** Tools that paint: switching between them doesn't save (switching to any other tool does). */
@@ -296,8 +345,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const update = (fn: (d: SketchDoc) => SketchDoc) =>
     save((d) => {
       const next = fn(d)
-      const docChanged = next.guide !== d.guide || next.backgroundColor !== d.backgroundColor
-      const doc = docChanged ? { before: { guide: d.guide, backgroundColor: d.backgroundColor }, after: { guide: next.guide, backgroundColor: next.backgroundColor } } : undefined
+      const docChanged = next.guide !== d.guide || next.backgroundColor !== d.backgroundColor || next.frosted !== d.frosted
+      const doc = docChanged ? { before: { guide: d.guide, backgroundColor: d.backgroundColor, frosted: d.frosted }, after: { guide: next.guide, backgroundColor: next.backgroundColor, frosted: next.frosted } } : undefined
       if (next.layers !== d.layers || doc) engine.layersChanged(d.layers, next.layers, doc)
       return next
     })
@@ -308,6 +357,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
 
   const boxRef = useRef<HTMLDivElement>(null)
   const viewCanvas = useRef<HTMLCanvasElement>(null)
+  /** The Blurred paper picture and what it was made for (see paperPicture). */
+  const paperRef = useRef<{ canvas: HTMLCanvasElement; key: string; version: number; theme?: string } | null>(null)
   const [view, setView] = useState<View | null>(null)
   const viewRef = useRef<View | null>(null)
   useEffect(() => {
@@ -624,8 +675,12 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   useEffect(() => {
     const box = boxRef.current
     if (!gpuView || !box) return
-    box.prepend(gpuView)
-    return () => gpuView.remove()
+    // Right under the canvas that takes the pen, over the Blurred paper.
+    box.insertBefore(gpuView, viewCanvas.current)
+    // A lost GPU is replaced on the next draw (at most once a second): draw again then, so the picture comes back.
+    const lost = () => setTimeout(() => setVersion((v) => v + 1), 1100)
+    gpuView.addEventListener('webglcontextlost', lost)
+    return () => (gpuView.removeEventListener('webglcontextlost', lost), gpuView.remove())
   }, [gpuView])
 
   // Redraw the visible canvas.
@@ -650,19 +705,49 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     // Transparent: nothing is drawn behind the picture, so the app's own background and wallpaper show through.
     ctx.imageSmoothingEnabled = view.scale < 1 || !!view.rot
     // With a graphics card the picture is drawn under this canvas, straight from the GPU (0.31).
-    const gpuShown = !assist.mode && engine.draw(doc, viewMatrix(view), w, h, dpr, ctx.imageSmoothingEnabled, pointed ? { id: pointed, color: getComputedStyle(canvas).getPropertyValue('--accent').trim() || '#3e8ef7' } : null)
+    const frame = doc.frame ?? { x: 0, y: 0, w: doc.width, h: doc.height }
+    let paper: { image: HTMLCanvasElement; version: number; frame: typeof frame } | null = null
+    if (paperMode(doc) === 'blurred') {
+      const p = (paperRef.current ??= { canvas: document.createElement('canvas'), key: '', version: 0 })
+      const at = box.getBoundingClientRect()
+      const probe = `${w}x${h}@${dpr}|${at.left},${at.top}|${innerWidth}x${innerHeight}|${doc.frosted}`
+      if (!p.key.includes(probe) || p.key.endsWith('|false') || p.theme !== document.documentElement.style.cssText) {
+        p.key = paperPicture(p.canvas, w, h, dpr, at, doc.frosted ?? '#ffffff', () => setVersion((v) => v + 1)) ?? ''
+        p.theme = document.documentElement.style.cssText
+        p.version++
+      }
+      paper = { image: p.canvas, version: p.version, frame }
+    }
+    const gpuShown = !assist.mode && engine.draw(doc, viewMatrix(view), w, h, dpr, ctx.imageSmoothingEnabled, pointed ? { id: pointed, color: getComputedStyle(canvas).getPropertyValue('--accent').trim() || '#3e8ef7' } : null, paper)
     if (engine.view) engine.view.style.visibility = gpuShown ? '' : 'hidden'
-    if (!gpuShown) assist.paint(ctx)
+    if (!gpuShown) {
+      if (paper) {
+        // Canvas 2D: the same paper, cut to the canvas outline, under the picture.
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(frame.x, frame.y, frame.w, frame.h)
+        ctx.clip()
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.drawImage(paper.image, 0, 0)
+        ctx.restore()
+      }
+      assist.paint(ctx)
+    }
     // Transparent pages are just a white outline over the app's wallpaper.
     const px = 1 / view.scale
     const f = doc.frame ?? { x: 0, y: 0, w: doc.width, h: doc.height }
     if (doc.frame) {
-      // 0.31: paint past the canvas's edges stays, dimmed; exports are cut to the canvas.
-      ctx.beginPath()
-      ctx.rect(0, 0, doc.width, doc.height)
-      ctx.rect(f.x, f.y, f.w, f.h)
-      ctx.fillStyle = 'rgba(0,0,0,0.45)'
-      ctx.fill('evenodd')
+      // 0.31: paint past the canvas's edges stays, dimmed; exports are cut to the canvas. Only where there is paint:
+      // the rest of the working area stays invisible.
+      const used = engine.paintedBounds(doc.layers.filter((l) => l.visible && l.kind !== 'group' && l.kind !== 'adjust').map((l) => l.id))
+      const u = used ? { x: Math.min(used.x, f.x), y: Math.min(used.y, f.y), r: Math.max(used.x + used.w, f.x + f.w), b: Math.max(used.y + used.h, f.y + f.h) } : null
+      if (u) {
+        ctx.beginPath()
+        ctx.rect(u.x, u.y, u.r - u.x, u.b - u.y)
+        ctx.rect(f.x, f.y, f.w, f.h)
+        ctx.fillStyle = 'rgba(0,0,0,0.45)'
+        ctx.fill('evenodd')
+      }
     }
     ctx.strokeStyle = doc.backgroundColor ? 'rgba(128,128,128,0.6)' : '#ffffff'
     ctx.lineWidth = (doc.backgroundColor ? 1 : 1.5) * px
@@ -1494,11 +1579,18 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
           {/* Background colour at the top of the panel, where it is easy to find. */}
           <div className="sketch-row sketch-background">
             <span>{UI.background}</span>
-            <input type="color" value={doc.backgroundColor ?? '#ffffff'} onChange={(e) => update((d) => ({ ...d, backgroundColor: e.target.value }))} disabled={!doc.backgroundColor} />
-            <label className="sketch-check">
-              <input type="checkbox" checked={!doc.backgroundColor} onChange={(e) => update((d) => ({ ...d, backgroundColor: e.target.checked ? null : '#ffffff' }))} />
-              {UI.transparent}
-            </label>
+            <input
+              type="color"
+              title={UI.paperColor}
+              value={doc.backgroundColor ?? doc.frosted ?? '#ffffff'}
+              onChange={(e) => update((d) => (paperMode(d) === 'blurred' ? { ...d, frosted: e.target.value } : { ...d, backgroundColor: e.target.value }))}
+              disabled={paperMode(doc) === 'transparent'}
+            />
+            <select className="input" aria-label={UI.background} value={paperMode(doc)} onChange={(e) => update((d) => withPaper(d, e.target.value as PaperMode))}>
+              <option value="solid">{UI.solid}</option>
+              <option value="transparent">{UI.transparent}</option>
+              <option value="blurred">{UI.blurred}</option>
+            </select>
           </div>
           {panel}
           <ColorPanel color={color} setColor={setColor} swatches={swatches === SWATCHES ? [] : swatches} drop={drop} colorSpace={colorSpace} onColorSpace={(cs) => void setColorSpace(cs)} />

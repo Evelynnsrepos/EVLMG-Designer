@@ -131,13 +131,22 @@ void main() { outColor = texture(src, uv); }`
 const VIEW_VERT = `${HEADER}
 in vec2 pos;
 uniform vec2 doc;
+uniform vec4 rect;
 uniform mat3 toClip;
 out vec2 uv;
 void main() {
-  uv = pos * 0.5 + 0.5;
-  vec3 p = toClip * vec3(uv * doc, 1.0);
+  vec2 d = rect.xy + (pos * 0.5 + 0.5) * rect.zw;
+  uv = d / doc;
+  vec3 p = toClip * vec3(d, 1.0);
   gl_Position = vec4(p.xy, 0.0, 1.0);
 }`
+
+/** Draw's Blurred paper: a picture the size of the view, pinned to the screen, under the drawing. */
+const PAPER_FRAG = `${HEADER}
+uniform sampler2D paper;
+uniform vec2 screen;
+out vec4 outColor;
+void main() { outColor = texture(paper, vec2(gl_FragCoord.x / screen.x, 1.0 - gl_FragCoord.y / screen.y)); }`
 
 /** Move/transform: the lifted pixels through the transform mesh (meshRender.ts's shader, drawn in document pixels). */
 const MESH_VERT = `${HEADER}
@@ -429,14 +438,15 @@ export class GpuPainter {
   /** The blended picture; only the changed part is blended again. */
   picture: Tex
   private temps = new Map<string, Tex>()
-  private crop: CanvasRenderingContext2D | null = null
 
   static create(width: number, height: number, colorSpace: PredefinedColorSpace = 'srgb'): GpuPainter | null {
     if (!glAllowed.value || typeof document === 'undefined') return null
     try {
       const canvas = document.createElement('canvas')
       canvas.width = canvas.height = 1
-      const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: false })
+      // preserveDrawingBuffer: WebKitGTK may show the canvas again from its buffer when other layers change (an overlay
+      // like the Hotwheel opening or closing); without it that buffer is empty and the drawing seemed to vanish.
+      const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: true })
       if (!gl) return null
       const max = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number
       if (width > max || height > max) return null
@@ -482,6 +492,7 @@ export class GpuPainter {
         copy: [QUAD_VERT, COPY_FRAG],
         view: [VIEW_VERT, COPY_FRAG],
         tint: [VIEW_VERT, TINT_FRAG],
+        paper: [VIEW_VERT, PAPER_FRAG],
         dab: [DAB_VERT, DAB_FRAG],
         ribbon: [RIBBON_VERT, RIBBON_FRAG],
         mesh: [MESH_VERT, MESH_FRAG],
@@ -658,16 +669,18 @@ export class GpuPainter {
     const gl = this.gl
     gl.bindTexture(gl.TEXTURE_2D, t.tex)
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
-    if (!r) {
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, source)
+    const g = context2d(source)
+    if (!g) {
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, r?.x ?? 0, r?.y ?? 0, gl.RGBA, gl.UNSIGNED_BYTE, source)
       return
     }
-    // Only the changed part: a whole big canvas each pen move is slow where it goes through the CPU (WebKitGTK).
-    const c = (this.crop ??= document.createElement('canvas').getContext('2d', { colorSpace: this.gl.unpackColorSpace ?? 'srgb' })!)
-    c.canvas.width = r.w
-    c.canvas.height = r.h
-    c.drawImage(source as CanvasImageSource, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h)
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, r.x, r.y, gl.RGBA, gl.UNSIGNED_BYTE, c.canvas)
+    // As bytes, in strips: handing WebKitGTK the canvas itself sometimes uploaded other page pictures (the wallpaper)
+    // instead of the layer. Strips keep a big layer from needing one huge copy.
+    const a = r ?? { x: 0, y: 0, w: g.canvas.width, h: g.canvas.height }
+    for (let y = a.y; y < a.y + a.h; y += 512) {
+      const h = Math.min(512, a.y + a.h - y)
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, a.x, y, gl.RGBA, gl.UNSIGNED_BYTE, g.getImageData(a.x, y, a.w, h))
+    }
   }
 
   /** Straight-alpha pixels of `r` in `t`, as ImageData for the layer's Canvas 2D copy and undo. */
@@ -699,7 +712,8 @@ export class GpuPainter {
       if (e) gl.deleteTexture(e.tex)
       const tex = gl.createTexture()!
       gl.bindTexture(gl.TEXTURE_2D, tex)
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, src)
+      const g = context2d(src)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, g ? g.getImageData(0, 0, g.canvas.width, g.canvas.height) : src)
       gl.generateMipmap(gl.TEXTURE_2D)
       this.images.set(src, (e = { tex, version }))
     }
@@ -1127,7 +1141,15 @@ export class GpuPainter {
    * Show the picture: `m` is the view matrix in CSS pixels (as for ctx.transform), `w`×`h` the
    * element's CSS size. Smooth when zoomed out or turned, pixel-sharp when zoomed in.
    */
-  present(m: [number, number, number, number, number, number], w: number, h: number, dpr: number, smooth: boolean, tint: { tex: Tex; color: [number, number, number] } | null = null) {
+  present(
+    m: [number, number, number, number, number, number],
+    w: number,
+    h: number,
+    dpr: number,
+    smooth: boolean,
+    tint: { tex: Tex; color: [number, number, number] } | null = null,
+    paper: { image: TexImageSource; version: number; frame: Rect } | null = null,
+  ) {
     const gl = this.gl
     const cw = Math.max(1, Math.round(w * dpr))
     const ch = Math.max(1, Math.round(h * dpr))
@@ -1154,12 +1176,30 @@ export class GpuPainter {
     const sx = (2 * dpr) / cw
     const sy = (-2 * dpr) / ch
     const toClip = [a * sx, b * sy, 0, c * sx, d * sy, 0, e * sx - 1, ff * sy + 1, 1]
-    this.set(p, { doc: [this.width, this.height], toClip })
+    const whole = [0, 0, this.width, this.height]
+    let paperTex: WebGLTexture | null = null
+    try {
+      if (paper) paperTex = this.image(paper.image, 'classic', false, paper.version)
+    } catch {
+      // A picture the GPU may not read (another origin): no paper, rather than no GPU drawing at all.
+    }
+    if (paper && paperTex) {
+      // In the same canvas as the drawing, so the page has no extra layer that could flicker or cover it.
+      const pp = this.prog('paper')
+      this.bind(1, paperTex, pp, 'paper')
+      this.set(pp, { doc: [this.width, this.height], rect: [paper.frame.x, paper.frame.y, paper.frame.w, paper.frame.h], toClip, screen: [cw, ch] })
+      this.drawQuad()
+      gl.enable(gl.BLEND)
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+      this.prog('view')
+    }
+    this.set(p, { doc: [this.width, this.height], rect: whole, toClip })
     this.drawQuad()
+    gl.disable(gl.BLEND)
     if (tint) {
       const t = this.prog('tint')
       this.bind(0, tint.tex.tex, t, 'src')
-      this.set(t, { doc: [this.width, this.height], toClip, color: tint.color })
+      this.set(t, { doc: [this.width, this.height], rect: whole, toClip, color: tint.color })
       gl.enable(gl.BLEND)
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
       this.drawQuad()
@@ -1174,6 +1214,13 @@ export class GpuPainter {
   destroy() {
     this.gl.getExtension('WEBGL_lose_context')?.loseContext()
   }
+}
+
+/** The 2D context of a canvas source, so its pixels go up as bytes (see upload); null for other sources. */
+function context2d(src: TexImageSource): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null {
+  if (!(src instanceof HTMLCanvasElement) && !(typeof OffscreenCanvas !== 'undefined' && src instanceof OffscreenCanvas)) return null
+  const g = src.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null
+  return g && src.width > 0 && src.height > 0 ? g : null
 }
 
 let unpremultiplied: Uint8Array | null = null

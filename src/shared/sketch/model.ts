@@ -67,6 +67,11 @@ export interface SketchDoc {
   height: number
   /** null = transparent. */
   backgroundColor: string | null
+  /**
+   * 0.31: Blurred paper. With no background colour, the canvas shows what is behind it blurred and tinted with this
+   * colour; exports are see-through like a transparent canvas. Missing = a plain transparent canvas.
+   */
+  frosted?: string | null
   /** Bottom to top. */
   layers: SketchLayer[]
   references: SketchReference[]
@@ -175,3 +180,16 @@ export function mirrored<T extends { x: number; y: number }>(p: T, width: number
 }
 
 export type SymmetryMode = 'off' | 'vertical' | 'horizontal' | 'quad'
+
+/** The three kinds of canvas background (paper). */
+export type PaperMode = 'solid' | 'transparent' | 'blurred'
+
+export const paperMode = (d: Pick<SketchDoc, 'backgroundColor' | 'frosted'>): PaperMode => (d.backgroundColor ? 'solid' : d.frosted ? 'blurred' : 'transparent')
+
+/** The drawing with another kind of paper; the colour carries over (paper colour <-> blur tint). */
+export function withPaper<D extends Pick<SketchDoc, 'backgroundColor' | 'frosted'>>(d: D, mode: PaperMode): D {
+  const colour = d.backgroundColor ?? d.frosted ?? '#ffffff'
+  if (mode === 'solid') return { ...d, backgroundColor: colour, frosted: undefined }
+  if (mode === 'blurred') return { ...d, backgroundColor: null, frosted: colour }
+  return { ...d, backgroundColor: null, frosted: undefined }
+}

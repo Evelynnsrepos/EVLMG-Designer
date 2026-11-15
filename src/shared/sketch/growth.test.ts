@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { alphaBounds } from './engine'
 import { GROW_STEP, growDoc, growFor } from './growth'
 
 describe('growing the working area (0.31)', () => {
@@ -28,5 +29,18 @@ describe('the drawing after growing', () => {
     expect(out.layers[1]).toEqual({ id: 'b' })
     expect(out.guide).toEqual({ center: { x: 562, y: 40 }, vanishing: [{ x: 513, y: 2 }], size: 10 })
     expect(growDoc(out, { left: 0, top: 512, width: 612, height: 592 }).frame).toEqual({ x: 512, y: 512, w: 100, h: 80 })
+  })
+})
+
+describe('alphaBounds (only the painted part past the canvas is shown)', () => {
+  const img = (w: number, h: number, px: [number, number][]) => {
+    const data = new Uint8ClampedArray(w * h * 4)
+    for (const [x, y] of px) data[(y * w + x) * 4 + 3] = 1
+    return { data, width: w, height: h } as ImageData
+  }
+  it('is null for an empty layer', () => expect(alphaBounds(img(8, 8, []), 32, 32)).toBeNull())
+  it('scales up and pads by one small pixel, within the area', () => {
+    expect(alphaBounds(img(8, 8, [[2, 3], [4, 3]]), 32, 32)).toEqual({ x: 32, y: 64, w: 160, h: 96 })
+    expect(alphaBounds(img(8, 8, [[0, 0], [7, 7]]), 32, 32)).toEqual({ x: 0, y: 0, w: 256, h: 256 })
   })
 })
