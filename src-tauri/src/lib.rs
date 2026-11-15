@@ -1,5 +1,6 @@
 use tauri::Manager;
 
+mod code;
 mod collab;
 mod collab_commands;
 mod git;
@@ -21,6 +22,7 @@ pub fn run() {
     .manage(collab_commands::CollabState::default())
     .manage(server_link::ServerLinks::default())
     .manage(texpaint_commands::TexpaintState::default())
+    .manage(code::CodeState::default())
     .invoke_handler(tauri::generate_handler![
       spell::spell_check,
       spell::spell_suggest,
@@ -51,6 +53,12 @@ pub fn run() {
       texpaint_commands::texpaint_pick,
       texpaint_commands::texpaint_bake,
       texpaint_commands::texpaint_wear,
+      code::code_engine_version,
+      code::code_start,
+      code::code_stop,
+      code::code_lsp_connect,
+      code::code_lsp_send,
+      code::code_lsp_close,
     ])
     .setup(|app| {
       if let Some(window) = app.get_webview_window("main") {
@@ -79,6 +87,7 @@ pub fn run() {
     .run(|app, event| {
       if let tauri::RunEvent::Exit = event {
         llm::stop(app);
+        code::stop(app);
       }
     });
 }
