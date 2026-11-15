@@ -10,8 +10,10 @@ export const AUTOSAVE_DELAY_MS = 1000
  * closing), and after this long without changes as a safety net.
  */
 export const IDLE_SAVE_MS = 20_000
-/** Drawing without a pause still saves this long after the first unsaved change. */
+/** Drawing without a long pause still saves this long after the first unsaved change... */
 export const MAX_SAVE_WAIT_MS = 60_000
+/** ...but only once there is a short pause (no change for this long), never right after a stroke. */
+export const PAUSE_SAVE_MS = 3000
 
 type Job = { timer: ReturnType<typeof setTimeout>; run: () => Promise<void>; since: number }
 
@@ -25,8 +27,8 @@ export function scheduleSave(key: string, run: () => Promise<void>, delay = AUTO
   const existing = pending.get(key)
   if (existing) clearTimeout(existing.timer)
   const since = existing?.since ?? Date.now()
-  // Long waits restart with every change, but never past MAX_SAVE_WAIT_MS since the first unsaved one.
-  if (delay >= IDLE_SAVE_MS) delay = Math.max(0, Math.min(delay, since + MAX_SAVE_WAIT_MS - Date.now()))
+  // Long waits restart with every change; past MAX_SAVE_WAIT_MS since the first unsaved one, the next short pause.
+  if (delay >= IDLE_SAVE_MS) delay = Math.max(PAUSE_SAVE_MS, Math.min(delay, since + MAX_SAVE_WAIT_MS - Date.now()))
   const timer = setTimeout(() => void flush(key), delay)
   pending.set(key, { timer, run, since })
   notify(true, null)

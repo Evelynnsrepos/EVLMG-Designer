@@ -75,16 +75,18 @@ describe('saving at good moments (0.31)', () => {
 
 describe('drawing without a pause', () => {
   afterEach(() => vi.useRealTimers())
-  it('still saves a minute after the first unsaved change', async () => {
+  it('still saves after a minute, but only at the next short pause', async () => {
     vi.useFakeTimers()
     const run = vi.fn(async () => {})
-    for (let t = 0; t < 59; t++) {
+    for (let t = 0; t < 90; t++) {
       scheduleSave('busy', run, IDLE_SAVE_MS)
       await vi.advanceTimersByTimeAsync(1000)
     }
     expect(run).not.toHaveBeenCalled()
     scheduleSave('busy', run, IDLE_SAVE_MS)
-    await vi.advanceTimersByTimeAsync(1500)
+    await vi.advanceTimersByTimeAsync(2900)
+    expect(run).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(200)
     expect(run).toHaveBeenCalledTimes(1)
   })
 })
