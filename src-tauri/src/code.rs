@@ -1,4 +1,4 @@
-//! Code tool: starts the game engine the user picked (Godot), streams what it prints, and carries
+//! Code Studio: starts the game engine the user picked (Godot), streams what it prints, and carries
 //! language server messages over a local TCP connection.
 //! Only a program whose file name contains "godot" can be started from here, never another one,
 //! and the language server connection only goes to this computer (127.0.0.1).
@@ -41,7 +41,7 @@ fn is_godot(program: &str) -> bool {
 
 fn command(program: &str, args: &[String]) -> Result<Command, String> {
   if !is_godot(program) {
-    return Err("Only Godot can be started from the Code tool.".into());
+    return Err("Only Godot can be started from Code Studio.".into());
   }
   let mut cmd = Command::new(program);
   cmd.args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -172,7 +172,7 @@ pub fn code_lsp_close(state: State<'_, CodeState>) {
   }
 }
 
-/// Stops everything the Code tool started; called when the app closes.
+/// Stops everything Code Studio started; called when the app closes.
 pub fn stop(app: &tauri::AppHandle) {
   let state = app.state::<CodeState>();
   for (_, child) in state.procs.lock().unwrap().drain() {

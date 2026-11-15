@@ -1,6 +1,6 @@
-# Code tool (experimental)
+# Code Studio (experimental)
 
-How the Code tool (`src/components/code/`, Rust side `src-tauri/src/code.rs`) is put together. The plan with all
+How Code Studio (`src/components/code/`, Rust side `src-tauri/src/code.rs`) is put together. The plan with all
 later steps is `plans/code-editor-plan.md` in the project's shared folder.
 
 ## What is where
