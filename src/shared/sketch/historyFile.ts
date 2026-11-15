@@ -2,6 +2,7 @@ import { unzipSync, zipSync } from 'fflate'
 import type { Id } from '@/core/model'
 import { getFs } from '@/core/fs'
 import { projectPaths } from '@/core/project'
+import { zipOf } from './encode'
 import type { SketchEngine } from './engine'
 import type { UndoStep } from './tiles'
 
@@ -31,14 +32,23 @@ interface StepHead {
 
 const keep = (s: UndoStep) => !!s.id && (s.tiles.length > 0 || s.meta !== undefined)
 
+/** encodeStep, zipped off the page (saving a big stroke's tiles took about a second there). */
+export async function encodeStepAsync(s: UndoStep): Promise<Uint8Array> {
+  return zipOf(stepFiles(s))
+}
+
 export function encodeStep(s: UndoStep): Uint8Array {
+  return zipSync(stepFiles(s), { level: 1 })
+}
+
+function stepFiles(s: UndoStep): Record<string, Uint8Array> {
   const head: StepHead = { layerId: s.layerId, meta: s.meta, rects: s.tiles.map((t) => t.rect) }
   const files: Record<string, Uint8Array> = { 'step.json': new TextEncoder().encode(JSON.stringify(head)) }
   s.tiles.forEach((t, i) => {
     files[`b${i}`] = new Uint8Array(t.before.data.buffer, t.before.data.byteOffset, t.before.data.byteLength)
     files[`a${i}`] = new Uint8Array(t.after.data.buffer, t.after.data.byteOffset, t.after.data.byteLength)
   })
-  return zipSync(files, { level: 1 })
+  return files
 }
 
 export function decodeStep(id: string, bytes: Uint8Array, colorSpace: PredefinedColorSpace): UndoStep {
@@ -101,7 +111,7 @@ export class SketchHistoryFile {
     await fs.mkdir(dir)
     for (const s of kept)
       if (!this.onDisk.has(s.id!)) {
-        await fs.writeBinaryAtomic(await fs.join(dir, `${s.id}.bin`), encodeStep(s))
+        await fs.writeBinaryAtomic(await fs.join(dir, `${s.id}.bin`), await encodeStepAsync(s))
         this.onDisk.add(s.id!)
       }
     const index: Index = { version: 1, width: engine.width, height: engine.height, undo: undo.filter(keep).slice(-SAVED_STEPS).map((s) => s.id!), redo: redo.filter(keep).map((s) => s.id!) }

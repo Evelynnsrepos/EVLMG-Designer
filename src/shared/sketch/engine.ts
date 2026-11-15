@@ -11,7 +11,8 @@ import { layerTree, lockedInTree, shownInTree, type LayerNode } from './layers'
 import { mirrored, type InputPoint, type SketchDoc, type SketchLayer, type SymmetryMode } from './model'
 import { applyRelief } from './relief'
 import { runCpu } from './adjust/cpu'
-import { toFrame, type Growth } from './growth'
+import { pngOf } from './encode'
+import { frameOf, toFrame, type Growth } from './growth'
 import { buildMesh, outerBounds, type XfState } from './transform'
 import { TileHistory, tilesIn, type Rect, type UndoStep } from './tiles'
 
@@ -1392,14 +1393,24 @@ export class SketchEngine {
     return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`
   }
 
+  /** A layer as PNG (encoded off the page where possible, so saving doesn't freeze drawing). */
   layerPng(layerId: Id): Promise<Blob> {
-    return toPng(this.ensure(layerId).canvas)
+    return pngOf(this.ensure(layerId).canvas, this.colorSpace)
   }
 
   /** The flattened picture as PNG, cut to the drawing's frame (0.31). */
   flattenedPng(doc: SketchDoc, withBackground = true): Promise<Blob> {
+    if (this.gpuFor(doc)) {
+      try {
+        // Straight from the GPU picture, only the frame, encoded off the page.
+        this.toPicture(doc, withBackground)
+        return pngOf(this.gpu!.read(this.gpu!.picture, frameOf(doc), this.colorSpace), this.colorSpace)
+      } catch {
+        this.gpuFailed()
+      }
+    }
     const pic = this.render(doc, withBackground)
-    return toPng(doc.frame ? toFrame(pic, doc) : pic)
+    return pngOf(doc.frame ? toFrame(pic, doc) : pic, this.colorSpace)
   }
 
   /** True when the layer has no visible pixels (saved as an empty layer instead of a PNG). */

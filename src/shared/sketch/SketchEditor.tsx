@@ -438,6 +438,16 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     }
   }, [doc.layers, root, engine])
 
+  const stickerKey = useRef(`${root}|sketch-sticker/${newId()}`).current
+  /** The sticker: the whole picture without background, for Storyboard, Moodboards and pickers. */
+  const saveSticker = useCallback(async () => {
+    if (!root) return
+    const sticker = await importAssetFromBlob(root, await engine.flattenedPng({ ...docRef.current, layers: exportLayers(docRef.current.layers) }, false), 'image', 'sticker.png')
+    const prev = docRef.current.sticker
+    save((d) => ({ ...d, sticker: sticker?.path ?? null }))
+    if (prev && prev !== sticker?.path) void resolveAssetPath(root, prev).then((abs) => getFs().remove(abs).catch(() => {}))
+  }, [root, engine])
+
   const flushNow = useCallback(async () => {
     if (!root || !dirty.current.size) return
     const ids = [...dirty.current].filter((id) => !loading.current.has(id))
@@ -462,10 +472,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       if (prev && prev !== path) old.push(prev)
       loaded.current.set(id, path)
     }
-    // The sticker: the whole picture without background.
-    const sticker = await importAssetFromBlob(root, await engine.flattenedPng({ ...docRef.current, layers: exportLayers(docRef.current.layers) }, false), 'image', 'sticker.png')
-    if (docRef.current.sticker) old.push(docRef.current.sticker)
-    save((d) => ({ ...d, sticker: sticker?.path ?? null, layers: d.layers.map((l) => (saved.has(l.id) ? { ...l, image: saved.get(l.id)! } : l)) }))
+    save((d) => ({ ...d, layers: d.layers.map((l) => (saved.has(l.id) ? { ...l, image: saved.get(l.id)! } : l)) }))
+    // The sticker (the whole picture) is made less often: a while after the last stroke, and when the app closes.
+    scheduleSave(stickerKey, saveSticker, 6000)
     // Each save writes a new PNG (assets are write-once); remove the ones this editor replaced.
     for (const p of old) void resolveAssetPath(root, p).then((abs) => getFs().remove(abs).catch(() => {}))
     void historyFile?.sync(engine)
