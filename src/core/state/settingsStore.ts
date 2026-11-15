@@ -47,6 +47,17 @@ export interface AppSettings {
   git: GitSettings
   /** 0.21: the start screen's project folders. A project path is in at most one folder. */
   projectFolders: ProjectFolder[]
+  /** Start screen sections: order and size. Ids are folder ids plus 'recent' and 'rest' (projects in no section). */
+  homeSections: HomeSection[]
+}
+
+/** How big a start screen section is: width on a 12-column grid, height in rows. */
+export type SectionWidth = 'narrow' | 'medium' | 'wide' | 'half' | 'full'
+export type SectionHeight = 'short' | 'tall'
+export interface HomeSection {
+  id: string
+  width: SectionWidth
+  height: SectionHeight
 }
 
 /** A folder on the start screen (0.21), e.g. "Games" or "YouTube videos". */
@@ -96,7 +107,7 @@ export interface HotwheelSettings {
 export const DEFAULT_INNER = ['close', 'scale', 'jump', 'layout', 'undo', 'search']
 const hotwheelDefaults = (): HotwheelSettings => ({ inner: DEFAULT_INNER, outer: {}, size: 'M', penButton: false, rightHold: false, middle: false })
 
-const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, githubLogin: '', hotkeyHints: true, projectPresets: [], git: gitDefaults(), projectFolders: [] })
+const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, githubLogin: '', hotkeyHints: true, projectPresets: [], git: gitDefaults(), projectFolders: [], homeSections: [] })
 
 async function settingsPath() {
   const fs = getFs()

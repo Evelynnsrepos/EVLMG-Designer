@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, CircleHelp, FileArchive, FolderOpen, FolderPlus, GitBranch, Image, MoreHorizontal, Moon, Plus, Search, Settings, Sun, Type, Users } from 'lucide-react'
+import { CircleHelp, FileArchive, FolderOpen, FolderPlus, GitBranch, Image, Maximize2, Minimize2, MoreHorizontal, Moon, Plus, Redo2, Search, Settings, Sun, Type, Undo2, Users } from 'lucide-react'
 import { getVersion } from '@tauri-apps/api/app'
 import { useCallback, useEffect, useState } from 'react'
 import { saveBinaryFile, safeFileName } from '@/core/export'
@@ -7,26 +7,50 @@ import { cloneProject, connectGitHub, listProjectRepos, repoNameFor, projectGitS
 import { assetUrl, pickAndImportAssets } from '@/core/assets'
 import { newId, type RecentProject } from '@/core/model'
 import { deleteProject, importProjectZip, isProjectFolder, loadProject, readRecents, removeRecent, saveMeta, upsertRecent, zipProject } from '@/core/project'
-import { useAppStore, useProjectStore, useSettings, type ProjectFolder } from '@/core/state'
+import { useAppStore, useProjectStore, useSettings, type HomeSection, type ProjectFolder, type SectionHeight, type SectionWidth } from '@/core/state'
 import { confirmDialog, promptDialog } from '@/shared/dialogs'
 import { Modal } from '@/shared/ui'
 import { maybeStartTour, useHelp } from '../help/help'
 import { toggleTheme, useTheme } from '../theme'
 import { openSettings } from '../settings/open'
 import { BackupsDialog } from './BackupsDialog'
-import { moveToFolder } from './folders'
+import { homeLayout, moveSection, moveToFolder, WIDTH_COLUMNS } from './folders'
 import { JoinDialog } from '../collab/CollabDialogs'
 import './launcher.css'
 
 /** Drag type for a project card dragged onto a start-screen folder (0.21). */
 const PROJECT_DRAG = 'application/x-egd-project'
-/** How many cards the Recent projects row shows. */
-const RECENT_COUNT = 6
+/** Drag type for a section dragged by its title onto another section, to move it there. */
+const SECTION_DRAG = 'application/x-egd-section'
+/** How many cards the Recent projects section shows. */
+const RECENT_COUNT = 12
 
-const setFolders = (projectFolders: ProjectFolder[]) => useSettings.getState().update({ projectFolders })
+/** Start screen layout changes are undoable (Ctrl+Z / Ctrl+Shift+Z) while the start screen is open. */
+type Layout = { projectFolders: ProjectFolder[]; homeSections: HomeSection[] }
+const past: Layout[] = []
+const future: Layout[] = []
+const snapshot = (): Layout => {
+  const s = useSettings.getState()
+  return { projectFolders: s.projectFolders, homeSections: s.homeSections }
+}
+function changeLayout(patch: Partial<Layout>) {
+  past.push(snapshot())
+  if (past.length > 100) past.shift()
+  future.length = 0
+  useSettings.getState().update(patch)
+}
+function undoLayout(redo = false) {
+  const from = redo ? future : past
+  const step = from.pop()
+  if (!step) return
+  ;(redo ? past : future).push(snapshot())
+  useSettings.getState().update(step)
+}
+const setFolders = (projectFolders: ProjectFolder[]) => changeLayout({ projectFolders })
+const setSections = (homeSections: HomeSection[]) => changeLayout({ homeSections })
 
 async function newFolder(path?: string) {
-  const name = (await promptDialog('New folder', ''))?.trim()
+  const name = (await promptDialog('New section', ''))?.trim()
   if (!name) return
   const id = newId()
   const folders = [...useSettings.getState().projectFolders, { id, name, open: true, paths: [] }]
@@ -50,6 +74,21 @@ export function Launcher() {
   const [repos, setRepos] = useState<GitHubRepo[] | null>(null)
   const theme = useTheme()
   const folders = useSettings((s) => s.projectFolders)
+  const sections = homeLayout(folders, useSettings((s) => s.homeSections))
+  /** The section opened to fill the screen with its expand button, if any. */
+  const [expanded, setExpanded] = useState<string | null>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest('input, textarea, [contenteditable="true"]')) return
+      if (e.key === 'Escape') setExpanded(null)
+      const mod = e.ctrlKey || e.metaKey
+      if (!mod || !'zy'.includes(e.key.toLowerCase())) return
+      e.preventDefault()
+      undoLayout(e.shiftKey || e.key.toLowerCase() === 'y')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const refresh = useCallback(async () => {
     const list = await readRecents()
@@ -172,14 +211,30 @@ export function Launcher() {
   return (
     <div className="launcher">
       <header className="launcher-header">
-        <div className="launcher-brand">
-          <img src="/favicon.png" alt="" className="launcher-logo" />
-          <div>
+        <div className="launcher-head-left">
+          <div className="launcher-brand">
+            <img src="/favicon.png" alt="" className="launcher-logo" />
             <h1>
               Eve.Lopment Games Designer {version && <span className="launcher-version muted">v{version}</span>}
             </h1>
-            <div className="muted">Your game projects</div>
           </div>
+          {!!projects?.length && (
+            <div className="launcher-tools">
+              <button className="icon-btn launcher-add" title="Add a section (for example Games, YouTube videos or Writing)" onClick={() => void newFolder()}>
+                <FolderPlus size={17} />
+              </button>
+              <label className="launcher-search">
+                <Search size={15} />
+                <input className="input" type="search" placeholder="Search your projects" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && (e.preventDefault(), setQuery(''))} />
+              </label>
+              <button className="icon-btn" title="Undo the last start screen change (Ctrl+Z)" disabled={!past.length} onClick={() => undoLayout()}>
+                <Undo2 size={16} />
+              </button>
+              <button className="icon-btn" title="Redo (Ctrl+Shift+Z)" disabled={!future.length} onClick={() => undoLayout(true)}>
+                <Redo2 size={16} />
+              </button>
+            </div>
+          )}
         </div>
         <div className="launcher-actions">
           <button className="icon-btn" title="Help" data-tour="help" onClick={() => useHelp.getState().openReport()}>
@@ -256,103 +311,152 @@ export function Launcher() {
         </div>
       )}
 
-      {!!projects?.length && (
-        <div className="launcher-tools">
-          <label className="launcher-search">
-            <Search size={15} />
-            <input className="input" type="search" placeholder="Search your projects" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && (e.preventDefault(), setQuery(''))} />
-          </label>
-          <button className="btn" onClick={() => void newFolder()}>
-            <FolderPlus size={16} /> New folder
-          </button>
-          {folders.length > 0 && (
-            <button className="btn btn-ghost" onClick={() => setFolders(folders.map((f) => ({ ...f, open: !folders.every((g) => g.open) })))}>
-              {folders.every((f) => f.open) ? 'Collapse all folders' : 'Expand all folders'}
-            </button>
-          )}
-        </div>
-      )}
       {!!projects?.length && shown?.length === 0 && <p className="muted">No project matches "{query}".</p>}
 
       {words.length ? (
         <div className="project-grid">{shown?.map(card)}</div>
       ) : (
         !!projects?.length && (
-          <>
-            {folders.map((f) => (
-              <FolderSection key={f.id} folder={f} folders={folders}>
-                {projects.filter((p) => f.paths.includes(p.path)).map(card)}
-              </FolderSection>
-            ))}
-            <section className="launcher-section">
-              <h2 className="launcher-section-title">Recent projects</h2>
-              <div className="project-grid launcher-recent">{projects.slice(0, RECENT_COUNT).map(card)}</div>
-            </section>
-            <FolderSection folders={folders}>{projects.filter((p) => !folders.some((f) => f.paths.includes(p.path))).map(card)}</FolderSection>
-          </>
+          <div className={`home-grid${expanded ? ' expanded' : ''}`}>
+            {sections
+              .filter((sec) => !expanded || sec.id === expanded)
+              .map((sec) => {
+                const folder = folders.find((f) => f.id === sec.id)
+                const list =
+                  sec.id === 'recent' ? projects.slice(0, RECENT_COUNT) : sec.id === 'rest' ? projects.filter((p) => !folders.some((f) => f.paths.includes(p.path))) : projects.filter((p) => folder!.paths.includes(p.path))
+                if (sec.id === 'rest' && !list.length) return null
+                const title = folder?.name ?? (sec.id === 'recent' ? 'Recent projects' : folders.length ? 'Not in a section' : 'All projects')
+                return (
+                  <FolderSection key={sec.id} section={sec} sections={sections} title={title} folder={folder} folders={folders} expanded={expanded === sec.id} onExpand={(on) => setExpanded(on ? sec.id : null)}>
+                    {list.map(card)}
+                  </FolderSection>
+                )
+              })}
+          </div>
         )
       )}
     </div>
   )
 }
 
-/** A start-screen folder (0.21): a section you can expand, rename, delete and drop projects onto. */
-function FolderSection({ folder, folders, children }: { folder?: ProjectFolder; folders: ProjectFolder[]; children: React.ReactNode[] }) {
-  const [over, setOver] = useState(false)
+const WIDTHS: [SectionWidth, string][] = [
+  ['narrow', 'Narrow'],
+  ['medium', 'Medium'],
+  ['wide', 'Wide'],
+  ['half', 'Half'],
+  ['full', 'Full width'],
+]
+const HEIGHTS: [SectionHeight, string][] = [
+  ['short', 'Short'],
+  ['tall', 'Tall'],
+]
+
+/**
+ * A start screen section: a box with a light edge. A folder section ("Games", "YouTube videos") holds the projects put
+ * into it; Recent projects and "Not in a section" are built in. Every section can be resized and moved, and opened to
+ * fill the screen with the expand button in its corner. Two short sections next to a tall one stack on top of each other.
+ */
+function FolderSection({
+  section,
+  sections,
+  title,
+  folder,
+  folders,
+  expanded,
+  onExpand,
+  children,
+}: {
+  section: HomeSection
+  sections: HomeSection[]
+  title: string
+  folder?: ProjectFolder
+  folders: ProjectFolder[]
+  expanded: boolean
+  onExpand: (on: boolean) => void
+  children: React.ReactNode[]
+}) {
+  const [over, setOver] = useState<'project' | 'section' | null>(null)
   const [menu, setMenu] = useState(false)
-  // The "Not in a folder" section has no folder; it is hidden when empty and is always open.
-  if (!folder && !children.length) return null
-  const open = folder?.open ?? true
-  const update = (patch: Partial<ProjectFolder>) => setFolders(folders.map((f) => (f.id === folder!.id ? { ...f, ...patch } : f)))
+  const at = sections.findIndex((s) => s.id === section.id)
+  const resize = (patch: Partial<HomeSection>) => setSections(sections.map((s) => (s.id === section.id ? { ...s, ...patch } : s)))
+  const move = (by: number) => {
+    setMenu(false)
+    setSections(moveSection(sections, section.id, by < 0 ? sections[at - 1].id : (sections[at + 2]?.id ?? null)))
+  }
   const rename = async () => {
     setMenu(false)
-    const name = (await promptDialog('Rename folder', folder!.name))?.trim()
-    if (name) update({ name })
+    const name = (await promptDialog('Rename section', folder!.name))?.trim()
+    if (name) setFolders(folders.map((f) => (f.id === folder!.id ? { ...f, name } : f)))
   }
   const remove = async () => {
     setMenu(false)
-    const ok = await confirmDialog({ title: `Delete the folder "${folder!.name}"?`, message: 'Only the folder goes away. Its projects stay and move back to "Not in a folder".', confirmLabel: 'Delete folder' })
+    const ok = await confirmDialog({ title: `Delete the section "${folder!.name}"?`, message: 'Only the section goes away. Its projects stay and move to "Not in a section". You can undo this with Ctrl+Z.', confirmLabel: 'Delete section' })
     if (ok) setFolders(folders.filter((f) => f.id !== folder!.id))
   }
   return (
     <section
-      className={`launcher-section${over ? ' drop' : ''}`}
+      className={`home-section${over ? ` drop-${over}` : ''}${expanded ? ' expanded' : ''}`}
+      style={{ '--w': WIDTH_COLUMNS[section.width], '--h': section.height === 'tall' ? 2 : 1 } as React.CSSProperties}
       onDragOver={(e) => {
-        if (!e.dataTransfer.types.includes(PROJECT_DRAG)) return
+        const kind = e.dataTransfer.types.includes(SECTION_DRAG) ? 'section' : e.dataTransfer.types.includes(PROJECT_DRAG) && section.id !== 'recent' ? 'project' : null
+        if (!kind) return
         e.preventDefault()
-        setOver(true)
+        setOver(kind)
       }}
-      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(false)}
+      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(null)}
       onDrop={(e) => {
-        setOver(false)
+        setOver(null)
+        const moved = e.dataTransfer.getData(SECTION_DRAG)
+        if (moved) return setSections(moveSection(sections, moved, section.id))
         const path = e.dataTransfer.getData(PROJECT_DRAG)
-        if (path) setFolders(moveToFolder(folders, path, folder?.id ?? null))
+        if (path && section.id !== 'recent') setFolders(moveToFolder(folders, path, folder?.id ?? null))
       }}
     >
-      <h2 className="launcher-section-title">
-        {folder ? (
-          <>
-            <button className="launcher-section-toggle" onClick={() => update({ open: !open })} aria-expanded={open}>
-              {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />} {folder.name}
-              <span className="muted launcher-section-count">{children.length}</span>
-            </button>
-            <button className="icon-btn" title="Folder menu" onClick={() => setMenu(!menu)}>
-              <MoreHorizontal size={16} />
-            </button>
-            {menu && (
-              <div className="menu launcher-section-menu" onMouseLeave={() => setMenu(false)}>
-                <button onClick={() => void rename()}>Rename</button>
-                <button className="danger" onClick={() => void remove()}>
-                  Delete folder
+      <h2 className="home-section-title" draggable={!expanded} title="Drag onto another section to move it there" onDragStart={(e) => e.dataTransfer.setData(SECTION_DRAG, section.id)}>
+        <span className="home-section-name">{title}</span>
+        <span className="muted launcher-section-count">{children.length}</span>
+        <button className="icon-btn home-section-menu-btn" title="Section menu: size, move, rename" onClick={() => setMenu(!menu)}>
+          <MoreHorizontal size={16} />
+        </button>
+        {menu && (
+          <div className="menu home-section-menu" onMouseLeave={() => setMenu(false)}>
+            <div className="home-size-label muted">Width</div>
+            <div className="home-size-row">
+              {WIDTHS.map(([w, label]) => (
+                <button key={w} className={`template-chip${section.width === w ? ' on' : ''}`} onClick={() => resize({ width: w })}>
+                  {label}
                 </button>
-              </div>
+              ))}
+            </div>
+            <div className="home-size-label muted">Height</div>
+            <div className="home-size-row">
+              {HEIGHTS.map(([h, label]) => (
+                <button key={h} className={`template-chip${section.height === h ? ' on' : ''}`} onClick={() => resize({ height: h })}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button disabled={at === 0} onClick={() => move(-1)}>
+              Move earlier
+            </button>
+            <button disabled={at === sections.length - 1} onClick={() => move(1)}>
+              Move later
+            </button>
+            {folder && <button onClick={() => void rename()}>Rename</button>}
+            {folder && (
+              <button className="danger" onClick={() => void remove()}>
+                Delete section
+              </button>
             )}
-          </>
-        ) : (
-          folders.length ? 'Not in a folder' : 'All projects'
+          </div>
         )}
       </h2>
-      {open && (children.length ? <div className="project-grid">{children}</div> : <p className="muted launcher-section-empty">Drag a project here, or use Move to folder in its menu.</p>)}
+      <div className="home-section-body">
+        {children.length ? <div className="project-grid">{children}</div> : <p className="muted launcher-section-empty">{section.id === 'recent' ? 'Projects you open show up here.' : 'Drag a project here, or use Move to … in its menu.'}</p>}
+      </div>
+      <button className="icon-btn home-expand" title={expanded ? 'Back to all sections (Esc)' : 'Expand this section to fill the screen'} onClick={() => onExpand(!expanded)}>
+        {expanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+      </button>
     </section>
   )
 }
@@ -501,7 +605,7 @@ function ProjectCard({
                   </button>
                 ))}
               {inFolder && <button onClick={() => (setMenu(false), setFolders(moveToFolder(folders, project.path, null)))}>Take out of {inFolder.name}</button>}
-              <button onClick={() => (setMenu(false), void newFolder(project.path))}>Move to a new folder…</button>
+              <button onClick={() => (setMenu(false), void newFolder(project.path))}>Move to a new section…</button>
               <button onClick={() => void getFs().revealInFolder(project.path)}>Show in folder</button>
               <button onClick={() => void exportZip()}>Export as zip…</button>
               {isTauri() && (
