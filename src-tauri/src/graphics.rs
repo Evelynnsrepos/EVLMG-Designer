@@ -99,7 +99,15 @@ pub fn forward_pen(window: &tauri::WebviewWindow) {
     let view = w.inner();
     let st = Rc::new(Pending::default());
     let s = st.clone();
+    let uncompressed = Cell::new(false);
     view.connect_motion_notify_event(move |v, e| {
+      // GTK squashes mouse and pen moves to about one per screen frame (fewer while it is busy), so fast strokes
+      // reached the page as a few points with straight lines between them. Drawing needs every sample.
+      if !uncompressed.replace(true) {
+        if let Some(win) = e.window() {
+          win.set_event_compression(false);
+        }
+      }
       send(v, e, &s, false);
       glib::Propagation::Proceed
     });
