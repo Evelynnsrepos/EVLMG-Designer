@@ -1,10 +1,13 @@
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, X } from 'lucide-react'
-import { Component, Suspense, useState, type ReactNode } from 'react'
+import { Component, Suspense, useState, type ErrorInfo, type ReactNode } from 'react'
 import type { Panel } from '@/core/model'
 import { getManifest } from '@/core/registry'
 import { PanelContext, useAppStore, useProjectStore } from '@/core/state'
 import { ReviewButton } from '@/shared/reviews'
 import { PanelJumps } from '@/shared/jumps/Jumps'
+import { openExternalUrl } from '@/shared/links/openUrl'
+import { REPO_URL } from '../help/HelpHost'
+import { crashReport, issueUrl, logCrash } from './crashReport'
 import { SaveBar } from './SaveBar'
 import { closePanel, DRAG_MIME, movePanel, openComponent, type DragPayload } from '../editor/actions'
 import { neighbor, sideFromPoint, type Direction, type DropSide } from './layoutTree'
@@ -107,20 +110,44 @@ function dropSide(e: React.DragEvent<HTMLElement>): DropSide {
   return sideFromPoint((e.clientX - box.left) / box.width, (e.clientY - box.top) / box.height)
 }
 
-/** A crashing component must not take down the whole editor. */
-class PanelErrorBoundary extends Component<{ name: string; children: ReactNode }, { error: Error | null }> {
-  state = { error: null as Error | null }
+/** A crashing component must not take down the whole editor. 0.31.1: it can be reloaded and reported. */
+class PanelErrorBoundary extends Component<{ name: string; children: ReactNode }, { error: Error | null; report: string; copied: boolean }> {
+  state = { error: null as Error | null, report: '', copied: false }
   static getDerivedStateFromError(error: Error) {
-    return { error }
+    return { error, copied: false }
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    void crashReport(this.props.name, error, info.componentStack ?? '').then((report) => {
+      this.setState({ report })
+      return logCrash(report)
+    }).catch((e) => console.error('Writing the crash log failed', e))
   }
   render() {
-    if (this.state.error) {
-      return (
-        <div className="panel-loading">
-          {this.props.name} crashed: {this.state.error.message}
+    const { error, report, copied } = this.state
+    if (!error) return this.props.children
+    const name = this.props.name
+    return (
+      <div className="panel-loading panel-crash" role="alert">
+        <p>
+          <strong>{name} ran into a problem and stopped.</strong> Your work up to the last save is safe.
+        </p>
+        <p className="muted">{error.message}</p>
+        <div className="panel-crash-actions">
+          <button className="btn" onClick={() => this.setState({ error: null, report: '' })}>
+            Reload this tool
+          </button>
+          <button
+            className="btn btn-ghost"
+            disabled={!report}
+            onClick={() => void navigator.clipboard.writeText(report).then(() => this.setState({ copied: true }), () => {})}
+          >
+            {copied ? 'Copied' : 'Copy report'}
+          </button>
+          <button className="btn btn-ghost" disabled={!report} title="Opens a new issue on GitHub with the report filled in. Nothing is sent until you press Submit there." onClick={() => void openExternalUrl(issueUrl(REPO_URL, name, report))}>
+            Report on GitHub
+          </button>
         </div>
-      )
-    }
-    return this.props.children
+      </div>
+    )
   }
 }

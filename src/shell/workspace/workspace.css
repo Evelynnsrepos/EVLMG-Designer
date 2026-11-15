@@ -462,3 +462,21 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* 0.31.1: a crashed tool can be reloaded or reported. */
+.panel-crash p {
+  margin: 0 0 8px;
+  color: var(--text);
+}
+.panel-crash .muted {
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.panel-crash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
