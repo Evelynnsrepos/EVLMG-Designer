@@ -14,15 +14,29 @@
 
 .story-empty-hint {
   position: absolute;
-  top: 40%;
+  top: 42%;
   left: 50%;
   transform: translate(-50%, -50%);
-  max-width: 360px;
+  max-width: 400px;
   margin: 0;
+  padding: 18px 22px;
+  border: 1px solid var(--glass-border, var(--border));
+  border-radius: var(--radius-xl, var(--radius));
+  background: var(--glass-chip, var(--bg-elevated));
+  box-shadow: inset 0 1px 0 var(--glass-hi, transparent), var(--glass-shadow-sm, var(--shadow));
   color: var(--text-muted);
-  text-align: center;
   line-height: 1.5;
   pointer-events: none;
+}
+.story-empty-hint strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text);
+  font-size: 16px;
+}
+.story-empty-hint ol {
+  margin: 0;
+  padding-left: 20px;
 }
 
 /* Side panel for the selected node */
@@ -31,13 +45,21 @@
   flex: none;
   flex-direction: column;
   gap: 12px;
-  width: 260px;
+  width: 280px;
   max-width: 45%;
   height: 100%;
   padding: 12px;
   overflow-y: auto;
   border-left: 1px solid var(--border);
   background: var(--bg-elevated);
+}
+:root[data-glass] .story-details {
+  margin: 8px 8px 8px 0;
+  height: calc(100% - 16px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  background: var(--glass-chip);
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow-sm);
 }
 .story-details-head {
   display: flex;
@@ -132,9 +154,9 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  border: 2px solid var(--story-color);
-  border-top-width: 5px;
-  border-radius: 8px;
+  border: 1.5px solid var(--story-color);
+  border-left-width: 5px;
+  border-radius: 14px;
   background: var(--bg-elevated);
   pointer-events: auto;
 }
@@ -164,4 +186,283 @@
 .story-node-editor-line {
   height: 1px;
   background: var(--border);
+}
+
+/* v0.33: node role, choices, overview */
+.story-seg {
+  display: flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+}
+.story-seg-btn {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.story-seg-btn.on {
+  background: var(--bg-elevated);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 var(--glass-hi, transparent), 0 1px 4px rgb(0 0 0 / 0.2);
+}
+.story-note {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.story-ok svg {
+  flex: none;
+  color: var(--accent);
+}
+.story-choice {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.story-choice .input {
+  flex: 1;
+  min-width: 0;
+  border-left: 3px solid var(--story-color);
+}
+.story-choice-icon {
+  flex: none;
+  color: var(--story-color);
+}
+.story-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.story-stats span {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+  font-size: 12px;
+}
+.story-actions {
+  display: grid;
+  gap: 6px;
+}
+.story-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.story-problems,
+.story-tips {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.story-problems button {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 6px);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.story-problems button:hover {
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+}
+.story-problems svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--danger);
+}
+.story-problems span {
+  display: grid;
+  min-width: 0;
+}
+.story-problems b {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.story-problems small,
+.story-tips li {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.story-tips li::before {
+  content: '• ';
+  color: var(--accent);
+}
+
+/* The bar under the selected node: + Add next, Ending, Play from here. Lives in world space like the color offer. */
+.story-quick,
+.story-color-offer {
+  border: 1px solid var(--glass-border, var(--border));
+  border-radius: 999px;
+  background: var(--glass-fill-thick, var(--bg-elevated));
+  box-shadow: inset 0 1px 0 var(--glass-hi, transparent), var(--glass-shadow-sm, var(--shadow));
+}
+.story-color-offer {
+  padding: 5px 10px;
+}
+.story-quick {
+  position: absolute;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+.story-quick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.story-quick-btn:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+}
+.story-quick-btn.is-main {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.story-quick-btn.on {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
+}
+
+/* Play mode */
+.story-play {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  outline: none;
+}
+.story-play-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(560px, 100%);
+  max-height: 100%;
+  padding: 18px 22px 22px;
+  overflow: auto;
+  border: 1px solid var(--glass-border, var(--border));
+  border-top: 5px solid var(--story-color);
+  border-radius: var(--radius-xl, 14px);
+  background: var(--glass-fill-thick, var(--bg-elevated));
+  box-shadow: inset 0 1px 0 var(--glass-hi, transparent), var(--glass-shadow, var(--shadow));
+}
+.story-play-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.story-play-step {
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.story-play-card h2 {
+  margin: 0;
+  font-size: 22px;
+}
+.story-play-image {
+  max-width: 100%;
+  max-height: 260px;
+  border-radius: var(--radius-sm, 6px);
+  object-fit: contain;
+}
+.story-play-body {
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.story-play-choices {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+.story-play-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--story-color) 50%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--story-color) 12%, transparent);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.story-play-choice:hover {
+  background: color-mix(in srgb, var(--story-color) 24%, transparent);
+}
+.story-play-choice kbd {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  text-align: center;
+}
+.story-play-end {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  color: var(--text-muted);
+}
+.story-play-end.is-end {
+  color: var(--text);
+  font-weight: 600;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .story-play-card {
+    animation: story-pop 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+@keyframes story-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }

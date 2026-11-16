@@ -8,10 +8,13 @@ export const STORY_NODE_UI = {
   bodyHint: 'What happens here…',
   label: 'Story node',
   missing: 'Missing link',
+  start: 'START',
+  end: 'ENDING',
 }
 
 const PAD = 12
 const BAR = 5
+const RADIUS = 14
 const TITLE_SIZE = 17
 const BODY_SIZE = 13
 const LINK_SIZE = 12
@@ -85,25 +88,43 @@ export function makeStoryNodeTypes(o: StoryTypeOptions): NodeTypes {
               y={-6}
               width={n.width + 12}
               height={l.height + 12}
-              cornerRadius={12}
+              cornerRadius={RADIUS + 5}
               stroke={n.id === o.pendingId ? theme.focus : theme.accent}
               strokeWidth={2}
               dash={[8, 5]}
             />
           )}
+          {n.role && (
+            <Group y={-21} listening={false}>
+              <Rect width={n.role === 'start' ? 54 : 66} height={17} cornerRadius={9} fill={n.fillColor} />
+              <Text
+                width={n.role === 'start' ? 54 : 66}
+                height={17}
+                text={n.role === 'start' ? STORY_NODE_UI.start : STORY_NODE_UI.end}
+                align="center"
+                verticalAlign="middle"
+                fontSize={10}
+                fontStyle="bold"
+                fontFamily={theme.font}
+                letterSpacing={1}
+                fill="#15161a"
+              />
+            </Group>
+          )}
           <Rect
             width={n.width}
             height={l.height}
-            cornerRadius={8}
+            cornerRadius={RADIUS}
             fill={theme.bgElevated}
-            stroke={n.fillColor}
-            strokeWidth={2}
             shadowColor="#000"
-            shadowOpacity={0.25}
-            shadowBlur={10}
-            shadowOffsetY={2}
+            shadowOpacity={0.22}
+            shadowBlur={18}
+            shadowOffsetY={6}
           />
-          <Rect width={n.width} height={BAR} cornerRadius={[8, 8, 0, 0]} fill={n.fillColor} />
+          {/* A soft wash of the branch colour, so lines read as one colour without loud boxes. */}
+          <Rect width={n.width} height={l.height} cornerRadius={RADIUS} fill={n.fillColor} opacity={0.09} listening={false} />
+          <Rect width={BAR} height={l.height} cornerRadius={[RADIUS, 0, 0, RADIUS]} fill={n.fillColor} listening={false} />
+          <Rect width={n.width} height={l.height} cornerRadius={RADIUS} stroke={n.fillColor} strokeWidth={n.role === 'end' ? 2.5 : 1.5} opacity={0.75} dash={n.role === 'end' ? [10, 4] : undefined} listening={false} />
           {!editing && (
             <Text
               x={PAD}

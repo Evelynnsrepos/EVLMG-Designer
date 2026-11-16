@@ -1,10 +1,11 @@
-import { ExternalLink, ImagePlus, Trash2, X } from 'lucide-react'
+import { CornerDownRight, ExternalLink, Flag, ImagePlus, Play, Trash2, X } from 'lucide-react'
 import { useRef } from 'react'
 import type { Id } from '@/core/model'
 import { AssetImage } from '@/shared/AssetImage'
 import { openExternalUrl, RefPicker } from '@/shared/links'
 import type { RefProvider } from '@/shared/richtext'
-import { isUrlLink, STORY_COLORS, type StoryLink, type StoryNode } from './model'
+import type { ConnectorNode } from '@/shared/canvas'
+import { isUrlLink, STORY_COLORS, type StoryLink, type StoryNode, type StoryRole } from './model'
 import { STORY_NODE_UI } from './storyNodeType'
 import { ProofTextarea } from '@/shared/spell'
 
@@ -29,6 +30,11 @@ const DETAILS_UI = {
   remove: 'Remove link',
   deleteNode: 'Delete node',
   close: 'Close details',
+  role: 'This node is',
+  roles: { none: 'Scene', start: 'Start', end: 'Ending' } as Record<'none' | StoryRole, string>,
+  choices: 'Choices after this',
+  noChoices: 'None yet. Use + Add next under the node, or the Connect tool (L).',
+  choiceHint: 'What the player picks (optional)',
 }
 
 type LinkMode = 'none' | 'url' | 'node' | 'ref'
@@ -50,13 +56,16 @@ export interface NodeDetailsProps {
   onPickImage(): void
   onGoTo(id: Id): void
   onDelete(): void
+  /** Arrows leaving this node with their targets (v0.33). */
+  choices: { arrow: ConnectorNode; to: StoryNode }[]
+  onChoiceText(arrowId: Id, text: string, options?: { undoable?: boolean }): void
   onClose(): void
   /** Esc in the panel: hand the keyboard back to the canvas so tool keys work again. */
   onEscape(): void
 }
 
 /** Side panel for the selected node: text, color, image and link (SW-1, SW-2). */
-export function NodeDetails({ node, nodes, refs, onPatch, onColor, onPickImage, onGoTo, onDelete, onClose, onEscape }: NodeDetailsProps) {
+export function NodeDetails({ node, nodes, refs, onPatch, onColor, onPickImage, onGoTo, onDelete, onClose, onEscape, choices, onChoiceText }: NodeDetailsProps) {
   // One undo step per field edit: the first keystroke records, the rest replace it.
   const editing = useRef(false)
   const typed = (patch: Partial<StoryNode>) => {
@@ -95,6 +104,22 @@ export function NodeDetails({ node, nodes, refs, onPatch, onColor, onPickImage, 
         </button>
       </header>
 
+      <div className="story-field">
+        <span>{DETAILS_UI.role}</span>
+        <div className="story-seg" role="radiogroup" aria-label={DETAILS_UI.role}>
+          {(['none', 'start', 'end'] as const).map((r) => {
+            const on = (node.role ?? 'none') === r
+            return (
+              <button key={r} role="radio" aria-checked={on} className={'story-seg-btn' + (on ? ' on' : '')} onClick={() => onPatch({ role: r === 'none' ? undefined : r })}>
+                {r === 'start' && <Play size={12} />}
+                {r === 'end' && <Flag size={12} />}
+                {DETAILS_UI.roles[r]}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
       <label className="story-field">
         <span>{DETAILS_UI.title}</span>
         <input className="input" value={node.title} placeholder={STORY_NODE_UI.untitled} onChange={(e) => typed({ title: e.target.value })} {...fieldEvents} />
@@ -104,6 +129,31 @@ export function NodeDetails({ node, nodes, refs, onPatch, onColor, onPickImage, 
         <span>{DETAILS_UI.body}</span>
         <ProofTextarea className="input story-body" value={node.body} rows={5} onChange={(e) => typed({ body: e.target.value })} {...fieldEvents} />
       </label>
+
+      <div className="story-field">
+        <span>{DETAILS_UI.choices}</span>
+        {choices.length === 0 && <p className="story-note">{node.role === 'end' ? DETAILS_UI.roles.end : DETAILS_UI.noChoices}</p>}
+        {choices.map(({ arrow, to }) => (
+          <div key={arrow.id} className="story-choice" style={{ ['--story-color' as string]: to.fillColor }}>
+            <CornerDownRight size={14} className="story-choice-icon" />
+            <input
+              className="input"
+              value={arrow.label ?? ''}
+              placeholder={to.title || STORY_NODE_UI.untitled}
+              title={DETAILS_UI.choiceHint}
+              aria-label={`${DETAILS_UI.choiceHint}: ${to.title || STORY_NODE_UI.untitled}`}
+              onChange={(e) => {
+                onChoiceText(arrow.id, e.target.value, { undoable: !editing.current })
+                editing.current = true
+              }}
+              {...fieldEvents}
+            />
+            <button className="icon-btn" title={DETAILS_UI.goTo} aria-label={DETAILS_UI.goTo} onClick={() => onGoTo(to.id)}>
+              <ExternalLink size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
 
       <div className="story-field">
         <span>{DETAILS_UI.color}</span>

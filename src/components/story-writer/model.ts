@@ -23,6 +23,8 @@ export interface StoryNode extends NodeBase {
   link?: StoryLink | null
   /** 0.21: new nodes start as a roomy card with space for the story text; older nodes fit their text. */
   minHeight?: number
+  /** v0.33: Start or Ending marker; missing = an ordinary node. */
+  role?: StoryRole
 }
 
 export type StoryItem = StoryNode | ConnectorNode
@@ -140,4 +142,173 @@ export function patchStoryNode(scene: Scene<StoryItem>, id: Id, patch: Partial<O
 export function isLinkSet(link: StoryLink | null | undefined): link is StoryLink {
   if (!link) return false
   return isUrlLink(link) ? link.url.trim() !== '' : link.targetId !== ''
+}
+
+// ---- v0.33 overhaul: start/ending, quick add, story check, tidy, play, Twine export ----
+
+/** Optional node role (v0.33, additive field): where the story starts, or one of its endings. */
+export type StoryRole = 'start' | 'end'
+
+/** Arrows coming into a node. */
+export function incoming(scene: Scene<StoryItem>, id: Id): ConnectorNode[] {
+  return scene.nodes.filter((n): n is ConnectorNode => isConnector(n) && n.toId === id)
+}
+
+/** Where reading starts: nodes marked Start, else nodes nothing points to (oldest first). */
+export function storyStarts(scene: Scene<StoryItem>): StoryNode[] {
+  const nodes = storyNodes(scene)
+  const marked = nodes.filter((n) => n.role === 'start')
+  if (marked.length) return marked
+  const roots = nodes.filter((n) => incoming(scene, n.id).length === 0)
+  return roots.length ? roots : nodes.slice(0, 1)
+}
+
+/** The choices after a node: each arrow with its target, in the order they were made. */
+export function choicesOf(scene: Scene<StoryItem>, id: Id): { arrow: ConnectorNode; to: StoryNode }[] {
+  return outgoing(scene, id).flatMap((arrow) => {
+    const to = getNode(scene, arrow.toId)
+    return isStoryNode(to) ? [{ arrow, to }] : []
+  })
+}
+
+/** Every node once, in reading order (starts first, then breadth first); unreachable nodes at the end. */
+export function readingOrder(scene: Scene<StoryItem>): StoryNode[] {
+  const seen = new Set<Id>()
+  const out: StoryNode[] = []
+  const queue = [...storyStarts(scene)]
+  const visit = () => {
+    while (queue.length) {
+      const n = queue.shift()!
+      if (seen.has(n.id)) continue
+      seen.add(n.id)
+      out.push(n)
+      queue.push(...choicesOf(scene, n.id).map((c) => c.to))
+    }
+  }
+  visit()
+  for (const n of storyNodes(scene)) if (!seen.has(n.id)) (queue.push(n), visit())
+  return out
+}
+
+export type StoryProblem = { id: Id; kind: 'dead-end' | 'unreachable' | 'untitled' }
+
+/** Story check: lines that stop without being an ending, nodes no path reaches, nodes without a title. */
+export function storyProblems(scene: Scene<StoryItem>): StoryProblem[] {
+  const nodes = storyNodes(scene)
+  const reached = new Set<Id>()
+  const queue = storyStarts(scene).map((n) => n.id)
+  while (queue.length) {
+    const id = queue.shift()!
+    if (reached.has(id)) continue
+    reached.add(id)
+    queue.push(...outgoing(scene, id).map((c) => c.toId))
+  }
+  const out: StoryProblem[] = []
+  for (const n of nodes) {
+    if (!reached.has(n.id)) out.push({ id: n.id, kind: 'unreachable' })
+    else if (n.role !== 'end' && outgoing(scene, n.id).length === 0 && nodes.length > 1) out.push({ id: n.id, kind: 'dead-end' })
+    if (!n.title.trim()) out.push({ id: n.id, kind: 'untitled' })
+  }
+  return out
+}
+
+const wordsIn = (s: string) => s.split(/\s+/).filter(Boolean).length
+
+export function storyStats(scene: Scene<StoryItem>) {
+  const nodes = storyNodes(scene)
+  return {
+    nodes: nodes.length,
+    choices: nodes.filter((n) => outgoing(scene, n.id).length > 1).length,
+    endings: nodes.filter((n) => n.role === 'end').length,
+    words: nodes.reduce((sum, n) => sum + wordsIn(n.title) + wordsIn(n.body), 0),
+  }
+}
+
+export const COLUMN_GAP = 90
+export const ROW_GAP = 40
+
+/**
+ * Quick add (the + button under a node): a new node to the right, below the node's other followers,
+ * connected from it. The first follower continues the line's color; later ones are new choices.
+ */
+export function addFollower(scene: Scene<StoryItem>, fromId: Id, heights: (id: Id) => number): CreateResult | null {
+  const from = getNode(scene, fromId)
+  if (!isStoryNode(from)) return null
+  const kids = choicesOf(scene, fromId).map((c) => c.to)
+  const x = from.x + from.width + COLUMN_GAP + NODE_WIDTH / 2
+  const y = kids.length ? Math.max(...kids.map((k) => k.y + heights(k.id))) + ROW_GAP : from.y
+  return createNodeAfter(scene, fromId, from.layerId, { x, y: y + 20 })
+}
+
+/**
+ * Tidy: lay the story out left to right, one column per step from the start, each column stacked
+ * without overlaps. Nodes keep their order inside a column (top to bottom).
+ */
+export function tidyLayout(scene: Scene<StoryItem>, heights: (id: Id) => number): Scene<StoryItem> {
+  const depth = new Map<Id, number>()
+  const walk = (startIds: Id[]) => {
+    const queue = startIds.map((id) => ({ id, d: 0 }))
+    while (queue.length) {
+      const { id, d } = queue.shift()!
+      if (depth.has(id)) continue
+      depth.set(id, d)
+      for (const c of outgoing(scene, id)) queue.push({ id: c.toId, d: d + 1 })
+    }
+  }
+  walk(storyStarts(scene).map((n) => n.id))
+  const order = readingOrder(scene)
+  // An island no start reaches gets its own columns from 0.
+  for (const n of order) if (!depth.has(n.id)) walk([n.id])
+  const columns = new Map<number, StoryNode[]>()
+  for (const n of order) {
+    const d = depth.get(n.id) ?? 0
+    columns.set(d, [...(columns.get(d) ?? []), n])
+  }
+  const all = storyNodes(scene)
+  const left = all.length ? Math.min(...all.map((n) => n.x)) : 0
+  const top = all.length ? Math.min(...all.map((n) => n.y)) : 0
+  const colWidth = (d: number) => Math.max(...(columns.get(d) ?? []).map((n) => n.width))
+  const pos = new Map<Id, { x: number; y: number }>()
+  let x = left
+  for (let d = 0; columns.has(d); d++) {
+    let y = top
+    for (const n of columns.get(d)!) {
+      pos.set(n.id, { x, y })
+      y += heights(n.id) + ROW_GAP
+    }
+    x += colWidth(d) + COLUMN_GAP
+  }
+  return { ...scene, nodes: scene.nodes.map((n) => (isStoryNode(n) && pos.has(n.id) ? { ...n, ...pos.get(n.id)! } : n)) }
+}
+
+/** The arrow's choice text (what the player picks), stored as the connector's label. */
+export function setChoiceText(scene: Scene<StoryItem>, connectorId: Id, label: string): Scene<StoryItem> {
+  return updateNode(scene, connectorId, (n) => (isConnector(n) ? { ...n, label } : n))
+}
+
+/** Twine (Twee 3) text, so the story opens in Twine and engines that read Twee. */
+export function toTwee(scene: Scene<StoryItem>, title: string): string {
+  const order = readingOrder(scene)
+  const names = new Map<Id, string>()
+  const used = new Set<string>()
+  for (const n of order) {
+    const base = (n.title.trim() || 'Untitled').replace(/[[\]{}|]/g, '').replace(/->|<-/g, '')
+    let name = base
+    for (let i = 2; used.has(name.toLowerCase()); i++) name = `${base} ${i}`
+    used.add(name.toLowerCase())
+    names.set(n.id, name)
+  }
+  const start = storyStarts(scene)[0]
+  const data = { ifid: crypto.randomUUID().toUpperCase(), format: 'Harlowe', 'format-version': '3.3.9', start: start ? names.get(start.id) : undefined }
+  const head = `:: StoryTitle\n${title.trim() || 'Untitled story'}\n\n:: StoryData\n${JSON.stringify(data, null, 2)}\n`
+  const passages = order.map((n) => {
+    const links = choicesOf(scene, n.id).map(({ arrow, to }) => {
+      const target = names.get(to.id)!
+      const text = arrow.label?.trim().replace(/[[\]]|->/g, '')
+      return text && text !== target ? `[[${text}->${target}]]` : `[[${target}]]`
+    })
+    const tags = n.role === 'end' ? ' [ending]' : ''
+    return `:: ${names.get(n.id)}${tags} {"position":"${Math.round(n.x)},${Math.round(n.y)}"}\n${[n.body.trim(), links.join('\n')].filter(Boolean).join('\n\n')}\n`
+  })
+  return [head, ...passages].join('\n')
 }

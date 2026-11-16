@@ -1,13 +1,16 @@
-import { PanelRight } from 'lucide-react'
+import { Flag, PanelRight, Play, Plus } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { pickAndImportAssets, useAssetUrls } from '@/core/assets'
 import type { Id } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
+import { saveTextFile, safeFileName } from '@/core/export'
 import { useDocument, useProjectStore } from '@/core/state'
 import { CanvasEditor, deleteNodes, handTool, rectCenter, sceneBinding, selectTool, useCanvasState, type CanvasApi, type CanvasTool } from '@/shared/canvas'
 import { combineRefProviders, useEntityRefProvider } from '@/shared/richtext'
 import { useArticleRefProvider } from '@/shared/wiki'
-import { createDefaultStory, isStoryNode, isUrlLink, patchStoryNode, setNodeColor, STORY_COLORS, storyNodes, type StoryItem, type StoryLink } from './model'
+import { addFollower, choicesOf, createDefaultStory, isStoryNode, isUrlLink, NEW_NODE_HEIGHT, patchStoryNode, setChoiceText, setNodeColor, STORY_COLORS, storyNodes, tidyLayout, toTwee, type StoryItem, type StoryLink } from './model'
+import { PlayStory } from './PlayStory'
+import { OVERVIEW_UI, StoryOverview } from './StoryOverview'
 import { NodeDetails } from './NodeDetails'
 import { NodeEditor } from './NodeEditor'
 import { makeStoryNodeTypes, STORY_NODE_UI } from './storyNodeType'
@@ -16,9 +19,20 @@ import './story-writer.css'
 
 const UI = {
   canvas: 'Story canvas',
-  details: 'Node details (with the Select tool)',
-  emptyHint: 'Click anywhere to make the first node. Each next click adds a node connected to the last one; click an older node to branch from it.',
+  details: 'Side panel: story overview, or the selected node’s details',
+  emptyTitle: 'Write a branching story',
+  emptySteps: [
+    'Click anywhere to place the first scene and type it.',
+    'Click again: the next scene is connected to the last one.',
+    'Click an older scene, then empty space, to branch into a choice.',
+  ],
   pickColor: 'Color for this branch',
+  addNext: 'Add next',
+  addChoice: 'Add choice',
+  addHint: 'A new scene after this one; a second one makes it a choice',
+  ending: 'Ending',
+  endingHint: 'Mark this scene as an ending (the line is meant to stop here)',
+  playFrom: 'Play from here',
 }
 
 export default function View({ documentId, active }: PanelProps) {
@@ -38,6 +52,9 @@ export default function View({ documentId, active }: PanelProps) {
   const [showDetails, setShowDetails] = useState(true)
   /** 0.21: node open for typing (double-click, or right after Create). */
   const [editingId, setEditingId] = useState<Id | null>(null)
+  /** v0.33 play mode: undefined = off, null = from the start, an id = from that node. */
+  const [playFrom, setPlayFrom] = useState<Id | null | undefined>(undefined)
+  const docTitle = useProjectStore((s) => s.meta?.documents.find((d) => d.id === documentId)?.title ?? '')
 
   // The color offer belongs to the node just created; it goes away once that node is no longer selected.
   const offerId = colorOfferId && canvas.selection.includes(colorOfferId) ? colorOfferId : null
@@ -107,6 +124,28 @@ export default function View({ documentId, active }: PanelProps) {
   const patch = (id: Id, p: Parameters<typeof patchStoryNode>[2], options?: { undoable?: boolean }) =>
     binding.onChange((s) => patchStoryNode(s, id, p), options)
   const recolor = (id: Id, color: string) => binding.onChange((s) => setNodeColor(s, id, color))
+  const heightOf = (id: Id) => apiRef.current?.getWorldBounds(id)?.height ?? NEW_NODE_HEIGHT
+
+  /** The + under a node: a new scene after it, typed right away. */
+  const addAfter = (fromId: Id) => {
+    let made: ReturnType<typeof addFollower> = null
+    binding.onChange((s) => {
+      made = addFollower(s, fromId, heightOf)
+      return made?.scene ?? s
+    })
+    const r = made as ReturnType<typeof addFollower>
+    if (!r) return
+    setLastId(r.node.id)
+    apiRef.current?.select([r.node.id])
+    if (r.isBranch) setColorOfferId(r.node.id)
+    setEditingId(r.node.id)
+  }
+  const tidy = () => {
+    binding.onChange((s) => tidyLayout(s, heightOf))
+    requestAnimationFrame(() => apiRef.current?.fitToContent())
+  }
+  const exportTwine = () =>
+    void saveTextFile({ title: OVERVIEW_UI.twine, defaultName: `${safeFileName(docTitle, 'story')}.twee`, text: toTwee(scene, docTitle), filter: { name: 'Twine story', extensions: ['twee'] } })
 
   const pickImage = async (id: Id) => {
     if (!root) return
@@ -126,7 +165,16 @@ export default function View({ documentId, active }: PanelProps) {
   }
 
   return (
-    <div className="story-root">
+    <div
+      className="story-root"
+      onKeyDown={(e) => {
+        // P plays the story (when typing nowhere); tool letters are handled by the canvas.
+        const el = e.target as HTMLElement
+        if (!active || e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== 'p' || el.closest('input, textarea, [contenteditable="true"]') || !nodes.length) return
+        e.preventDefault()
+        setPlayFrom(selectedNode?.id ?? null)
+      }}
+    >
       <div className="story-canvas" ref={wrapRef}>
         <CanvasEditor<StoryItem>
           scene={scene}
@@ -139,6 +187,16 @@ export default function View({ documentId, active }: PanelProps) {
           resolveImageSrc={resolveImageSrc}
           ariaLabel={UI.canvas}
           toolbarExtra={
+            <>
+            <button
+              className="canvas-toolbar-btn"
+              title={OVERVIEW_UI.playHint}
+              aria-label={OVERVIEW_UI.play}
+              disabled={!nodes.length}
+              onClick={() => setPlayFrom(null)}
+            >
+              <Play size={17} strokeWidth={1.8} />
+            </button>
             <button
               className={'canvas-toolbar-btn' + (showDetails ? ' is-active' : '')}
               title={UI.details}
@@ -148,6 +206,7 @@ export default function View({ documentId, active }: PanelProps) {
             >
               <PanelRight size={17} strokeWidth={1.8} />
             </button>
+            </>
           }
           onNodeDoubleClick={(id, api) => {
             if (isStoryNode(api.scene.nodes.find((n) => n.id === id))) setEditingId(id)
@@ -166,7 +225,30 @@ export default function View({ documentId, active }: PanelProps) {
                   }}
                 />
               )
-            if (!offerId) return null
+            if (!offerId) {
+              const qn = selectedNode && (canvas.toolId === 'select' || canvas.toolId === 'create') ? selectedNode : undefined
+              const qb = qn && api.getWorldBounds(qn.id)
+              if (!qn || !qb) return null
+              const hasNext = choicesOf(scene, qn.id).length > 0
+              return (
+                <div className="story-quick" style={{ left: qb.x, top: qb.y + qb.height + 10 }} onPointerDown={(e) => e.stopPropagation()}>
+                  <button className="story-quick-btn is-main" title={UI.addHint} onClick={() => addAfter(qn.id)}>
+                    <Plus size={14} /> {hasNext ? UI.addChoice : UI.addNext}
+                  </button>
+                  <button
+                    className={'story-quick-btn' + (qn.role === 'end' ? ' on' : '')}
+                    title={UI.endingHint}
+                    aria-pressed={qn.role === 'end'}
+                    onClick={() => patch(qn.id, { role: qn.role === 'end' ? undefined : 'end' })}
+                  >
+                    <Flag size={13} /> {UI.ending}
+                  </button>
+                  <button className="story-quick-btn" title={UI.playFrom} aria-label={UI.playFrom} onClick={() => setPlayFrom(qn.id)}>
+                    <Play size={13} />
+                  </button>
+                </div>
+              )
+            }
             const b = api.getWorldBounds(offerId)
             if (!b) return null
             return (
@@ -191,7 +273,31 @@ export default function View({ documentId, active }: PanelProps) {
             )
           }}
         />
-        {nodes.length === 0 && <p className="story-empty-hint">{UI.emptyHint}</p>}
+        {nodes.length === 0 && (
+          <div className="story-empty-hint">
+            <strong>{UI.emptyTitle}</strong>
+            <ol>
+              {UI.emptySteps.map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+            </ol>
+          </div>
+        )}
+        {playFrom !== undefined && (
+          <PlayStory
+            scene={scene}
+            fromId={playFrom}
+            onClose={() => {
+              setPlayFrom(undefined)
+              wrapRef.current?.querySelector<HTMLElement>('.canvas-root')?.focus()
+            }}
+            onEdit={(id) => {
+              setPlayFrom(undefined)
+              apiRef.current?.setTool('select')
+              goTo(id)
+            }}
+          />
+        )}
       </div>
       {/* Details belong to the Select tool (SW-8), so they never cover the canvas while creating or linking. */}
       {selectedNode && showDetails && canvas.toolId === 'select' && (
@@ -210,7 +316,12 @@ export default function View({ documentId, active }: PanelProps) {
           }}
           onClose={() => setShowDetails(false)}
           onEscape={() => wrapRef.current?.querySelector<HTMLElement>('.canvas-root')?.focus()}
+          choices={choicesOf(scene, selectedNode.id)}
+          onChoiceText={(arrowId, text, o) => binding.onChange((s) => setChoiceText(s, arrowId, text), o)}
         />
+      )}
+      {!selectedNode && showDetails && nodes.length > 0 && (
+        <StoryOverview scene={scene} onGoTo={(id) => (apiRef.current?.setTool('select'), goTo(id))} onPlay={() => setPlayFrom(null)} onTidy={tidy} onTwine={exportTwine} onClose={() => setShowDetails(false)} />
       )}
     </div>
   )
