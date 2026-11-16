@@ -1,4 +1,4 @@
-import { BellOff, BookPlus, Trash2, Volume2, X } from 'lucide-react'
+import { ArrowRight, BellOff, BookPlus, CaseUpper, Trash2, Volume2, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useSettings } from '@/core/state'
 import { aiReady, fixOptions, fixTitle, guessLang, ignoreFix } from './proof'
@@ -22,6 +22,10 @@ export interface ProofHit {
   why?: string
   rule?: string
   lang?: Lang
+  /** Every hint of the same kind in the paragraph (German nouns typed small), in the caller's positions. */
+  group?: { from: number; to: number; fix: string }[]
+  /** Going through the text one mistake at a time: the card shows the sentence and moves on after a fix. */
+  walk?: boolean
 }
 
 /** Reads the sentence around the hit aloud, in its language, with the computer's own voice. Hearing a sentence often shows the wrong word. */
@@ -44,11 +48,33 @@ const UI = {
   hint: 'Check this word',
   read: 'Read the sentence aloud',
   off: 'Stop hints like this',
+  everywhere: 'Fix this word everywhere in this text',
+  nouns: (n: number) => `Capital letters for all ${n} nouns in this paragraph`,
+  next: 'Next',
+  keys: 'Enter takes the first fix · → goes on · Esc stops',
   close: 'Close',
 }
 
 /** Suggestion card on an underline: what kind of mistake, about 3 fixes, Dismiss and Add to dictionary. */
-export function ProofCard({ hit, replace, onClose }: { hit: ProofHit; replace: (from: number, to: number, text: string) => void; onClose: () => void }) {
+export function ProofCard({
+  hit,
+  replace,
+  onClose,
+  replaceAll,
+  replaceMany,
+  onNext,
+}: {
+  hit: ProofHit
+  replace: (from: number, to: number, text: string) => void
+  onClose: () => void
+  /** Replaces the whole word `bad` everywhere in the text, as one undo step. Without it the card has no "everywhere" box. */
+  replaceAll?: (bad: string, fix: string) => void
+  /** Several replacements as one undo step. */
+  replaceMany?: (list: { from: number; to: number; fix: string }[]) => void
+  /** Walk-through: open the next underline after this document position. */
+  onNext?: (after: number) => void
+}) {
+  const [everywhere, setEverywhere] = useState(false)
   const [options, setOptions] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const card = useRef<HTMLDivElement>(null)
@@ -59,15 +85,24 @@ export function ProofCard({ hit, replace, onClose }: { hit: ProofHit; replace: (
     void fixOptions(hit.para, hit.at, hit.at + hit.bad.length, hit.fix, hit.word, (o) => live && setOptions(o), { fixes: hit.fixes, lang: hit.lang }).then(() => live && setLoading(false))
     const close = (e: MouseEvent | KeyboardEvent) => {
       if (e instanceof KeyboardEvent ? e.key === 'Escape' : !(e.target as Element).closest?.('.proof-card')) onClose()
+      // Walk-through keys: Enter takes the first fix, the right arrow skips to the next mistake.
+      if (!(e instanceof KeyboardEvent) || !hit.walk) return
+      if (e.key === 'Enter' || e.key === 'ArrowRight') {
+        e.preventDefault()
+        e.stopPropagation()
+        const first = card.current?.querySelector<HTMLButtonElement>('.proof-card-option')
+        if (e.key === 'Enter' && first) first.click()
+        else onNext?.(hit.from)
+      }
     }
     window.addEventListener('mousedown', close)
-    window.addEventListener('keydown', close)
+    window.addEventListener('keydown', close, true)
     return () => {
       live = false
       window.removeEventListener('mousedown', close)
-      window.removeEventListener('keydown', close)
+      window.removeEventListener('keydown', close, true)
     }
-  }, [hit, onClose])
+  }, [hit, onClose, onNext])
 
   // Stay on screen: below the word, or above it near the bottom edge.
   useLayoutEffect(() => {
@@ -78,6 +113,18 @@ export function ProofCard({ hit, replace, onClose }: { hit: ProofHit; replace: (
   }, [hit, options, loading, pos])
 
   const spelling = hit.fix === undefined
+  const sentence = hit.walk ? sentences(hit.para).findLast((x) => x.from <= hit.at) : undefined
+  const pick = (o: string) => {
+    // Remember what the writer meant by this spelling: next time it is the first fix.
+    if (hit.word && !hit.rule) {
+      const s = useSettings.getState()
+      s.update({ learnedFixes: { ...s.learnedFixes, [hit.word.toLowerCase()]: o } })
+    }
+    if (everywhere && replaceAll) replaceAll(hit.bad, o)
+    else replace(hit.from, hit.to, o)
+    if (hit.walk && onNext) onNext(hit.from + o.length)
+    else onClose()
+  }
   return (
     <div ref={card} className="proof-card" style={{ position: 'fixed', ...pos }} role="dialog" aria-label={UI.kind}>
       <header className="proof-card-head">
@@ -94,17 +141,22 @@ export function ProofCard({ hit, replace, onClose }: { hit: ProofHit; replace: (
           <X size={14} />
         </button>
       </header>
-      <div className="proof-card-bad">{hit.bad}</div>
+      {sentence ? (
+        <div className="proof-card-sentence">
+          {sentence.text.slice(0, hit.at - sentence.from)}
+          <mark>{hit.bad}</mark>
+          {sentence.text.slice(hit.at - sentence.from + hit.bad.length)}
+        </div>
+      ) : (
+        <div className="proof-card-bad">{hit.bad}</div>
+      )}
       {hit.why && <div className="proof-card-why">{hit.why}</div>}
       <div className="proof-card-options">
         {options.map((o) => (
           <button
             key={o}
             className="proof-card-option"
-            onClick={() => {
-              replace(hit.from, hit.to, o)
-              onClose()
-            }}
+            onClick={() => pick(o)}
           >
             {o}
           </button>
@@ -112,6 +164,30 @@ export function ProofCard({ hit, replace, onClose }: { hit: ProofHit; replace: (
         {!loading && options.length === 0 && <span className="muted">{UI.none}</span>}
       </div>
       {loading && aiReady() && <div className="proof-card-note">{UI.more}</div>}
+      {hit.word && !hit.rule && replaceAll && (
+        <label className="proof-card-note proof-card-check">
+          <input type="checkbox" checked={everywhere} onChange={(e) => setEverywhere(e.target.checked)} /> {UI.everywhere}
+        </label>
+      )}
+      {hit.group && hit.group.length > 1 && replaceMany && (
+        <button
+          className="proof-card-all"
+          onClick={() => {
+            replaceMany(hit.group!)
+            onClose()
+          }}
+        >
+          <CaseUpper size={14} /> {UI.nouns(hit.group.length)}
+        </button>
+      )}
+      {hit.walk && (
+        <div className="proof-card-walk">
+          <span className="proof-card-note">{UI.keys}</span>
+          <button onClick={() => onNext?.(hit.from)}>
+            {UI.next} <ArrowRight size={14} />
+          </button>
+        </div>
+      )}
       <footer className="proof-card-foot">
         <button
           onClick={() => {

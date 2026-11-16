@@ -17,6 +17,7 @@ import {
   ListChecks,
   ListOrdered,
   Pilcrow,
+  SpellCheck2,
   Redo2,
   TextQuote,
   Underline,
@@ -26,7 +27,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { useCollab } from '@/core/collab'
 import { promptDialog } from '../dialogs'
-import { ProofCard, SpellCheck, type ProofHit } from '../spell'
+import { ProofCard, SpellCheck, nextHit, type ProofHit } from '../spell'
 import '../spell/spell.css'
 import { liveTextExtensions, openLiveText } from './collab'
 import { normalizeRichText } from './doc'
@@ -74,6 +75,7 @@ export interface RichTextEditorProps {
 }
 
 const UI = {
+  check: 'Fix my text: go through the underlined spots one by one',
   placeholder: 'Start writing… Type [[ to link an article, entry, tool or document.',
   imagePrompt: 'Image path or URL',
   bold: 'Bold (Ctrl+B)',
@@ -250,14 +252,34 @@ export function RichTextEditor({
     if (editor.state.selection.empty === false) editor.commands.setTextSelection(editor.state.selection.to)
   }
 
+  /** Several fixes as one undo step (from the end, so earlier positions stay right). */
+  const replaceMany = (list: { from: number; to: number; fix: string }[]) => {
+    const tr = editor.state.tr
+    for (const x of [...list].sort((a, b) => b.from - a.from)) tr.insertText(x.fix, x.from, x.to)
+    editor.view.dispatch(tr)
+    editor.commands.focus()
+  }
+
   return (
     <div className={['richtext', className].filter(Boolean).join(' ')}>
-      {toolbar && editable && <Toolbar editor={editor} onImage={insertImage} extraFormats={extraFormats} />}
+      {toolbar && editable && <Toolbar editor={editor} onImage={insertImage} extraFormats={extraFormats} onCheck={() => setMisspelling(nextHit(editor.view, editor.state.selection.head - 1))} />}
       <EditorContent editor={editor} className="richtext-content" />
       {misspelling && editor && editable && (
         <ProofCard
           hit={misspelling}
           replace={(from, to, text) => editor.chain().focus().insertContentAt({ from, to }, text).run()}
+          replaceMany={replaceMany}
+          replaceAll={(bad, fix) => {
+            // Whole words only, outside code and links, as one undo step.
+            const word = new RegExp(`(?<![\\p{L}\\p{M}])${bad.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{M}])`, 'gu')
+            const list: { from: number; to: number; fix: string }[] = []
+            editor.state.doc.descendants((node, pos) => {
+              if (!node.isText || node.marks.some((m) => m.type.name === 'code' || m.type.name === 'link')) return
+              for (const m of node.text!.matchAll(word)) list.push({ from: pos + m.index, to: pos + m.index + bad.length, fix })
+            })
+            replaceMany(list)
+          }}
+          onNext={(after) => setMisspelling(nextHit(editor.view, after))}
           onClose={() => setMisspelling(null)}
         />
       )}
@@ -265,7 +287,7 @@ export function RichTextEditor({
   )
 }
 
-function Toolbar({ editor, onImage, extraFormats }: { editor: Editor; onImage: () => void; extraFormats: boolean }) {
+function Toolbar({ editor, onImage, extraFormats, onCheck }: { editor: Editor; onImage: () => void; extraFormats: boolean; onCheck: () => void }) {
   const state = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
@@ -329,6 +351,7 @@ function Toolbar({ editor, onImage, extraFormats }: { editor: Editor; onImage: (
       {button(ImagePlus, UI.image, onImage)}
       {button(Link2, UI.link, () => chain().insertContent('[[').run())}
       <span className="richtext-toolbar-spacer" />
+      {button(SpellCheck2, UI.check, onCheck)}
       {button(Undo2, UI.undo, () => chain().undo().run(), false, !state.canUndo)}
       {button(Redo2, UI.redo, () => chain().redo().run(), false, !state.canRedo)}
     </div>

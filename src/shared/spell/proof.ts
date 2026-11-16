@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { useSettings } from '@/core/state'
 import { useAiHelper } from './ai'
-import { borrowedOk, knownWords, lookup, spellAvailable, spellLangs, suggestRanked, tokenize, tokenizeParts } from './spell'
+import { borrowedOk, knownWords, lookup, spellAvailable, spellLangs, suggestRanked, tokenize, tokenizeParts, wordsAround } from './spell'
 import { clauses, detectLangs, langScore, sentences, type Lang } from './lang'
 import { checkRules } from './rules'
 import { KNOWN_WRONG } from './words'
@@ -170,6 +170,32 @@ export function ignoreFix(bad: string, fix: string) {
   listeners.forEach((l) => l())
 }
 
+const JOINERS = new Set('and but so because und aber weil dann'.split(' '))
+const LONG = 40
+const STARTERS = new Set('i we he she they it you there then this that ich wir er sie es man du dann da das dort'.split(' '))
+/**
+ * A sentence of 40 or more words: where it could stop. Picks the first "and", "but", "because"… in the
+ * second half that has no comma before it, and offers a full stop there.
+ */
+export function longSentence(text: string, lang: Lang): { from: number; to: number; fix: string; why: string } | null {
+  const words = [...text.matchAll(/[\p{L}\p{M}'’-]+/gu)]
+  if (words.length < LONG) return null
+  for (let i = Math.floor(words.length / 2); i < words.length - 4; i++) {
+    const w = words[i][0].toLowerCase()
+    const prev = words[i - 1]
+    const next = words[i + 1]
+    if (!JOINERS.has(w) || text.slice(prev.index + prev[0].length, words[i].index) !== ' ') continue
+    // "and" also joins plain words ("quests and items"): only stop where a new statement starts.
+    if ((w === 'and' || w === 'und') && !STARTERS.has(next[0].toLowerCase())) continue
+    // "and"/"und" just joins: drop it. The others carry meaning and start the new sentence.
+    const drop = w === 'and' || w === 'und' || w === 'dann'
+    const fix = drop ? `${prev[0]}. ${cap(next[0])}` : `${prev[0]}. ${cap(words[i][0])}`
+    const why = lang === 'de' ? `Dieser Satz hat ${words.length} Wörter. Mit einem Punkt hier liest er sich leichter.` : `This sentence has ${words.length} words. A full stop here makes it easier to read.`
+    return { from: prev.index, to: drop ? next.index + next[0].length : words[i].index + w.length, fix, why }
+  }
+  return null
+}
+
 const DE_DET = new Set('der die das den dem des ein eine einen einem einer eines kein keine keinen mein meine meinen dein deine deinen sein seine seinen ihr ihre ihren unser unsere dieser diese dieses diesen jeder jede jedes zum zur im am vom beim ins'.split(' '))
 const OTHER_WORD = {
   en: (w: string) => `"${w}" is a German word. In an English sentence you may mean:`,
@@ -225,6 +251,8 @@ export async function findIssues(paragraphs: string[], focus = 0): Promise<Issue
         if (!i[other]) {
           // Known slips ("Standart") are never excused as a made-up compound.
           if (KNOWN_WRONG.en.has(lower) || KNOWN_WRONG.de.has(lower)) spots.push({ ...issue, word: w.word })
+          // A German noun typed small is a slip of the shift key, not a misspelling: a calm hint, and one click fixes all of them.
+          else if (lang === 'de' && w.word === lower && info(cap(w.word)).de && !off.has('noun-capital')) spots.push({ ...issue, fix: cap(w.word), fixes: [cap(w.word)], why: NOUN_CAP, rule: 'noun-capital' })
           else unknown.push({ p, issue: { ...issue, word: w.word }, german: lang === 'de' && sure })
           return
         }
@@ -245,6 +273,8 @@ export async function findIssues(paragraphs: string[], focus = 0): Promise<Issue
             const b = at(s.from + h.to - 1)
             if (a.sure && a.lang === lang && b.lang === lang) spots.push({ from: s.from + h.from, to: s.from + h.to, fix: h.fixes[0], fixes: h.fixes, why: h.why, rule: h.rule, lang })
           }
+      const long = off.has('long-sentence') ? null : longSentence(s.text, at(s.from).lang)
+      if (long) spots.push({ from: s.from + long.from, to: s.from + long.to, fix: long.fix, fixes: [long.fix], why: long.why, rule: 'long-sentence', lang: at(s.from).lang })
       out[p].push(...spots)
     })
     before = detected[detected.length - 1]?.lang ?? before
@@ -324,7 +354,7 @@ export function fixOptions(text: string, from: number, to: number, fix: string |
   const sentence = markedSentence(text, from, to)
   const lang = hint?.lang ?? guessLang(sentence)
   if (word)
-    void suggestRanked(word, lang).then((s) => {
+    void suggestRanked(word, lang, wordsAround(text, from, to)).then((s) => {
       dictionary = s.slice(0, 6).map((r) => r.word)
       sureFirst = s.length > 0 && s[0].score <= 1.5
       emit()

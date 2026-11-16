@@ -48,6 +48,48 @@
   text-decoration: line-through;
   color: var(--text-muted);
 }
+.proof-card-sentence {
+  font-size: 15px;
+  line-height: 1.6;
+  max-height: 9em;
+  overflow: auto;
+}
+.proof-card-sentence mark {
+  background: none;
+  color: var(--danger);
+  text-decoration: underline;
+  font-weight: 600;
+}
+.proof-card-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.proof-card-all,
+.proof-card-walk button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+.proof-card-all:hover,
+.proof-card-walk button:hover {
+  border-color: var(--focus);
+}
+.proof-card-all svg {
+  flex: none;
+}
+.proof-card-walk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
 .proof-card-why {
   font-size: 13px;
   line-height: 1.5;

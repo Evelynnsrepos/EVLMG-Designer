@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { useSettings } from '@/core/state'
 import { clauses, detectLangs, sentences } from './lang'
-import { findIssues } from './proof'
+import { findIssues, longSentence } from './proof'
 import { checkRules } from './rules'
 import { setSpellBackend, soundDistance, suggestRanked, tokenizeParts } from './spell'
 
@@ -84,6 +84,10 @@ describe('with dictionaries', () => {
     expect(await marks('Der Spieler hat das Gameplay und die Colour.')).toEqual([])
     expect(await marks('Der Bosskampf und der Levelaufstieg.')).toEqual([])
   })
+  it('treats a German noun typed small as a calm hint, not a misspelling', async () => {
+    const hits = (await findIssues(['Der hund hat das.']))[0]
+    expect(hits.map((x) => [x.rule, x.fix])).toEqual([['noun-capital', 'Hund']])
+  })
   it('marks misspelled words and ranks the word that sounds alike first', async () => {
     expect(await marks('The castel is cool.')).toEqual(['castel→?'])
     expect((await suggestRanked('castel', 'en'))[0].word).toBe('castle')
@@ -102,5 +106,26 @@ describe('sound-alike suggestions', () => {
     expect((await suggestRanked('tommorow', 'en'))[0].word).toBe('tomorrow')
     expect((await suggestRanked('andthen', 'en'))[0].word).toBe('and then')
     setSpellBackend(null)
+  })
+
+  it('lets the words around and learned fixes decide', async () => {
+    useSettings.setState({ spellCheck: true, spellLanguages: ['en', 'de'], learnedFixes: {} })
+    setSpellBackend({ check: async (_l, words) => words.map(() => false), suggest: async () => ['peace', 'piece'] })
+    expect((await suggestRanked('peice', 'en', { prev: 'a', next: 'of' }))[0].word).toBe('piece')
+    expect((await suggestRanked('peice', 'en', { prev: 'world', next: 'and' }))[0].word).toBe('peace')
+    useSettings.setState({ learnedFixes: { kitchin: 'kitten' } })
+    expect((await suggestRanked('kitchin', 'en'))[0].word).toBe('kitten')
+    useSettings.setState({ learnedFixes: {} })
+    setSpellBackend(null)
+  })
+})
+
+describe('long sentences', () => {
+  it('offers a full stop at a joining word in the second half', () => {
+    const half = 'the little grey cat walked over the old stone bridge to the market in the early morning light with a basket'
+    const hit = longSentence(`${half} today and then ${half}`, 'en')!
+    expect(longSentence(`${half} and ${half}`, 'en')).toBeNull()
+    expect(hit.fix).toBe("today. Then")
+    expect(longSentence(half, 'en')).toBeNull()
   })
 })

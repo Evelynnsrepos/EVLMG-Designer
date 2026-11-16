@@ -203,6 +203,25 @@ function commonWords(lang: Lang): Promise<string[]> {
     return list
   }))
 }
+/** Words that often stand next to each other (freq/*-pairs.txt: "the screen", "next day"), loaded with the first suggestion. */
+const pairs: Partial<Record<Lang, Promise<Map<string, Set<string>>>>> = {}
+function commonPairs(lang: Lang): Promise<Map<string, Set<string>>> {
+  return (pairs[lang] ??= (lang === 'en' ? import('./freq/en-pairs.txt?raw') : import('./freq/de-pairs.txt?raw')).then(
+    (m) => new Map(m.default.split('\n').map((line) => [line.slice(0, line.indexOf(' ')), new Set(line.split(' ').slice(1))])),
+  ))
+}
+
+/** The words right before and after a spot (same clause), for picking the fix that fits the sentence. */
+export interface Around {
+  prev?: string
+  next?: string
+}
+export function wordsAround(text: string, from: number, to: number): Around {
+  const prev = /([\p{L}'’]+)\s+$/u.exec(text.slice(0, from))?.[1]
+  const next = /^\s+([\p{L}'’]+)/u.exec(text.slice(to))?.[1]
+  return { prev: prev?.toLowerCase(), next: next?.toLowerCase() }
+}
+
 /** 0 for the most used word, 1 for a rare or unlisted one: of two words that fit, the everyday one is meant more often. */
 const rarity = (lang: Lang, word: string) => ((rankOf[lang]?.get(word.toLowerCase()) ?? 45000) / 30000) ** 0.5 * 0.8
 
@@ -216,7 +235,8 @@ async function soundAlikes(word: string, lang: Lang): Promise<{ word: string; d:
     const l = c.toLowerCase()
     // Spelling by sound keeps the start of a word: same first letter, or the first two swapped.
     if (l[0] !== w[0] && !(l[0] === w[1] && l[1] === w[0])) continue
-    const d = soundDistance(w, l)
+    // A word that was cut short ("tomor") costs little per missing letter.
+    const d = Math.min(soundDistance(w, l), w.length >= 4 && l.startsWith(w) ? 0.4 * (l.length - w.length) : 99)
     if (d <= max) out.push({ word: c, d })
   }
   return out
@@ -233,10 +253,11 @@ const suggestions = new Map<string, Ranked[]>()
  * Ways to spell `word`, best first: the list of known misspellings, then both dictionaries'
  * ideas sorted by how alike they sound, with the sentence's language in front.
  */
-export async function suggestRanked(word: string, lang: Lang): Promise<Ranked[]> {
+export async function suggestRanked(word: string, lang: Lang, around: Around = {}): Promise<Ranked[]> {
   const langs = spellLangs()
   if (!spellAvailable() || langs.length === 0) return []
-  const key = `${lang}\u0000${langs.join()}\u0000${word}`
+  const learned = useSettings.getState().learnedFixes[word.toLowerCase()]
+  const key = `${lang}\u0000${langs.join()}\u0000${word}\u0000${around.prev}\u0000${around.next}\u0000${learned}`
   const hit = suggestions.get(key)
   if (hit) return hit
   const b = backend ?? tauriBackend
@@ -266,6 +287,15 @@ export async function suggestRanked(word: string, lang: Lang): Promise<Ranked[]>
     const info = await lookup(cuts.flat()).catch(() => null)
     for (const [a, b2] of info ? cuts : []) if (info!(a)[lang] && info!(b2)[lang]) add(`${a} ${b2}`, lang, 0.7 + rarity(lang, a) + rarity(lang, b2))
   }
+  // A fix that often stands next to the neighbour words fits the sentence ("a peice of" → "a piece of").
+  for (const r of out.values()) {
+    const follow = await commonPairs(r.lang).catch(() => null)
+    const w = r.word.toLowerCase()
+    if (around.prev && follow?.get(around.prev)?.has(w)) r.score -= 0.6
+    if (around.next && follow?.get(w)?.has(around.next)) r.score -= 0.6
+  }
+  // What the writer picked for this word before always comes first.
+  if (learned) out.set(learned, { word: learned, lang, score: -9 })
   const ranked = [...out.values()].sort((x, y) => x.score - y.score)
   suggestions.set(key, ranked)
   return ranked
