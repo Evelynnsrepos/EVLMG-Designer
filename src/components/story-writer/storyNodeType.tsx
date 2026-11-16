@@ -123,7 +123,16 @@ export function makeStoryNodeTypes(o: StoryTypeOptions): NodeTypes {
           />
           {/* A soft wash of the branch colour, so lines read as one colour without loud boxes. */}
           <Rect width={n.width} height={l.height} cornerRadius={RADIUS} fill={n.fillColor} opacity={0.09} listening={false} />
-          <Rect width={BAR} height={l.height} cornerRadius={[RADIUS, 0, 0, RADIUS]} fill={n.fillColor} listening={false} />
+          {/* The colour stripe is a hard-edged gradient over the whole card, so it follows the rounded corners. */}
+          <Rect
+            width={n.width}
+            height={l.height}
+            cornerRadius={RADIUS}
+            fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+            fillLinearGradientEndPoint={{ x: n.width, y: 0 }}
+            fillLinearGradientColorStops={[0, n.fillColor, BAR / n.width, n.fillColor, BAR / n.width, 'rgba(0,0,0,0)', 1, 'rgba(0,0,0,0)']}
+            listening={false}
+          />
           <Rect width={n.width} height={l.height} cornerRadius={RADIUS} stroke={n.fillColor} strokeWidth={n.role === 'end' ? 2.5 : 1.5} opacity={0.75} dash={n.role === 'end' ? [10, 4] : undefined} listening={false} />
           {!editing && (
             <Text
