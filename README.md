@@ -249,7 +249,7 @@ beginner guides.
 | Tool | What it does |
 |---|---|
 | **Writer** | Rich text documents for design docs, scripts and dialogue, with fonts and sizes, images you can size and let the text flow around, live word count, Markdown/text export and Markdown import. A per-document Markdown Syntax switch adds typing shortcuts like `==highlight==`, `- [ ]` checklists, `> [!note]` callouts, tags, footnotes and tables, and turns pasted Markdown into formatting. |
-| **Story Branch Writer** | Mind-map style branching stories: create, branch, connect and sever nodes. Double-click a node to type its title and story text right on it. |
+| **Story Branch Writer** | Mind-map style branching stories: create, branch, connect and sever nodes, with + Add next under each node, start and ending markers, choice text on arrows, a story check for dead ends, Play through to test it like a player, Tidy up and export for Twine. Stories also go into the Design Book. |
 | **Timeline** | Timelines with optional years, events with images, and branches for alternative histories (press `B`). |
 | **Quest Designer** | Quests with givers, places, objectives, rewards and chains shown as a graph, plus flags shared with the Dialogue Editor. |
 | **Dialogue Editor** | Branching conversations as a graph with speakers, choices, conditions and flags, a play-through mode, and export to JSON, Yarn Spinner or Ink. |

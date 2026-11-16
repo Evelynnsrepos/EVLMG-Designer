@@ -388,9 +388,12 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
   'story-writer': {
     title: 'Story Branch Writer',
     body: [
-      'A mind-map for branching stories. Create nodes, branch them, connect them to each other and sever connections.',
-      'Each node has a bold title and its story text below a thin line. Double-click a node (a new one opens by itself) to type both right on it. Enter in the title jumps to the story text, Shift+Tab or Up at its start goes back to the title, and Esc or clicking away finishes. The Details panel (Select tool) has the same text plus a picture and a link.',
-      'Like every canvas tool it has a bottom toolbar; hover a button to see its shortcut letter.',
+      'A mind-map for branching stories. Each node is one scene: a bold title and its story text. Arrows show what can happen next; a node with two or more arrows is a choice.',
+      'Start: with Create (C), click anywhere and type the first scene. Each next click adds a scene connected to the last one (it has a dashed outline). Click an older node, then empty space, to branch from it.',
+      'Select a node and use the bar under it: + Add next puts a new scene to the right (the second one becomes a choice), Ending marks the scene as one of the story\'s endings, and the play button plays from there.',
+      'Double-click a node to type right on it. Enter in the title jumps to the story text, Esc or clicking away finishes. The side panel (Select tool) has the text, whether it is the start or an ending, the choice text for each arrow (what the player picks), a colour, a picture and a link.',
+      'With nothing selected the side panel shows the story: numbers, Play through, Tidy up (lays everything out left to right) and Export for Twine (a .twee file). Story check lists lines that stop without an ending and nodes no path reaches; click one to go there.',
+      'Play through (P) reads the story like a player: click a choice or press its number, Backspace goes back, Esc stops. Everything you change is undoable with Ctrl+Z.',
     ],
     tips: ['Pan with the middle mouse button or Space+drag, zoom with the mouse wheel.'],
   },
