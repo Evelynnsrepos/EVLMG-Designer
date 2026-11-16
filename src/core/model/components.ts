@@ -58,6 +58,7 @@ export const COMPONENT_TYPES = [
   'card-designer',
   'vector',
   'material',
+  'code',
   'custom-list',
 ] as const
 
