@@ -186,7 +186,11 @@ export function readingOrder(scene: Scene<StoryItem>): StoryNode[] {
     }
   }
   visit()
-  for (const n of storyNodes(scene)) if (!seen.has(n.id)) (queue.push(n), visit())
+  for (const n of storyNodes(scene)) {
+    if (seen.has(n.id)) continue
+    queue.push(n)
+    visit()
+  }
   return out
 }
 

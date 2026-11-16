@@ -1,4 +1,5 @@
-import { Flag, PanelRight, Play, Plus } from 'lucide-react'
+import { Download, Flag, GitBranchPlus, LayoutGrid, Link2, MousePointer2, PanelRight, Play, Plus, Scissors } from 'lucide-react'
+import { useHotwheel, type HotAction } from '@/shared/hotwheel'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { pickAndImportAssets, useAssetUrls } from '@/core/assets'
 import type { Id } from '@/core/model'
@@ -10,12 +11,21 @@ import { combineRefProviders, useEntityRefProvider } from '@/shared/richtext'
 import { useArticleRefProvider } from '@/shared/wiki'
 import { addFollower, choicesOf, createDefaultStory, isStoryNode, isUrlLink, NEW_NODE_HEIGHT, patchStoryNode, setChoiceText, setNodeColor, STORY_COLORS, storyNodes, tidyLayout, toTwee, type StoryItem, type StoryLink } from './model'
 import { PlayStory } from './PlayStory'
-import { OVERVIEW_UI, StoryOverview } from './StoryOverview'
+import { OVERVIEW_UI } from './overviewUi'
+import { StoryOverview } from './StoryOverview'
 import { NodeDetails } from './NodeDetails'
 import { NodeEditor } from './NodeEditor'
 import { makeStoryNodeTypes, STORY_NODE_UI } from './storyNodeType'
 import { connectTool, createTool, severTool, type StoryToolHost } from './tools'
 import './story-writer.css'
+
+const HOTWHEEL_UI = {
+  create: 'Create (C)',
+  select: 'Select (V)',
+  connect: 'Connect (L)',
+  sever: 'Sever (S)',
+  panel: 'Side panel',
+}
 
 const UI = {
   canvas: 'Story canvas',
@@ -97,6 +107,28 @@ export default function View({ documentId, active }: PanelProps) {
     if (editingId) apiRef.current?.select([])
   }, [editingId])
 
+  // Hotwheel (hold Q): the story's tools and actions, the node ones only while one node is selected.
+  useHotwheel(() => {
+    if (!doc.data) return []
+    const tool = (id: string, label: string, icon: HotAction['icon']): HotAction => ({ id: `story.${id}`, label, icon, on: canvas.toolId === id, run: () => apiRef.current?.setTool(id) })
+    const sel = selectedNode
+    return [
+      tool('create', HOTWHEEL_UI.create, Plus),
+      tool('select', HOTWHEEL_UI.select, MousePointer2),
+      tool('connect', HOTWHEEL_UI.connect, Link2),
+      tool('sever', HOTWHEEL_UI.sever, Scissors),
+      ...(sel
+        ? [
+            { id: 'story.add', label: choicesOf(scene!, sel.id).length ? UI.addChoice : UI.addNext, icon: GitBranchPlus, run: () => addAfter(sel.id) },
+            { id: 'story.ending', label: UI.ending, icon: Flag, on: sel.role === 'end', run: () => patch(sel.id, { role: sel.role === 'end' ? undefined : 'end' }) },
+          ]
+        : [{ id: 'story.tidy', label: OVERVIEW_UI.tidy, icon: LayoutGrid, run: tidy }]),
+      { id: 'story.play', label: sel ? UI.playFrom : OVERVIEW_UI.play, icon: Play, run: () => nodes.length && setPlayFrom(sel?.id ?? null) },
+      { id: 'story.panel', label: HOTWHEEL_UI.panel, icon: PanelRight, on: showDetails, run: () => setShowDetails((v) => !v) },
+      { id: 'story.twine', label: OVERVIEW_UI.twine, icon: Download, run: exportTwine },
+    ]
+  })
+
   const scene = doc.data?.scene
   const nodes = useMemo(() => (scene ? storyNodes(scene) : []), [scene])
 
@@ -140,12 +172,14 @@ export default function View({ documentId, active }: PanelProps) {
     if (r.isBranch) setColorOfferId(r.node.id)
     setEditingId(r.node.id)
   }
-  const tidy = () => {
+  // Declared as functions so the Hotwheel (set up above the loading check) can call them.
+  function tidy() {
     binding.onChange((s) => tidyLayout(s, heightOf))
     requestAnimationFrame(() => apiRef.current?.fitToContent())
   }
-  const exportTwine = () =>
-    void saveTextFile({ title: OVERVIEW_UI.twine, defaultName: `${safeFileName(docTitle, 'story')}.twee`, text: toTwee(scene, docTitle), filter: { name: 'Twine story', extensions: ['twee'] } })
+  function exportTwine() {
+    void saveTextFile({ title: OVERVIEW_UI.twine, defaultName: `${safeFileName(docTitle, 'story')}.twee`, text: toTwee(scene!, docTitle), filter: { name: 'Twine story', extensions: ['twee'] } })
+  }
 
   const pickImage = async (id: Id) => {
     if (!root) return

@@ -394,6 +394,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Double-click a node to type right on it. Enter in the title jumps to the story text, Esc or clicking away finishes. The side panel (Select tool) has the text, whether it is the start or an ending, the choice text for each arrow (what the player picks), a colour, a picture and a link.',
       'With nothing selected the side panel shows the story: numbers, Play through, Tidy up (lays everything out left to right) and Export for Twine (a .twee file). Story check lists lines that stop without an ending and nodes no path reaches; click one to go there.',
       'Play through (P) reads the story like a player: click a choice or press its number, Backspace goes back, Esc stops. Everything you change is undoable with Ctrl+Z.',
+      'Hold Q for the Hotwheel: the four tools, + Add next and Ending for the selected node (Tidy up when nothing is selected), Play, the side panel and Export for Twine.',
     ],
     tips: ['Pan with the middle mouse button or Space+drag, zoom with the mouse wheel.'],
   },
