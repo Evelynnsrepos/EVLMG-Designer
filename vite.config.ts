@@ -1,11 +1,23 @@
 /// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react'
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
+
+// Tauri guesses a file's type from its first 1024 bytes before its name: "%PDF" there turns a .js file
+// into a PDF, the webview refuses it and every tool sharing that file crashes (0.32 Design Book bug).
+const noFileMagicInChunks: Plugin = {
+  name: 'no-file-magic-in-chunks',
+  generateBundle(_, bundle) {
+    for (const f of Object.values(bundle)) {
+      const text = f.type === 'chunk' ? f.code : typeof f.source === 'string' ? f.source : ''
+      if (text.slice(0, 1024).includes('%PDF')) this.error(`${f.fileName} has "%PDF" in its first 1024 bytes; Tauri would serve it as a PDF.`)
+    }
+  },
+}
 
 // Tauri expects a fixed dev port and wants to see Rust errors in the terminal.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), noFileMagicInChunks],
   clearScreen: false,
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },

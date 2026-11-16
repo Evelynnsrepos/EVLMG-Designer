@@ -37,7 +37,9 @@ export function makePdf(pages: PdfPage[]): Uint8Array {
     body.forEach(push)
     push('\nendobj\n')
   }
-  push('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n')
+  // "%" as a byte: the literal header text in the app's code made Tauri serve that file as a PDF (see vite.config.ts).
+  push(Uint8Array.of(0x25))
+  push('PDF-1.4\n%\xe2\xe3\xcf\xd3\n')
   const kids = pages.map((_, i) => `${3 + i * 3} 0 R`).join(' ')
   obj(1, ['<< /Type /Catalog /Pages 2 0 R >>'])
   obj(2, [`<< /Type /Pages /Kids [${kids}] /Count ${pages.length} >>`])
