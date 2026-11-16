@@ -232,13 +232,13 @@ pub async fn llm_check(app: AppHandle, text: String, lang: String, model: String
     let port = ensure_server(&app, &model)?;
     let (system, example, fixed) = if lang == "de" {
       (
-        "Du korrigierst deutschen Text. Gib den Text mit korrigierter Rechtschreibung, Grammatik und Zeichensetzung zurück. Behalte Bedeutung, Wortwahl, Namen und erfundene Wörter. Formuliere korrekten Text nicht um. Antworte nur mit dem korrigierten deutschen Text, niemals auf Englisch.",
+        "Du korrigierst deutschen Text. Gib den Text mit korrigierter Rechtschreibung, Grammatik und Zeichensetzung zurück. Behalte Bedeutung, Wortwahl, Namen und erfundene Wörter. Formuliere korrekten Text nicht um. Englische Wörter und Satzteile im Text sind Absicht: lass sie englisch und übersetze nichts. Antworte nur mit dem korrigierten Text.",
         "Die Wache sagen, das der König krank ist.",
         "Die Wache sagt, dass der König krank ist.",
       )
     } else {
       (
-        "You proofread English text. Return the text with spelling, grammar and punctuation mistakes fixed. Keep the meaning, wording, names and made-up words. Do not rephrase correct text. Return only the corrected text.",
+        "You proofread English text. Return the text with spelling, grammar and punctuation mistakes fixed. Keep the meaning, wording, names and made-up words. Do not rephrase correct text. German words and phrases in the text are on purpose: keep them German and never translate. Return only the corrected text.",
         "Their is to many goblin in the castel.",
         "There are too many goblins in the castle.",
       )

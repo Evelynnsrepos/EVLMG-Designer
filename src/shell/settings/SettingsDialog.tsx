@@ -19,6 +19,12 @@ const UI = {
   title: 'Settings',
   spell: 'Spell check',
   spellOn: 'Underline misspelled words',
+  spellAutoFix: 'Fix sure slips while I write (like "teh"). Ctrl+Z takes one back, and that word is then left alone',
+  learned: (n: number) => `${n} fix${n === 1 ? '' : 'es'} learned from your clicks.`,
+  forget: 'Forget them',
+  spellCalm: 'Calm underlines: only show them in the paragraph I am writing in',
+  writingHintsOff: (n: number) => `${n} kind${n === 1 ? '' : 's'} of writing hint turned off.`,
+  writingHintsOn: 'Turn them back on',
   spellDesktopOnly: 'Spell check works in the desktop app.',
   languages: 'Languages',
   words: 'My dictionary',
@@ -143,6 +149,30 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
               <input type="checkbox" checked={s.spellCheck} onChange={(e) => s.update({ spellCheck: e.target.checked })} />
               {UI.spellOn}
             </label>
+            <label className="settings-check">
+              <input type="checkbox" checked={s.spellCalm} onChange={(e) => s.update({ spellCalm: e.target.checked })} />
+              {UI.spellCalm}
+            </label>
+            <label className="settings-check">
+              <input type="checkbox" checked={s.spellAutoFix} onChange={(e) => s.update({ spellAutoFix: e.target.checked })} />
+              {UI.spellAutoFix}
+            </label>
+            {Object.keys(s.learnedFixes).length > 0 && (
+              <p className="muted settings-hint">
+                {UI.learned(Object.keys(s.learnedFixes).length)}{' '}
+                <button className="btn" onClick={() => s.update({ learnedFixes: {} })}>
+                  {UI.forget}
+                </button>
+              </p>
+            )}
+            {s.spellRulesOff.length > 0 && (
+              <p className="muted settings-hint">
+                {UI.writingHintsOff(s.spellRulesOff.length)}{' '}
+                <button className="btn" onClick={() => s.update({ spellRulesOff: [] })}>
+                  {UI.writingHintsOn}
+                </button>
+              </p>
+            )}
             <div className="settings-row">
               <span className="muted">{UI.languages}</span>
               {SPELL_LANGUAGES.map((l) => (
@@ -256,7 +286,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
             <h3>{UI.hints}</h3>
             <label className="settings-check">
               <input type="checkbox" checked={s.hotkeyHints} onChange={(e) => s.update({ hotkeyHints: e.target.checked, hotkeyHintsChosen: true })} />
-              {UI.hintsOn}
+              {UI.writingHintsOn}
             </label>
           </section>
           </div>

@@ -14,6 +14,14 @@ export interface AppSettings {
   spellLanguages: string[]
   /** "Add to dictionary" words, e.g. made-up names. Compared case-insensitively. */
   personalWords: string[]
+  /** Kinds of writing hints the user turned off (rule ids from shared/spell/rules.ts). */
+  spellRulesOff: string[]
+  /** Calm underlines: only the paragraph you are writing in shows its underlines. */
+  spellCalm: boolean
+  /** Fixes the user picked for their own misspellings (typed word in lower case → chosen word): offered first next time. Stays on this computer. */
+  learnedFixes: Record<string, string>
+  /** Fix sure slips while typing ("teh" → "the"): known misspellings and learned fixes only. */
+  spellAutoFix: boolean
   /** Use the downloaded AI helper for suggestions when it is installed. */
   aiHelper: boolean
   /** Which downloaded AI model checks grammar: see AI_MODELS in shared/spell/ai.ts. */
@@ -35,6 +43,8 @@ export interface AppSettings {
   hotwheel: HotwheelSettings
   /** 0.19: new Writer documents start with the Markdown Syntax switch on. */
   writerMarkdownSyntax: boolean
+  /** Writer reading comfort: text size (px), line spacing, page width (px, 0 = full) and the open side panel. */
+  writerView: { size: number; spacing: number; width: number; side: '' | 'outline' | 'help' }
   /** 0.20: the GitHub user Git saving makes repositories for; '' = GitHub not connected on this computer. */
   githubLogin: string
   /** Hotkey hint mode, every button with a key shows it in its corner. On unless turned off in Settings. */
@@ -107,7 +117,7 @@ export interface HotwheelSettings {
 export const DEFAULT_INNER = ['close', 'scale', 'jump', 'layout', 'undo', 'search']
 const hotwheelDefaults = (): HotwheelSettings => ({ inner: DEFAULT_INNER, outer: {}, size: 'M', penButton: false, rightHold: false, middle: false })
 
-const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, githubLogin: '', hotkeyHints: true, projectPresets: [], git: gitDefaults(), projectFolders: [], homeSections: [] })
+const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], spellRulesOff: [], spellCalm: false, learnedFixes: {}, spellAutoFix: false, aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, writerView: { size: 15, spacing: 1.6, width: 760, side: '' }, githubLogin: '', hotkeyHints: true, projectPresets: [], git: gitDefaults(), projectFolders: [], homeSections: [] })
 
 async function settingsPath() {
   const fs = getFs()

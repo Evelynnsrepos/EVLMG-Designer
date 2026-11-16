@@ -14,7 +14,9 @@ return <RichTextEditor value={doc.data.body} onChange={(body) => doc.update((d) 
 
 - **Undo/redo** lives inside the editor (Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z, toolbar buttons). Save with `{ undoable: false }`
   and do not bind your own Ctrl+Z on the editor. If `value` changes from outside, the editor shows the new value.
-- **Toolbar**: normal text, H1 to H3, bold, italic, underline, bulleted and numbered lists, quote, image, `[[` link, undo, redo.
+- **Toolbar**: normal text, H1 to H3, bold, italic, underline, bulleted and numbered lists, quote, image, `[[` link, find and replace (Ctrl+F), Fix my text, undo, redo.
+  With `extraFormats` (Writer): crossed out, highlight, checklist, callout, remove formatting, and the insert menu
+  (`inserts.tsx`: one list for the + button, the `/` menu and `InsertList`, each entry with the Markdown to type).
   Markdown shortcuts work too (`# `, `- `, `1. `, `> `, `**bold**`). Pass `toolbar={false}` for small fields, `editable={false}` to read only.
 - **Stored format**: TipTap JSON. Prose is under `text` keys, so the project word counter counts it; links store only `kind` and `id`.
 

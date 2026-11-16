@@ -17,6 +17,11 @@ import {
   ListChecks,
   ListOrdered,
   Pilcrow,
+  Plus,
+  RemoveFormatting,
+  Search,
+  Strikethrough,
+  SpellCheck2,
   Redo2,
   TextQuote,
   Underline,
@@ -26,12 +31,14 @@ import {
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { useCollab } from '@/core/collab'
 import { promptDialog } from '../dialogs'
-import { ProofCard, SpellCheck, type ProofHit } from '../spell'
+import { ProofCard, SpellCheck, nextHit, type ProofHit } from '../spell'
 import '../spell/spell.css'
 import { liveTextExtensions, openLiveText } from './collab'
 import { normalizeRichText } from './doc'
 import { ImageFiles, RichImage, type ImageImporter } from './imageExtension'
+import { FindBar, FindText } from './find'
 import { FontMark } from './fontExtension'
+import { InsertList, SlashMenu } from './inserts'
 import { FONT_SIZES } from './styles'
 import { allLocalFonts, GENERIC_FONTS, systemFonts } from '../fontList'
 import { RefCard, RefExtension } from './refExtension'
@@ -74,6 +81,7 @@ export interface RichTextEditorProps {
 }
 
 const UI = {
+  check: 'Fix my text: go through the underlined spots one by one',
   placeholder: 'Start writing… Type [[ to link an article, entry, tool or document.',
   imagePrompt: 'Image path or URL',
   bold: 'Bold (Ctrl+B)',
@@ -87,6 +95,10 @@ const UI = {
   ordered: 'Numbered list',
   quote: 'Quote',
   highlight: 'Highlight (Ctrl+Shift+H)',
+  strike: 'Crossed out (Ctrl+Shift+S)',
+  clear: 'Remove formatting',
+  insert: 'Insert… (or type / on a new line)',
+  find: 'Find and replace (Ctrl+F)',
   checklist: 'Checklist',
   callout: 'Callout box',
   image: 'Insert image',
@@ -113,6 +125,10 @@ interface LiveProps {
   onChange?: (next: RichTextDoc) => void
   placeholder: string
   syntax: boolean
+  /** The `/` insert menu (Writer). */
+  inserts: boolean
+  /** Opens the find bar; missing = no Ctrl+F here. */
+  onFind?: () => void
 }
 
 /** After a teammate's edit, save the merged text once things are quiet. */
@@ -137,6 +153,8 @@ function buildExtensions(live: RefObject<LiveProps>, onMisspelling: (hit: ProofH
       () => live.current.provider,
     ),
     SpellCheck.configure({ onMisspelling }),
+    SlashMenu.configure({ enabled: () => live.current.inserts }),
+    FindText.configure({ onOpen: () => !!live.current.onFind && (live.current.onFind(), true) }),
   ]
 }
 
@@ -168,9 +186,11 @@ export function RichTextEditor({
 
   // Extensions are built once (rebuilding would reset the content); they read the latest props through `live`.
   const [misspelling, setMisspelling] = useState<ProofHit | null>(null)
-  const live = useRef<LiveProps>({ provider, resolveImageSrc, importImages, onChange, placeholder, syntax: markdownSyntax })
+  const [finding, setFinding] = useState(false)
+  const onFind = toolbar && editable ? () => setFinding(true) : undefined
+  const live = useRef<LiveProps>({ provider, resolveImageSrc, importImages, onChange, placeholder, syntax: markdownSyntax, inserts: extraFormats, onFind })
   useEffect(() => {
-    live.current = { provider, resolveImageSrc, importImages, onChange, placeholder, syntax: markdownSyntax }
+    live.current = { provider, resolveImageSrc, importImages, onChange, placeholder, syntax: markdownSyntax, inserts: extraFormats, onFind }
   })
   const lastEmitted = useRef<RichTextDoc | null>(null)
   // The extensions only read `live` inside editor callbacks, never during render.
@@ -250,14 +270,35 @@ export function RichTextEditor({
     if (editor.state.selection.empty === false) editor.commands.setTextSelection(editor.state.selection.to)
   }
 
+  /** Several fixes as one undo step (from the end, so earlier positions stay right). */
+  const replaceMany = (list: { from: number; to: number; fix: string }[]) => {
+    const tr = editor.state.tr
+    for (const x of [...list].sort((a, b) => b.from - a.from)) tr.insertText(x.fix, x.from, x.to)
+    editor.view.dispatch(tr)
+    editor.commands.focus()
+  }
+
   return (
     <div className={['richtext', className].filter(Boolean).join(' ')}>
-      {toolbar && editable && <Toolbar editor={editor} onImage={insertImage} extraFormats={extraFormats} />}
+      {toolbar && editable && <Toolbar editor={editor} onImage={insertImage} extraFormats={extraFormats} syntax={markdownSyntax} onFind={() => setFinding((f) => !f)} onCheck={() => setMisspelling(nextHit(editor.view, editor.state.selection.head - 1))} />}
+      {finding && editor && editable && <FindBar editor={editor} onClose={() => setFinding(false)} />}
       <EditorContent editor={editor} className="richtext-content" />
       {misspelling && editor && editable && (
         <ProofCard
           hit={misspelling}
           replace={(from, to, text) => editor.chain().focus().insertContentAt({ from, to }, text).run()}
+          replaceMany={replaceMany}
+          replaceAll={(bad, fix) => {
+            // Whole words only, outside code and links, as one undo step.
+            const word = new RegExp(`(?<![\\p{L}\\p{M}])${bad.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{M}])`, 'gu')
+            const list: { from: number; to: number; fix: string }[] = []
+            editor.state.doc.descendants((node, pos) => {
+              if (!node.isText || node.marks.some((m) => m.type.name === 'code' || m.type.name === 'link')) return
+              for (const m of node.text!.matchAll(word)) list.push({ from: pos + m.index, to: pos + m.index + bad.length, fix })
+            })
+            replaceMany(list)
+          }}
+          onNext={(after) => setMisspelling(nextHit(editor.view, after))}
           onClose={() => setMisspelling(null)}
         />
       )}
@@ -265,13 +306,36 @@ export function RichTextEditor({
   )
 }
 
-function Toolbar({ editor, onImage, extraFormats }: { editor: Editor; onImage: () => void; extraFormats: boolean }) {
+function Toolbar({
+  editor,
+  onImage,
+  extraFormats,
+  syntax,
+  onFind,
+  onCheck,
+}: {
+  editor: Editor
+  onImage: () => void
+  extraFormats: boolean
+  syntax: boolean
+  onFind: () => void
+  onCheck: () => void
+}) {
+  const [inserting, setInserting] = useState(false)
+  const insertRoot = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!inserting) return
+    const close = (e: MouseEvent) => !insertRoot.current?.contains(e.target as Node) && setInserting(false)
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [inserting])
   const state = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
       bold: e.isActive('bold'),
       italic: e.isActive('italic'),
       underline: e.isActive('underline'),
+      strike: e.isActive('strike'),
       paragraph: e.isActive('paragraph'),
       h1: e.isActive('heading', { level: 1 }),
       h2: e.isActive('heading', { level: 2 }),
@@ -318,7 +382,9 @@ function Toolbar({ editor, onImage, extraFormats }: { editor: Editor; onImage: (
       {button(Bold, UI.bold, () => chain().toggleBold().run(), state.bold)}
       {button(Italic, UI.italic, () => chain().toggleItalic().run(), state.italic)}
       {button(Underline, UI.underline, () => chain().toggleUnderline().run(), state.underline)}
+      {extraFormats && button(Strikethrough, UI.strike, () => chain().toggleStrike().run(), state.strike)}
       {extraFormats && button(Highlighter, UI.highlight, () => chain().toggleMark('highlight').run(), state.highlight)}
+      {extraFormats && button(RemoveFormatting, UI.clear, () => chain().unsetAllMarks().clearNodes().run())}
       <span className="richtext-toolbar-sep" />
       {button(List, UI.bullet, () => chain().toggleBulletList().run(), state.bullet)}
       {button(ListOrdered, UI.ordered, () => chain().toggleOrderedList().run(), state.ordered)}
@@ -328,7 +394,19 @@ function Toolbar({ editor, onImage, extraFormats }: { editor: Editor; onImage: (
       <span className="richtext-toolbar-sep" />
       {button(ImagePlus, UI.image, onImage)}
       {button(Link2, UI.link, () => chain().insertContent('[[').run())}
+      {extraFormats && (
+        <span className="richtext-insert" ref={insertRoot}>
+          {button(Plus, UI.insert, () => setInserting((o) => !o), inserting)}
+          {inserting && (
+            <div className="richtext-insert-menu">
+              <InsertList editor={editor} syntax={syntax} onDone={() => setInserting(false)} />
+            </div>
+          )}
+        </span>
+      )}
       <span className="richtext-toolbar-spacer" />
+      {button(Search, UI.find, onFind)}
+      {button(SpellCheck2, UI.check, onCheck)}
       {button(Undo2, UI.undo, () => chain().undo().run(), false, !state.canUndo)}
       {button(Redo2, UI.redo, () => chain().redo().run(), false, !state.canRedo)}
     </div>

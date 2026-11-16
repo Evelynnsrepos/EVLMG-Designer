@@ -1,14 +1,16 @@
 import type { Editor } from '@tiptap/core'
-import { Download, Highlighter, Info, Upload } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { CircleHelp, Download, Eye, Highlighter, Info, ListTree, Upload } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { saveTextFile } from '@/core/export'
 import type { PanelProps } from '@/core/registry'
-import { collabNames, useDocument, useProjectStore } from '@/core/state'
+import { collabNames, useDocument, useProjectStore, useSettings } from '@/core/state'
 import { useHotwheel } from '@/shared/hotwheel'
 import {
   combineRefProviders,
   findRefByLabel,
   countRichTextWords,
+  InsertList,
+  richTextToPlainText,
   RichTextEditor,
   useEntityRefProvider,
   useProjectImages,
@@ -25,6 +27,22 @@ const UI = {
   titlePlaceholder: 'Untitled document',
   titleLabel: 'Document title',
   words: (n: number) => (n === 1 ? '1 word' : `${n.toLocaleString()} words`),
+  minutes: (n: number) => `${n} min read`,
+  stats: (chars: number) => `${chars.toLocaleString()} characters. Reading time at 200 words a minute.`,
+  outline: 'Outline',
+  outlineTitle: 'Outline: your headings, click one to jump there',
+  outlineEmpty: 'No headings yet. Headings you add show up here, so you can jump around a long text.',
+  help: 'Markdown help',
+  helpTitle: 'Markdown help: everything you can insert, and what to type for it',
+  helpOn: 'Click a row to insert it, or type what is shown on the right.',
+  helpOff: 'Click a row to insert it. The greyed-out ones can only be typed with the Markdown Syntax switch on.',
+  view: 'View',
+  viewTitle: 'Text size, line spacing and page width',
+  size: 'Text size',
+  spacing: 'Line spacing',
+  width: 'Page width',
+  copy: 'Copy as Markdown',
+  copied: 'Copied',
   export: 'Export',
   exportTitle: (f: string) => `Export as ${f}`,
   syntax: 'Markdown Syntax',
@@ -50,6 +68,9 @@ export default function View({ documentId }: PanelProps) {
   const resolve = useMemo<LabelResolver>(() => (t) => refs.resolve(t)?.label, [refs])
   const [editor, setEditor] = useState<Editor | null>(null)
   const syntaxOn = !!doc.data?.markdownSyntax
+  const view = useSettings((s) => s.writerView)
+  const setView = (patch: Partial<typeof view>) => useSettings.getState().update({ writerView: { ...view, ...patch } })
+  const side = (which: 'outline' | 'help') => setView({ side: view.side === which ? '' : which })
   const toggleSyntax = () => doc.update((d) => ({ ...d, markdownSyntax: !d.markdownSyntax }))
 
   useHotwheel(() => [
@@ -97,10 +118,18 @@ export default function View({ documentId }: PanelProps) {
             ))}
           </select>
         )}
+        <button className={view.side === 'outline' ? 'icon-btn is-active' : 'icon-btn'} title={UI.outlineTitle} aria-label={UI.outlineTitle} aria-pressed={view.side === 'outline'} onClick={() => side('outline')}>
+          <ListTree size={16} />
+        </button>
+        <button className={view.side === 'help' ? 'icon-btn is-active' : 'icon-btn'} title={UI.helpTitle} aria-label={UI.helpTitle} aria-pressed={view.side === 'help'} onClick={() => side('help')}>
+          <CircleHelp size={16} />
+        </button>
+        <ViewMenu view={view} setView={setView} />
         <ImportButton refs={refs} />
-        <ExportMenu onExport={runExport} />
+        <ExportMenu onExport={runExport} onCopy={() => navigator.clipboard.writeText(exportDocument(ref.title, body, 'markdown', resolve).text)} />
       </header>
-      <div className="writer-page">
+      <div className="writer-body">
+      <div className="writer-page" style={{ '--writer-size': `${view.size}px`, '--writer-spacing': view.spacing, '--writer-width': view.width ? `${view.width}px` : 'none' } as CSSProperties}>
         <RichTextEditor
           key={documentId}
           value={body}
@@ -114,6 +143,20 @@ export default function View({ documentId }: PanelProps) {
           extraFormats
           markdownSyntax={syntaxOn}
         />
+      </div>
+      {view.side && editor && (
+        <aside className="writer-side" aria-label={view.side === 'outline' ? UI.outline : UI.help}>
+          <h3>{view.side === 'outline' ? UI.outline : UI.help}</h3>
+          {view.side === 'outline' ? (
+            <Outline body={body} editor={editor} />
+          ) : (
+            <>
+              <p className="muted">{syntaxOn ? UI.helpOn : UI.helpOff}</p>
+              <InsertList editor={editor} syntax={syntaxOn} />
+            </>
+          )}
+        </aside>
+      )}
       </div>
     </div>
   )
@@ -174,18 +217,100 @@ function TitleInput({ value, onCommit }: { value: string; onCommit: (title: stri
   )
 }
 
-/** Live word count; recounted a moment after typing stops so long documents stay smooth. */
+/** Live word count and reading time; recounted a moment after typing stops so long documents stay smooth. */
 function WordCount({ body, resolve }: { body: RichTextDoc; resolve: LabelResolver }) {
-  const [count, setCount] = useState(() => countRichTextWords(body, resolve))
+  const stats = () => ({ words: countRichTextWords(body, resolve), chars: richTextToPlainText(body, resolve).length })
+  const [count, setCount] = useState(stats)
   useEffect(() => {
-    const t = setTimeout(() => setCount(countRichTextWords(body, resolve)), 250)
+    const t = setTimeout(() => setCount(stats()), 250)
     return () => clearTimeout(t)
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [body, resolve])
-  return <span className="writer-words">{UI.words(count)}</span>
+  return (
+    <span className="writer-words" title={UI.stats(count.chars)}>
+      {UI.words(count.words)} · {UI.minutes(Math.max(1, Math.round(count.words / 200)))}
+    </span>
+  )
 }
 
-function ExportMenu({ onExport }: { onExport: (format: ExportFormat) => Promise<void> }) {
+/** The top-level headings as a clickable list. */
+function Outline({ body, editor }: { body: RichTextDoc; editor: Editor }) {
+  const text = (n: RichTextDoc): string => n.text ?? (n.content ?? []).map(text).join('')
+  const headings = (body.content ?? []).filter((n) => n.type === 'heading')
+  const jump = (index: number) => {
+    let i = -1
+    editor.state.doc.forEach((node, pos) => {
+      if (node.type.name === 'heading' && ++i === index) editor.chain().focus().setTextSelection(pos + 1).scrollIntoView().run()
+    })
+  }
+  if (!headings.length) return <p className="muted">{UI.outlineEmpty}</p>
+  return (
+    <nav className="writer-outline">
+      {headings.map((h, i) => (
+        <button key={i} className="writer-outline-item" style={{ paddingLeft: 8 + 14 * (((h.attrs?.level as number) ?? 1) - 1) }} onClick={() => jump(i)}>
+          {text(h) || '…'}
+        </button>
+      ))}
+    </nav>
+  )
+}
+
+const SIZES: [string, number][] = [['S', 14], ['M', 15], ['L', 18], ['XL', 21]]
+const SPACINGS: [string, number][] = [['Tight', 1.4], ['Normal', 1.6], ['Wide', 1.9], ['Extra wide', 2.3]]
+const WIDTHS: [string, number][] = [['Narrow', 600], ['Normal', 760], ['Wide', 1000], ['Full', 0]]
+
+type WriterView = ReturnType<typeof useSettings.getState>['writerView']
+
+/** Reading comfort for every Writer document on this computer: text size, line spacing, page width. */
+function ViewMenu({ view, setView }: { view: WriterView; setView: (patch: Partial<WriterView>) => void }) {
   const [open, setOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false)
+    }
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [open])
+  const row = (label: string, field: 'size' | 'spacing' | 'width', options: [string, number][]) => (
+    <div className="writer-view-row" role="group" aria-label={label}>
+      <span>{label}</span>
+      {options.map(([name, value]) => (
+        <button key={name} className={view[field] === value ? 'btn is-active' : 'btn'} aria-pressed={view[field] === value} onClick={() => setView({ [field]: value })}>
+          {name}
+        </button>
+      ))}
+    </div>
+  )
+  return (
+    <div
+      className="writer-export"
+      ref={root}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && open) {
+          e.preventDefault()
+          setOpen(false)
+        }
+      }}
+    >
+      <button className="btn btn-ghost writer-export-btn" title={UI.viewTitle} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <Eye size={14} /> {UI.view}
+      </button>
+      {open && (
+        <div className="writer-menu writer-view">
+          {row(UI.size, 'size', SIZES)}
+          {row(UI.spacing, 'spacing', SPACINGS)}
+          {row(UI.width, 'width', WIDTHS)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ExportMenu({ onExport, onCopy }: { onExport: (format: ExportFormat) => Promise<void>; onCopy: () => Promise<void> }) {
+  const [open, setOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
@@ -224,6 +349,9 @@ function ExportMenu({ onExport }: { onExport: (format: ExportFormat) => Promise<
               {EXPORT_FORMATS[f].label}
             </button>
           ))}
+          <button role="menuitem" className="writer-menu-item" onClick={() => void onCopy().then(() => setCopied(true))}>
+            {copied ? UI.copied : UI.copy}
+          </button>
         </div>
       )}
     </div>

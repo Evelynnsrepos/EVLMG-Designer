@@ -50,7 +50,8 @@ calculators all live in one project, and they all know about each other. Free, o
   your own notes, on your own computer. They are off until you turn them on, and they never write anything for you.
 - 🔓 **Fully open source.** The app is [GPL-3.0](LICENSE), and everything it is built from is open source too: all
   libraries (MIT, Apache-2.0, BSD, ISC, MPL-2.0, GPL-3.0 and similar), the English (SCOWL) and German (igerman98,
-  GPL) spell check dictionaries, and the optional helper downloads (llama.cpp, MIT, and Qwen models, Apache-2.0).
+  GPL) spell check dictionaries, the word frequency lists that sort spelling suggestions
+  ([FrequencyWords](https://github.com/hermitdave/FrequencyWords) by Hermit Dave, CC BY-SA 4.0), word pair lists (from [SymSpell](https://github.com/wolfgarbe/SymSpell) by Wolf Garbe, MIT, and [google-books-ngram-frequency](https://github.com/orgtre/google-books-ngram-frequency), both built from the Google Books Ngram data, CC BY 3.0), and the optional helper downloads (llama.cpp, MIT, and Qwen models, Apache-2.0).
   No closed part, no account, no tracking.
 - 🏠 **Your data stays yours.** Projects are normal folders on your computer. Nothing is uploaded, nothing is used
   for training.
@@ -119,6 +120,11 @@ The whole app in five minutes.
 - **Looks**: a glass look (Full, Light or Off in Settings > General) with a bubble Hotwheel, the accent colour everywhere, light and dark themes, a Project look per project (accent, background, wallpaper), a project picture,
   and a font for every tool.
 - **Spell check** in English and German with your own word list; names from your project count as correct.
+  Made for mixed English and German text and for people who spell by sound: each part of a sentence is checked in
+  its own language, and writing hints catch right-spelled wrong words (their/there, das/dass) with a one-line
+  explanation and a one-click fix. No AI needed.
+  It learns the fixes you pick, can fix a word everywhere at once, and "Fix my text" goes through all
+  underlined spots one by one.
   The optional grammar helper comes in Small (1.1 GB), Better (2.5 GB) and Best (4.7 GB).
 - **Export a project as a zip** and import it again, for backups or to send to someone.
 - **Plugins** add new tools: install one from a GitHub link or a zip in Settings. Plugin tools can use Send to and receive pictures too.
@@ -248,7 +254,7 @@ beginner guides.
 
 | Tool | What it does |
 |---|---|
-| **Writer** | Rich text documents for design docs, scripts and dialogue, with fonts and sizes, images you can size and let the text flow around, live word count, Markdown/text export and Markdown import. A per-document Markdown Syntax switch adds typing shortcuts like `==highlight==`, `- [ ]` checklists, `> [!note]` callouts, tags, footnotes and tables, and turns pasted Markdown into formatting. |
+| **Writer** | Rich text documents for design docs, scripts and dialogue, with fonts and sizes, images you can size and let the text flow around, live word count, Markdown/text export and Markdown import. A per-document Markdown Syntax switch adds typing shortcuts like `==highlight==`, `- [ ]` checklists, `> [!note]` callouts, tags, footnotes and tables, and turns pasted Markdown into formatting. An insert menu (+ button, or type `/`) and a Markdown help panel show what to type for each format, with an outline of headings, find and replace, tables, and text size, line spacing and page width to read comfortably. |
 | **Story Branch Writer** | Mind-map style branching stories: create, branch, connect and sever nodes, with + Add next under each node, start and ending markers, choice text on arrows, a story check for dead ends, Play through to test it like a player, Tidy up and export for Twine. Stories also go into the Design Book. |
 | **Timeline** | Timelines with optional years, events with images, and branches for alternative histories (press `B`). |
 | **Quest Designer** | Quests with givers, places, objectives, rewards and chains shown as a graph, plus flags shared with the Dialogue Editor. |
