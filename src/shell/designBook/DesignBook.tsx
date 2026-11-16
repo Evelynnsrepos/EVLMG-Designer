@@ -75,6 +75,7 @@ function DesignBookDialog({ onClose }: { onClose(): void }) {
         ...ENTITY_TYPES.map((t) => ({ id: t, title: ENTITY_LABELS[t].many, entries: all[t].map((e) => ({ id: e.id, label: e.name || 'Untitled' })) })),
         { id: 'wiki', title: 'Wiki', entries: (wiki?.articles ?? []).map((a) => ({ id: a.id, label: articleTitle(a, all) })) },
         { id: 'writer', title: 'Writing', entries: (meta?.documents ?? []).filter((d) => d.type === 'writer').map((d) => ({ id: d.id, label: d.title })) },
+        { id: 'story-writer', title: 'Stories', entries: docsOf('story-writer') },
         { id: 'quests', title: 'Quests', entries: quests.map((q) => ({ id: q.id, label: q.name || 'Untitled quest' })) },
         { id: 'assets', title: 'Assets', entries: meta?.enabledComponents.includes('asset-pool') ? pool.map((a) => ({ id: a.id, label: a.name || 'Untitled' })) : [] },
         { id: 'card-designer', title: 'Cards', entries: docsOf('card-designer') },
@@ -181,6 +182,30 @@ function DesignBookDialog({ onClose }: { onClose(): void }) {
           if (m.type !== 'vector' || !ids.has(m.id)) continue
           const icon = await loadDocumentNow<Parameters<typeof toSvg>[0] | null>(root, 'vector', m.id, () => null)
           if (icon?.artboard) entries.push({ title: m.title, kind: 'Icon', image: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(toSvg(icon))}` })
+        }
+      } else if (s.id === 'story-writer') {
+        // Branching stories in reading order: each scene with its text and the choices that follow it.
+        const story = await import('@/components/story-writer/model')
+        for (const m of meta?.documents ?? []) {
+          if (m.type !== 'story-writer' || !ids.has(m.id)) continue
+          const doc = await loadDocumentNow<{ scene?: Parameters<typeof story.readingOrder>[0] } | null>(root, 'story-writer', m.id, () => null)
+          if (!doc?.scene) continue
+          const sc = doc.scene
+          const nodes = story.readingOrder(sc)
+          const stats = story.storyStats(sc)
+          const anchor = (id: Id) => `story-${m.id}-${id}`
+          const html = nodes
+            .map((n) => {
+              const tag = n.role === 'start' ? ' <em>(start)</em>' : n.role === 'end' ? ' <em>(ending)</em>' : ''
+              const choices = story.choicesOf(sc, n.id).map(({ arrow, to }) => {
+                const target = escapeHtml(to.title || 'Untitled')
+                const label = arrow.label?.trim()
+                return `<li>${label ? `${escapeHtml(label)} → ` : ''}<a href="#${anchor(to.id)}">${target}</a></li>`
+              })
+              return `<h4 id="${anchor(n.id)}" style="border-left:4px solid ${escapeHtml(n.fillColor)};padding-left:8px">${escapeHtml(n.title || 'Untitled')}${tag}</h4>${paragraphs(n.body)}${choices.length ? `<ul>${choices.join('')}</ul>` : ''}`
+            })
+            .join('')
+          entries.push({ title: m.title, kind: `${stats.nodes} scenes, ${stats.choices} choice points, ${stats.endings} endings`, html })
         }
       } else if (s.id === 'quests') {
         for (const q of quests) {
