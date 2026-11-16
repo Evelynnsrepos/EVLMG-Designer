@@ -84,6 +84,8 @@ export function ProofCard({
     let live = true
     void fixOptions(hit.para, hit.at, hit.at + hit.bad.length, hit.fix, hit.word, (o) => live && setOptions(o), { fixes: hit.fixes, lang: hit.lang }).then(() => live && setLoading(false))
     const close = (e: MouseEvent | KeyboardEvent) => {
+      // Esc closes the card only; preventDefault keeps the shell from switching to Layout Mode (ED-7).
+      if (e instanceof KeyboardEvent && e.key === 'Escape') e.preventDefault()
       if (e instanceof KeyboardEvent ? e.key === 'Escape' : !(e.target as Element).closest?.('.proof-card')) onClose()
       // Walk-through keys: Enter takes the first fix, the right arrow skips to the next mistake.
       if (!(e instanceof KeyboardEvent) || !hit.walk) return

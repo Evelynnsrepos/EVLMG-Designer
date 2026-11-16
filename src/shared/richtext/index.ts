@@ -22,3 +22,4 @@ export { combineRefProviders, DOC_KIND, findRefByLabel, rankRefItems, useEntityR
 export type { ImagePicker, RefItem, RefProvider, RefTarget, RichTextDoc } from './types'
 export { projectImagePaths, useProjectImages, type ProjectImages } from './projectImages'
 export { markdownToRichText, type FindRef } from './markdown'
+export { InsertList } from './inserts'
