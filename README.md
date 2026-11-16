@@ -51,7 +51,7 @@ calculators all live in one project, and they all know about each other. Free, o
 - 🔓 **Fully open source.** The app is [GPL-3.0](LICENSE), and everything it is built from is open source too: all
   libraries (MIT, Apache-2.0, BSD, ISC, MPL-2.0, GPL-3.0 and similar), the English (SCOWL) and German (igerman98,
   GPL) spell check dictionaries, the word frequency lists that sort spelling suggestions
-  ([FrequencyWords](https://github.com/hermitdave/FrequencyWords) by Hermit Dave, CC BY-SA 4.0), and the optional helper downloads (llama.cpp, MIT, and Qwen models, Apache-2.0).
+  ([FrequencyWords](https://github.com/hermitdave/FrequencyWords) by Hermit Dave, CC BY-SA 4.0), word pair lists (from [SymSpell](https://github.com/wolfgarbe/SymSpell) by Wolf Garbe, MIT, and [google-books-ngram-frequency](https://github.com/orgtre/google-books-ngram-frequency), both built from the Google Books Ngram data, CC BY 3.0), and the optional helper downloads (llama.cpp, MIT, and Qwen models, Apache-2.0).
   No closed part, no account, no tracking.
 - 🏠 **Your data stays yours.** Projects are normal folders on your computer. Nothing is uploaded, nothing is used
   for training.
