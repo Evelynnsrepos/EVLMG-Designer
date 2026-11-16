@@ -92,3 +92,15 @@ describe('with dictionaries', () => {
     expect(soundDistance('fone', 'phone')).toBeLessThan(soundDistance('fone', 'done') + 1)
   })
 })
+
+describe('sound-alike suggestions', () => {
+  it('finds everyday words the dictionary does not guess', async () => {
+    useSettings.setState({ spellCheck: true, spellLanguages: ['en', 'de'] })
+    setSpellBackend({ check: async (_l, words) => words.map((w) => ['and', 'then'].includes(w)), suggest: async () => [] })
+    expect((await suggestRanked('buisness', 'en'))[0].word).toBe('business')
+    expect((await suggestRanked('kitchin', 'en'))[0].word).toBe('kitchen')
+    expect((await suggestRanked('tommorow', 'en'))[0].word).toBe('tomorrow')
+    expect((await suggestRanked('andthen', 'en'))[0].word).toBe('and then')
+    setSpellBackend(null)
+  })
+})

@@ -130,10 +130,13 @@ rule('en', 'affect-effect', 'affect affects', W_EFFECT, (c) => (has(S('the an no
 rule('en', 'effect-affect', 'effect', W_EFFECT, (c) => (has(MODAL, c.p) || c.p === 'not' ? (has(DET, c.n) || has(OBJ, c.n) || has(S('how what'), c.n) ? 'affect' : null) : null))
 
 const W_WHOSE = "whose = belongs to who · who's = who is"
-rule('en', 'whose-whos', 'whose', W_WHOSE, (c) => (has(S('a the going been not there that this your in on at'), c.n) ? "who's" : null))
+rule('en', 'whose-whos', 'whose', W_WHOSE, (c) => (has(S('a the going been not there that this your in on at responsible coming ready here right wrong next first'), c.n) ? "who's" : null))
 
 const W_WERE = "were = past of are · where = a place · we're = we are"
-rule('en', 'where-were', 'where', W_WERE, (c) => (has(S('we they'), c.p) ? 'were' : null))
+const PLACES = S('place room area spot part point town city level screen page tab menu section house world map location zone case situation know knows see show tell from to is was find somewhere anywhere everywhere')
+rule('en', 'where-were', 'where', W_WERE, (c) =>
+  has(S('we they'), c.p) || (c.p && !c.first && !c.comma && !c.q && !has(PLACES, c.p) && (/..(ed|(?<!th)ing)$/.test(c.n ?? '') || has(S('busy able supposed not gone made built'), c.n))) ? 'were' : null,
+)
 rule('en', 'were-where', 'were', W_WERE, (c) => (has(S('is are do does did can'), c.n) && !has(S('we you they there'), c.p) ? 'where' : c.first && (c.n === 'going' || c.n === 'gonna' || c.n === 'not') && !c.q ? "we're" : null))
 
 const W_QUIET = 'quiet = no noise · quite = fairly, very'
@@ -167,6 +170,7 @@ rule('en', 'passed-past', 'passed', W_PAST, (c) =>
 )
 rule('en', 'past-passed', 'past', W_PAST, (c) => (has(S("has have had he she i we they hasn't haven't just already never"), c.p) && has(S('the a away out on it through by my his her all'), c.n) && !has(S('walk walked go went run ran'), c.p2) ? 'passed' : null))
 
+rule('en', 'safe-save', 'safe', 'save = rescue, or keep · safe = not in danger', (c) => ((has(MODAL, c.p) || c.p === 'to') && (has(DET, c.n) || has(OBJ, c.n) || has(S('time money'), c.n)) ? 'save' : null))
 rule('en', 'lead-led', 'lead', 'led = past of lead (it led to…) · lead = now, or the metal', (c) => (has(S('has have had was were been being got'), c.p) ? 'led' : null))
 rule('en', 'brake-break', 'brake', 'break = pause, or smash · brake = stops a car', (c) =>
   (has(S('a short quick lunch coffee'), c.p) && has(S('take took need needs needed have had taking a'), c.p2)) || ((has(MODAL, c.p) || c.p === 'to') && has(S('the a it down up out into in free through my your his her their things stuff everything rules'), c.n)) ? 'break' : null,

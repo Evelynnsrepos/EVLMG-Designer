@@ -170,13 +170,15 @@ const group = (c: string) => GROUPS.findIndex((g) => g.includes(c))
 
 /** How far `b` is from `a`, where swapped neighbours, doubled letters and sound-alike letters count less than a full change. */
 export function soundDistance(a: string, b: string): number {
-  a = a.toLowerCase().replace(/ß/g, 'ss')
-  b = b.toLowerCase().replace(/ß/g, 'ss')
+  a = a.toLowerCase().replace(/ß/g, 'ss').replace(/['’]/g, '')
+  b = b.toLowerCase().replace(/ß/g, 'ss').replace(/['’]/g, '')
   const n = a.length
   const m = b.length
   const d = Array.from({ length: n + 1 }, () => new Float32Array(m + 1))
   // A doubled letter, a silent h or an e costs less to add or drop.
-  const gap = (s: string, i: number) => (s[i] === s[i - 1] || s[i] === s[i + 1] ? 0.3 : s[i] === 'h' ? 0.5 : s[i] === 'e' ? 0.7 : 1)
+  // "ck" for "k" and "ie" for "i" sound the same too.
+  const gap = (s: string, i: number) =>
+    s[i] === s[i - 1] || s[i] === s[i + 1] || (s[i] === 'c' && s[i + 1] === 'k') ? 0.3 : s[i] === 'h' ? 0.5 : s[i] === 'e' ? 0.7 : 1
   for (let i = 1; i <= n; i++) d[i][0] = d[i - 1][0] + gap(a, i - 1)
   for (let j = 1; j <= m; j++) d[0][j] = d[0][j - 1] + gap(b, j - 1)
   for (let i = 1; i <= n; i++)
@@ -189,6 +191,35 @@ export function soundDistance(a: string, b: string): number {
       d[i][j] = best
     }
   return d[n][m]
+}
+
+/** Common words of a language, most used first (freq/*.txt), loaded when the first suggestion is asked for. */
+const common: Partial<Record<Lang, Promise<string[]>>> = {}
+const rankOf: Partial<Record<Lang, Map<string, number>>> = {}
+function commonWords(lang: Lang): Promise<string[]> {
+  return (common[lang] ??= (lang === 'en' ? import('./freq/en.txt?raw') : import('./freq/de.txt?raw')).then((m) => {
+    const list = m.default.split('\n')
+    rankOf[lang] = new Map(list.map((w, i) => [w.toLowerCase(), i]))
+    return list
+  }))
+}
+/** 0 for the most used word, 1 for a rare or unlisted one: of two words that fit, the everyday one is meant more often. */
+const rarity = (lang: Lang, word: string) => ((rankOf[lang]?.get(word.toLowerCase()) ?? 45000) / 30000) ** 0.5 * 0.8
+
+/** Common words that sound like `word`. The dictionary guesses by letters and misses these ("buisness" → "business"). */
+async function soundAlikes(word: string, lang: Lang): Promise<{ word: string; d: number }[]> {
+  const w = word.toLowerCase()
+  const max = Math.max(1.3, w.length * 0.3)
+  const out: { word: string; d: number }[] = []
+  for (const c of await commonWords(lang)) {
+    if (Math.abs(c.length - w.length) > 3) continue
+    const l = c.toLowerCase()
+    // Spelling by sound keeps the start of a word: same first letter, or the first two swapped.
+    if (l[0] !== w[0] && !(l[0] === w[1] && l[1] === w[0])) continue
+    const d = soundDistance(w, l)
+    if (d <= max) out.push({ word: c, d })
+  }
+  return out
 }
 
 export interface Ranked {
@@ -215,17 +246,25 @@ export async function suggestRanked(word: string, lang: Lang): Promise<Ranked[]>
     if (w !== word && (!out.has(w) || out.get(w)!.score > score)) out.set(w, { word: w, lang: l, score })
   }
   for (const l of [lang, ...langs.filter((x) => x !== lang)]) {
+    const typedCap = word[0] !== lower[0]
+    for (const c of await soundAlikes(word, l).catch(() => [])) add(typedCap && c.word[0] === c.word[0].toLowerCase() ? cap(c.word) : c.word, l, c.d + rarity(l, c.word) + (l === lang ? 0 : 0.8))
     const known = KNOWN_WRONG[l].get(lower)
     // Typed with a capital (start of a sentence): keep it.
     if (known) add(word[0] !== lower[0] && known[0] === known[0].toLowerCase() ? cap(known) : known, l, l === lang ? -2 : -1)
     for (const s of await b.suggest(l, word).catch(() => [])) {
-      let score = soundDistance(word, s)
+      let score = soundDistance(word, s) + rarity(l, s)
       if (/[ -]/.test(s)) score += 1.5
       if (l !== lang) score += 0.8
       // A name where a normal word was typed is rarely meant; in German a capital is just a noun.
       if (s[0] !== s[0].toLowerCase() && word[0] === lower[0] && l === 'en') score += 0.7
       add(s, l, score)
     }
+  }
+  // Two words typed as one ("andthen"): split where both halves are words, best when one is an everyday word.
+  if (lower.length >= 5 && /^\p{L}+$/u.test(word)) {
+    const cuts = Array.from({ length: lower.length - 3 }, (_, k) => [word.slice(0, k + 2), word.slice(k + 2)])
+    const info = await lookup(cuts.flat()).catch(() => null)
+    for (const [a, b2] of info ? cuts : []) if (info!(a)[lang] && info!(b2)[lang]) add(`${a} ${b2}`, lang, 0.7 + rarity(lang, a) + rarity(lang, b2))
   }
   const ranked = [...out.values()].sort((x, y) => x.score - y.score)
   suggestions.set(key, ranked)

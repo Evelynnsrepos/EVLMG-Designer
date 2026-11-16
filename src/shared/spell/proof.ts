@@ -206,7 +206,10 @@ export async function findIssues(paragraphs: string[], focus = 0): Promise<Issue
     const parts = sents.flatMap((s) => clauses(s.text).map((c) => ({ from: s.from + c.from, text: c.text })))
     const detected = detectLangs(parts.map((c) => c.text), langs, before, info ?? undefined)
     const at = (pos: number) => detected[Math.max(0, parts.findLastIndex((c) => c.from <= pos))] ?? { lang: before, sure: false }
-    const prose = sents.length > 1 || /[.!?]\s*$/.test(paragraphs[p])
+    // Notes typed all in lower case are a style, not a mistake: no capital-letter hints there.
+    const casual = sents.every((s) => /^\s*[^\p{L}]*\p{Ll}/u.test(s.text))
+    const prose = !casual && (sents.length > 1 || /[.!?]\s*$/.test(paragraphs[p]))
+    const offHere = casual ? new Set([...off, 'i-cap']) : off
     sents.forEach((s) => {
       if (ai) forAi.push({ text: s.text.trimEnd(), lang: guessLang(s.text), d: Math.abs(p - focus) })
       if (!info) return
@@ -237,7 +240,7 @@ export async function findIssues(paragraphs: string[], focus = 0): Promise<Issue
       const here = new Set(parts.map((c, k) => (c.from >= s.from && c.from < s.from + s.text.length && detected[k].sure ? detected[k].lang : null)))
       for (const lang of langs)
         if (here.has(lang))
-          for (const h of checkRules(s.text, lang, off, prose)) {
+          for (const h of checkRules(s.text, lang, offHere, prose)) {
             const a = at(s.from + h.from)
             const b = at(s.from + h.to - 1)
             if (a.sure && a.lang === lang && b.lang === lang) spots.push({ from: s.from + h.from, to: s.from + h.to, fix: h.fixes[0], fixes: h.fixes, why: h.why, rule: h.rule, lang })
