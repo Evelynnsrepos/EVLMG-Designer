@@ -2115,7 +2115,7 @@ function Editor({ doc, title, active, documentId }: { doc: UseDocumentResult<Pix
           </button>
         </label>
         {d.kind === 'tileset' && (
-          <button className={`btn${inMap ? ' btn-primary' : ''}`} title="Switch between drawing the tiles and painting a map with them (Tab)" onClick={() => setMapMode(!mapMode)}>
+          <button className={`btn${inMap ? ' btn-primary' : ''}`} title="Switch between drawing the tiles and painting a map with them (Shift+Tab)" onClick={() => setMapMode(!mapMode)}>
             <MapIcon size={14} /> {inMap ? 'Map' : 'Tiles'}
           </button>
         )}

@@ -9,6 +9,7 @@ export const SHORTCUT_GROUPS = [
     name: 'Everywhere',
     items: [
       { id: 'app.search', label: 'Search and commands', keys: ['ctrl+k'] },
+      { id: 'app.map', label: 'Tool map (all tools and their links)', keys: ['tab'] },
       { id: 'app.hotwheel', label: 'Hotwheel (hold, or tap to keep it open)', keys: ['q'] },
       { id: 'app.help', label: 'User guide', keys: ['f1'] },
       { id: 'app.layout', label: 'Layout Mode on / off', keys: ['esc'] },
@@ -76,7 +77,7 @@ export const SHORTCUT_GROUPS = [
       { id: 'pixel.prev', label: 'Previous frame', keys: [','] },
       { id: 'pixel.next', label: 'Next frame', keys: ['.'] },
       { id: 'pixel.play', label: 'Play / stop', keys: ['enter'] },
-      { id: 'pixel.mode', label: 'Tiles / map (tilesets)', keys: ['tab'] },
+      { id: 'pixel.mode', label: 'Tiles / map (tilesets)', keys: ['shift+tab'] },
     ],
   },
 ] as const
