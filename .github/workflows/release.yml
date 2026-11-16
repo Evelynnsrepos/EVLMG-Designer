@@ -40,7 +40,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev
       - run: npm ci
-      - run: npm test
+      # Windows runners are slow; fewer test workers keep timing tests (git sync, GPU pages) from timing out.
+      - run: npm test${{ matrix.os == 'windows-latest' && ' -- --maxWorkers=2' || '' }}
       # What's new: docs/releases/v<version>.md, written with every release.
       - id: notes
         shell: bash
