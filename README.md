@@ -119,6 +119,9 @@ The whole app in five minutes.
 - **Looks**: a glass look (Full, Light or Off in Settings > General) with a bubble Hotwheel, the accent colour everywhere, light and dark themes, a Project look per project (accent, background, wallpaper), a project picture,
   and a font for every tool.
 - **Spell check** in English and German with your own word list; names from your project count as correct.
+  Made for mixed English and German text and for people who spell by sound: each part of a sentence is checked in
+  its own language, and writing hints catch right-spelled wrong words (their/there, das/dass) with a one-line
+  explanation and a one-click fix. No AI needed.
   The optional grammar helper comes in Small (1.1 GB), Better (2.5 GB) and Best (4.7 GB).
 - **Export a project as a zip** and import it again, for backups or to send to someone.
 - **Plugins** add new tools: install one from a GitHub link or a zip in Settings. Plugin tools can use Send to and receive pictures too.
