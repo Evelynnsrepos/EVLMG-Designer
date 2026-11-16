@@ -22,5 +22,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    // Windows CI runs the GPU material tests beside small render tests; 5 s is too tight there.
+    testTimeout: 20_000,
   },
 })
