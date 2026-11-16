@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { PanelProps } from '@/core/registry'
-import { useDocument, useProjectStore } from '@/core/state'
+import { flushDocument, useDocument, useProjectStore } from '@/core/state'
 import { CANVAS_PRESETS, createSketchDoc, SketchEditor, type SketchDoc } from '@/shared/sketch'
 import { CARD_SIZES, mmToPx } from '@/shared/print'
 import { useInputSettings } from '@/shared/sketch/inputSettings'
@@ -41,6 +41,7 @@ export default function View({ documentId, active }: PanelProps) {
     <SketchEditor
       growable
       historyId={documentId!}
+      flushDoc={() => flushDocument('sketch', documentId!)}
       panel={
         guides && (
           <label className="sketch-row">

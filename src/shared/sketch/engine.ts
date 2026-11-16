@@ -666,7 +666,11 @@ export class SketchEngine {
             const b = before[i].data
             for (let p = 0; p < a.length; p += 4) {
               if (m[p + 3]) continue
-              if (Math.abs(a[p] - b[p]) > 8 || Math.abs(a[p + 1] - b[p + 1]) > 8 || Math.abs(a[p + 2] - b[p + 2]) > 8 || Math.abs(a[p + 3] - b[p + 3]) > 8) foreign++
+              // Compared premultiplied: faint pixels round very differently between the GPU and Canvas 2D (a colour
+              // can jump by 60 at alpha 4) without looking any different, and those were counted as foreign.
+              const aa = a[p + 3]
+              const ba = b[p + 3]
+              if (Math.abs(aa - ba) > 8 || Math.abs(a[p] * aa - b[p] * ba) > 2040 || Math.abs(a[p + 1] * aa - b[p + 1] * ba) > 2040 || Math.abs(a[p + 2] * aa - b[p + 2] * ba) > 2040) foreign++
               a[p] = b[p]
               a[p + 1] = b[p + 1]
               a[p + 2] = b[p + 2]
@@ -681,8 +685,11 @@ export class SketchEngine {
         e.version = this.layerVersions.get(id)!
         if (foreign) {
           console.warn(`Draw: the GPU copy of a layer had ${foreign} pixels it shouldn't have; uploading it again from the saved copy`)
-          e.version = -1
-          this.edits++
+          // Only the stroke's tiles: uploading the whole layer again stalled the end of the stroke.
+          for (const t of rects) {
+            gpu.upload(e.t, ctx.canvas, t)
+            this.growDirty(t)
+          }
         }
         this.growDirty(r)
         this.version++

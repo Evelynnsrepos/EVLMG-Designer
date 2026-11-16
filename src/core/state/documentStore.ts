@@ -95,7 +95,9 @@ async function loadDocument<T>(root: string, type: ComponentType, id: Id, create
 }
 
 /** Big documents saved at good moments instead of a second after each change (see IDLE_SAVE_MS). */
-const SAVE_AT_MOMENTS = new Set<string>(['pixel-art'])
+// Draw and Texture Paint too: their stroke counter and time-lapse frames change after every stroke (the editor
+// flushes them with the pixels).
+const SAVE_AT_MOMENTS = new Set<string>(['pixel-art', 'sketch', 'texture-paint'])
 
 function setDoc(root: string, type: ComponentType, id: Id, data: unknown) {
   const key = keyOf(root, type, id)

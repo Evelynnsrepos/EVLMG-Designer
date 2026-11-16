@@ -285,6 +285,8 @@ export interface SketchEditorProps {
   growable?: boolean
   /** 0.31: keep the undo history between sessions under this document id (Draw). */
   historyId?: Id
+  /** Writes the host's document now; called whenever the pixels are saved, so both are saved together. */
+  flushDoc?: () => Promise<void>
 }
 
 export interface SketchEditorHandle {
@@ -323,7 +325,7 @@ function CardGuides({ g, width, height, scale }: { g: NonNullable<SketchDoc['car
   )
 }
 
-export function SketchEditor({ doc, update: save, active, title, actions, swatches = SWATCHES, panel, editorRef, growable = false, historyId }: SketchEditorProps) {
+export function SketchEditor({ doc, update: save, active, title, actions, swatches = SWATCHES, panel, editorRef, growable = false, historyId, flushDoc }: SketchEditorProps) {
   const root = useProjectStore((s) => s.root)
   const engineRef = useRef<SketchEngine | null>(null)
   const colorSpace = doc.colorSpace ?? 'srgb'
@@ -352,8 +354,10 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       return next
     })
   const docRef = useRef(doc)
+  const flushDocRef = useRef(flushDoc)
   useEffect(() => {
     docRef.current = doc
+    flushDocRef.current = flushDoc
   })
 
   const boxRef = useRef<HTMLDivElement>(null)
@@ -571,6 +575,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     // Each save writes a new PNG (assets are write-once). The replaced ones are retired, not deleted, so restoring a backup brings them back.
     void retireAssets(root, old)
     void historyFile?.sync(engine)
+    await flushDocRef.current?.()
     setSaving(false)
   }, [root, engine, update])
   // Sketch Pro: one save at a time, so an older save never lands after a newer one (and reloads old pixels).
@@ -667,10 +672,11 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   // 0.31: good moments to save (a short pause doesn't matter there): the layer list changed, or a tool other than
   // a brush was picked. Otherwise only after IDLE_SAVE_MS, on leaving the window or the tool, and on closing.
   const layerOrder = doc.layers.map((l) => l.id).join('|')
-  useEffect(() => void flushSave(saveKey), [layerOrder, saveKey])
+  const saveNow = useCallback(() => void flushSave(saveKey).then(() => flushDocRef.current?.()), [saveKey])
+  useEffect(saveNow, [layerOrder, saveNow])
   useEffect(() => {
-    if (!PAINT_TOOLS.has(tool)) void flushSave(saveKey)
-  }, [tool, saveKey])
+    if (!PAINT_TOOLS.has(tool)) saveNow()
+  }, [tool, saveNow])
 
   // The GPU's view of the picture sits under the visible canvas (a new one after the working area grew).
   const gpuView = engine.view

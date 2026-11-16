@@ -5,7 +5,7 @@ import { saveBinaryFile, safeFileName } from '@/core/export'
 import { getFs } from '@/core/fs'
 import { newId } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
-import { useDocument, useProjectStore } from '@/core/state'
+import { flushDocument, useDocument, useProjectStore } from '@/core/state'
 import { createSketchDoc, SketchEditor, type SketchEditorHandle } from '@/shared/sketch'
 import type * as THREE from 'three'
 import { createTexturePaintDoc, MODEL_EXTENSIONS, TEXTURE_SIZES, uvFlipped, type TexturePaintDoc } from './model'
@@ -296,7 +296,7 @@ export default function View({ documentId, active }: PanelProps) {
         </p>
       </div>
       <div className="tp-right">
-        <SketchEditor editorRef={editor} doc={d} update={(fn) => doc.update((x) => ({ ...x, ...fn(x) }), { undoable: false })} active={active} title={title} actions={(flatten) => <SendMenu title={title} picture={flatten} label="Send the texture to…" />} />
+        <SketchEditor editorRef={editor} flushDoc={() => flushDocument('texture-paint', documentId!)} doc={d} update={(fn) => doc.update((x) => ({ ...x, ...fn(x) }), { undoable: false })} active={active} title={title} actions={(flatten) => <SendMenu title={title} picture={flatten} label="Send the texture to…" />} />
       </div>
     </div>
   )
