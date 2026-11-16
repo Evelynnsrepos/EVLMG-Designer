@@ -254,3 +254,79 @@
   display: block;
   color: var(--text-muted);
 }
+
+/* --- Glass look (Settings > General): same recipe as the other tools in shell/glass.css, colours and edges
+ * only, no blur. The code itself keeps a thick fill so text stays easy to read. --- */
+:root[data-glass] .code-root {
+  background: var(--glass-fill-thick);
+  gap: 6px;
+  padding: 6px;
+}
+:root[data-glass] .code-main {
+  gap: 6px;
+}
+:root[data-glass] .code-center {
+  gap: 6px;
+}
+:root[data-glass] .code-bar {
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--glass-chip);
+  box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 0 0 1px var(--glass-border);
+}
+:root[data-glass] :is(.code-tree, .code-output, .code-editor-box) {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-chip);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+}
+:root[data-glass] .code-editor-box {
+  background: color-mix(in srgb, var(--bg-sunken) 88%, transparent);
+}
+:root[data-glass] .code-empty {
+  background: transparent;
+}
+:root[data-glass] .code-tree-row {
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  border-radius: var(--radius-sm);
+}
+:root[data-glass] .code-tree-row.is-active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+/* The tab row becomes one pill with the open tab as a raised pill. */
+:root[data-glass] .code-tabs {
+  flex: none;
+  gap: 2px;
+  padding: 3px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-sunken) 70%, transparent);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.18);
+}
+:root[data-glass] .code-tab {
+  border: 1px solid transparent;
+  border-radius: 999px;
+}
+:root[data-glass] .code-tab.is-active {
+  border-color: var(--glass-border);
+  background: var(--glass-chip);
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow-sm);
+}
+:root[data-glass] .code-pill {
+  border-color: var(--glass-border);
+  background: var(--glass-chip);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+}
+:root[data-glass] .code-root .cm-tooltip {
+  border-color: var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass-fill-thick);
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow);
+}
+:root[data-glass] .code-root .cm-gutters {
+  background: transparent;
+}
+:root[data-glass] .code-combo-label {
+  text-shadow: 0 0 14px color-mix(in srgb, var(--accent) 60%, transparent);
+}
