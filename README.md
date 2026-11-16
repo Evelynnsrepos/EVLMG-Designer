@@ -106,8 +106,9 @@ The whole app in five minutes.
   computer. A shared project can instead get a push-only Git backup by one member.
 - **Search everywhere**: find projects on the start screen, presets and tools when you make a project, and any
   setting in the Settings search.
-- **Project folders**: sort the start screen into your own folders (Games, YouTube videos, Writing…), with your
-  recent projects in one row.
+- **Start screen sections**: sort the start screen into your own sections (Games, YouTube videos, Writing…) as boxes
+  you can make narrow or wide, short or tall, move and stack, each with a button to open it full screen, and your
+  recent projects in one row. If a tool crashes, it can be reloaded and the report copied or sent to GitHub.
 - **Your own project presets**: save the tools you picked as a preset, or make and edit presets in Settings.
 - **Your drawings everywhere**: wherever you add a picture, your drawings from Draw are offered first, like stickers.
 - **Review status and comments** on every tool window and entry, from Idea to Final, with a Reviews board.
