@@ -123,6 +123,8 @@ The whole app in five minutes.
   Made for mixed English and German text and for people who spell by sound: each part of a sentence is checked in
   its own language, and writing hints catch right-spelled wrong words (their/there, das/dass) with a one-line
   explanation and a one-click fix. No AI needed.
+  It learns the fixes you pick, can fix a word everywhere at once, and "Fix my text" goes through all
+  underlined spots one by one.
   The optional grammar helper comes in Small (1.1 GB), Better (2.5 GB) and Best (4.7 GB).
 - **Export a project as a zip** and import it again, for backups or to send to someone.
 - **Plugins** add new tools: install one from a GitHub link or a zip in Settings. Plugin tools can use Send to and receive pictures too.

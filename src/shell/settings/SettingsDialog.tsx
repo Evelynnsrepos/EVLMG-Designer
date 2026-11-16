@@ -19,6 +19,9 @@ const UI = {
   title: 'Settings',
   spell: 'Spell check',
   spellOn: 'Underline misspelled words',
+  spellAutoFix: 'Fix sure slips while I write (like "teh"). Ctrl+Z takes one back, and that word is then left alone',
+  learned: (n: number) => `${n} fix${n === 1 ? '' : 'es'} learned from your clicks.`,
+  forget: 'Forget them',
   spellCalm: 'Calm underlines: only show them in the paragraph I am writing in',
   writingHintsOff: (n: number) => `${n} kind${n === 1 ? '' : 's'} of writing hint turned off.`,
   writingHintsOn: 'Turn them back on',
@@ -150,6 +153,18 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
               <input type="checkbox" checked={s.spellCalm} onChange={(e) => s.update({ spellCalm: e.target.checked })} />
               {UI.spellCalm}
             </label>
+            <label className="settings-check">
+              <input type="checkbox" checked={s.spellAutoFix} onChange={(e) => s.update({ spellAutoFix: e.target.checked })} />
+              {UI.spellAutoFix}
+            </label>
+            {Object.keys(s.learnedFixes).length > 0 && (
+              <p className="muted settings-hint">
+                {UI.learned(Object.keys(s.learnedFixes).length)}{' '}
+                <button className="btn" onClick={() => s.update({ learnedFixes: {} })}>
+                  {UI.forget}
+                </button>
+              </p>
+            )}
             {s.spellRulesOff.length > 0 && (
               <p className="muted settings-hint">
                 {UI.writingHintsOff(s.spellRulesOff.length)}{' '}
