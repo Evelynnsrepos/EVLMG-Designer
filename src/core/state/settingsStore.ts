@@ -18,6 +18,10 @@ export interface AppSettings {
   spellRulesOff: string[]
   /** Calm underlines: only the paragraph you are writing in shows its underlines. */
   spellCalm: boolean
+  /** Fixes the user picked for their own misspellings (typed word in lower case → chosen word): offered first next time. Stays on this computer. */
+  learnedFixes: Record<string, string>
+  /** Fix sure slips while typing ("teh" → "the"): known misspellings and learned fixes only. */
+  spellAutoFix: boolean
   /** Use the downloaded AI helper for suggestions when it is installed. */
   aiHelper: boolean
   /** Which downloaded AI model checks grammar: see AI_MODELS in shared/spell/ai.ts. */
@@ -111,7 +115,7 @@ export interface HotwheelSettings {
 export const DEFAULT_INNER = ['close', 'scale', 'jump', 'layout', 'undo', 'search']
 const hotwheelDefaults = (): HotwheelSettings => ({ inner: DEFAULT_INNER, outer: {}, size: 'M', penButton: false, rightHold: false, middle: false })
 
-const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], spellRulesOff: [], spellCalm: false, aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, githubLogin: '', hotkeyHints: true, projectPresets: [], git: gitDefaults(), projectFolders: [], homeSections: [] })
+const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], spellRulesOff: [], spellCalm: false, learnedFixes: {}, spellAutoFix: false, aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, githubLogin: '', hotkeyHints: true, projectPresets: [], git: gitDefaults(), projectFolders: [], homeSections: [] })
 
 async function settingsPath() {
   const fs = getFs()
