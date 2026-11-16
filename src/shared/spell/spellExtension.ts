@@ -58,7 +58,7 @@ function hitAt(view: EditorView, pos: number, event: MouseEvent): ProofHit | nul
   if (!main) return null
   const s = main.spec as Spec
   const word = spell && spell.from === main.from && spell.to === main.to ? (spell.spec as Spec).word : undefined
-  return { x: event.clientX, y: event.clientY, from: main.from, to: main.to, bad: s.para.slice(s.from, s.to), fix: s.fix, word, para: s.para, at: s.from }
+  return { x: event.clientX, y: event.clientY, from: main.from, to: main.to, bad: s.para.slice(s.from, s.to), fix: s.fix, word, para: s.para, at: s.from, fixes: s.fixes, why: s.why, rule: s.rule, lang: s.lang }
 }
 
 /** Underlines misspelled words (wavy red) and AI grammar suggestions (wavy blue), and reports clicks on them. */
@@ -85,9 +85,11 @@ export const SpellCheck = Extension.create<SpellOptions>({
           focus,
         )
         if (mine !== run || view.isDestroyed || view.state.doc !== doc) return
+        const calm = useSettings.getState().spellCalm
         const decos = paragraphs.flatMap((p, i) =>
           issues[i]
-            .filter((x) => !p.skip.slice(x.from, x.to).some(Boolean))
+            // Not the word still being typed, and with calm underlines only the paragraph being written.
+            .filter((x) => !p.skip.slice(x.from, x.to).some(Boolean) && p.pos[x.to - 1] + 1 !== at && (!calm || i === focus))
             .map((x) => Decoration.inline(p.pos[x.from], p.pos[x.to - 1] + 1, { class: x.fix === undefined ? 'spell-error' : 'grammar-error' }, spec(p, x))),
         )
         view.dispatch(view.state.tr.setMeta(key, DecorationSet.create(view.state.doc, decos)))
@@ -129,7 +131,8 @@ export const SpellCheck = Extension.create<SpellOptions>({
           const offAi = onAiResult(() => recheck(view))
           return {
             update: (v, prev) => {
-              if (!v.state.doc.eq(prev.doc)) recheck(v)
+              // Calm underlines follow the cursor from paragraph to paragraph.
+              if (!v.state.doc.eq(prev.doc) || (useSettings.getState().spellCalm && !v.state.selection.$head.sameParent(prev.selection.$head))) recheck(v)
             },
             destroy: () => {
               clearTimeout(timer)

@@ -1,7 +1,10 @@
 import { invoke } from '@tauri-apps/api/core'
 import { useSettings } from '@/core/state'
 import { useAiHelper } from './ai'
-import { findMisspelled, knownWords, suggest, tokenize } from './spell'
+import { borrowedOk, knownWords, lookup, spellAvailable, spellLangs, suggestRanked, tokenize, tokenizeParts } from './spell'
+import { clauses, detectLangs, langScore, sentences, type Lang } from './lang'
+import { checkRules } from './rules'
+import { KNOWN_WRONG } from './words'
 
 /**
  * Spelling and AI grammar issues for plain paragraphs, shared by the rich text
@@ -13,8 +16,14 @@ export interface Issue {
   to: number
   /** Spelling: the misspelled word. */
   word?: string
-  /** AI: what to write instead of text[from..to]. */
+  /** AI or a writing hint: what to write instead of text[from..to]. */
   fix?: string
+  /** A writing hint (rules.ts): every word that could be meant, the short explanation and the rule's id. */
+  fixes?: string[]
+  why?: string
+  rule?: string
+  /** The language of the sentence around it. */
+  lang?: Lang
 }
 
 export interface Edit {
@@ -88,24 +97,19 @@ export function diffEdits(text: string, fixed: string): Edit[] {
   return edits
 }
 
-const GERMAN = new Set('der die das und ist nicht ein eine einen sie wir ich hat sind mit von zu den dem auf für auch es sich war'.split(' '))
-const ENGLISH = new Set('the and is not a an of to in it was he she they we with for on are that this you'.split(' '))
-
-/** "de" or "en", from common words; limited to the spell check languages the user picked. */
-export function guessLang(text: string): 'de' | 'en' {
-  const langs = useSettings.getState().spellLanguages
-  if (!langs.includes('de')) return 'en'
-  if (!langs.includes('en')) return 'de'
-  let score = 0
-  for (const w of text.toLowerCase().split(/[^\p{L}]+/u)) score += Number(GERMAN.has(w)) - Number(ENGLISH.has(w))
-  return score > 0 ? 'de' : 'en'
+/** "de" or "en", from common words and letters; limited to the spell check languages the user picked. */
+export function guessLang(text: string): Lang {
+  const langs = spellLangs()
+  if (langs.length < 2) return langs[0] ?? 'en'
+  const s = langScore(text)
+  return s.de > s.en ? 'de' : s.en > s.de ? 'en' : langs[0]
 }
 
 /** AI results per model and paragraph text, so switching to the better model checks everything again. */
 const fixes = new Map<string, Edit[]>()
 const fixKey = (text: string) => `${useSettings.getState().aiModel}\u0000${text}`
 const listeners = new Set<() => void>()
-let queue: string[] = []
+let queue: { text: string; lang: Lang }[] = []
 let busy = false
 
 export function aiReady(): boolean {
@@ -119,21 +123,20 @@ export function onAiResult(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
-/** Paragraphs around the cursor the AI helper looks at per pause; the rest waits until you work there. */
-const NEAR = 6
+/** Sentences around the cursor the AI helper looks at per pause; the rest waits until you work there. */
+const NEAR = 12
 
 /**
  * Queue paragraphs for the AI helper, nearest to where the user is writing first. The queue is replaced,
  * not added to: older versions of edited paragraphs and far-away ones used to pile up, so the helper
  * spent its time on stale text and the paragraph being written got its suggestions later and later.
  */
-function want(texts: string[], focus: number) {
+function want(texts: { text: string; lang: Lang; d: number }[]) {
+  const seen = new Set<string>()
   queue = texts
-    .map((t, i) => ({ t, d: Math.abs(i - focus) }))
-    .filter(({ t }) => !fixes.has(fixKey(t)) && t.split(/\s+/).length >= 3)
+    .filter(({ text }) => !fixes.has(fixKey(text)) && text.split(/\s+/).length >= 3 && !seen.has(text) && seen.add(text))
     .sort((a, b) => a.d - b.d)
     .slice(0, NEAR)
-    .map(({ t }) => t)
   void pump()
 }
 
@@ -142,11 +145,11 @@ async function pump() {
   busy = true
   try {
     while (queue.length && aiReady()) {
-      const text = queue.shift()!
+      const { text, lang } = queue.shift()!
       if (fixes.has(fixKey(text))) continue
       try {
         const model = useSettings.getState().aiModel
-        fixes.set(`${model}\u0000${text}`, diffEdits(text, await invoke<string>('llm_check', { text, lang: guessLang(text), model })))
+        fixes.set(`${model}\u0000${text}`, diffEdits(text, await invoke<string>('llm_check', { text, lang, model })))
       } catch (e) {
         // Do not hammer a broken helper; show why in Settings and try again on the next edit.
         useAiHelper.setState({ error: String(e) })
@@ -167,24 +170,111 @@ export function ignoreFix(bad: string, fix: string) {
   listeners.forEach((l) => l())
 }
 
-/** Spelling and grammar issues for each paragraph (`focus` = the one with the cursor). AI results arrive later through `onAiResult`. */
+const DE_DET = new Set('der die das den dem des ein eine einen einem einer eines kein keine keinen mein meine meinen dein deine deinen sein seine seinen ihr ihre ihren unser unsere dieser diese dieses diesen jeder jede jedes zum zur im am vom beim ins'.split(' '))
+const OTHER_WORD = {
+  en: (w: string) => `"${w}" is a German word. In an English sentence you may mean:`,
+  de: (w: string) => `„${w}“ ist ein englisches Wort. In einem deutschen Satz meinst du vielleicht:`,
+}
+const NOUN_CAP = 'Nomen schreibt man groß: der Hund, das Haus'
+const cap = (w: string) => w[0].toUpperCase() + w.slice(1)
+
+/**
+ * Spelling and grammar issues for each paragraph (`focus` = the one with the cursor). Every sentence
+ * is checked in its own language, so English and German can share a paragraph. AI results arrive
+ * later through `onAiResult`.
+ */
 export async function findIssues(paragraphs: string[], focus = 0): Promise<Issue[][]> {
-  const words = paragraphs.map(tokenize)
-  const bad = useSettings.getState().spellCheck
-    ? await findMisspelled(words.flat().map((w) => w.word)).catch(() => new Set<string>())
-    : new Set<string>()
+  const settings = useSettings.getState()
+  const langs = spellLangs()
+  const on = settings.spellCheck && spellAvailable() && langs.length > 0
   const ai = aiReady()
-  if (ai) want(paragraphs, focus)
+  if (!on && !ai) return paragraphs.map(() => [])
+  const paras = paragraphs.map((text) => sentences(text).map((s) => ({ ...s, words: tokenizeParts(s.text) })))
+  const all = paras.flat().flatMap((s) => s.words.map((w) => w.word))
+  const info = on ? await lookup([...all, ...all.filter((w) => w[0] === w[0].toLowerCase()).map(cap)]).catch(() => null) : null
   const known = knownWords()
-  return paragraphs.map((text, p) => {
-    const out: Issue[] = words[p].filter((w) => bad.has(w.word) && !ignored.has(`${w.word}\u0000`)).map((w) => ({ from: w.from, to: w.to, word: w.word }))
-    for (const e of (ai && fixes.get(fixKey(text))) || []) {
-      const was = text.slice(e.from, e.to)
-      // Made-up names the user taught the app stay as they are.
-      if (ignored.has(`${was}\u0000${e.fix}`) || (tokenize(was).length > 0 && tokenize(was).every((w) => known.has(w.word.toLowerCase())))) continue
-      out.push({ ...e })
-    }
-    return out
+  const off = new Set(settings.spellRulesOff)
+  const out: Issue[][] = paragraphs.map(() => [])
+  /** Words no dictionary knows, and German words in English sentences: both need one more question to the dictionaries. */
+  const unknown: { p: number; issue: Issue; german: boolean }[] = []
+  const foreign: { p: number; issue: Issue }[] = []
+  const forAi: { text: string; lang: Lang; d: number }[] = []
+  let before: Lang = langs[0] ?? 'en'
+
+  paras.forEach((sents, p) => {
+    // The language is decided per clause (between commas), because that is where mixed writing switches.
+    const parts = sents.flatMap((s) => clauses(s.text).map((c) => ({ from: s.from + c.from, text: c.text })))
+    const detected = detectLangs(parts.map((c) => c.text), langs, before, info ?? undefined)
+    const at = (pos: number) => detected[Math.max(0, parts.findLastIndex((c) => c.from <= pos))] ?? { lang: before, sure: false }
+    const prose = sents.length > 1 || /[.!?]\s*$/.test(paragraphs[p])
+    sents.forEach((s) => {
+      if (ai) forAi.push({ text: s.text.trimEnd(), lang: guessLang(s.text), d: Math.abs(p - focus) })
+      if (!info) return
+      const spots: Issue[] = []
+      s.words.forEach((w, n) => {
+        const { lang, sure } = at(s.from + w.from)
+        const other: Lang = lang === 'en' ? 'de' : 'en'
+        const lower = w.word.toLowerCase()
+        if (known.has(lower) || ignored.has(`${w.word}\u0000`)) return
+        const i = info(w.word)
+        if (i[lang]) return
+        const issue: Issue = { from: s.from + w.from, to: s.from + w.to, lang }
+        if (!i[other]) {
+          // Known slips ("Standart") are never excused as a made-up compound.
+          if (KNOWN_WRONG.en.has(lower) || KNOWN_WRONG.de.has(lower)) spots.push({ ...issue, word: w.word })
+          else unknown.push({ p, issue: { ...issue, word: w.word }, german: lang === 'de' && sure })
+          return
+        }
+        // Right in the other language. Next to more words of that language it is how the writer talks; alone in a clear sentence it may be a slip.
+        const foreignToo = (x?: { word: string }) => !!x && !info(x.word)[lang] && info(x.word)[other]
+        if (!sure || off.has('other-language') || foreignToo(s.words[n - 1]) || foreignToo(s.words[n + 1])) return
+        const fix = KNOWN_WRONG[lang].get(lower)
+        if (fix) spots.push({ ...issue, fix, fixes: [fix], why: OTHER_WORD[lang](w.word), rule: 'other-language' })
+        else if (lang === 'de' && w.word === lower && info(cap(w.word)).de && DE_DET.has(s.words[n - 1]?.word.toLowerCase())) {
+          if (!off.has('noun-capital')) spots.push({ ...issue, fix: cap(w.word), fixes: [cap(w.word)], why: NOUN_CAP, rule: 'noun-capital' })
+        } else if (lang === 'en' && w.word === lower && lower.length >= 3) foreign.push({ p, issue: { ...issue, rule: 'other-language', why: OTHER_WORD.en(w.word) } })
+      })
+      const here = new Set(parts.map((c, k) => (c.from >= s.from && c.from < s.from + s.text.length && detected[k].sure ? detected[k].lang : null)))
+      for (const lang of langs)
+        if (here.has(lang))
+          for (const h of checkRules(s.text, lang, off, prose)) {
+            const a = at(s.from + h.from)
+            const b = at(s.from + h.to - 1)
+            if (a.sure && a.lang === lang && b.lang === lang) spots.push({ from: s.from + h.from, to: s.from + h.to, fix: h.fixes[0], fixes: h.fixes, why: h.why, rule: h.rule, lang })
+          }
+      out[p].push(...spots)
+    })
+    before = detected[detected.length - 1]?.lang ?? before
+  })
+
+  if (unknown.length) {
+    const fine = await borrowedOk(unknown.map((u) => ({ word: u.issue.word!, german: u.german }))).catch(() => new Set<string>())
+    for (const u of unknown) if (!fine.has(u.issue.word!)) out[u.p].push(u.issue)
+  }
+  for (const f of foreign) {
+    const word = paragraphs[f.p].slice(f.issue.from, f.issue.to)
+    const close = (await suggestRanked(word, 'en').catch(() => [])).filter((r) => r.lang === 'en' && r.score < 1 && !/[ -]/.test(r.word)).slice(0, 3)
+    if (close.length) out[f.p].push({ ...f.issue, fix: close[0].word, fixes: close.map((r) => r.word) })
+  }
+  if (ai) want(forAi)
+
+  return out.map((list, p) => {
+    const text = paragraphs[p]
+    // One underline per spot: a misspelled word wins over a hint on the same words.
+    const red = list.filter((x) => x.word)
+    const hints = list.filter((x) => !x.word && !ignored.has(`${text.slice(x.from, x.to)}\u0000${x.fix}`) && !red.some((r) => r.from < x.to && x.from < r.to))
+    const found = [...red, ...hints]
+    if (ai)
+      for (const s of paras[p])
+        for (const e of fixes.get(fixKey(s.text.trimEnd())) ?? []) {
+          const edit = { from: e.from + s.from, to: e.to + s.from, fix: e.fix }
+          const was = text.slice(edit.from, edit.to)
+          // Made-up names the user taught the app stay as they are; a hint already there is enough.
+          if (ignored.has(`${was}\u0000${e.fix}`) || (tokenize(was).length > 0 && tokenize(was).every((w) => known.has(w.word.toLowerCase())))) continue
+          if (hints.some((h) => h.from < edit.to && edit.from < h.to)) continue
+          found.push(edit)
+        }
+    return found.sort((a, b) => a.from - b.from)
   })
 }
 
@@ -213,21 +303,32 @@ export function cleanOptions(lines: string[], bad: string): string[] {
 }
 
 /**
- * About 3 ways to fix text[from..to], best first: the background fix, then the AI helper's
- * options for this spot, then the dictionary's for a misspelled word. `onUpdate` gets the list
- * again once the AI helper answered.
+ * About 3 ways to fix text[from..to], best first: a writing hint's own words; otherwise the background
+ * fix, the dictionary's closest word, the AI helper's options for this spot, then the dictionary's
+ * other words. `onUpdate` gets the list again once more answers arrived.
  */
-export function fixOptions(text: string, from: number, to: number, fix: string | undefined, word: string | undefined, onUpdate: (options: string[]) => void) {
+export function fixOptions(text: string, from: number, to: number, fix: string | undefined, word: string | undefined, onUpdate: (options: string[]) => void, hint?: { fixes?: string[]; lang?: Lang }) {
   const bad = text.slice(from, to)
+  if (hint?.fixes) {
+    onUpdate(hint.fixes.slice(0, 4))
+    return Promise.resolve()
+  }
   let ai: string[] = []
   let dictionary: string[] = []
-  const emit = () => onUpdate([...new Set([...(fix === undefined ? [] : [fix]), ...ai, ...dictionary])].filter((o) => o !== bad).slice(0, 3))
+  let sureFirst = false
+  const emit = () => onUpdate([...new Set([...(fix === undefined ? [] : [fix]), ...(sureFirst ? dictionary.slice(0, 1) : []), ...ai, ...dictionary])].filter((o) => o !== bad).slice(0, 3))
   emit()
-  if (word) void suggest(word).then((s) => ((dictionary = s), emit()))
-  if (!aiReady()) return Promise.resolve()
   const sentence = markedSentence(text, from, to)
+  const lang = hint?.lang ?? guessLang(sentence)
+  if (word)
+    void suggestRanked(word, lang).then((s) => {
+      dictionary = s.slice(0, 6).map((r) => r.word)
+      sureFirst = s.length > 0 && s[0].score <= 1.5
+      emit()
+    })
+  if (!aiReady()) return Promise.resolve()
   const { aiModel: model } = useSettings.getState()
-  return invoke<string[]>('llm_options', { sentence, lang: guessLang(sentence), model })
+  return invoke<string[]>('llm_options', { sentence, lang, model })
     .then((lines) => ((ai = cleanOptions(lines, bad)), emit()))
     .catch(() => {})
 }

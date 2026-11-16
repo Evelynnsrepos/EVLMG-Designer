@@ -1,7 +1,8 @@
-import { BookPlus, Trash2, X } from 'lucide-react'
+import { BellOff, BookPlus, Trash2, Volume2, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useSettings } from '@/core/state'
-import { aiReady, fixOptions, fixTitle, ignoreFix } from './proof'
+import { aiReady, fixOptions, fixTitle, guessLang, ignoreFix } from './proof'
+import { sentences, type Lang } from './lang'
 
 /** A click on underlined text. `from`/`to` are the caller's own positions; `para`/`at` locate the spot in its paragraph. */
 export interface ProofHit {
@@ -16,7 +17,23 @@ export interface ProofHit {
   word?: string
   para: string
   at: number
+  /** A writing hint: the words that could be meant, the one-line explanation and the kind of hint. */
+  fixes?: string[]
+  why?: string
+  rule?: string
+  lang?: Lang
 }
+
+/** Reads the sentence around the hit aloud, in its language, with the computer's own voice. Hearing a sentence often shows the wrong word. */
+function readAloud(hit: ProofHit) {
+  const s = sentences(hit.para).findLast((x) => x.from <= hit.at)?.text ?? hit.para
+  const say = new SpeechSynthesisUtterance(s)
+  say.lang = (hit.lang ?? guessLang(s)) === 'de' ? 'de-DE' : 'en-US'
+  say.rate = 0.9
+  speechSynthesis.cancel()
+  speechSynthesis.speak(say)
+}
+const canRead = () => typeof speechSynthesis !== 'undefined' && speechSynthesis.getVoices().length > 0
 
 const UI = {
   kind: 'Correctness',
@@ -24,6 +41,9 @@ const UI = {
   none: 'No suggestions',
   dismiss: 'Dismiss',
   add: 'Add to dictionary',
+  hint: 'Check this word',
+  read: 'Read the sentence aloud',
+  off: 'Stop hints like this',
   close: 'Close',
 }
 
@@ -36,7 +56,7 @@ export function ProofCard({ hit, replace, onClose }: { hit: ProofHit; replace: (
 
   useEffect(() => {
     let live = true
-    void fixOptions(hit.para, hit.at, hit.at + hit.bad.length, hit.fix, hit.word, (o) => live && setOptions(o)).then(() => live && setLoading(false))
+    void fixOptions(hit.para, hit.at, hit.at + hit.bad.length, hit.fix, hit.word, (o) => live && setOptions(o), { fixes: hit.fixes, lang: hit.lang }).then(() => live && setLoading(false))
     const close = (e: MouseEvent | KeyboardEvent) => {
       if (e instanceof KeyboardEvent ? e.key === 'Escape' : !(e.target as Element).closest?.('.proof-card')) onClose()
     }
@@ -63,13 +83,19 @@ export function ProofCard({ hit, replace, onClose }: { hit: ProofHit; replace: (
       <header className="proof-card-head">
         <span className={spelling ? 'proof-dot proof-dot-spell' : 'proof-dot'} />
         <span>
-          {UI.kind} · {fixTitle(hit.bad, hit.fix, hit.word !== undefined && hit.fix === undefined)}
+          {hit.why ? UI.hint : `${UI.kind} · ${fixTitle(hit.bad, hit.fix, hit.word !== undefined && hit.fix === undefined)}`}
         </span>
+        {canRead() && (
+          <button className="icon-btn" title={UI.read} onClick={() => readAloud(hit)}>
+            <Volume2 size={14} />
+          </button>
+        )}
         <button className="icon-btn" title={UI.close} onClick={onClose}>
           <X size={14} />
         </button>
       </header>
       <div className="proof-card-bad">{hit.bad}</div>
+      {hit.why && <div className="proof-card-why">{hit.why}</div>}
       <div className="proof-card-options">
         {options.map((o) => (
           <button
@@ -95,6 +121,17 @@ export function ProofCard({ hit, replace, onClose }: { hit: ProofHit; replace: (
         >
           <Trash2 size={14} /> {UI.dismiss}
         </button>
+        {hit.rule && (
+          <button
+            onClick={() => {
+              const s = useSettings.getState()
+              if (!s.spellRulesOff.includes(hit.rule!)) s.update({ spellRulesOff: [...s.spellRulesOff, hit.rule!] })
+              onClose()
+            }}
+          >
+            <BellOff size={14} /> {UI.off}
+          </button>
+        )}
         {hit.word && (
           <button
             onClick={() => {

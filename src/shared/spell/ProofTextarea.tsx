@@ -101,7 +101,7 @@ export function ProofTextarea({ ref, onScroll, onContextMenu, onClick, ...props 
       const start = text.lastIndexOf('\n', main.from - 1) + 1
       const end = text.indexOf('\n', main.to)
       const para = text.slice(start, end < 0 ? text.length : end)
-      return { x: e.clientX, y: e.clientY, from: main.from, to: main.to, bad: text.slice(main.from, main.to), fix: main.fix, word: spell?.word, para, at: main.from - start }
+      return { x: e.clientX, y: e.clientY, from: main.from, to: main.to, bad: text.slice(main.from, main.to), fix: main.fix, word: spell?.word, para, at: main.from - start, fixes: main.fixes, why: main.why, rule: main.rule, lang: main.lang }
     }
     return null
   }
