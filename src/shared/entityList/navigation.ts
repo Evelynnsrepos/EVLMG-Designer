@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { ComponentType, EntityType, Id, LinkTarget } from '@/core/model'
 import { useAppStore, useProjectStore } from '@/core/state'
-import { openComponent } from '@/shell/editor/actions'
+import { openComponent, replaceWithComponent } from '@/shell/editor/actions'
 import { leaves } from '@/shell/workspace/layoutTree'
 
 /**
@@ -83,22 +83,26 @@ function currentPlace(): JumpTarget | null {
 const samePlace = (a: JumpTarget | null | undefined, b: JumpTarget | null | undefined) =>
   !!a && !!b && a.kind === b.kind && a.type === b.type && (a.kind === 'entity' ? a.id === (b as typeof a).id : a.documentId === (b as typeof a).documentId)
 
-function show(target: JumpTarget) {
+function show(target: JumpTarget, alone = false) {
   if (target.kind === 'entity') {
     requestEntityFocus(target.type, target.id)
     openComponent(ENTITY_COMPONENT[target.type])
-  } else openComponent(target.type, target.documentId)
+  } else if (alone) void replaceWithComponent(target.type, target.documentId)
+  else openComponent(target.type, target.documentId)
 }
 
-/** Open any entity or tool document, remembering where the user came from so Back returns there. */
-export function jumpTo(target: JumpTarget) {
+/**
+ * Open any entity or tool document, remembering where the user came from so Back returns there.
+ * `alone` shows a tool on its own, like a plain click in the sidebar (the Tool map does that).
+ */
+export function jumpTo(target: JumpTarget, alone = false) {
   const here = currentPlace()
-  if (samePlace(here, target)) return show(target)
+  if (samePlace(here, target)) return show(target, alone)
   useJumpHistory.setState((h) => ({
     back: here && !samePlace(h.back.at(-1), here) ? [...h.back, here].slice(-MAX_HISTORY) : h.back,
     forward: [],
   }))
-  show(target)
+  show(target, alone)
 }
 
 function step(from: 'back' | 'forward') {
