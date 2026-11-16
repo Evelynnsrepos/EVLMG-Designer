@@ -5,6 +5,7 @@ import {
   createScene,
   deleteNodes,
   duplicateNodes,
+  liftChanged,
   ensureTopLayer,
   moveLayer,
   moveNodeInLayer,
@@ -124,5 +125,21 @@ describe('layers', () => {
     expect(s.layers.map((l) => l.id)).toEqual([first])
     expect(s.nodes.some((n) => n.id === 'x')).toBe(false)
     expect(removeLayer(s, first)).toBe(s)
+  })
+})
+
+describe('liftChanged (drag layer)', () => {
+  const connector = (n: BuiltinNode) => n.kind === 'connector'
+  it('lifts moved nodes and nodes that follow others, leaves the rest on the board', () => {
+    const s = sample()
+    const r = liftChanged(s, translateNodes(s, ['a'], 5, 0), connector)
+    expect(r.live.map((n) => n.id)).toEqual(['a', 'ab', 'bc'])
+    expect([...r.hidden]).toEqual(['a', 'ab', 'bc'])
+  })
+  it('hides nodes the preview removed', () => {
+    const s = sample()
+    const r = liftChanged(s, { ...s, nodes: s.nodes.filter((n) => n.id !== 'c') }, () => false)
+    expect(r.live).toEqual([])
+    expect([...r.hidden]).toEqual(['c'])
   })
 })

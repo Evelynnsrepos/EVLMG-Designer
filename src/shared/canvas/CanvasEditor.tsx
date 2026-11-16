@@ -38,6 +38,7 @@ import {
   updateNode,
   updateNodes,
   visibleNodes,
+  liftChanged,
 } from './scene'
 import { TextEditor } from './TextEditor'
 import { useCanvasTheme } from './theme'
@@ -154,14 +155,17 @@ interface NodeViewProps {
   /** Being edited inline: draw it without its text so the editor's text is the only copy. */
   editingText: boolean
   draft?: boolean
+  /** Drawn on the drag layer for now: hidden here, and without its id so the copy there is the one found. */
+  lifted?: boolean
 }
 
-function NodeViewInner({ node, type, ctx, editingText, draft }: NodeViewProps) {
+function NodeViewInner({ node, type, ctx, editingText, draft, lifted }: NodeViewProps) {
   const common = {
-    id: draft ? undefined : node.id,
-    name: draft ? undefined : 'canvas-node',
-    listening: !draft && !node.locked,
+    id: draft || lifted ? undefined : node.id,
+    name: draft || lifted ? undefined : 'canvas-node',
+    listening: !draft && !lifted && !node.locked,
     opacity: draft ? 0.7 : 1,
+    visible: !lifted,
   }
   const content = type.render(editingText && type.textEdit ? type.textEdit.set(node, '') : node, ctx)
   if (type.absolute) return <Group {...common}>{content}</Group>
@@ -174,7 +178,9 @@ function NodeViewInner({ node, type, ctx, editingText, draft }: NodeViewProps) {
 
 const NodeView = memo(
   NodeViewInner,
-  (a, b) => b.type.memo !== false && a.node === b.node && a.type === b.type && a.ctx === b.ctx && a.editingText === b.editingText,
+  (a, b) =>
+    a.lifted === b.lifted &&
+    (!!b.lifted || (b.type.memo !== false && a.node === b.node && a.type === b.type && a.ctx === b.ctx && a.editingText === b.editingText)),
 )
 
 /**
@@ -757,7 +763,9 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
 
   // ---- render ----
 
-  const layers = renderOrder(scene)
+  // 0.32: during a drag only the changed nodes redraw, on a layer of their own (see liftChanged).
+  const lift = preview ? liftChanged(props.scene, scene, (n) => typeOf(n).memo === false) : null
+  const layers = renderOrder(lift ? props.scene : scene)
   const s = viewport.scale
   const outlines = selectedNodes.filter((n) => !transformable(n) || editing).map((n) => ({ id: n.id, b: getWorldBounds(n.id) }))
   let gridStep = 24
@@ -812,12 +820,21 @@ export function CanvasEditor<N extends NodeBase>(props: CanvasEditorProps<N>) {
               layer.hidden ? null : (
                 <Group key={layer.id} id={layer.id} name="canvas-layer" listening={!layer.locked && (!scopeLayerId || layer.id === scopeLayerId)}>
                   {nodes.map((n) =>
-                    n.hidden ? null : <NodeView key={n.id} node={n} type={typeOf(n)} ctx={ctx} editingText={editing?.id === n.id} />,
+                    n.hidden ? null : (
+                      <NodeView key={n.id} node={n} type={typeOf(n)} ctx={ctx} editingText={editing?.id === n.id} lifted={!!lift?.hidden.has(n.id)} />
+                    ),
                   )}
                 </Group>
               ),
             )}
           </KonvaLayer>
+          {lift && (
+            <KonvaLayer>
+              {lift.live.map((n) => (
+                <NodeView key={n.id} node={n} type={typeOf(n)} ctx={ctx} editingText={editing?.id === n.id} />
+              ))}
+            </KonvaLayer>
+          )}
           <KonvaLayer ref={overlayRef}>
             {draft?.map((n) => <NodeView key={n.id} node={n} type={typeOf(n)} ctx={ctx} editingText={false} draft />)}
             {outlines.map(({ id, b }) =>

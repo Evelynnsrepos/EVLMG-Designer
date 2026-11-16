@@ -218,3 +218,18 @@ export function ensureTopLayer<N extends NodeBase>(scene: Scene<N>, name = 'Alwa
   // A fixed id: teammates turning it on at the same time get one layer, not two.
   return addLayer(scene, { id: 'always-on-top', name, alwaysOnTop: true })
 }
+
+/**
+ * 0.32: what a drag preview changed. Konva redraws a whole layer when one node on it moves, so moving one
+ * post-it redrew every note, shadow and text on the board on every frame (laggy on big boards, worst on
+ * Linux). While a preview runs, the board layer keeps showing the scene as it was, with these nodes hidden,
+ * and they draw on a layer of their own on top. `alwaysLive`: memo: false kinds, which follow other nodes.
+ */
+export function liftChanged<N extends NodeBase>(base: Scene<N>, next: Scene<N>, alwaysLive: (n: N) => boolean) {
+  const before = new Map(base.nodes.map((n) => [n.id, n]))
+  const live = visibleNodes(next).filter((n) => before.get(n.id) !== n || alwaysLive(n))
+  const hidden = new Set(live.map((n) => n.id))
+  const kept = new Set(next.nodes.map((n) => n.id))
+  for (const n of base.nodes) if (!kept.has(n.id)) hidden.add(n.id) // removed by the preview (eraser)
+  return { live, hidden }
+}
