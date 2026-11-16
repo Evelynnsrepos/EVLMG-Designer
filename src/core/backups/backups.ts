@@ -2,14 +2,20 @@ import { getFs } from '../fs'
 import { projectPaths, readVersioned, writeVersioned } from '../project'
 
 /**
- * Rolling project backups (spec 3.5): the last MAX_BACKUPS snapshots of every
- * JSON file in the project, kept in `<project>/.backups/`. Assets are not
- * copied: they are write-once `<uuid>.<ext>` files that edits never change.
+ * Rolling project backups (spec 3.5): snapshots of every JSON file in the project,
+ * kept in `<project>/.backups/` (the newest MAX_BACKUPS, plus one per day and one per
+ * week, see backupsToKeep). Assets are not copied: they are write-once `<uuid>.<ext>`
+ * files. A tool that replaces one (Draw's layer pictures) retires it with retireAssets
+ * instead of deleting it, so it stays while a kept backup still mentions it.
  *
  * Each backup is one file, `<time>_<reason>_<hash>.json`, so listing needs no
  * reads and a snapshot identical to the newest one is skipped.
  */
 export const MAX_BACKUPS = 10
+/** On top of the newest MAX_BACKUPS: the newest backup of each of the last DAILY_DAYS days and WEEKLY_WEEKS weeks. */
+export const DAILY_DAYS = 7
+export const WEEKLY_WEEKS = 4
+const DAY_MS = 24 * 60 * 60 * 1000
 
 export type BackupReason = 'open' | 'autosave' | 'close' | 'before-restore' | 'before-git'
 
@@ -109,8 +115,88 @@ export async function createBackup(root: string, reason: BackupReason, now = new
   const dir = await projectPaths.backupsDir(root)
   await writeVersioned(await fs.join(dir, id), snapshot)
 
-  for (const old of existing.slice(MAX_BACKUPS - 1)) await fs.remove(await fs.join(dir, old.id))
+  const keep = backupsToKeep([{ id, createdAt }, ...existing], now)
+  for (const old of existing) if (!keep.has(old.id)) await fs.remove(await fs.join(dir, old.id))
+  await sweepRetiredAssets(root).catch((error) => console.error('Cleaning up replaced pictures failed', error))
   return { id, createdAt, reason }
+}
+
+/**
+ * Which backups to keep (list newest first): the newest MAX_BACKUPS, plus the newest of each
+ * of the last DAILY_DAYS days and of each of the last WEEKLY_WEEKS weeks (at most 21 in all).
+ */
+export function backupsToKeep(list: { id: string; createdAt: string }[], now = new Date()): Set<string> {
+  const keep = new Set(list.slice(0, MAX_BACKUPS).map((b) => b.id))
+  const days = new Set<number>()
+  const weeks = new Set<number>()
+  for (const b of list) {
+    const age = now.getTime() - Date.parse(b.createdAt)
+    const day = Math.floor(age / DAY_MS)
+    const week = Math.floor(age / (7 * DAY_MS))
+    if (day < DAILY_DAYS && !days.has(day)) {
+      days.add(day)
+      keep.add(b.id)
+    }
+    if (week < WEEKLY_WEEKS && !weeks.has(week)) {
+      weeks.add(week)
+      keep.add(b.id)
+    }
+  }
+  return keep
+}
+
+const RETIRED_FILE = 'retired-assets.json'
+/** Only files right inside assets/<kind>/ can be retired, never anything else in the project. */
+const ASSET_FILE = /^assets\/(images|audio|files)\/[\w-]+\.[a-z0-9]{1,10}$/
+/** One job at a time per project, so two saves never overwrite each other's list. */
+const queues = new Map<string, Promise<unknown>>()
+function queued<T>(root: string, job: () => Promise<T>): Promise<T> {
+  const next = (queues.get(root) ?? Promise.resolve()).then(job, job)
+  queues.set(root, next.catch(() => {}))
+  return next
+}
+
+async function readRetired(root: string): Promise<string[]> {
+  try {
+    const list: unknown = JSON.parse(await getFs().readText(await getFs().join(await projectPaths.backupsDir(root), RETIRED_FILE)))
+    return Array.isArray(list) ? list.filter((p): p is string => typeof p === 'string' && ASSET_FILE.test(p)) : []
+  } catch {
+    return []
+  }
+}
+
+async function writeRetired(root: string, list: string[]) {
+  const fs = getFs()
+  const dir = await projectPaths.backupsDir(root)
+  await fs.mkdir(dir)
+  await fs.writeTextAtomic(await fs.join(dir, RETIRED_FILE), JSON.stringify(list))
+}
+
+/**
+ * Asset files a newer save replaced (`assets/images/<uuid>.png`). They are deleted by
+ * sweepRetiredAssets once neither the project nor any kept backup mentions them.
+ */
+export function retireAssets(root: string, paths: (string | null | undefined)[]): Promise<void> {
+  const fresh = paths.filter((p): p is string => !!p && ASSET_FILE.test(p))
+  if (!fresh.length) return Promise.resolve()
+  return queued(root, async () => writeRetired(root, [...new Set([...(await readRetired(root)), ...fresh])]))
+}
+
+/** Delete the retired assets that nothing mentions any more; returns how many were deleted. */
+export function sweepRetiredAssets(root: string): Promise<number> {
+  return queued(root, async () => {
+    const retired = await readRetired(root)
+    if (!retired.length) return 0
+    const fs = getFs()
+    const dir = await projectPaths.backupsDir(root)
+    const texts = Object.values(await collectProjectFiles(root))
+    for (const b of await listWithHash(root)) texts.push(await fs.readText(await fs.join(dir, b.id)).catch(() => ''))
+    const still = retired.filter((p) => texts.some((t) => t.includes(p)))
+    const gone = retired.filter((p) => !still.includes(p))
+    for (const p of gone) await fs.remove(await fs.join(root, ...p.split('/'))).catch(() => {})
+    await writeRetired(root, still)
+    return gone.length
+  })
 }
 
 /**

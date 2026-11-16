@@ -60,7 +60,7 @@ export const BASICS: Record<string, GuideTopic> = {
       'Everything you need to find your way, in ten minutes. Each part has its own page under Topics for the details.',
       '## 1. Projects',
       'Every game you design is a project: New Project on the start screen, a name, and the tools you want (you can add more later). A project is a normal folder of readable files in Documents/Evelopment Games Designer.',
-      'There is no Save button: everything saves about a second after you change it. Ctrl+Z and Ctrl+Y undo and redo in every tool, and the last 10 saves are kept as backups (project card menu …, Restore a backup).',
+      'There is no Save button: everything saves about a second after you change it. Ctrl+Z and Ctrl+Y undo and redo in every tool, and backups go back a month (project card menu …, Restore a backup).',
       '## 2. The sidebar: keep your tools organised',
       'The sidebar lists your tools. Tools that hold several documents (boards, drawings, levels, maps…) list them underneath: + New makes another one, right-click renames, duplicates or deletes it. Duplicate makes a full copy, handy for turning a card template into a test deck.',
       'Search tools and documents, at the top, filters the list as you type. The star next to a tool keeps it at the top. Drag tools up and down to put them in your order.',
@@ -150,8 +150,9 @@ export const BASICS: Record<string, GuideTopic> = {
     body: [
       'There is no Save button. Everything saves about a second after you change it, and again when you close the app.',
       'Every tool has its own undo and redo: Ctrl+Z and Ctrl+Y (Cmd on a Mac).',
-      'The app keeps rolling backups of your last 10 saves. On the start screen, open a project card menu (…) and choose Restore a backup.',
+      'The app keeps backups: the last 10 (taken when a project opens and closes and every few minutes while you work), plus one per day for the last week and one per week for the last month. Restoring one brings back drawings too. On the start screen, open a project card menu (…) and choose Restore a backup.',
       'To back up a whole project or send it to someone, open its card menu (…) and choose Export as zip. Import zip on the start screen brings it back as a new project.',
+      'If a tool runs into a problem, it stops and shows Reload this tool. Copy report copies what went wrong (app version, system, graphics card and the error) and Report on GitHub opens a new issue with it filled in; nothing is sent until you press Submit there. The same report is kept in crash.log in the app\'s data folder.',
     ],
   },
   spelling: {

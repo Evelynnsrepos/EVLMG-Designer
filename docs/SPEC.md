@@ -101,7 +101,7 @@ From the notes: once a custom category is created it can be used everywhere.
 ### 3.5 Auto-Save
 - Every change is saved automatically, shortly after editing stops (about 1 second) and immediately when a component is closed (as the notes require) or the app is closed.
 - **[Default]** Undo/redo (Ctrl+Z / Ctrl+Y) inside every component, per component.
-- **[Default]** A rolling backup of each project is kept (last 10 saves) so a bad edit or a crash can be recovered.
+- **[Default]** A rolling backup of each project is kept (the last 10, plus one per day for a week and one per week for a month) so a bad edit or a crash can be recovered.
 
 ---
 
