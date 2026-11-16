@@ -10,6 +10,7 @@ import { useHelp } from '../help/help'
 import { openSettings } from '../settings/open'
 import { openDesignBook } from '../designBook/open'
 import { useEngineExport } from '../engineExport/open'
+import { openToolMap } from '../toolMap/open'
 import { shownTool } from './optionalTools'
 import { backToProjects, newDocument, openComponent, replaceWithComponent } from './actions'
 
@@ -63,6 +64,7 @@ function Palette({ onClose }: { onClose(): void }) {
     cmd('book', 'Design Book (export as web page or PDF)', openDesignBook)
     cmd('engine', 'Export to a game engine (Godot, Unity, Unreal, JSON)', () => useEngineExport.setState({ open: true }))
     cmd('help', 'Help and user guide', () => useHelp.getState().openGuide())
+    cmd('map', 'Tool map (all tools and their links)', () => setTimeout(openToolMap))
     cmd('layout', 'Layout mode (move and close windows)', () => setTimeout(() => useAppStore.getState().setLayoutMode(true)))
     cmd('home', 'Back to projects', () => void backToProjects())
     return out

@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, BookOpen, FolderClosed, FolderOpen, Search, Star, Boxes, ChevronDown, ChevronRight, CircleHelp, House, LayoutDashboard, PanelLeftClose, PanelLeftOpen, Palette, Plus, Gem, Settings, Trash2, Users } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpen, FolderClosed, FolderOpen, Search, Star, Boxes, ChevronDown, ChevronRight, CircleHelp, House, LayoutDashboard, Network, PanelLeftClose, PanelLeftOpen, Palette, Plus, Gem, Settings, Trash2, Users } from 'lucide-react'
 import { useState } from 'react'
 import { newId, type ComponentType, type Id, type SidebarFolder } from '@/core/model'
 import { allManifests, getManifest, type ComponentManifest } from '@/core/registry'
@@ -20,6 +20,9 @@ import { PresenceDots, ShareDialog, TeammateDots } from '../collab/CollabDialogs
 import { GitSyncRow } from '../gitsync/GitSync'
 import { CloseToolDialog, RestoreToolDialog, type CloseChoice, type RestoreChoice } from './ToolDialogs'
 import { BACKGROUND_TOOLS, deleteToolContent, hideTool, toolHasContent } from './toolContent'
+import { defaultKeys, formatCombo } from '@/core/shortcuts'
+import { keyHint } from '@/shared/hotkeyHints'
+import { openToolMap } from '../toolMap/open'
 
 /** Colours for tools and folders in the sidebar (v0.13); null = none. */
 const TOOL_COLORS: (string | null)[] = [null, '#e03131', '#f08c00', '#f5b301', '#2f9e44', '#0c8599', '#1971c2', '#7048e8', '#c2255c']
@@ -63,6 +66,7 @@ export function Sidebar() {
   const [restoring, setRestoring] = useState<ComponentManifest | null>(null)
   usePlugins((s) => s.installed) // re-render when plugin tools come and go
   const askProject = useSettings((s) => s.askProject)
+  const mapKey = useSettings((s) => s.shortcuts['app.map'])?.[0] ?? defaultKeys('app.map')[0]
   if (!meta) return null
   const collapsed = meta.sidebarCollapsed
   const favorites = meta.favorites ?? []
@@ -262,6 +266,9 @@ export function Sidebar() {
             aria-pressed={layoutMode}
           >
             <LayoutDashboard size={16} />
+          </button>
+          <button className="sidebar-row sidebar-arrange" onClick={openToolMap} title={`Tool map: all tools and their links${mapKey ? ` (${formatCombo(mapKey)})` : ''}`} aria-label="Tool map" {...keyHint(mapKey)}>
+            <Network size={16} />
           </button>
         </div>
         {!collapsed && <div className="sidebar-project" title={meta.name}>{meta.name}</div>}

@@ -11,6 +11,7 @@ import { HistoryRecorder } from '../history/HistoryRecorder'
 import { EngineExportHost } from '../engineExport/EngineExport'
 import { ProjectWallpaper, useProjectTheme } from './projectTheme'
 import { Sidebar } from './Sidebar'
+import { ToolMapHost } from '../toolMap/ToolMap'
 import { clearJumpHistory, jumpBack, jumpForward } from '@/shared/entityList/navigation'
 import './editor.css'
 
@@ -49,6 +50,7 @@ export function EditorScreen() {
       <Sidebar />
       <Workspace />
       <CommandPalette />
+      <ToolMapHost />
       <DesignBookHost />
       <PinThreadHost />
       <HistoryRecorder />
