@@ -23,6 +23,7 @@ import { BACKGROUND_TOOLS, deleteToolContent, hideTool, toolHasContent } from '.
 import { defaultKeys, formatCombo } from '@/core/shortcuts'
 import { keyHint } from '@/shared/hotkeyHints'
 import { openToolMap } from '../toolMap/open'
+import { MOVED_TOOLS, TOOL_GROUPS, TOOL_INFO, toolGroup } from './toolGroups'
 
 /** Colours for tools and folders in the sidebar (v0.13); null = none. */
 const TOOL_COLORS: (string | null)[] = [null, '#e03131', '#f08c00', '#f5b301', '#2f9e44', '#0c8599', '#1971c2', '#7048e8', '#c2255c']
@@ -519,10 +520,14 @@ function JumpButtons() {
 function AddToolMenu({ style, available, onAdd, onClose }: { style: React.CSSProperties; available: ComponentManifest[]; onAdd(m: ComponentManifest): void; onClose(): void }) {
   const [query, setQuery] = useState('')
   const q = query.trim().toLowerCase()
-  const shown = q ? available.filter((m) => `${m.name} ${m.description}`.toLowerCase().includes(q)) : available
+  const offered = available.filter((m) => !MOVED_TOOLS[m.type])
+  const matches = (m: ComponentManifest) => `${m.name} ${m.description} ${TOOL_INFO[m.type]?.useWhen ?? ''}`.toLowerCase().includes(q)
+  const groups = TOOL_GROUPS.map((g) => ({ ...g, tools: offered.filter((m) => toolGroup(m.type) === g.id && (!q || matches(m))) })).filter((g) => g.tools.length)
+  const shown = groups.flatMap((g) => g.tools)
+  const moved = q ? available.filter((m) => MOVED_TOOLS[m.type] && m.name.toLowerCase().includes(q)) : []
   return (
     <div className="menu sidebar-add-menu" style={{ position: 'fixed', overflowY: 'auto', ...style }} onMouseDown={(e) => e.stopPropagation()}>
-      {available.length > 0 && (
+      {offered.length > 0 && (
         <input
           className="input sidebar-add-search"
           placeholder="Search tools…"
@@ -539,13 +544,24 @@ function AddToolMenu({ style, available, onAdd, onClose }: { style: React.CSSPro
           }}
         />
       )}
-      {shown.map((m) => (
-        <button key={m.type} title={m.description} onClick={() => onAdd(m)}>
-          {m.name}
-        </button>
+      {groups.map((g) => (
+        <div key={g.id} className="sidebar-add-group" role="group" aria-label={g.name}>
+          <div className="sidebar-add-heading">{g.name}</div>
+          {g.tools.map((m) => (
+            <button key={m.type} title={m.description} onClick={() => onAdd(m)}>
+              <span>{m.name}</span>
+              {TOOL_INFO[m.type] && <span className="sidebar-add-when">for {TOOL_INFO[m.type]!.useWhen}</span>}
+            </button>
+          ))}
+        </div>
       ))}
-      {available.length === 0 && <div className="sidebar-menu-note">Every tool is already added.</div>}
-      {available.length > 0 && shown.length === 0 && <div className="sidebar-menu-note">No tool matches.</div>}
+      {moved.map((m) => (
+        <div key={m.type} className="sidebar-menu-note">
+          {m.name} moved: use {MOVED_TOOLS[m.type]}. Projects that have it keep it.
+        </div>
+      ))}
+      {offered.length === 0 && <div className="sidebar-menu-note">Every tool is already added.</div>}
+      {offered.length > 0 && shown.length === 0 && moved.length === 0 && <div className="sidebar-menu-note">No tool matches.</div>}
     </div>
   )
 }

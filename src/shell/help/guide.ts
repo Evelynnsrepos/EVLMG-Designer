@@ -140,7 +140,7 @@ export const BASICS: Record<string, GuideTopic> = {
   tools: {
     title: 'Adding and closing tools',
     body: [
-      'Add tool at the bottom of the sidebar is always there. Click it to add any tool your project does not have yet.',
+      'Add tool at the bottom of the sidebar is always there. Click it to add any tool your project does not have yet. Tools are sorted into groups (Plan & manage, Story & writing, World & characters, Art & look, Levels & gameplay, Numbers & balance), each with a short line on when to use it.',
       'Right-click a tool in the sidebar and choose Close tool. Hide removes it from the sidebar but keeps everything you made in it. Delete contents removes the tool and everything in it; the red button has to be pressed twice, and this cannot be undone.',
       'If you add a hidden tool again, the app asks whether to bring its contents back or delete them and start empty (again with the red button pressed twice).',
     ],
