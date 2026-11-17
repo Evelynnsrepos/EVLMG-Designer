@@ -46,7 +46,10 @@ jobs:
       - id: notes
         shell: bash
         run: |
-          f="docs/releases/v$(node -p "require('./package.json').version").md"
+          v=$(node -p "require('./package.json').version")
+          f="docs/releases/v$v.md"
+          # A version with a dash (0.35.0-1) is an unstable pre-release: never "latest", so installed apps don't update to it.
+          case "$v" in *-*) echo "pre=true" >> "$GITHUB_OUTPUT"; echo "label= (unstable)" >> "$GITHUB_OUTPUT";; *) echo "pre=false" >> "$GITHUB_OUTPUT";; esac
           { echo 'body<<NOTES_EOF'; if [ -f "$f" ]; then cat "$f"; fi; echo; echo 'NOTES_EOF'; } >> "$GITHUB_OUTPUT"
       # macOS disk image creation fails now and then (hdiutil); one retry below.
       - name: The app has the real public update key
@@ -68,7 +71,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
-          releaseName: Eve.Lopment Games Designer v__VERSION__
+          releaseName: Eve.Lopment Games Designer v__VERSION__${{ steps.notes.outputs.label }}
           releaseBody: |
             ${{ steps.notes.outputs.body }}
 
@@ -77,6 +80,7 @@ jobs:
             Windows: download the `-setup.exe`. Linux: the `.AppImage` (any distro) or `.deb`.
             Mac: the `.dmg` (Apple Silicon and Intel). It is unsigned, see the README's Mac section for the one-time "Open Anyway" step.
           releaseDraft: false
+          prerelease: ${{ steps.notes.outputs.pre }}
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && ' --config src-tauri/tauri.updater.conf.json' || '' }}
       - if: steps.tauri.outcome == 'failure'
@@ -88,7 +92,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
-          releaseName: Eve.Lopment Games Designer v__VERSION__
+          releaseName: Eve.Lopment Games Designer v__VERSION__${{ steps.notes.outputs.label }}
           releaseBody: |
             ${{ steps.notes.outputs.body }}
 
@@ -97,6 +101,7 @@ jobs:
             Windows: download the `-setup.exe`. Linux: the `.AppImage` (any distro) or `.deb`.
             Mac: the `.dmg` (Apple Silicon and Intel). It is unsigned, see the README's Mac section for the one-time "Open Anyway" step.
           releaseDraft: false
+          prerelease: ${{ steps.notes.outputs.pre }}
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && ' --config src-tauri/tauri.updater.conf.json' || '' }}
 
