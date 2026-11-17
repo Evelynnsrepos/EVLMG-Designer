@@ -625,6 +625,15 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Plan a build tests the tree like a player: set the points at the start, per level and the level, then click skills and add or take back ranks. The planner explains why a rank is not possible yet.',
     ],
   },
+  'live-ops': {
+    title: 'Live-Service Planner',
+    body: [
+      'Plan the weeks after launch. Week 0 is launch week; set a Launch date to see real dates. Versions or seasons follow each other; events, banners and store items sit on any week.',
+      'Weeks shows everything on a ruler. Drag an event or banner to move it and drag its right edge to make it longer; drag a version\'s right edge and everything after it moves. Every drag is one undo step. The + next to a row adds one.',
+      'List has the details: event rewards and a link to a quest or achievement, the Gacha & Loot document a banner uses and the characters it features. Tick rows and move them together by a week or two. A character featured again sooner than the weeks you set (26 by default) gets a warning and a red banner.',
+      'Battle pass sets tiers, XP per tier, XP per hour played and how many weeks it runs, and tells you in how many days a Casual, Regular and Core player finishes it. Store lists what is on sale which week. Make milestones adds one Task Board milestone per version.',
+    ],
+  },
   relationships: {
     title: 'Relationships',
     body: [

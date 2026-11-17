@@ -37,6 +37,7 @@ export const DATA_TOOLS = [
   'gacha',
   'level-calculator',
   'level-layout',
+  'live-ops',
   'map',
   'pacing',
   'relationships',

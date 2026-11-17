@@ -18,6 +18,7 @@ export const TOOL_INFO: Partial<Record<ComponentType, { group: ToolGroupId; useW
   vision: { group: 'plan', useWhen: 'pinning down what your game is about' },
   scope: { group: 'plan', useWhen: 'deciding what makes it into the game' },
   tasks: { group: 'plan', useWhen: 'tracking who does what' },
+  'live-ops': { group: 'plan', useWhen: 'updates, events, banners and a battle pass after launch' },
   playtests: { group: 'plan', useWhen: 'collecting what testers said' },
   reviews: { group: 'plan', useWhen: 'leaving comments for your team' },
   pitch: { group: 'plan', useWhen: 'presenting your game to others' },
