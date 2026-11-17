@@ -1,0 +1,8 @@
+.rel-ranks td .calc-input,
+.rel-ranks td input {
+  width: 80px;
+}
+.ld-toolbar .btn.on {
+  background: var(--accent);
+  color: #fff;
+}
