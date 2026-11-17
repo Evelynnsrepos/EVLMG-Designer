@@ -4,6 +4,7 @@ import { SPELL_LANGUAGES, useSettings } from '@/core/state'
 import { confirmDialog } from '@/shared/dialogs'
 import { AI_MODELS, spellAvailable, useAiHelper } from '@/shared/spell'
 import { Modal } from '@/shared/ui'
+import { LANGS, localized, setLang, useLang, type Lang } from '@/shared/i18n'
 import { PluginsSection } from '../plugins/PluginsSection'
 import './settings.css'
 
@@ -16,7 +17,7 @@ import { DrawingSection } from './DrawingSection'
 import { UpdatesSection } from '../updates/UpdatesSection'
 import { setContrast, setGlass, setUiScale, UI_SCALES, useContrast, useGlass, useUiScale, type Glass } from '../theme'
 
-const UI = {
+const UI_EN = {
   title: 'Settings',
   spell: 'Spell check',
   spellOn: 'Underline misspelled words',
@@ -52,6 +53,8 @@ const UI = {
   reset: 'Reset',
   contrast: 'Strong contrast',
   contrastOn: 'Plain, solid colours with darker text, clear lines and thick focus rings (turns the glass look off)',
+  language: 'Interface language',
+  languageHint: 'German is still being translated: so far the Settings are in German, the rest follows in parts. Some texts switch when you open them again.',
   glassHint: 'The app gets a glass look: rounded see-through menus, dialogs, toolbars and panels over a soft background in your project colours. Full glass also blurs what is behind the sidebar, dialogs and menus. Canvases always stay solid. Choose Light or Off if the app feels slower.',
   pixels: 'Pictures',
   sharp: 'Sharp pixel art',
@@ -64,15 +67,72 @@ const UI = {
   keysHint: 'Click Change and press the new key. Single-letter keys only work in the tool you clicked last. The user guide (F1) has the same list as a cheatsheet.',
 }
 
+/** German interface, part 1 (review: Evelynn). Terms: docs/GERMAN-TERMS.md. */
+const UI_DE: Partial<typeof UI_EN> = {
+  title: 'Einstellungen',
+  spell: 'Rechtschreibprüfung',
+  spellOn: 'Falsch geschriebene Wörter unterstreichen',
+  spellAutoFix: 'Sichere Tippfehler beim Schreiben verbessern (wie „teh“). Strg+Z nimmt eine Verbesserung zurück, das Wort bleibt dann so',
+  learned: (n: number) => `${n} ${n === 1 ? 'Verbesserung' : 'Verbesserungen'} aus deinen Klicks gelernt.`,
+  forget: 'Vergessen',
+  spellCalm: 'Ruhige Unterstreichungen: nur im Absatz zeigen, in dem ich gerade schreibe',
+  writingHintsOff: (n: number) => `${n} ${n === 1 ? 'Art' : 'Arten'} von Schreibhinweisen ausgeschaltet.`,
+  writingHintsOn: 'Wieder einschalten',
+  spellDesktopOnly: 'Die Rechtschreibprüfung gibt es in der Desktop-App.',
+  languages: 'Sprachen',
+  words: 'Mein Wörterbuch',
+  wordsHint: 'Wörter, die du mit „Zum Wörterbuch hinzufügen“ hinzugefügt hast. Die Namen deiner Gegenstände, Figuren, Orte und Gegner kennt die App immer.',
+  noWords: 'Noch keine Wörter.',
+  ai: 'KI-Hilfe',
+  aiAbout: 'Ein KI-Modell, das auf diesem Computer läuft und beim Schreiben deine Grammatik und Rechtschreibung prüft. Klicke auf eine blaue Unterstreichung für seine Vorschläge. Es kann auch das Werkzeug „Frag dein Projekt“ zeigen, das in deinen eigenen Notizen nachschaut. Nichts wird ins Internet geschickt.',
+  askProject: 'Das Werkzeug „Frag dein Projekt“ zeigen (schaut in deinen Notizen nach, schreibt nie für dich)',
+  aiModels: 'Modell',
+  aiDownload: 'Herunterladen',
+  aiRemove: 'KI-Hilfe entfernen',
+  aiRemoveAsk: 'Die heruntergeladene KI-Hilfe und ihre Modelle von diesem Computer löschen?',
+  aiUse: 'Grammatik mit der KI-Hilfe prüfen',
+  aiProgram: 'Programm wird geladen',
+  aiModel: 'Modell wird geladen',
+  close: 'Schließen',
+  writer: 'Writer',
+  writerSyntax: 'Neue Dokumente starten mit Markdown-Syntax an',
+  writerSyntaxHint: 'Mit Markdown-Syntax formatierst du durch Zeichen, wie ==Markierung== oder > [!note], und eingefügtes Markdown wird zu Formatierung. Jedes Dokument hat seinen eigenen Schalter oben.',
+  glass: 'Glas-Look',
+  glassLevels: { full: 'Volles Glas', light: 'Leichtes Glas (ohne Unschärfe, am schnellsten)', off: 'Aus (einfarbig, der klassische Look)' },
+  glassHint: 'Die App bekommt einen Glas-Look: runde, durchscheinende Menüs, Fenster, Werkzeugleisten und Bereiche über einem weichen Hintergrund in deinen Projektfarben. Volles Glas macht außerdem unscharf, was hinter der Seitenleiste, den Fenstern und Menüs liegt. Zeichenflächen bleiben immer einfarbig. Wähle Leicht oder Aus, wenn sich die App langsamer anfühlt.',
+  pixels: 'Bilder',
+  sharp: 'Scharfe Pixel-Art',
+  sharpHint: 'Kleine Bilder, wie Pixel-Art-Kacheln im Level Layout, werden mit harten, eckigen Pixeln gezeigt statt geglättet. Schalte es für gemalte Bilder oder Foto-Tilesets aus.',
+  keys: 'Tastenkürzel',
+  search: 'Einstellungen durchsuchen',
+  noMatch: (q: string) => `Keine Einstellung passt zu „${q}“.`,
+  hints: 'Tastenhinweise',
+  hintsOn: 'Die Taste jedes Knopfs in seiner Ecke zeigen',
+  keysHint: 'Klicke auf Ändern und drücke die neue Taste. Einzelne Buchstaben wirken nur im Werkzeug, das du zuletzt angeklickt hast. Das Handbuch (F1) hat dieselbe Liste als Spickzettel.',
+  size: 'Größe der Oberfläche',
+  sizeHint: 'Macht alle Menüs, Knöpfe und Texte größer oder kleiner. Zeichenwerkzeuge behalten ihren eigenen Zoom obendrauf. Strg+0 in einer Zeichenfläche passt das Bild weiterhin ein.',
+  reset: 'Zurücksetzen',
+  contrast: 'Starker Kontrast',
+  contrastOn: 'Einfache, einfarbige Farben mit dunklerem Text, klaren Linien und dicken Fokusrahmen (schaltet den Glas-Look aus)',
+  language: 'Sprache der Oberfläche',
+  languageHint: 'Deutsch ist noch in Arbeit: Bisher sind die Einstellungen übersetzt, der Rest folgt Stück für Stück. Manche Texte wechseln erst, wenn du sie neu öffnest.',
+}
+
+const UI = localized(UI_EN, UI_DE)
+
 /** v0.20: the tabs of the Settings window; each section says which tab it is on with data-tab. */
+const TAB_NAMES = localized(
+  { general: 'General', writing: 'Writing', keys: 'Keys & Hotwheel', presets: 'Project presets', git: 'Git', plugins: 'Plugins' },
+  { general: 'Allgemein', writing: 'Schreiben', keys: 'Tasten & Hotwheel', presets: 'Projektvorlagen' },
+)
 const TABS = [
-  { id: 'general', name: 'General' },
-  { id: 'writing', name: 'Writing' },
-  { id: 'keys', name: 'Keys & Hotwheel' },
-  { id: 'presets', name: 'Project presets' },
-  { id: 'git', name: 'Git' },
-  { id: 'plugins', name: 'Plugins', desktop: true },
-]
+  { id: 'general' },
+  { id: 'writing' },
+  { id: 'keys' },
+  { id: 'presets' },
+  { id: 'git' },
+  { id: 'plugins', desktop: true },
+] as { id: keyof typeof TAB_NAMES; desktop?: boolean }[]
 
 const mb = (n: number) => `${Math.round(n / 1024 / 1024)} MB`
 
@@ -83,6 +143,7 @@ export function SettingsHost() {
 }
 
 function SettingsDialog({ onClose }: { onClose: () => void }) {
+  useLang() // texts follow a language switch
   const s = useSettings()
   const section = useSettingsDialog((x) => x.section)
   const box = useRef<HTMLDivElement>(null)
@@ -134,7 +195,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
           <div className="settings-tabs" role="tablist">
             {TABS.filter((t) => desktop || !t.desktop).map((t) => (
               <button key={t.id} role="tab" aria-selected={!query && tab === t.id} className={`settings-tab${!query && tab === t.id ? ' on' : ''}`} onClick={() => (setTab(t.id), setQuery(''))}>
-                {t.name}
+                {TAB_NAMES[t.id]}
               </button>
             ))}
           </div>
@@ -331,6 +392,7 @@ function GlassSection() {
   const scale = useUiScale()
   return (
     <>
+    <LanguageSection />
     <section data-section="size">
       <h3>{UI.size}</h3>
       <label className="settings-check">
@@ -362,5 +424,22 @@ function GlassSection() {
       <p className="muted settings-hint">{UI.glassHint}</p>
     </section>
     </>
+  )
+}
+
+function LanguageSection() {
+  const lang = useLang()
+  return (
+    <section data-section="language">
+      <h3>{UI.language}</h3>
+      <select className="input" value={lang} onChange={(e) => setLang(e.target.value as Lang)} aria-label={UI.language}>
+        {LANGS.map((l) => (
+          <option key={l.id} value={l.id}>
+            {l.name}
+          </option>
+        ))}
+      </select>
+      <p className="muted settings-hint">{UI.languageHint}</p>
+    </section>
   )
 }

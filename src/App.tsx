@@ -1,3 +1,4 @@
+import { useLang } from './shared/i18n'
 import { useEffect } from 'react'
 import { installAutoBackup, waitForBackups } from '@/core/backups'
 import { installCollaboration } from '@/core/collab'
@@ -34,6 +35,7 @@ installRangeFill()
 
 export default function App() {
   const screen = useAppStore((s) => s.screen)
+  useLang() // re-render on a language switch
   useJoinRequests()
   useHotkeyHintMode()
 

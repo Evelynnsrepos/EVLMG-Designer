@@ -6,8 +6,10 @@ import App from './App.tsx'
 import { flushOn } from './core/state'
 import { glAllowed } from './shared/sketch/gl'
 import { applyTheme } from './shell/theme'
+import { getLang } from './shared/i18n'
 
 applyTheme()
+document.documentElement.lang = getLang()
 
 // Waiting saves are written when the window loses focus or is hidden (minimised, another desktop).
 flushOn(window, ['blur', 'pagehide'])
