@@ -115,3 +115,19 @@ describe('v0.16 select and move, isometric levels', () => {
     expect(scene).not.toContain('floor_1')
   })
 })
+
+describe('Tiled export', () => {
+  it('writes tilesets, CSV layers with flip bits, markers and blocked cells', async () => {
+    const { tiledMap } = await import('./model')
+    const set = { id: 's', name: 'Dungeon & co', image: 'a.png', tileSize: 16, columns: 4, rows: 2, width: 64, height: 32, solid: ['1:1'] }
+    const d = { width: 3, height: 2, tiles: { '2,1': 'chest' as const }, notes: [{ id: 'n', x: 0, y: 0, text: 'Start <here>' }], layers: [{ id: 'l', name: 'Ground', art: { '0,0': 's:1:0', '1,1': 's:0:1:1' } }], blocked: { '2,0': true as const } }
+    const tmx = tiledMap(d, [set], () => 'level_tiles_0.png')
+    expect(tmx).toContain('<tileset firstgid="1" name="Dungeon &amp; co" tilewidth="16" tileheight="16" spacing="0" margin="0" tilecount="8" columns="4">')
+    expect(tmx).toContain('<tile id="5"><properties><property name="solid" type="bool" value="true"/></properties></tile>')
+    // (0,0) = gid 2; (1,1) = row 1 col 0 → gid 5, flipped horizontally
+    expect(tmx).toContain(`2,0,0,\n0,${(5 | 0x80000000) >>> 0},0`)
+    expect(tmx).toContain('<object id="1" name="chest" type="chest" x="40" y="24"><point/></object>')
+    expect(tmx).toContain('<property name="text" value="Start &lt;here&gt;"/>')
+    expect(tmx).toContain('<object id="3" type="blocked" x="32" y="0" width="16" height="16"/>')
+  })
+})

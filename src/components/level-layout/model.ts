@@ -355,3 +355,70 @@ export function levelMarkers(d: LevelDoc): { kind: string; x: number; y: number;
   for (const n of d.notes) out.push({ kind: 'note', x: Math.floor(n.x), y: Math.floor(n.y), text: n.text })
   return out
 }
+
+const xml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+/**
+ * The level as a Tiled map (.tmx, pro fixes phase 5 #12): one tileset per used tileset picture, one tile layer per
+ * picture layer (CSV, with Tiled's flip bits), and the markers, notes and blocked cells as object layers.
+ * `imagePath(i)` is the file name the tileset picture `i` is saved under, next to the map.
+ */
+export function tiledMap(d: LevelDoc, sets: Tileset[], imagePath: (i: number) => string): string {
+  const tw = sets[0]?.tileSize ?? 16
+  const th = d.iso ? (sets[0]?.tileHeight ?? tw / 2) : (sets[0]?.tileHeight ?? tw)
+  const layers = d.layers ?? []
+  const markers = levelMarkers(d)
+  const blocked = Object.keys(d.blocked ?? {}).map((k) => k.split(',').map(Number))
+  const out = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<map version="1.10" orientation="${d.iso ? 'isometric' : 'orthogonal'}" renderorder="right-down" width="${d.width}" height="${d.height}" tilewidth="${tw}" tileheight="${th}" infinite="0" nextlayerid="${layers.length + 3}" nextobjectid="${markers.length + blocked.length + 1}">`,
+  ]
+  const first = new Map<string, number>()
+  let gid = 1
+  sets.forEach((t, i) => {
+    first.set(t.id, gid)
+    const h = t.tileHeight ?? t.tileSize
+    out.push(` <tileset firstgid="${gid}" name="${xml(t.name)}" tilewidth="${t.tileSize}" tileheight="${h}" spacing="${t.spacing ?? 0}" margin="${t.margin ?? 0}" tilecount="${t.columns * t.rows}" columns="${t.columns}">`)
+    out.push(`  <image source="${xml(imagePath(i))}" width="${t.width}" height="${t.height}"/>`)
+    for (const s of t.solid ?? []) {
+      const [col, row] = s.split(':').map(Number)
+      out.push(`  <tile id="${row * t.columns + col}"><properties><property name="solid" type="bool" value="true"/></properties></tile>`)
+    }
+    out.push(' </tileset>')
+    gid += t.columns * t.rows
+  })
+  layers.forEach((l, n) => {
+    const cells = new Array<number>(d.width * d.height).fill(0)
+    for (const [k, v] of Object.entries(l.art)) {
+      const [x, y] = k.split(',').map(Number)
+      const a = parseArt(v)
+      const set = sets.find((t) => t.id === a.set)
+      const base = first.get(a.set)
+      if (!set || base === undefined || x < 0 || y < 0 || x >= d.width || y >= d.height) continue
+      // Tiled's flip bits: horizontal, vertical, diagonal (our turn flag).
+      const flags = (a.flags & 1 ? 0x80000000 : 0) | (a.flags & 2 ? 0x40000000 : 0) | (a.flags & 4 ? 0x20000000 : 0)
+      cells[y * d.width + x] = ((base + a.row * set.columns + a.col) | flags) >>> 0
+    }
+    const rows = Array.from({ length: d.height }, (_, y) => cells.slice(y * d.width, (y + 1) * d.width).join(','))
+    out.push(` <layer id="${n + 1}" name="${xml(l.name)}" width="${d.width}" height="${d.height}"${l.hidden ? ' visible="0"' : ''}>`, '  <data encoding="csv">', rows.join(',\n'), '</data>', ' </layer>')
+  })
+  // Objects sit on the cell's middle (isometric maps use Tiled's own pixel space: tile height per cell on both axes).
+  const px = (x: number, y: number) => (d.iso ? { x: (x + 0.5) * th, y: (y + 0.5) * th } : { x: (x + 0.5) * tw, y: (y + 0.5) * th })
+  let id = 1
+  if (markers.length) {
+    out.push(` <objectgroup id="${layers.length + 1}" name="Markers">`)
+    for (const m of markers) {
+      const p = px(m.x, m.y)
+      const text = m.text ? `<properties><property name="text" value="${xml(m.text)}"/></properties>` : ''
+      out.push(`  <object id="${id++}" name="${m.kind}" type="${m.kind}" x="${p.x}" y="${p.y}">${text}<point/></object>`)
+    }
+    out.push(' </objectgroup>')
+  }
+  if (blocked.length) {
+    out.push(` <objectgroup id="${layers.length + 2}" name="Blocked">`)
+    for (const [x, y] of blocked) out.push(`  <object id="${id++}" type="blocked" x="${d.iso ? x * th : x * tw}" y="${y * th}" width="${d.iso ? th : tw}" height="${th}"/>`)
+    out.push(' </objectgroup>')
+  }
+  out.push('</map>', '')
+  return out.join('\n')
+}

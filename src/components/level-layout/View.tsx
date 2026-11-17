@@ -27,6 +27,7 @@ import {
   createLibrary,
   footprint,
   godotScene,
+  tiledMap,
   grid,
   isBlocked,
   LIBRARY_ID,
@@ -615,27 +616,43 @@ export default function View({ documentId, active }: PanelProps) {
     setLayers((ls) => ls.filter((x) => x.id !== l.id))
   }
 
+  /** The used tileset pictures into `dir` as `<base>_tiles_<i>.png`, as they are shown (black made see-through stays so). */
+  const writeTilesets = async (dir: string, base: string, used: Tileset[]) => {
+    const fs = getFs()
+    for (const [i, t] of used.entries()) {
+      const img = images[t.id]
+      const bytes =
+        t.blackTransparent && img instanceof HTMLCanvasElement
+          ? new Uint8Array(await (await new Promise<Blob | null>((res) => img.toBlob(res, 'image/png')))!.arrayBuffer())
+          : await fs.readBinary(await resolveAssetPath(root!, t.image))
+      await fs.writeBinaryAtomic(await fs.join(dir, `${base}_tiles_${i}.png`), bytes)
+    }
+  }
+  const exportBase = () => safeFileName(title).replace(/\s+/g, '_').toLowerCase() || 'level'
   /** v0.13: the level as a Godot 4 TileMap scene, with its tileset pictures, into the game project. */
   const exportGodot = async () => {
     const fs = getFs()
     const folder = await fs.pickFolder('Choose your Godot project folder')
     if (!folder || !root) return
-    const base = safeFileName(title).replace(/\s+/g, '_').toLowerCase() || 'level'
+    const base = exportBase()
     const dir = await fs.join(folder, 'egd', 'levels')
     await fs.mkdir(dir)
     const used = usedTilesets(d, sets)
-    for (const [i, t] of used.entries()) {
-      const img = images[t.id]
-      // A picture with black made see-through is saved as it is shown.
-      const bytes =
-        t.blackTransparent && img instanceof HTMLCanvasElement
-          ? new Uint8Array(await (await new Promise<Blob | null>((res) => img.toBlob(res, 'image/png')))!.arrayBuffer())
-          : await fs.readBinary(await resolveAssetPath(root, t.image))
-      await fs.writeBinaryAtomic(await fs.join(dir, `${base}_tiles_${i}.png`), bytes)
-    }
+    await writeTilesets(dir, base, used)
     const scene = godotScene(d, used, title, (i) => `res://egd/levels/${base}_tiles_${i}.png`)
     await fs.writeBinaryAtomic(await fs.join(dir, `${base}.tscn`), new TextEncoder().encode(scene))
     setExported(`Saved egd/levels/${base}.tscn in your Godot project.`)
+  }
+  /** The level as a Tiled map (.tmx) with its tileset pictures next to it, for Tiled and the engines that read it. */
+  const exportTiled = async () => {
+    const fs = getFs()
+    const folder = await fs.pickFolder('Choose a folder for the Tiled map')
+    if (!folder || !root) return
+    const base = exportBase()
+    const used = usedTilesets(d, sets)
+    await writeTilesets(folder, base, used)
+    await fs.writeBinaryAtomic(await fs.join(folder, `${base}.tmx`), new TextEncoder().encode(tiledMap(d, used, (i) => `${base}_tiles_${i}.png`)))
+    setExported(`Saved ${base}.tmx and its tileset pictures. Open it in Tiled.`)
   }
   const exportPng = async () => {
     const blob = await new Promise<Blob | null>((res) => canvas.current!.toBlob(res, 'image/png'))
@@ -747,6 +764,9 @@ export default function View({ documentId, active }: PanelProps) {
         </button>
         <button className="btn btn-ghost lv-btn" disabled={!usedTilesets(d, sets).length && !levelMarkers(d).length} title="Export the picture tiles as a Godot 4 TileMap scene, with doors, spawns, enemies, loot and notes as Marker2D nodes" onClick={() => void exportGodot()}>
           <Download size={14} /> Godot scene
+        </button>
+        <button className="btn btn-ghost lv-btn" disabled={!usedTilesets(d, sets).length && !levelMarkers(d).length} title="Export a Tiled map (.tmx) with the picture layers, tileset pictures, markers, notes and blocked cells" onClick={() => void exportTiled()}>
+          <Download size={14} /> Tiled map
         </button>
         {exported && <span className="muted">{exported}</span>}
         <label className="ld-inline" title="Show where nothing can walk">
