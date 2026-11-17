@@ -162,6 +162,8 @@ Grab the file for your system from the
 > EVLMG Designer used to be called *Evelopment Games Designer*. Installers, download files and the installed app still carry
 > that name for now, so updates find your existing install and your projects stay where they are.
 
+**Updates:** from version 0.35 on, the start screen tells you when a new version is out. On Windows, macOS and the AppImage one click installs it; the Flatpak updates through your Software app or `flatpak update`. Settings > General > Updates turns the check off.
+
 **Flatpak:** `flatpak install Evelopment.Games.Designer_<version>_x86_64.flatpak`.
 On NixOS, turn Flatpak on first with `services.flatpak.enable = true;` in your system configuration.
 Drawing slow or the window blank? Settings, General, Drawing speed shows if the graphics card is used and has a

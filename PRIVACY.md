@@ -1,6 +1,6 @@
 # Privacy Policy – Eve.Lopment Games Designer
 
-*Last updated: 4 October 2026* · [Deutsche Fassung: DATENSCHUTZ.md](DATENSCHUTZ.md)
+*Last updated: 17 November 2026* · [Deutsche Fassung: DATENSCHUTZ.md](DATENSCHUTZ.md)
 
 ## The short version
 
@@ -25,11 +25,12 @@ You can delete all of this at any time by deleting the project folder and uninst
 
 ## When the app connects to the internet
 
-Only when you start one of these actions:
+Only for the update check (which you can turn off) and when you start one of these actions:
 
 | What you do | Who the app contacts | What they can see |
 |---|---|---|
 | Turn on the local AI helper (one-time download) | Hugging Face (AI model file) and GitHub (llama.cpp program) | Your IP address and that the file was downloaded. Your text is never sent. |
+| Check for updates (on by default; Settings > General > Updates turns it off) | GitHub (github.com, objects.githubusercontent.com); for Flatpak updates also evelynnsrepos.github.io | Your IP address and that the update file was downloaded. No ID, no version number and nothing about your projects is sent. |
 | Install a plugin from a GitHub link | GitHub (github.com, api.github.com, codeload.github.com) | Your IP address and which plugin you downloaded. |
 | Work together directly (peer to peer) | The people you share with; when needed, public relay and lookup servers run by n0 (a US company, the makers of iroh) | Teammates see your IP address on direct connections. n0 sees your IP address and a random device ID. Project contents are end-to-end encrypted, so n0 cannot read them. |
 | Work through an Evelopment Games Designer Server | The server named in your connect code | That server stores the project and the name you type. Whoever runs that server is responsible for it and must give you their own privacy notice. Only use servers you trust. |
@@ -37,7 +38,7 @@ Only when you start one of these actions:
 | Connect GitHub for Git saving (only if you click Connect GitHub) | GitHub's API (api.github.com), with the GitHub login your computer's Git already has | GitHub sees your IP address and your account. The app reads your user name and your repositories whose names start with egd-, and makes a private repository for each project. The login token stays on your computer and is never stored by the app. |
 | Click a link (GitHub, Discord, YouTube, Instagram, report a problem, or links you added) | The website, opened in your normal browser | The usual information a website receives. Their own privacy policies apply. |
 
-The app itself does not check for updates in the background and makes no other connections.
+Apart from the update check above, the app makes no other connections.
 
 ## Data you share with teammates
 
