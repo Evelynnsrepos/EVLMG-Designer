@@ -66,3 +66,13 @@ describe('Writer links', () => {
     expect(numberFrames(perParagraph).map((x) => x.scene)).toEqual([1, 2, 2, 3])
   })
 })
+
+describe('animatic subtitles', () => {
+  it('times each panel with dialogue like the animatic (SubRip)', async () => {
+    const { subtitlesSrt } = await import('./exporting')
+    const item = (start: number, seconds: number, dialogue: string) => ({ frame: { seconds, dialogue }, n: { start } }) as never
+    expect(subtitlesSrt([item(0, 2.5, 'Hello'), item(2.5, 1, ''), item(3.5, 61.25, 'Bye\n')])).toBe(
+      '1\n00:00:00,000 --> 00:00:02,500\nHello\n\n2\n00:00:03,500 --> 00:01:04,750\nBye\n',
+    )
+  })
+})

@@ -341,17 +341,56 @@ export function animaticFrame(p: Prepared, w: number, h: number, o: Pick<VideoOp
   return canvas
 }
 
-/** The animatic as a video (WebM, or GIF where the webview can't make video). Sound is not included yet. */
-export async function animaticVideo(items: Prepared[], doc: StoryboardDoc, o: VideoOptions, onProgress?: (done: number) => void): Promise<Exported> {
+/** The animatic as a video (WebM, or GIF where the webview can't make video), with its sound mix in WebM where the webview can encode Opus. */
+export async function animaticVideo(items: Prepared[], doc: StoryboardDoc, o: VideoOptions, onProgress?: (done: number) => void, sound?: AudioBuffer | null): Promise<Exported> {
   const a = aspectOf(doc)
-  // shortcut: video has no sound track yet (the WebM muxer writes video only); add an Opus track when WebCodecs audio is checked on Linux.
   return encodeAnimation(
     o.format,
     a.w,
     a.h,
     items.map((p) => ({ ms: Math.round(p.frame.seconds * 1000), draw: () => animaticFrame(p, a.w, a.h, o) })),
     onProgress,
+    sound,
   )
+}
+
+/** Played like Play animatic: the soundtrack under everything, each panel's clip from its start until the panel ends. Null without any sound. */
+export async function mixSound(root: string, doc: StoryboardDoc, items: Prepared[]): Promise<AudioBuffer | null> {
+  const clips = [
+    ...(doc.soundtrack ? [{ path: doc.soundtrack, at: 0, until: Infinity }] : []),
+    ...items.filter((p) => p.frame.audio).map((p) => ({ path: p.frame.audio!, at: p.n.start, until: p.n.start + p.frame.seconds })),
+  ]
+  if (!clips.length || typeof OfflineAudioContext === 'undefined') return null
+  const total = items.reduce((t, p) => t + p.frame.seconds, 0)
+  const rate = 48000
+  const ctx = new OfflineAudioContext(2, Math.max(1, Math.ceil(total * rate)), rate)
+  for (const c of clips) {
+    try {
+      const bytes = await getFs().readBinary(await resolveAssetPath(root, c.path))
+      const src = ctx.createBufferSource()
+      src.buffer = await ctx.decodeAudioData(bytes.slice().buffer as ArrayBuffer)
+      src.connect(ctx.destination)
+      src.start(c.at)
+      src.stop(Math.min(c.until, total))
+    } catch {
+      // A missing or unreadable clip is left out, like in Play animatic.
+    }
+  }
+  return ctx.startRendering()
+}
+
+const srtTime = (s: number) => {
+  const ms = Math.round(s * 1000)
+  const p = (n: number, w = 2) => String(n).padStart(w, '0')
+  return `${p(Math.floor(ms / 3600000))}:${p(Math.floor(ms / 60000) % 60)}:${p(Math.floor(ms / 1000) % 60)},${p(ms % 1000, 3)}`
+}
+
+/** Subtitles (SubRip): one entry per panel with dialogue, timed like the animatic. */
+export function subtitlesSrt(items: Prepared[]): string {
+  return items
+    .filter((p) => p.frame.dialogue.trim())
+    .map((p, i) => `${i + 1}\n${srtTime(p.n.start)} --> ${srtTime(p.n.start + p.frame.seconds)}\n${p.frame.dialogue.trim()}\n`)
+    .join('\n')
 }
 
 /** Slides for the Pitch Deck: one per cut (its first panel's picture, saved as its own copy by the caller), text from action and dialogue. */

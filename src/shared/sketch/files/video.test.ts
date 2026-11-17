@@ -45,6 +45,20 @@ describe('WebM', () => {
     expect(blocks[0][1][3]).toBe(0x80)
     expect(new TextDecoder().decode(seg[1][1]).includes('V_VP9')).toBe(true)
   })
+
+  it('adds an Opus track whose blocks sit between the video frames in time order', () => {
+    const v = [
+      { data: new Uint8Array(10), time: 0, key: true },
+      { data: new Uint8Array(10), time: 40, key: false },
+    ]
+    const audio = { chunks: [{ data: new Uint8Array(5), time: 0, key: true }, { data: new Uint8Array(5), time: 20, key: true }], sampleRate: 48000, channels: 2, codecPrivate: new Uint8Array(19) }
+    const seg = ebml(ebml(muxWebm(v, { width: 8, height: 8, codec: 'V_VP8', duration: 60, audio }))[1][1])
+    expect(ebml(seg[1][1]).filter((e) => e[0] === 0xae)).toHaveLength(2)
+    expect(new TextDecoder().decode(seg[1][1]).includes('A_OPUS')).toBe(true)
+    const blocks = seg.filter((e) => e[0] === 0x1f43b675).flatMap((c) => ebml(c[1]).filter((e) => e[0] === 0xa3))
+    // track number byte, then time: video 0, audio 0, audio 20, video 40
+    expect(blocks.map((b) => [b[1][0], b[1][2]])).toEqual([[0x81, 0], [0x82, 0], [0x82, 20], [0x81, 40]])
+  })
 })
 
 describe('APNG', () => {

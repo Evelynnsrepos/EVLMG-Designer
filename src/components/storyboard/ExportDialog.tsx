@@ -3,18 +3,20 @@ import { importAssetFromBlob } from '@/core/assets'
 import { safeFileName, saveBinaryFile, saveTextFile } from '@/core/export'
 import { postIntent } from '@/core/state'
 import { PAGE_SIZES } from '@/shared/print'
-import { canEncodeVideo } from '@/shared/sketch/files/io'
+import { canEncodeSound, canEncodeVideo, wavBytes } from '@/shared/sketch/files/io'
 import { Modal } from '@/shared/ui'
 import { openComponent } from '@/shell/editor/actions'
-import { animaticVideo, picturesZip, pitchSlides, prepare, scriptMarkdown, SHEET_KINDS, sheetsPdf, shotListCsv, type SheetKind } from './exporting'
+import { animaticVideo, mixSound, picturesZip, subtitlesSrt, pitchSlides, prepare, scriptMarkdown, SHEET_KINDS, sheetsPdf, shotListCsv, type SheetKind } from './exporting'
 import { fpsOf, type StoryboardDoc } from './model'
 
-type Kind = 'pdf' | 'video' | 'pitch' | 'csv' | 'script' | 'pictures'
+type Kind = 'pdf' | 'video' | 'pitch' | 'srt' | 'sound' | 'csv' | 'script' | 'pictures'
 
 const KINDS: { id: Kind; label: string; hint: string }[] = [
   { id: 'pdf', label: 'Print / PDF', hint: 'Storyboard sheets to print, share with the team or put in a pitch.' },
   { id: 'video', label: 'Animatic video', hint: 'The board played with its timing, as a video file (WebM) or GIF. Upload it, or put it in your video editor under the real sound.' },
   { id: 'pitch', label: 'Pitch Deck', hint: 'One slide per cut with its picture, what happens and the dialogue, added to the Pitch Deck.' },
+  { id: 'srt', label: 'Subtitles (SRT)', hint: 'The dialogue timed like the animatic, for a video editor or player.' },
+  { id: 'sound', label: 'Sound mix (WAV)', hint: 'The soundtrack and every panel’s sound clip mixed like Play animatic, as one sound file.' },
   { id: 'csv', label: 'Shot list (CSV)', hint: 'Every panel as a row: scene, cut, timing, camera, text, status. Opens in the Spreadsheet, Excel or LibreOffice.' },
   { id: 'script', label: 'Script (Markdown)', hint: 'A readable shooting script: scenes, cuts, camera, action and dialogue.' },
   { id: 'pictures', label: 'Pictures (ZIP)', hint: 'Every panel as a PNG named by scene and cut (S01_C003_B.png), for an editor or animation app.' },
@@ -30,7 +32,9 @@ const UI = {
   subtitles: 'Dialogue as subtitles',
   burnIn: 'Scene, cut and timecode in the corner (for review copies)',
   noVideo: 'This system can’t make video files here, so the animatic is saved as a GIF.',
-  noSound: 'The video has no sound yet. Put it in a video editor with your sound, or use Play animatic to watch it with sound.',
+  withSound: 'The WebM video gets the soundtrack and the panels’ sound clips, mixed like Play animatic.',
+  noSound: 'This system can’t put sound into the video here. Export Sound mix (WAV) too and put both in a video editor.',
+  nothingToMix: 'This board has no soundtrack and no sound clips yet.',
   export: 'Export',
   cancel: 'Close',
   working: (done: number, total: number) => `Getting the panels ready… ${done} / ${total}`,
@@ -62,8 +66,15 @@ export function ExportDialog({ root, doc, title, onClose }: { root: string; doc:
         const bytes = await sheetsPdf(items, doc, { kind: sheet, paper: { w: p.w, h: p.h }, title, fps })
         ok = await saveBinaryFile({ title: UI.title, defaultName: `${name}.pdf`, bytes, filter: { name: 'PDF', extensions: ['pdf'] } })
       } else if (kind === 'video') {
-        const file = await animaticVideo(items, doc, { format, subtitles, burnIn, fps }, (d) => setNote(UI.encoding(d, items.length)))
+        const sound = format === 'webm' && canEncodeSound() ? await mixSound(root, doc, items) : null
+        const file = await animaticVideo(items, doc, { format, subtitles, burnIn, fps }, (d) => setNote(UI.encoding(d, items.length)), sound)
         ok = await saveBinaryFile({ title: UI.title, defaultName: `${name}.${file.ext}`, bytes: file.bytes, filter: file.filter })
+      } else if (kind === 'srt') {
+        ok = await saveTextFile({ title: UI.title, defaultName: `${name}.srt`, text: subtitlesSrt(items), filter: { name: 'SubRip subtitles', extensions: ['srt'] } })
+      } else if (kind === 'sound') {
+        const mix = await mixSound(root, doc, items)
+        if (!mix) return setNote(UI.nothingToMix)
+        ok = await saveBinaryFile({ title: UI.title, defaultName: `${name} sound.wav`, bytes: wavBytes(mix), filter: { name: 'WAV sound', extensions: ['wav'] } })
       } else if (kind === 'csv') {
         ok = await saveTextFile({ title: UI.title, defaultName: `${name} shot list.csv`, text: shotListCsv(items, fps), filter: { name: 'CSV', extensions: ['csv'] } })
       } else if (kind === 'script') {
@@ -144,7 +155,7 @@ export function ExportDialog({ root, doc, title, onClose }: { root: string; doc:
               <input type="checkbox" checked={burnIn} onChange={(e) => setBurnIn(e.target.checked)} /> {UI.burnIn}
             </label>
             {format === 'webm' && !canEncodeVideo() && <p className="sb-warn">{UI.noVideo}</p>}
-            <p className="muted sb-small">{UI.noSound}</p>
+            {format === 'webm' && <p className="muted sb-small">{canEncodeSound() ? UI.withSound : UI.noSound}</p>}
           </>
         )}
         {note && <p className="sb-note">{note}</p>}

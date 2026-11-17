@@ -12,7 +12,7 @@ import { fitSize, type CanvasChange } from './canvas'
 import { GifEncoder } from './gif'
 import { readPsd, writePsd, type Pixels, type PsdFile } from './psd'
 import { readTiff, writeTiff } from './tiff'
-import { muxWebm, type VideoChunk } from './webm'
+import { muxWebm, type AudioTrack, type VideoChunk } from './webm'
 
 /**
  * The browser side of Sketch files (Sketch Pro): reading files the user picks,
@@ -222,9 +222,11 @@ export async function encodeAnimation(
   height: number,
   frames: AnimFrame[],
   onProgress?: (done: number) => void,
+  /** WebM only: a sound track (Storyboard animatics). Left out where the webview can't encode Opus. */
+  sound?: AudioBuffer | null,
 ): Promise<Exported> {
   if (format === 'webm' && canEncodeVideo()) {
-    const video = await encodeWebm(width, height, frames, onProgress)
+    const video = await encodeWebm(width, height, frames, onProgress, sound ? await encodeOpus(sound) : undefined)
     if (video) return out(video, 'webm')
   }
   // GIF and APNG keep the real size up to 1920 px (sprites stay pixel-exact).
@@ -242,7 +244,7 @@ export async function encodeAnimation(
   return format === 'apng' ? out(enc.done(), 'png', 'Animated PNG') : out(enc.done(), 'gif')
 }
 
-async function encodeWebm(width: number, height: number, frames: AnimFrame[], onProgress?: (done: number) => void): Promise<Uint8Array | null> {
+async function encodeWebm(width: number, height: number, frames: AnimFrame[], onProgress?: (done: number) => void, audio?: AudioTrack | null): Promise<Uint8Array | null> {
   const size = fitSize(width, height, 4096)
   for (const [codec, id] of [
     ['vp09.00.10.08', 'V_VP9'],
@@ -276,9 +278,84 @@ async function encodeWebm(width: number, height: number, frames: AnimFrame[], on
     enc.close()
     if (failed) continue
     chunks.sort((a, b) => a.time - b.time)
-    return muxWebm(chunks, { ...size, codec: id, duration: t })
+    return muxWebm(chunks, { ...size, codec: id, duration: t, audio: audio ?? undefined })
   }
   return null
+}
+
+export const canEncodeSound = () => typeof AudioEncoder !== 'undefined' && typeof AudioData !== 'undefined'
+
+/** Opus chunks for a WebM sound track, or null where the webview has no Opus encoder. */
+export async function encodeOpus(buffer: AudioBuffer): Promise<AudioTrack | null> {
+  if (!canEncodeSound()) return null
+  const sampleRate = 48000
+  const channels = Math.min(2, buffer.numberOfChannels)
+  const config: AudioEncoderConfig = { codec: 'opus', sampleRate, numberOfChannels: channels, bitrate: 128_000 }
+  if (buffer.sampleRate !== sampleRate || !(await AudioEncoder.isConfigSupported(config).catch(() => null))?.supported) return null
+  const chunks: VideoChunk[] = []
+  let codecPrivate: Uint8Array | null = null
+  let failed: unknown = null
+  const enc = new AudioEncoder({
+    output: (chunk, meta) => {
+      const data = new Uint8Array(chunk.byteLength)
+      chunk.copyTo(data)
+      chunks.push({ data, time: chunk.timestamp / 1000, key: true })
+      const d = meta?.decoderConfig?.description
+      if (d && !codecPrivate) codecPrivate = new Uint8Array(ArrayBuffer.isView(d) ? d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength) : d)
+    },
+    error: (e) => (failed = e),
+  })
+  enc.configure(config)
+  // One second at a time, planar float like the AudioBuffer holds it.
+  for (let at = 0; at < buffer.length && !failed; at += sampleRate) {
+    const n = Math.min(sampleRate, buffer.length - at)
+    const planes = new Float32Array(n * channels)
+    for (let c = 0; c < channels; c++) planes.set(buffer.getChannelData(c).subarray(at, at + n), c * n)
+    const ad = new AudioData({ format: 'f32-planar', sampleRate, numberOfFrames: n, numberOfChannels: channels, timestamp: Math.round((at / sampleRate) * 1e6), data: planes })
+    enc.encode(ad)
+    ad.close()
+  }
+  if (!failed) await enc.flush().catch((e) => (failed = e))
+  enc.close()
+  if (failed || !chunks.length) return null
+  // shortcut: without an OpusHead from the encoder, build the standard one (no pre-skip info), when a player complains use the encoder's.
+  codecPrivate ??= opusHead(channels, sampleRate)
+  return { chunks, sampleRate, channels, codecPrivate }
+}
+
+function opusHead(channels: number, rate: number): Uint8Array {
+  const b = new Uint8Array(19)
+  b.set([...'OpusHead'].map((c) => c.charCodeAt(0)))
+  const v = new DataView(b.buffer)
+  b[8] = 1
+  b[9] = channels
+  v.setUint16(10, 312, true)
+  v.setUint32(12, rate, true)
+  return b
+}
+
+/** A 16-bit WAV file (Storyboard: the animatic's sound mix on its own). */
+export function wavBytes(buffer: AudioBuffer): Uint8Array {
+  const ch = buffer.numberOfChannels
+  const n = buffer.length
+  const out = new Uint8Array(44 + n * ch * 2)
+  const v = new DataView(out.buffer)
+  const text = (at: number, s: string) => [...s].forEach((c, i) => (out[at + i] = c.charCodeAt(0)))
+  text(0, 'RIFF')
+  v.setUint32(4, 36 + n * ch * 2, true)
+  text(8, 'WAVEfmt ')
+  v.setUint32(16, 16, true)
+  v.setUint16(20, 1, true)
+  v.setUint16(22, ch, true)
+  v.setUint32(24, buffer.sampleRate, true)
+  v.setUint32(28, buffer.sampleRate * ch * 2, true)
+  v.setUint16(32, ch * 2, true)
+  v.setUint16(34, 16, true)
+  text(36, 'data')
+  v.setUint32(40, n * ch * 2, true)
+  const data = [...Array(ch)].map((_, c) => buffer.getChannelData(c))
+  for (let i = 0, at = 44; i < n; i++) for (let c = 0; c < ch; c++, at += 2) v.setInt16(at, Math.max(-1, Math.min(1, data[c][i])) * 0x7fff, true)
+  return out
 }
 
 /** Time-lapse frames from the recorded assets, then the finished picture. */
