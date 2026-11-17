@@ -16,6 +16,7 @@ import {
 } from '@/shared/calculators'
 import { formatNumber, FUNCTION_HELP, libraryFor } from '@/shared/formulas'
 import { activeFormula, evaluateDoc, filledValues, rangeRows, switchFormula, withRangeVariable } from './logic'
+import { ScoreSection, TtkSection } from './Extras'
 import './damage-calculator.css'
 
 const T = {
@@ -171,6 +172,8 @@ export function DamageCalculator({ documentId, doc: raw }: { documentId: Id; doc
           </section>
 
           <RangeSection data={data} update={update} resultLabel={f.resultLabel} variables={f.variables.map((v) => ({ name: v.name, label: v.label }))} />
+          <TtkSection data={data} update={update} />
+          <ScoreSection data={data} update={update} />
         </div>
       </div>
     </div>

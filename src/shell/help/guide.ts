@@ -535,6 +535,8 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     body: [
       'A library of damage formulas grouped by game type: elemental reactions, armor, crits, damage over time, resistances and more.',
       'Pick a formula, enter values and see the result, or write your own formulas. Each preset is its own document.',
+      'Time to kill (for shooters) compares weapons: damage, shots per minute and how damage falls off with distance. It shows the shots and the time each weapon needs against a target with the health and armour you set, and a chart of time to kill over distance.',
+      'Score stack (for card games and roguelites) starts with two numbers, like Chips and Mult, and changes them step by step from top to bottom: add to one, or multiply one, as many times as you set. The score is the two multiplied. Turn a step off to see the score without it, and move steps up or down to see why order matters.',
     ],
   },
   'level-calculator': {
@@ -583,6 +585,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Banner: set the tiers and their rates (or use the project rarities), hard and soft pity, the featured chance and the guarantee after losing a 50/50, and how many featured copies you want.',
       'The simulator plays thousands of players and shows the average pulls, how many pulls 50, 90 and 99% of players need, what that costs, and a chart of players done by pull.',
       'Chest / drop table: list what can drop, either one entry picked by weight or each entry with its own chance, or load an enemy drop table. Mark one entry as the target to see its chance per opening and how many openings a 50, 90 or 99% chance takes.',
+      'Offers (pick 1 of N) is for shops, level-up choices and card drafts: a pool with weights, how many choices are shown and how many offers a run has. Mark the thing the player wants as the target to see how often it shows up in the first offer, by the last offer, and on which offer on average. Tick What you take leaves the pool when a taken choice can\'t come back.',
     ],
   },
   spreadsheet: {

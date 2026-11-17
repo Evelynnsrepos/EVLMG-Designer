@@ -129,3 +129,39 @@
 .dmg-result p {
   margin: 0;
 }
+.dmg-extra > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.dmg-extra > summary h3 {
+  display: inline;
+  margin-right: 8px;
+}
+.dmg-extra > summary::before {
+  content: '▸ ';
+  color: var(--text-muted);
+}
+.dmg-extra[open] > summary::before {
+  content: '▾ ';
+}
+.dmg-ttk-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  margin: 8px 0;
+}
+.dmg-ttk-wrap {
+  overflow-x: auto;
+}
+.dmg-ttk td .input.calc-number {
+  width: 72px;
+  min-width: 0;
+}
+.dmg-ttk td > .input {
+  width: 130px;
+  min-width: 0;
+}
+.dmg-ttk td select.input {
+  width: 110px;
+}
