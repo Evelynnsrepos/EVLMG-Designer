@@ -1,0 +1,127 @@
+.lo {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.lo-head {
+  padding: 0 12px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lo-head .btn.on {
+  background: var(--accent);
+  color: #fff;
+}
+.lo-start {
+  margin-left: auto;
+}
+.lo-warn {
+  padding: 0 12px;
+}
+.lo-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 12px;
+}
+.lo-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lo-ruler,
+.lo-row {
+  display: flex;
+}
+.lo-rowname {
+  width: 110px;
+  flex: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  position: sticky;
+  left: 0;
+  background: var(--bg);
+  z-index: 2;
+}
+.lo-week {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-left: 1px solid var(--border);
+  padding-left: 3px;
+}
+.lo-lane {
+  position: relative;
+  flex: 1;
+  background-image: linear-gradient(to right, var(--border) 1px, transparent 1px);
+  background-size: 56px 100%;
+}
+.lo-bar {
+  position: absolute;
+  height: 26px;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  user-select: none;
+}
+.lo-bar.movable {
+  cursor: grab;
+}
+.lo-bar-text {
+  flex: 1;
+  padding: 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lo-bar-input {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font: inherit;
+  width: 100%;
+}
+.lo-bar-size {
+  width: 8px;
+  align-self: stretch;
+  cursor: ew-resize;
+  background: rgb(255 255 255 / 0.25);
+}
+.lo-hint {
+  margin-top: 10px;
+}
+.lo-body {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.lo-body h3 {
+  margin: 6px 0 0;
+}
+.lo-table {
+  width: auto;
+}
+.lo-table .calc-number,
+.lo-table td > .input {
+  max-width: 160px;
+}
+.lo-bad {
+  color: var(--danger);
+}
+.lo-warn-line {
+  color: var(--danger);
+  margin: 2px 0;
+  font-size: 13px;
+}
