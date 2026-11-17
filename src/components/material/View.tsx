@@ -13,6 +13,8 @@ import {
 import { LIGHTS, MaterialPreview, type PreviewShape } from '@/shared/material/preview'
 import { MaterialRenderer } from '@/shared/material/render'
 import { GraphView } from './GraphView'
+import { godotMaterial } from './godot'
+import { SendMenu } from '@/shell/editor/SendMenu'
 import { canvasBytes } from '@/shared/print'
 import './material.css'
 
@@ -40,7 +42,8 @@ const T = {
   another: 'Pick another material',
   anotherHint: 'Back to the gallery. Ctrl+Z brings this material back.',
   save: 'Save as images',
-  saveHint: 'One PNG per map, in a ZIP, with your slider settings baked in. Works in Godot, Unity, Blender and other engines.',
+  saveHint: 'One PNG per map, in a ZIP, with your slider settings baked in. Works in Godot, Unity, Blender and other engines. The ZIP also has a ready Godot material (.tres): unpack it into your Godot project and drop the .tres on a mesh.',
+  send: 'Send colour to…',
   size: 'Size',
   noGpu: 'This device has no WebGL2, which Material Lab needs to draw materials.',
   error: 'This material could not be drawn:',
@@ -258,11 +261,22 @@ export default function View({ documentId, active }: PanelProps) {
       const m = renderMaps(r, loadMaterial(graph), exportSize)
       const name = safeFileName(title)
       const files: Record<string, Uint8Array> = {}
-      for (const map of MAPS) if (m[map.key] || map.key === 'albedo') files[`${name}_${map.key}.png`] = await mapPng(map.key, m[map.key] ?? null, exportSize, graph)
+      const names: Partial<Record<MapKey, string>> = {}
+      for (const map of MAPS) if (m[map.key] || map.key === 'albedo') files[(names[map.key] = `${name}_${map.key}.png`)] = await mapPng(map.key, m[map.key] ?? null, exportSize, graph)
+      files[`${name}.tres`] = new TextEncoder().encode(godotMaterial(names))
       await saveBinaryFile({ title: T.save, defaultName: `${name} maps.zip`, bytes: zipSync(files), filter: { name: 'ZIP', extensions: ['zip'] } })
     } finally {
       setBusy(false)
     }
+  }
+
+  // the colour map with the sliders baked in, for tools that take a picture (Asset Pool, Moodboard, …)
+  const picture = async () => {
+    if (!graph) return null
+    const r = renderer()
+    r.variation = variation
+    const png = await mapPng('albedo', renderMaps(r, loadMaterial(graph), exportSize, ['albedo']).albedo ?? null, exportSize, graph)
+    return new Blob([png as Uint8Array<ArrayBuffer>], { type: 'image/png' })
   }
 
   const onKey = (e: React.KeyboardEvent) => {
@@ -376,6 +390,7 @@ export default function View({ documentId, active }: PanelProps) {
             </select>
           </label>
           <button onClick={() => void save()} disabled={busy}><Save size={16} /> {T.save}</button>
+          <SendMenu title={title} picture={picture} label={T.send} />
         </div>
       </aside>
     </div>
