@@ -20,11 +20,13 @@ import {
 } from './brushes'
 import { CurveEditor } from './CurveEditor'
 import { DrawingPad } from './DrawingPad'
+import { STARTERS } from './brushDefaults'
 import { useBrushLibrary } from './library'
 import { blobToMask, TextureEditor } from './TextureEditor'
 import './studio.css'
 
 const PAGES = [
+  'Easy',
   'Stroke path',
   'Stabilization',
   'Taper',
@@ -42,7 +44,7 @@ const PAGES = [
 type Page = (typeof PAGES)[number]
 
 /** Pages that edit brush-wide things, not the main or second half of a dual brush. */
-const WHOLE_BRUSH = new Set<Page>(['Properties', 'Dual brush', 'About this brush'])
+const WHOLE_BRUSH = new Set<Page>(['Easy', 'Properties', 'Dual brush', 'About this brush'])
 
 const UI = {
   title: 'Brush Studio',
@@ -54,6 +56,9 @@ const UI = {
   main: 'Main brush',
   second: 'Second brush',
   noGrain: 'No grain',
+  startFrom: 'Start from',
+  startHint: 'Picks a starting point and replaces the settings (Ctrl+Z goes back). Then fine-tune with the sliders below, or open the other pages for every setting.',
+  easyMore: 'Every other setting is on the pages on the left.',
   wetHint: 'Wet mix picks up the colors already on the layer and mixes them with the paint.',
   noDual: 'A dual brush paints two brushes along the same line and combines them.',
   addDual: 'Add a second brush',
@@ -84,7 +89,7 @@ export function BrushStudio({ brushId, color, onClose }: { brushId: Id; color: s
   const stored = useBrushLibrary((s) => s.brushes.find((b) => b.id === brushId))
   const replace = useBrushLibrary((s) => s.replaceBrush)
   const [draft, setDraft] = useState<BrushDef | undefined>(stored)
-  const [page, setPage] = useState<Page>('Stroke path')
+  const [page, setPage] = useState<Page>('Easy')
   const [target, setTarget] = useState<'main' | 'second'>('main')
   const hist = useRef<{ past: BrushDef[]; future: BrushDef[]; key: string; at: number }>({ past: [], future: [], key: '', at: 0 })
 
@@ -201,6 +206,43 @@ export function BrushStudio({ brushId, color, onClose }: { brushId: Id; color: s
                   {UI.second}
                 </button>
               </div>
+            )}
+            {page === 'Easy' && (
+              <>
+                <div className="studio-sub">{UI.startFrom}</div>
+                <div className="studio-starters">
+                  {STARTERS.map((t) => (
+                    <button
+                      key={t.id}
+                      className="btn btn-small"
+                      title={t.hint}
+                      onClick={() => commit({ ...draft, ...normalizeSettings({ ...t.settings, size: draft.size }) }, 'starter')}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="studio-note muted">{UI.startHint}</div>
+                {num('size', 'Size', s.minSize, s.maxSize, 'px')}
+                {num('opacity', 'Opacity', 0, 1)}
+                {!s.shapeImage && num('hardness', 'Hard edge', 0, 1, '%', '100% = crisp edge, 0% = soft')}
+                {num('streamline', 'Smooth lines', 0, 1, '%', 'Calmer lines that follow the pen a little later')}
+                {num('spacing', 'Spacing', 0.02, 1.5, '%', 'Distance between stamps: low = solid line, high = dots')}
+                {num('scatter', 'Scatter', 0, 2, '%', 'Stamps jump sideways from the line')}
+                <NumberRow
+                  label="Pointed ends"
+                  hint="How long the line grows and shrinks at its start and end"
+                  value={Math.max(s.taperStart, s.taperEnd)}
+                  min={0}
+                  max={400}
+                  unit="px"
+                  onChange={(v) => set({ taperStart: v, taperEnd: v, touchTaperStart: v, touchTaperEnd: v }, 'taper')}
+                />
+                {num('pressureSize', 'Pressure changes size', 0, 1)}
+                {num('pressureOpacity', 'Pressure changes opacity', 0, 1)}
+                {s.grain !== 'none' || s.grainImage ? num('grainDepth', 'Texture', 0, 1, '%', 'How strongly the paper grain shows') : null}
+                <div className="studio-note muted">{UI.easyMore}</div>
+              </>
             )}
             {page === 'Stroke path' && (
               <>

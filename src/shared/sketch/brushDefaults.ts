@@ -27,6 +27,20 @@ const nature: S = { rotation: 'random', randomize: true, sizeJitter: 0.5, scatte
 const pixel: S = { shape: 'square', hardness: 1, pressureSize: 0, streamline: 0, spacing: 0.05, alphaThreshold: 0.5, shapeFiltering: 'none', rotation: 0 }
 const blender: S = { dilution: 0, charge: 0, pull: 0.9, attack: 0.6, flow: 0.6, hardness: 0.4, pressureSize: 0.3, pressureOpacity: 0.7, spacing: 0.06 }
 
+/** Starting points for a new brush in the Brush Studio's Easy page (plain names, a few settings each). */
+export const STARTERS: { id: string; label: string; hint: string; settings: S }[] = [
+  { id: 'pen', label: 'Pen', hint: 'Clean, smooth lines with pointed ends', settings: ink },
+  { id: 'pencil', label: 'Pencil', hint: 'Grainy pencil on paper', settings: pencil },
+  { id: 'paint', label: 'Paint', hint: 'Soft paint that builds up', settings: paint },
+  { id: 'wet', label: 'Wet paint', hint: 'Mixes with the colours already on the layer', settings: wet },
+  { id: 'water', label: 'Watercolour', hint: 'See-through, darker at the edges', settings: water },
+  { id: 'airbrush', label: 'Airbrush', hint: 'Very soft spray', settings: air },
+  { id: 'marker', label: 'Marker', hint: 'Even colour, overlaps don’t get darker', settings: marker },
+  { id: 'stamps', label: 'Scattered stamps', hint: 'Shapes sprinkled along the line (leaves, stars, dots)', settings: { ...nature, shape: 'leaf' } },
+  { id: 'ribbon', label: 'Ribbon strip', hint: 'One image bent along the whole line (ropes, braids, chains). Pick the image on the Shape page', settings: { hardness: 1, pressureSize: 0.3, streamline: 0.5, ribbon: 'tile' } },
+  { id: 'pixel', label: 'Pixel', hint: 'Hard square pixels', settings: pixel },
+]
+
 const SETS: [setId: string, name: string, icon: string, brushes: Def[]][] = [
   [
     'sketching',

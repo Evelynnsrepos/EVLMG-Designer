@@ -413,3 +413,9 @@
   background: var(--placeholder);
   border-radius: 4px;
 }
+
+.studio-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
