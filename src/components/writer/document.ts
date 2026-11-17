@@ -54,3 +54,12 @@ export const SPEC_TEMPLATES: { id: string; label: string; html: string }[] = [
     html: '<h1>Postmortem: project or milestone</h1><h2>What we set out to do</h2><p></p><h2>What went well</h2><ul><li><p></p></li></ul><h2>What went wrong</h2><ul><li><p></p></li></ul><h2>What we change next time</h2><ul data-type="taskList"><li data-type="taskItem" data-checked="false"><p></p></li></ul>',
   },
 ]
+
+/** A print-ready page from the editor's own HTML, so pictures and [[links]] look as they do on screen. */
+export function printPage(title: string, body: string) {
+  const esc = (t: string) => t.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)
+  const css = `body{font-family:'Lexend Deca',system-ui,sans-serif;font-size:11pt;line-height:1.5;color:#111;margin:0}
+img{max-width:100%}h1,h2,h3{break-after:avoid}table{border-collapse:collapse}td,th{border:1px solid #999;padding:4px 6px}
+blockquote,.callout{border-left:3px solid #999;margin:8px 0;padding:4px 12px}pre{white-space:pre-wrap}@page{margin:18mm}`
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${css}</style></head><body>${body}</body></html>`
+}

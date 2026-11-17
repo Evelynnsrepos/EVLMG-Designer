@@ -2,6 +2,7 @@ import type { Editor } from '@tiptap/core'
 import { CircleHelp, Download, Eye, Highlighter, Info, ListTree, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { saveTextFile } from '@/core/export'
+import { printHtml } from '@/shared/print'
 import type { PanelProps } from '@/core/registry'
 import { collabNames, useDocument, useProjectStore, useSettings } from '@/core/state'
 import { useHotwheel } from '@/shared/hotwheel'
@@ -20,7 +21,7 @@ import {
 } from '@/shared/richtext'
 import { useArticleRefProvider } from '@/shared/wiki'
 import { importTextFiles } from './importFiles'
-import { createWriterDoc, EXPORT_FORMATS, SPEC_TEMPLATES, exportDocument, type ExportFormat, type WriterDoc } from './document'
+import { createWriterDoc, EXPORT_FORMATS, SPEC_TEMPLATES, exportDocument, printPage, type ExportFormat, type WriterDoc } from './document'
 import './writer.css'
 
 const UI = {
@@ -44,6 +45,7 @@ const UI = {
   copy: 'Copy as Markdown',
   copied: 'Copied',
   export: 'Export',
+  pdf: 'PDF (print dialog)…',
   exportTitle: (f: string) => `Export as ${f}`,
   syntax: 'Markdown Syntax',
   syntaxTitle: 'Format by typing symbols (==highlight==, > [!note], - [ ], #tag, ^[footnote]…) and turn pasted Markdown into formatting. Only for this document.',
@@ -126,7 +128,7 @@ export default function View({ documentId }: PanelProps) {
         </button>
         <ViewMenu view={view} setView={setView} />
         <ImportButton refs={refs} />
-        <ExportMenu onExport={runExport} onCopy={() => navigator.clipboard.writeText(exportDocument(ref.title, body, 'markdown', resolve).text)} />
+        <ExportMenu onExport={runExport} onPdf={() => editor && printHtml(printPage(ref.title, editor.view.dom.innerHTML))} onCopy={() => navigator.clipboard.writeText(exportDocument(ref.title, body, 'markdown', resolve).text)} />
       </header>
       <div className="writer-body">
       <div className="writer-page" style={{ '--writer-size': `${view.size}px`, '--writer-spacing': view.spacing, '--writer-width': view.width ? `${view.width}px` : 'none' } as CSSProperties}>
@@ -308,7 +310,7 @@ function ViewMenu({ view, setView }: { view: WriterView; setView: (patch: Partia
   )
 }
 
-function ExportMenu({ onExport, onCopy }: { onExport: (format: ExportFormat) => Promise<void>; onCopy: () => Promise<void> }) {
+function ExportMenu({ onExport, onPdf, onCopy }: { onExport: (format: ExportFormat) => Promise<void>; onPdf: () => void; onCopy: () => Promise<void> }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const root = useRef<HTMLDivElement>(null)
@@ -349,6 +351,16 @@ function ExportMenu({ onExport, onCopy }: { onExport: (format: ExportFormat) => 
               {EXPORT_FORMATS[f].label}
             </button>
           ))}
+          <button
+            role="menuitem"
+            className="writer-menu-item"
+            onClick={() => {
+              setOpen(false)
+              onPdf()
+            }}
+          >
+            {UI.pdf}
+          </button>
           <button role="menuitem" className="writer-menu-item" onClick={() => void onCopy().then(() => setCopied(true))}>
             {copied ? UI.copied : UI.copy}
           </button>

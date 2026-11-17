@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { exportDocument } from './document'
+import { exportDocument, printPage } from './document'
 
 const body = {
   type: 'doc',
@@ -27,5 +27,13 @@ describe('exportDocument', () => {
     const withHeading = { type: 'doc', content: [{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Lore' }] }] }
     const out = exportDocument('Lore', withHeading, 'markdown', resolve)
     expect(out.text.match(/# Lore/g)).toHaveLength(1)
+  })
+})
+
+describe('printPage', () => {
+  it('wraps the editor HTML in a page and escapes the title', () => {
+    const html = printPage('Tom & <Jerry>', '<p>Hi</p>')
+    expect(html).toContain('<title>Tom &#38; &#60;Jerry&#62;</title>')
+    expect(html).toContain('<body><p>Hi</p></body>')
   })
 })

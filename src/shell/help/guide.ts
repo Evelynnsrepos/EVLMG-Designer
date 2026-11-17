@@ -337,7 +337,7 @@ export const BASICS: Record<string, GuideTopic> = {
     body: [
       'Format by typing symbols. Turn on Markdown Syntax in a Writer document\'s header. Each document has its own switch.',
       'You do not have to remember any of it. The ? button in the Writer header opens Markdown help: a list of everything you can insert, with what to type shown next to it. Click a row to insert it. The + button in the toolbar has the same list, and so does typing / at the start of a line (keep typing to filter, Enter to pick).',
-      'The Writer also has: an outline of your headings to jump around (the list button in the header), find and replace (Ctrl+F or the magnifier, Replace all is one Ctrl+Z), tables from the + menu with add and delete for rows and columns, crossed out text and Remove formatting. View sets text size, line spacing and page width for all Writer documents on this computer. Export also has Copy as Markdown. Next to the word count is the reading time.',
+      'The Writer also has: an outline of your headings to jump around (the list button in the header), find and replace (Ctrl+F or the magnifier, Replace all is one Ctrl+Z), tables from the + menu with add and delete for rows and columns, crossed out text and Remove formatting. View sets text size, line spacing and page width for all Writer documents on this computer. Export also has Copy as Markdown, and PDF opens the print dialog, where you pick Save as PDF (pictures and links look as on screen). Next to the word count is the reading time.',
       'These always work, switch on or off: # Heading (up to ###), **bold**, *italic*, ~~strike~~, `code`, - list, 1. list, > quote.',
       '## With Markdown Syntax on',
       '==text== highlights it.',
