@@ -204,7 +204,7 @@ function ToolMap() {
           {edges.map((e, i) => {
             const a = layout.nodes.get(e.a)!
             const b = layout.nodes.get(e.b)!
-            const lit = hot && (e.a === hot || e.b === hot)
+            const lit = told && (e.a === told || e.b === told) // the tool pointed at, else where you are
             // Bowed, each to the side where it crosses the fewest lines and bubbles.
             const bow = edgePath(a, b, bends[i])
             return (

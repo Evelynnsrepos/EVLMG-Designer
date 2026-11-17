@@ -74,20 +74,21 @@
   stroke: color-mix(in srgb, var(--accent) 70%, var(--text));
   stroke-linecap: round;
   fill: none;
-  opacity: 0.6;
+  /* Very faint, so many links stay calm; only the lines of one tool (pointed at, or where you are) stand out. */
+  opacity: 0.16;
   pointer-events: stroke;
 }
 .tm-edge.route {
   stroke: var(--text-muted);
   stroke-dasharray: 2 7;
-  opacity: 0.5;
+  opacity: 0.22;
 }
 .tm-edge.on {
   stroke: var(--accent);
   opacity: 1;
 }
 .tm-edge.dim {
-  opacity: 0.1;
+  opacity: 0.06;
 }
 
 .tm-node {
