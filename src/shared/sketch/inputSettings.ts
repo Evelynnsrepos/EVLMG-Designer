@@ -36,6 +36,8 @@ export interface InputSettings {
    * while ticked (null = use the brush's own). Set in the side panel.
    */
   overrides: { streamline: number | null; stabilization: number | null; tether: number | null }
+  /** Draw: paint and move past the canvas edge, the working area grows (off by default: big areas cost memory). */
+  beyondCanvas: boolean
   /** Your own canvas sizes for new drawings. */
   canvasPresets: { name: string; width: number; height: number }[]
 }
@@ -52,6 +54,7 @@ export const defaultInputSettings = (): InputSettings => ({
   touchGestures: true,
   fingerDraws: true,
   overrides: { streamline: null, stabilization: null, tether: null },
+  beyondCanvas: false,
   canvasPresets: [],
 })
 
@@ -63,6 +66,7 @@ export function normalizeInputSettings(saved: Partial<InputSettings>): InputSett
   const quickMenus = Array.isArray(s.quickMenus) && s.quickMenus.length ? s.quickMenus.map(normalizeProfile) : d.quickMenus
   return {
     ...s,
+    beyondCanvas: s.beyondCanvas === true,
     steadyHold: typeof s.steadyHold === 'number' && Number.isFinite(s.steadyHold) ? Math.min(1, Math.max(0, s.steadyHold)) : d.steadyHold,
     pressureCurve: curve.length >= 2 && curve.length <= MAX_CURVE_POINTS ? curve : LINEAR,
     penButtons: { ...d.penButtons, ...s.penButtons },

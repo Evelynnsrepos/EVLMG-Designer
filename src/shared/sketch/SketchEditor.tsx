@@ -130,6 +130,8 @@ interface ShapeOffer {
 }
 
 const UI = {
+  beyondCanvas: 'Draw beyond the canvas',
+  beyondCanvasNote: 'Heads up: painting or moving far past the edge, or doing it on a big canvas, needs a lot more memory and can make drawing slower. Exports still only take what is on the canvas.',
   brush: 'Brush (B)',
   eraser: 'Eraser (E)',
   smudge: 'Smudge (S): drags the colors with the brush',
@@ -600,7 +602,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
    * Only between strokes; the view moves along so nothing jumps, and every layer is saved again at the new size.
    */
   const growTo = (r: Rect, margin: number) => {
-    if (!growable || engine.stroking) return null
+    if (!growable || !useInputSettings.getState().beyondCanvas || engine.stroking) return null
     const g = growFor(engine.width, engine.height, r, margin)
     if (!g) return null
     engine.grow(g, (m) => shiftDocData(m, g))
@@ -1601,6 +1603,15 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
             </select>
           </div>
           {panel}
+          {growable && (
+            <div className="sketch-beyond">
+              <label className="sketch-row">
+                <input type="checkbox" checked={input.beyondCanvas} onChange={(e) => input.update({ beyondCanvas: e.target.checked })} />
+                {UI.beyondCanvas}
+              </label>
+              {input.beyondCanvas && <p className="sketch-beyond-note">{UI.beyondCanvasNote}</p>}
+            </div>
+          )}
           <ColorPanel color={color} setColor={setColor} swatches={swatches === SWATCHES ? [] : swatches} drop={drop} colorSpace={colorSpace} onColorSpace={(cs) => void setColorSpace(cs)} />
 
           <section>
