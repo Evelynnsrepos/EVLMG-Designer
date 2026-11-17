@@ -3,8 +3,9 @@ import { CANVAS_BLENDS, type BlendMode } from './blend'
 import { shiftColor } from './brushColor'
 import { CurveFill, PathSmoother } from './brushPath'
 import { applyCurve, hasRealPressure, type CurvePoint } from './pen'
-import { GRAINS, grainCanvas, imageMask, imageTip, seeded, SHAPES, tipImage, type BrushGrain, type BrushShape } from './brushTextures'
-import { GpuSurface, rgb, type DabLook } from './gpuPaint'
+import { GRAINS, grainCanvas, imageMask, imageTip, seeded, shapeShade, SHAPES, tipImage, type BrushGrain, type BrushShape } from './brushTextures'
+import { isArtShape } from './brushArt'
+import { GpuSurface, OUTLINE_EDGE, OUTLINE_SIGMA, rgb, type DabLook } from './gpuPaint'
 
 /**
  * Brushes (v0.5, extended for Sketch Pro), with a Brush Library and Brush Studio:
@@ -55,6 +56,29 @@ export const GRAIN_BLENDS = [
   { id: 'lighten', label: 'Lighten' },
 ] as const
 export type GrainBlend = (typeof GRAIN_BLENDS)[number]['id']
+
+export const OUTLINE_COLORS = [
+  { id: 'main', label: 'Brush colour' },
+  { id: 'darker', label: 'Darker brush colour' },
+  { id: 'black', label: 'Black' },
+  { id: 'white', label: 'White' },
+] as const
+export type OutlineColor = (typeof OUTLINE_COLORS)[number]['id']
+
+export const OUTLINE_FILLS = [
+  { id: 'paint', label: 'Brush colour' },
+  { id: 'none', label: 'Nothing (hollow)' },
+  { id: 'clear', label: 'Clear: wipes what is under it, so outlines join up' },
+  { id: 'white', label: 'White' },
+] as const
+export type OutlineFill = (typeof OUTLINE_FILLS)[number]['id']
+
+/** The outline's colour for a brush colour. */
+export function outlineColorOf(b: BrushSettings, color: string): string {
+  const c = b.outlineColor
+  return c === 'black' ? '#000000' : c === 'white' ? '#ffffff' : c === 'darker' ? shiftColor(color, 0, 0.1, -0.45) : color
+}
+export const hasOutline = (b: BrushSettings) => (b.outline ?? 0) > 0
 
 export interface BrushSettings {
   // Properties
@@ -130,6 +154,12 @@ export interface BrushSettings {
   /** 0.31: images at the start and end of a ribbon (a bead, a band, a tip), as data URLs. */
   capStart?: string | null
   capEnd?: string | null
+  /** 0.35: width (px) of a line drawn around the stroke's whole shape, following it as you paint; 0 = off. */
+  outline?: number
+  /** 0.35: the outline's colour: the brush colour, a darker shade of it, black or white. */
+  outlineColor?: OutlineColor
+  /** 0.35: inside the outline: the brush colour, nothing (hollow), clear (also wipes what was there, so outlines join up) or white. */
+  outlineFill?: OutlineFill
   /** Turn stamps with the pen's direction (azimuth). */
   azimuth: boolean
   /** Flip each stamp at random. */
@@ -318,6 +348,9 @@ export const BASE_BRUSH: BrushSettings = {
   shaded: false,
   capStart: null,
   capEnd: null,
+  outline: 0,
+  outlineColor: 'main',
+  outlineFill: 'paint',
   azimuth: false,
   randomize: false,
   flipX: false,
@@ -424,6 +457,9 @@ export function normalizeSettings(b: Partial<BrushSettings>): BrushSettings {
   s.shapeImage = typeof s.shapeImage === 'string' && s.shapeImage ? s.shapeImage : null
   if (s.ribbon !== 'stretch' && s.ribbon !== 'tile') s.ribbon = 'off'
   s.shaded = s.shaded === true
+  s.outline = Math.max(0, Math.min(200, s.outline ?? 0))
+  s.outlineColor = oneOf(OUTLINE_COLORS, s.outlineColor, 'main')
+  s.outlineFill = oneOf(OUTLINE_FILLS, s.outlineFill, 'paint')
   s.capStart = typeof s.capStart === 'string' && s.capStart ? s.capStart : null
   s.capEnd = typeof s.capEnd === 'string' && s.capEnd ? s.capEnd : null
   s.grainImage = typeof s.grainImage === 'string' && s.grainImage ? s.grainImage : null
@@ -468,7 +504,9 @@ export function isWet(b: BrushSettings): boolean {
 }
 
 /** True when the brush's image keeps its own light and dark (needs a shape image). */
-export const isShaded = (b: BrushSettings) => !!b.shaded && !!b.shapeImage
+/** True when the brush's image has its own light and dark it can keep (an imported image or a built-in picture). */
+export const canShade = (b: BrushSettings) => !!b.shapeImage || isArtShape(b.shape)
+export const isShaded = (b: BrushSettings) => !!b.shaded && canShade(b)
 
 /** True when the brush bends its image along the stroke instead of stamping it. */
 export const isRibbon = (b: BrushSettings) => b.ribbon === 'stretch' || b.ribbon === 'tile'
@@ -477,6 +515,9 @@ export const isRibbon = (b: BrushSettings) => b.ribbon === 'stretch' || b.ribbon
 export function imageShade(src: string | null | undefined): HTMLCanvasElement | null {
   return (src && imageMask(src)?.shade) || null
 }
+
+/** The light and dark of a brush's own image or built-in picture. */
+const brushShade = (b: BrushSettings) => (b.shapeImage ? imageShade(b.shapeImage) : shapeShade(b.shape))
 
 /** True when each stamp gets its own colour (colour dynamics). */
 export function hasColorDynamics(b: BrushSettings): boolean {
@@ -510,7 +551,7 @@ export function brushReach(b: BrushSettings): number {
   const grow = (1 + b.sizeJitter + b.scatter * Math.max(1, b.count)) * (1 + b.tiltSize * 2) * (1 + Math.max(0, b.speedSize))
   // shortcut: ribbon caps are counted as up to 3 brush sizes long; a much longer cap image could be cut off by undo.
   const caps = isRibbon(b) && (b.capStart || b.capEnd) ? 3 : 1
-  return b.size * grow * caps * Math.max(1, b.dual ? b.dualScale * (1 + b.dual.scatter) : 1) + 4
+  return (b.outline ?? 0) * 1.2 + b.size * grow * caps * Math.max(1, b.dual ? b.dualScale * (1 + b.dual.scatter) : 1) + 4
 }
 
 // ---- Stamps -----------------------------------------------------------------
@@ -586,7 +627,7 @@ export function dabLook(b: BrushSettings): DabLook {
   const grain = b.grainMode === 'moving' && hasGrain(b) ? grainCanvas(b) : null
   return {
     tip: brushTip(b),
-    shade: isShaded(b) ? imageShade(b.shapeImage) : null,
+    shade: isShaded(b) ? brushShade(b) : null,
     filtering: b.shapeFiltering,
     grain: grain && { image: grain, scale: b.grainScale, zoom: b.grainZoom, rotation: b.grainRotation, movement: b.grainMovement, filtering: b.grainFiltering },
   }
@@ -961,7 +1002,7 @@ export class StrokeStamper {
       box.y1 = Math.max(box.y1, p.y + half)
     }
     const color = this.colored ? this.strokeColor : null
-    const shade = isShaded(b) ? imageShade(b.shapeImage) : null
+    const shade = isShaded(b) ? brushShade(b) : null
     // One strip per mirror copy (symmetry); mirroring each point also records how far the stroke reaches.
     const strips: number[][] = []
     for (let i = 0; i < verts.length; i += 5)
@@ -1044,7 +1085,7 @@ export class StrokeStamper {
       g.globalCompositeOperation = 'source-in'
       g.fillStyle = d.color
       g.fillRect(0, 0, s, s)
-      const shade = isShaded(b) ? imageShade(b.shapeImage) : null
+      const shade = isShaded(b) ? brushShade(b) : null
       if (shade) {
         // The image's greys shade the colour (hard light), then the tip's shape is cut out again.
         g.globalCompositeOperation = 'hard-light'
@@ -1253,6 +1294,7 @@ export function colorStroke(mask: HTMLCanvasElement, out: CanvasRenderingContext
     }
   }
   out.restore()
+  if (hasOutline(brush) && r.w > 0 && r.h > 0) outline2d(mask, out, color, brush, r)
   if (brush.alphaThreshold > 0 && r.w > 0 && r.h > 0) {
     const img = out.getImageData(r.x, r.y, r.w, r.h)
     const d = img.data
@@ -1260,6 +1302,64 @@ export function colorStroke(mask: HTMLCanvasElement, out: CanvasRenderingContext
     for (let i = 3; i < d.length; i += 4) d[i] = d[i] >= t && d[i] > 0 ? 255 : 0
     out.putImageData(img, r.x, r.y)
   }
+}
+
+let scratchO: HTMLCanvasElement | null = null
+export { OUTLINE_SIGMA }
+
+/**
+ * The outline around a stroke (Canvas 2D): a blurred copy of the stroke mask is low but not zero up to about the
+ * outline width away from it; that band outside the stroke is the outline. The fill inside is kept, removed or white.
+ */
+function outline2d(mask: HTMLCanvasElement, out: CanvasRenderingContext2D, color: string, b: BrushSettings, r: { x: number; y: number; w: number; h: number }) {
+  const W = out.canvas.width
+  const H = out.canvas.height
+  const sigma = b.outline! / OUTLINE_SIGMA
+  const pad = Math.ceil(sigma * 3)
+  const bx = Math.max(0, r.x - pad)
+  const by = Math.max(0, r.y - pad)
+  const bw = Math.min(W, r.x + r.w + pad) - bx
+  const bh = Math.min(H, r.y + r.h + pad) - by
+  if (bw <= 0 || bh <= 0) return
+  scratchO = scratch(scratchO, bw, bh)
+  const a = scratchO.getContext('2d', { willReadFrequently: true })!
+  a.clearRect(0, 0, bw, bh)
+  a.filter = `blur(${sigma}px)`
+  a.drawImage(mask, bx, by, bw, bh, 0, 0, bw, bh)
+  a.filter = 'none'
+  const blurred = a.getImageData(0, 0, bw, bh).data
+  a.clearRect(0, 0, bw, bh)
+  a.drawImage(mask, bx, by, bw, bh, 0, 0, bw, bh)
+  const m = a.getImageData(0, 0, bw, bh).data
+  const img = out.getImageData(bx, by, bw, bh)
+  const d = img.data
+  const [oc, fill] = [hexRgb(outlineColorOf(b, color)), b.outlineFill]
+  const [e0, e1] = OUTLINE_EDGE
+  for (let i = 0; i < d.length; i += 4) {
+    const t = Math.min(1, Math.max(0, (blurred[i + 3] / 255 - e0) / (e1 - e0)))
+    const ma = m[i + 3] / 255
+    const ring = t * t * (3 - 2 * t) * (1 - ma)
+    let fa = d[i + 3] / 255
+    let fr = d[i], fg = d[i + 1], fb = d[i + 2]
+    if (fill === 'none' || fill === 'clear') fa = 0
+    else if (fill === 'white') [fr, fg, fb, fa] = [255, 255, 255, ma]
+    const A = ring + fa * (1 - ring)
+    if (A <= 0) {
+      d[i + 3] = 0
+      continue
+    }
+    const k = (fa * (1 - ring)) / A
+    d[i] = oc[0] * (1 - k) + fr * k
+    d[i + 1] = oc[1] * (1 - k) + fg * k
+    d[i + 2] = oc[2] * (1 - k) + fb * k
+    d[i + 3] = A * 255
+  }
+  out.putImageData(img, bx, by)
+}
+
+function hexRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.replace('#', '').slice(0, 6).padEnd(6, '0'), 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
 
 const toLinear = new Float32Array(256).map((_, i) => {
@@ -1276,9 +1376,17 @@ export function compositeStroke(
   ctx: CanvasRenderingContext2D,
   paint: HTMLCanvasElement,
   brush: BrushSettings,
-  o: { erase: boolean; alphaLock: boolean; selection: Path2D | null; area?: Area },
+  o: { erase: boolean; alphaLock: boolean; selection: Path2D | null; area?: Area; clearInside?: HTMLCanvasElement | null },
 ) {
   const alpha = strokeAlpha(brush)
+  if (o.clearInside && !o.erase) {
+    // A 'clear' outline fill wipes the layer under the stroke, so a new outlined shape joins the ones below.
+    ctx.save()
+    if (o.selection) ctx.clip(o.selection)
+    ctx.globalCompositeOperation = 'destination-out'
+    ctx.drawImage(o.clearInside, 0, 0)
+    ctx.restore()
+  }
   if (brush.luminanceBlend && !o.erase) {
     const r = clampArea(o.area, ctx.canvas.width, ctx.canvas.height)
     if (r.w <= 0 || r.h <= 0) return

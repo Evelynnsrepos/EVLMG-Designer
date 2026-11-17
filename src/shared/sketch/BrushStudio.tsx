@@ -6,9 +6,12 @@ import { Modal } from '../ui'
 import { BLEND_MODES, CANVAS_BLENDS } from './blend'
 import {
   builtInBrush,
+  canShade,
   DUAL_MODES,
   FILTERINGS,
   GRAIN_BLENDS,
+  OUTLINE_COLORS,
+  OUTLINE_FILLS,
   isRibbon,
   normalizeBrush,
   normalizeSettings,
@@ -240,6 +243,8 @@ export function BrushStudio({ brushId, color, onClose }: { brushId: Id; color: s
                 />
                 {num('pressureSize', 'Pressure changes size', 0, 1)}
                 {num('pressureOpacity', 'Pressure changes opacity', 0, 1)}
+                {num('outline', 'Outline', 0, 60, 'px', 'A line around the shape you paint, following it as you draw')}
+                {(s.outline ?? 0) > 0 && choice('outlineFill', 'Inside the outline', OUTLINE_FILLS)}
                 {s.grain !== 'none' || s.grainImage ? num('grainDepth', 'Texture', 0, 1, '%', 'How strongly the paper grain shows') : null}
                 <div className="studio-note muted">{UI.easyMore}</div>
               </>
@@ -304,7 +309,7 @@ export function BrushStudio({ brushId, color, onClose }: { brushId: Id; color: s
                 {check('flipX', 'Flip left to right')}
                 {check('flipY', 'Flip upside down')}
                 {choice('shapeFiltering', 'Edges', FILTERINGS)}
-                {s.shapeImage && check('shaded', 'Keep the image’s light and dark (its greys shade the colour)')}
+                {canShade(s) && check('shaded', 'Keep the image’s light and dark (its greys shade the colour)')}
                 {choice('ribbon', 'Ribbon', [
                   { id: 'off', label: 'Off: stamps' },
                   { id: 'stretch', label: 'Bend the image along the stroke, stretched' },
@@ -341,6 +346,9 @@ export function BrushStudio({ brushId, color, onClose }: { brushId: Id; color: s
             )}
             {page === 'Rendering' && (
               <>
+                {num('outline', 'Outline', 0, 60, 'px', 'A line around the shape you paint, following it as you draw')}
+                {(s.outline ?? 0) > 0 && choice('outlineColor', 'Outline colour', OUTLINE_COLORS)}
+                {(s.outline ?? 0) > 0 && choice('outlineFill', 'Inside the outline', OUTLINE_FILLS)}
                 {num('height', 'Height (3D paint)', 0, 1, '%', 'Thick paint: strokes look raised and catch the light')}
                 <div className="studio-modes">
                   {RENDER_MODES.map((m) => (

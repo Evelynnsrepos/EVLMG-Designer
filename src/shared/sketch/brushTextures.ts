@@ -5,6 +5,8 @@
  * Everything is cached, so a stroke only builds each texture once.
  */
 
+import { ART_SHAPES, drawArt, isArtShape } from './brushArt'
+
 export const SHAPES = [
   { id: 'round', label: 'Round' },
   { id: 'square', label: 'Square' },
@@ -32,6 +34,7 @@ export const SHAPES = [
   { id: 'heart', label: 'Heart' },
   { id: 'hair', label: 'Hair strands' },
   { id: 'hex', label: 'Hexagon' },
+  ...ART_SHAPES,
 ] as const
 export type BrushShape = (typeof SHAPES)[number]['id']
 
@@ -356,7 +359,11 @@ export function tipImage(shape: BrushShape, hardness: number): HTMLCanvasElement
   }
   const rnd = seeded(shape.length * 977 + Math.round(hardness * 100))
   g.fillStyle = '#fff'
-  if (VALUE_SHAPES.has(shape)) {
+  if (isArtShape(shape)) {
+    g.drawImage(artCanvas(shape), 0, 0)
+    g.globalCompositeOperation = 'source-in'
+    g.fillRect(0, 0, TIP, TIP)
+  } else if (VALUE_SHAPES.has(shape)) {
     const m = new Uint8ClampedArray(TIP * TIP)
     for (let y = 0; y < TIP; y++) for (let x = 0; x < TIP; x++) m[y * TIP + x] = shapeValue(shape, x, y, TIP) * 255
     g.drawImage(maskCanvas(m, TIP, TIP), 0, 0)
@@ -472,6 +479,35 @@ export function tipImage(shape: BrushShape, hardness: number): HTMLCanvasElement
   } else soft(r, r, r)
   g.globalCompositeOperation = 'source-over'
   shapeCache.set(key, c)
+  return c
+}
+
+const artCache = new Map<string, HTMLCanvasElement>()
+
+/** A built-in picture (brushArt) in its greys, TIP px square, cached. */
+function artCanvas(shape: BrushShape): HTMLCanvasElement {
+  let c = artCache.get(shape)
+  if (!c) {
+    c = canvas(TIP)
+    const g = c.getContext('2d')!
+    g.scale(TIP / 128, TIP / 128)
+    if (isArtShape(shape)) drawArt(g, shape, seeded(shape.length * 7919 + shape.charCodeAt(0)))
+    artCache.set(shape, c)
+  }
+  return c
+}
+
+const artShades = new Map<string, HTMLCanvasElement>()
+
+/** The light and dark of a built-in picture (opaque grey), or null for shapes without one. */
+export function shapeShade(shape: BrushShape): HTMLCanvasElement | null {
+  if (!isArtShape(shape)) return null
+  let c = artShades.get(shape)
+  if (!c) {
+    const data = artCanvas(shape).getContext('2d')!.getImageData(0, 0, TIP, TIP).data
+    c = shadeCanvas(data, TIP, TIP)
+    artShades.set(shape, c)
+  }
   return c
 }
 

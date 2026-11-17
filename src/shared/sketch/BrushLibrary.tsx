@@ -32,6 +32,10 @@ import {
   Type,
   Upload,
   type LucideIcon,
+  Link,
+  Ribbon,
+  Sprout,
+  Waves,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { saveBinaryFile, safeFileName } from '@/core/export'
@@ -64,6 +68,10 @@ const SET_ICONS: Record<string, LucideIcon> = {
   eraser: Eraser,
   star: Star,
   heart: Heart,
+  link: Link,
+  ribbon: Ribbon,
+  sprout: Sprout,
+  waves: Waves,
   sparkles: Sparkles,
 }
 

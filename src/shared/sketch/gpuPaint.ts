@@ -44,6 +44,10 @@ export interface DabLook {
   grain: { image: TexImageSource; scale: number; zoom: number; rotation: number; movement: number; filtering: Filtering } | null
 }
 
+/** The outline's blur sigma is its width / OUTLINE_SIGMA; the band where the blurred stroke is between OUTLINE_EDGE's values is the outline's soft outer edge. */
+export const OUTLINE_SIGMA = 1.5
+export const OUTLINE_EDGE: [number, number] = [0.04, 0.095]
+
 /** Everything that turns a stroke mask into paint on a layer (colorStroke + compositeStroke on the GPU). */
 export interface StrokeLook {
   color: [number, number, number]
@@ -53,6 +57,8 @@ export interface StrokeLook {
   grain: { image: TexImageSource; gray: boolean; blend: BlendMode; scale: number; rotation: number; filtering: Filtering } | null
   wetEdges: number
   burntEdges: number
+  /** A line around the stroke's shape (null = none): width (px), blur sigma, colour, and the fill inside (0 paint, 1 clear, 2 none, 3 white). */
+  outline: { width: number; sigma: number; color: [number, number, number]; fill: number } | null
   burntColor: [number, number, number]
   /** Gaussian blur of the mask used by wet and burnt edges (px). */
   edgeBlur: number
@@ -313,11 +319,11 @@ void main() {
 /** colorStroke + compositeStroke: the stroke mask as paint on the layer below it (dst). */
 const APPLY_FRAG = `${HEADER}
 in vec2 uv;
-uniform sampler2D dst, mask, pred, grain, edges, relief, sel, wet;
-uniform vec2 doc, grainSize;
-uniform vec3 color, burntColor;
-uniform bool colored, usePred, useGrain, grainGray, useSel, erase, alphaLock, luminance, useWet;
-uniform int grainMode, mode;
+uniform sampler2D dst, mask, pred, grain, edges, relief, sel, wet, outl;
+uniform vec2 doc, grainSize, outlEdge;
+uniform vec3 color, burntColor, outlColor;
+uniform bool colored, usePred, useGrain, grainGray, useSel, erase, alphaLock, luminance, useWet, useOutline;
+uniform int grainMode, mode, outlFill;
 uniform float grainScale, grainRot, wetEdges, burntEdges, threshold, height, opacity;
 out vec4 outColor;
 ${GLSL_BLEND}
@@ -368,8 +374,17 @@ void main() {
     vec3 c = clamp(p.rgb / p.a * (1.0 + diffuse * 0.8 * height * cover) + spec, 0.0, 1.0);
     p = vec4(c * p.a, p.a);
   }
+  float clearA = 0.0;
+  if (useOutline && !useWet && !erase) {
+    // The blurred stroke is above zero up to about the outline width away: that band outside the stroke is the outline.
+    float ring = smoothstep(outlEdge.x, outlEdge.y, texture(outl, uv).r) * (1.0 - m.a);
+    vec4 fill = outlFill == 0 ? p : outlFill == 3 ? vec4(m.a) : vec4(0.0);
+    if (outlFill == 1) clearA = m.a;
+    p = vec4(outlColor * ring, ring) + fill * (1.0 - ring);
+  }
   float selA = useSel ? texture(sel, uv).a : 1.0;
   p *= selA;
+  d *= 1.0 - clearA * selA;
   if (useWet) { outColor = p + d * (1.0 - selA) * (1.0 - p.a); return; }
   if (erase) { outColor = d * (1.0 - p.a * opacity); return; }
   if (luminance) {
@@ -939,11 +954,12 @@ export class GpuPainter {
   applyStroke(dst: Tex, mask: Tex, pred: Tex | null, out: Tex, look: StrokeLook, r: Rect, sel: TexImageSource | null, wet: Tex | null = null) {
     const grow = (n: number) => clip({ x: r.x - n, y: r.y - n, w: r.w + 2 * n, h: r.h + 2 * n }, this.width, this.height)
     const edges = look.wetEdges > 0 || look.burntEdges > 0
+    const ol = look.outline
     // The blur passes read the stroke texture around the area too.
     let joined = mask
-    if (pred && (edges || look.height > 0)) {
+    if (pred && (edges || ol || look.height > 0)) {
       joined = this.temp('joined')
-      const big = grow(Math.ceil(look.edgeBlur * 3) + 6)
+      const big = grow(Math.ceil(Math.max(look.edgeBlur, ol?.sigma ?? 0) * 3) + 6)
       if (big) {
         this.copy(mask, joined, big)
         this.copy(pred, joined, big, 'source-over')
@@ -952,6 +968,10 @@ export class GpuPainter {
     if (edges) {
       const e = grow(Math.ceil(look.edgeBlur * 3) + 2)
       if (e) this.blur(joined, this.temp('edges'), e, look.edgeBlur)
+    }
+    if (ol) {
+      const e = grow(Math.ceil(ol.sigma * 3) + 2)
+      if (e) this.blur(joined, this.temp('outline'), e, ol.sigma)
     }
     if (look.height > 0 && !look.erase) {
       const e = grow(8)
@@ -970,6 +990,7 @@ export class GpuPainter {
     this.bind(5, look.height > 0 ? this.temp('relief').tex : null, p, 'relief')
     this.bind(6, sel ? this.selection(sel) : null, p, 'sel')
     this.bind(7, wet?.tex ?? null, p, 'wet')
+    this.bind(8, ol ? this.temp('outline').tex : null, p, 'outl')
     const gi = g?.image as { width: number; height: number } | undefined
     this.set(p, {
       doc: [this.width, this.height],
@@ -992,7 +1013,11 @@ export class GpuPainter {
       threshold: look.alphaThreshold,
       height: Math.min(1, look.height),
       opacity: look.opacity,
+      useOutline: !!ol,
+      outlColor: ol?.color ?? [0, 0, 0],
+      outlEdge: OUTLINE_EDGE,
     })
+    this.seti(p, 'outlFill', ol?.fill ?? 0)
     this.seti(p, 'grainMode', g ? blendIndex(g.blend) : 0)
     this.seti(p, 'mode', blendIndex(look.blend))
     this.drawQuad()

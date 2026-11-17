@@ -1,6 +1,6 @@
 import type { Id } from '@/core/model'
 import { blendPixel, CANVAS_BLENDS, type BlendMode } from './blend'
-import { brushReach, colorStroke, compositeStroke, hasColorDynamics, hasGrain, isShaded, isWet, strokeAlpha, StrokeStamper, type BrushSettings } from './brushes'
+import { brushReach, colorStroke, compositeStroke, hasColorDynamics, hasGrain, hasOutline, isShaded, OUTLINE_SIGMA, outlineColorOf, isWet, strokeAlpha, StrokeStamper, type BrushSettings } from './brushes'
 import { shiftColor } from './brushColor'
 import { grainCanvas } from './brushTextures'
 import { WetStamper } from './brushWet'
@@ -408,6 +408,7 @@ export class SketchEngine {
       grain: grain && { image: grain, gray, blend: (gray ? b.grainBlend : 'source-over') as BlendMode, scale: b.grainScale * (1 + (b.size / 40 - 1) * b.grainZoom), rotation: b.grainRotation, filtering: b.grainFiltering },
       wetEdges: b.wetEdges,
       burntEdges: b.burntEdges,
+      outline: opts.erase || !hasOutline(b) ? null : { width: b.outline!, sigma: b.outline! / OUTLINE_SIGMA, color: rgb(outlineColorOf(b, opts.color)), fill: (['paint', 'clear', 'none', 'white'] as const).indexOf(b.outlineFill ?? 'paint') },
       burntColor: rgb(shiftColor(opts.color, 0, 0.1, -0.35)),
       edgeBlur: Math.max(1.5, b.size * 0.12),
       alphaThreshold: b.alphaThreshold,
@@ -446,7 +447,7 @@ export class SketchEngine {
     let r = final ? union(this.strokeArea(opts), g.predRect) : union(changed, p)
     if (!r) return
     // Wet and burnt edges and 3D paint look at the mask around a pixel, so a stamp changes a bit more.
-    const pad = final ? 0 : Math.ceil(Math.max(g.look.wetEdges || g.look.burntEdges ? g.look.edgeBlur * 3 : 0, g.look.height > 0 ? 6 : 0)) + 1
+    const pad = final ? 0 : Math.ceil(Math.max(g.look.wetEdges || g.look.burntEdges ? g.look.edgeBlur * 3 : 0, g.look.height > 0 ? 6 : 0, (g.look.outline?.width ?? 0) * 1.2)) + 1
     r = clip({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad }, this.width, this.height)
     if (!r) return
     this.gpu!.applyStroke(this.tex(g.layerId), g.surf.t, final ? null : (g.pred?.t ?? null), g.preview, g.look, r, this.sel?.canvas ?? null, this.wetWork)
@@ -497,7 +498,7 @@ export class SketchEngine {
   /** Paint the GPU stroke again inside `r` (after predicted points there went away). */
   private repaint(r: Rect) {
     const g = this.g!
-    const pad = Math.ceil(g.look.wetEdges || g.look.burntEdges ? g.look.edgeBlur * 3 : 0) + 8
+    const pad = Math.ceil(Math.max(g.look.wetEdges || g.look.burntEdges ? g.look.edgeBlur * 3 : 0, (g.look.outline?.width ?? 0) * 1.2)) + 8
     const c = clip({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad }, this.width, this.height)
     if (!c) return
     this.gpu!.applyStroke(this.tex(g.layerId), g.surf.t, g.pred?.t ?? null, g.preview, g.look, c, this.sel?.canvas ?? null, this.wetWork)
@@ -610,7 +611,8 @@ export class SketchEngine {
     colorStroke(mask, this.paint.ctx, opts.erase ? '#000' : opts.color, opts.brush, area)
     if (opts.brush.height > 0 && !opts.erase) applyRelief(this.paint.ctx, mask, area, opts.brush.height)
     this.keepSelected(this.paint.ctx)
-    compositeStroke(ctx, this.paint.canvas, opts.brush, { erase: opts.erase, alphaLock: opts.layer.alphaLock, selection: null, area })
+    const clearInside = hasOutline(opts.brush) && opts.brush.outlineFill === 'clear' ? mask : null
+    compositeStroke(ctx, this.paint.canvas, opts.brush, { erase: opts.erase, alphaLock: opts.layer.alphaLock, selection: null, area, clearInside })
   }
 
   /** Finish the stroke: merge it into the layer and record undo. Returns the changed layer. */

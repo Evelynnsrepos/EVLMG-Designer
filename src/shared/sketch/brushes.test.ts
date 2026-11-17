@@ -63,3 +63,19 @@ describe('ribbon, shading and caps (0.31)', () => {
     expect(isRibbon({ ...BASE_BRUSH, ribbon: 'tile' })).toBe(true)
   })
 })
+
+describe('v0.35 brushes', () => {
+  it('outline settings are cleaned up', () => {
+    const b = normalizeBrush({ ...BASE_BRUSH, outline: -3, outlineColor: 'pink' as never, outlineFill: 'x' as never } as never)
+    expect([b.outline, b.outlineColor, b.outlineFill]).toEqual([0, 'main', 'paint'])
+  })
+  it('built-in pictures can keep their light and dark', () => {
+    expect(isShaded({ ...BASE_BRUSH, shaded: true, shape: 'rope' })).toBe(true)
+  })
+  it('new built-in brushes keep their own shapes', () => {
+    const lib = defaultLibrary()
+    for (const id of ['rope', 'chain', 'satin-ribbon', 'oak-leaves', 'box-braid', 'locs', 'coils', 'outline-marker']) expect(lib.brushes.find((b) => b.id === id)).toBeTruthy()
+    expect(lib.brushes.find((b) => b.id === 'cornrow')?.shape).toBe('braid-flat')
+    expect(new Set(lib.brushes.map((b) => b.id)).size).toBe(lib.brushes.length)
+  })
+})

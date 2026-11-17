@@ -27,6 +27,11 @@ const nature: S = { rotation: 'random', randomize: true, sizeJitter: 0.5, scatte
 const pixel: S = { shape: 'square', hardness: 1, pressureSize: 0, streamline: 0, spacing: 0.05, alphaThreshold: 0.5, shapeFiltering: 'none', rotation: 0 }
 const blender: S = { dilution: 0, charge: 0, pull: 0.9, attack: 0.6, flow: 0.6, hardness: 0.4, pressureSize: 0.3, pressureOpacity: 0.7, spacing: 0.06 }
 
+const strip: S = { hardness: 1, ribbon: 'tile', shaded: true, pressureSize: 0.2, pressureOpacity: 0, streamline: 0.5, spacing: 0.05, stampPreview: false }
+const plant: S = { ...nature, shaded: true, rotation: 0, randomize: true, rotationJitter: 0.08, brightJitter: 0.15, hueJitter: 0.03 }
+const outlined: S = { hardness: 1, pressureSize: 0.2, streamline: 0.4, spacing: 0.04, outline: 4 }
+const coils: S = { shape: 'coil', rotation: 'random', randomize: true, scatter: 0.6, count: 4, spacing: 0.25, sizeJitter: 0.4, brightJitter: 0.08, pressureSize: 0.4, pressureOpacity: 0.3, stampPreview: false }
+
 /** Starting points for a new brush in the Brush Studio's Easy page (plain names, a few settings each). */
 export const STARTERS: { id: string; label: string; hint: string; settings: S }[] = [
   { id: 'pen', label: 'Pen', hint: 'Clean, smooth lines with pointed ends', settings: ink },
@@ -38,6 +43,7 @@ export const STARTERS: { id: string; label: string; hint: string; settings: S }[
   { id: 'marker', label: 'Marker', hint: 'Even colour, overlaps don’t get darker', settings: marker },
   { id: 'stamps', label: 'Scattered stamps', hint: 'Shapes sprinkled along the line (leaves, stars, dots)', settings: { ...nature, shape: 'leaf' } },
   { id: 'ribbon', label: 'Ribbon strip', hint: 'One image bent along the whole line (ropes, braids, chains). Pick the image on the Shape page', settings: { hardness: 1, pressureSize: 0.3, streamline: 0.5, ribbon: 'tile' } },
+  { id: 'outline', label: 'Outline', hint: 'Hollow: only a line around the shape you paint, and touching shapes join up', settings: { hardness: 1, pressureSize: 0, streamline: 0.4, spacing: 0.04, outline: 4, outlineFill: 'clear' } },
   { id: 'pixel', label: 'Pixel', hint: 'Hard square pixels', settings: pixel },
 ]
 
@@ -203,6 +209,12 @@ const SETS: [setId: string, name: string, icon: string, brushes: Def[]][] = [
       ['panel-liner', 'Panel Liner', { ...comic, size: 6, pressureSize: 0, streamline: 0.9 }],
       ['spot-black', 'Spot Black', { ...comic, size: 60, pressureSize: 0.2 }],
       ['gritty-ink', 'Gritty Ink', { ...comic, size: 14, shape: 'chalk', grain: 'rough', grainDepth: 0.5, pressureSize: 0.8, taperEnd: 30 }],
+      ['outline-marker', 'Outline Marker (hollow)', { ...outlined, size: 40, outlineFill: 'clear' }],
+      ['bubble-outline', 'Bubble Outline', { ...outlined, size: 50, outline: 5, outlineFill: 'white' }],
+      ['ink-fill', 'Ink Outline Fill', { ...outlined, size: 30, outlineColor: 'black' }],
+      ['sticker-outline', 'Sticker Outline', { ...outlined, size: 30, outline: 12, outlineColor: 'white' }],
+      ['toon-shape', 'Toon Shape', { ...outlined, size: 20, outline: 3, outlineColor: 'darker', pressureSize: 0.6, taperStart: 30, taperEnd: 40 }],
+      ['double-line', 'Double Line', { ...outlined, size: 8, outline: 2, outlineFill: 'none', pressureSize: 0 }],
     ],
   ],
   [
@@ -246,6 +258,91 @@ const SETS: [setId: string, name: string, icon: string, brushes: Def[]][] = [
       ['pixel-square', 'Pixel Square', { ...pixel, size: 4 }],
       ['pixel-round', 'Pixel Round', { ...pixel, shape: 'round', size: 6 }],
       ['dither', 'Dither', { ...pixel, size: 16, grain: 'halftone', grainDepth: 1, grainScale: 0.5, grainFiltering: 'none' }],
+    ],
+  ],
+  [
+    'ropes',
+    'Ropes & Chains',
+    'link',
+    [
+      ['rope', 'Rope', { ...strip, size: 30, shape: 'rope' }],
+      ['ship-rope', 'Thick Rope', { ...strip, size: 64, shape: 'rope', grain: 'linen', grainDepth: 0.3 }],
+      ['cord', 'Twisted Cord', { ...strip, size: 12, shape: 'cord' }],
+      ['chain', 'Chain', { ...strip, size: 30, shape: 'chain', pressureSize: 0 }],
+      ['flat-chain', 'Flat Chain', { ...strip, size: 26, shape: 'chain-flat', pressureSize: 0 }],
+      ['ball-chain', 'Ball Chain', { ...strip, size: 18, shape: 'ball-chain', pressureSize: 0 }],
+      ['barbed-wire', 'Barbed Wire', { ...strip, size: 30, shape: 'barbed', pressureSize: 0 }],
+    ],
+  ],
+  [
+    'ribbons',
+    'Ribbons',
+    'ribbon',
+    [
+      ['satin-ribbon', 'Satin Ribbon', { ...strip, size: 40, shape: 'satin', pressureSize: 0.3 }],
+      ['twisting-ribbon', 'Twisting Ribbon', { ...strip, size: 50, shape: 'ribbon-twist' }],
+      ['flowing-ribbon', 'Flowing Ribbon', { ...strip, size: 40, shape: 'satin', ribbon: 'stretch', taperStart: 80, taperEnd: 80, touchTaperStart: 80, touchTaperEnd: 80, taperSize: 1, taperTip: 0.05 }],
+      ['stitched-ribbon', 'Stitched Ribbon', { ...strip, size: 40, shape: 'ribbon-stitched' }],
+      ['striped-ribbon', 'Striped Ribbon', { ...strip, size: 40, shape: 'ribbon-striped' }],
+    ],
+  ],
+  [
+    'plants',
+    'Grass & Leaves',
+    'sprout',
+    [
+      ['grass-blades', 'Grass Blades', { ...plant, size: 70, shape: 'blade', count: 3, scatter: 0.5, spacing: 0.2, sizeJitter: 0.4 }],
+      ['lawn', 'Lawn', { ...plant, size: 30, shape: 'grass', count: 4, scatter: 0.6, spacing: 0.1, shaded: false }],
+      ['reeds', 'Tall Reeds', { ...plant, size: 120, shape: 'reed', spacing: 0.5, scatter: 0.4, sizeJitter: 0.3 }],
+      ['oak-leaves', 'Oak Leaves', { ...plant, size: 40, shape: 'oak-leaf', rotation: 'random', scatter: 0.9, count: 2 }],
+      ['maple-leaves', 'Maple Leaves', { ...plant, size: 40, shape: 'maple-leaf', rotation: 'random', scatter: 0.9, count: 2, hueJitter: 0.08 }],
+      ['round-leaves', 'Round Leaves', { ...plant, size: 36, shape: 'round-leaf', rotation: 'random', scatter: 0.8, count: 2 }],
+      ['fern', 'Fern Fronds', { ...plant, size: 90, shape: 'fern', rotation: 'random', spacing: 0.5, scatter: 0.6 }],
+      ['pine-needles', 'Pine Needles', { ...plant, size: 50, shape: 'pine', rotation: 'random', spacing: 0.35, scatter: 0.4 }],
+      ['vine', 'Vine', { ...strip, size: 40, shape: 'vine', pressureSize: 0.3 }],
+    ],
+  ],
+  [
+    'hair-coils',
+    'Hair: Coils & Curls',
+    'waves',
+    [
+      ['coils', 'Coils', { ...coils, size: 40 }],
+      ['coily-volume', 'Coily Volume (Afro)', { ...coils, size: 80, count: 6, scatter: 1, spacing: 0.15 }],
+      ['picked-out-edge', 'Picked-out Edge', { ...coils, size: 60, count: 3, scatter: 1.4, spacing: 0.4, opacity: 0.8 }],
+      ['short-natural', 'Short Natural (TWA)', { ...coils, size: 20, count: 5, scatter: 0.4, spacing: 0.15, pressureOpacity: 0.6 }],
+      ['ringlets', 'Ringlets', { shape: 'ringlet', shaded: true, rotation: 0, rotationJitter: 0.05, size: 50, spacing: 0.45, scatter: 0.3, sizeJitter: 0.25, pressureSize: 0.4, stampPreview: false }],
+      ['curl-clumps', 'Curl Clumps', { shape: 'ringlet', shaded: true, rotation: 'follow', size: 30, spacing: 0.3, count: 2, scatter: 0.5, sizeJitter: 0.3, stampPreview: false }],
+      ['bantu-knots', 'Bantu Knots', { shape: 'knot', shaded: true, rotation: 'random', size: 50, spacing: 1.5, pressureSize: 0.5 }],
+    ],
+  ],
+  [
+    'hair-braids',
+    'Hair: Braids, Twists & Locs',
+    'link',
+    [
+      ['box-braid', 'Box Braid', { ...strip, size: 24, shape: 'braid', pressureSize: 0.1 }],
+      ['thick-braid', 'Thick Plait', { ...strip, size: 50, shape: 'braid' }],
+      ['cornrow', 'Cornrow', { ...strip, size: 18, shape: 'braid-flat', streamline: 0.6 }],
+      ['two-strand-twist', 'Two-Strand Twist', { ...strip, size: 22, shape: 'twist' }],
+      ['senegalese-twist', 'Senegalese Twist', { ...strip, size: 16, shape: 'twist', streamline: 0.6 }],
+      ['locs', 'Locs', { ...strip, size: 26, shape: 'loc' }],
+      ['micro-locs', 'Micro Locs', { ...strip, size: 10, shape: 'loc' }],
+    ],
+  ],
+  [
+    'hair-strands',
+    'Hair: Strands, Waves & Edges',
+    'brush',
+    [
+      ['straight-strands', 'Straight Strands (sheen)', { ...strip, ribbon: 'stretch', size: 60, shape: 'strands', taperStart: 40, taperEnd: 90, touchTaperStart: 40, touchTaperEnd: 90, taperSize: 1, taperTip: 0.1 }],
+      ['fine-strands', 'Fine Strands', { ...strip, ribbon: 'stretch', size: 20, shape: 'strands', taperStart: 30, taperEnd: 60, touchTaperStart: 30, touchTaperEnd: 60, taperSize: 1, taperTip: 0.05 }],
+      ['wavy-clump', 'Wavy Clump (twist-out)', { ...strip, size: 50, shape: 'wave-strands', taperEnd: 60, touchTaperEnd: 60, taperSize: 1 }],
+      ['smooth-wrap', 'Smooth Wrap (buns)', { ...strip, size: 40, shape: 'strands' }],
+      ['edges', 'Edges (baby hairs)', { hardness: 1, size: 3, pressureSize: 1, taperStart: 10, taperEnd: 60, touchTaperStart: 10, touchTaperEnd: 60, taperTip: 0, streamline: 0.7, spacing: 0.04 }],
+      ['wave-pattern', '360 Waves', { ...strip, size: 16, shape: 'wave-strands', opacity: 0.75 }],
+      ['fade', 'Fade', { size: 80, hardness: 0, flow: 0.25, grain: 'noise', grainDepth: 0.6, pressureOpacity: 0.8, pressureSize: 0.2, spacing: 0.06 }],
+      ['line-up', 'Line-up Edge', { hardness: 1, size: 4, pressureSize: 0, streamline: 0.9, spacing: 0.04 }],
     ],
   ],
   [
