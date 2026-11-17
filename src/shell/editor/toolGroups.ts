@@ -77,6 +77,10 @@ export const TOOL_INFO: Partial<Record<ComponentType, { group: ToolGroupId; useW
  * Look-alike tools hidden from Add tool. Projects that have them keep them, with all their data;
  * the menu points to the tool to use instead when someone searches for them.
  */
-export const MOVED_TOOLS: Partial<Record<ComponentType, string>> = {}
+export const MOVED_TOOLS: Partial<Record<ComponentType, string>> = {
+  'story-writer': 'Dialogue Editor and Quests',
+  'design-language': 'Moodboard',
+  'resource-calculator': 'Economy Simulator',
+}
 
 export const toolGroup = (type: ComponentType): ToolGroupId => TOOL_INFO[type]?.group ?? 'more'
