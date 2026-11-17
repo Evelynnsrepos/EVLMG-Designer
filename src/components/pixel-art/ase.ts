@@ -1,5 +1,5 @@
-import { unzlibSync } from 'fflate'
-import { blank, rgbaToHex, type Img, type LoopMode } from '@/shared/pixel/model'
+import { unzlibSync, zlibSync } from 'fflate'
+import { blank, hexToRgba, rgbaToHex, type Img, type LoopMode } from '@/shared/pixel/model'
 
 /**
  * `.ase` / `.aseprite` import, written from the openly published file format description.
@@ -141,4 +141,103 @@ export function readAse(bytes: Uint8Array): AseFile {
   }
   for (const l of links) frames[l.frame].cels[l.layer] = frames[l.from]?.cels[l.layer]
   return { width, height, layers, frames, palette: palette.filter(Boolean), tags }
+}
+
+/**
+ * `.aseprite` save (pro fixes phase 5 #11): RGBA, one zlib cel per layer and frame cropped to its pixels,
+ * linked cels where a frame reuses the same picture, the palette and the tags. readAse reads it back the same.
+ */
+export function writeAse(f: AseFile): Uint8Array {
+  const out: number[] = []
+  const u8 = (n: number) => out.push(n & 255)
+  const u16 = (n: number) => (u8(n), u8(n >> 8))
+  const u32 = (n: number) => (u16(n), u16(n >>> 16))
+  const str = (s: string) => {
+    const b = new TextEncoder().encode(s)
+    u16(b.length)
+    b.forEach(u8)
+  }
+  const fill = (at: number, n: number) => [0, 8, 16, 24].forEach((sh, i) => (out[at + i] = (n >>> sh) & 255))
+  const chunk = (type: number, body: () => void) => {
+    const start = out.length
+    u32(0)
+    u16(type)
+    body()
+    fill(start, out.length - start)
+  }
+  // Header (128 bytes): size, magic, frames, size, 32-bit colour, "layer opacity is valid", speed, palette size, pixel ratio 1:1.
+  u32(0), u16(0xa5e0), u16(f.frames.length), u16(f.width), u16(f.height), u16(32), u32(1), u16(100), u32(0), u32(0)
+  u8(0), u8(0), u8(0), u8(0), u16(f.palette.length), u8(1), u8(1)
+  while (out.length < 128) u8(0)
+  const first = new Map<Img, number>()
+  f.frames.forEach((fr, fi) => {
+    const start = out.length
+    u32(0), u16(0xf1fa), u16(0), u16(fr.duration), u16(0), u32(0)
+    let chunks = 0
+    if (fi === 0) {
+      if (f.palette.length) {
+        chunks++
+        chunk(0x2019, () => {
+          u32(f.palette.length), u32(0), u32(f.palette.length - 1), u32(0), u32(0)
+          for (const hex of f.palette) {
+            const [r, g, b] = hexToRgba(hex)
+            u16(0), u8(r), u8(g), u8(b), u8(255)
+          }
+        })
+      }
+      for (const l of f.layers) {
+        chunks++
+        chunk(0x2004, () => {
+          u16((l.visible ? 1 : 0) | 2), u16(0), u16(0), u16(0), u16(0), u16(0), u8(Math.round(l.opacity * 255)), u8(0), u8(0), u8(0)
+          str(l.name)
+        })
+      }
+      if (f.tags.length) {
+        chunks++
+        chunk(0x2018, () => {
+          u16(f.tags.length), u32(0), u32(0)
+          for (const t of f.tags) {
+            u16(t.from), u16(t.to), u8(t.loop === 'reverse' ? 1 : t.loop === 'pingpong' ? 2 : 0), u16(0), u32(0), u16(0), u8(0), u8(0), u8(0), u8(0)
+            str(t.name)
+          }
+        })
+      }
+    }
+    fr.cels.forEach((img, li) => {
+      if (!img) return
+      const from = first.get(img)
+      const box = from === undefined ? bounds(img) : null
+      if (from === undefined && !box) return
+      chunks++
+      chunk(0x2005, () => {
+        u16(li), u16(box?.x ?? 0), u16(box?.y ?? 0), u8(255), u16(from === undefined ? 2 : 1), u16(0), u8(0), u8(0), u8(0), u8(0), u8(0)
+        if (from !== undefined) return u16(from)
+        const px = new Uint8Array(box!.w * box!.h * 4)
+        for (let y = 0; y < box!.h; y++) px.set(img.data.subarray(((box!.y + y) * img.width + box!.x) * 4, ((box!.y + y) * img.width + box!.x + box!.w) * 4), y * box!.w * 4)
+        u16(box!.w), u16(box!.h)
+        zlibSync(px).forEach(u8)
+      })
+      if (from === undefined) first.set(img, fi)
+    })
+    out[start + 6] = Math.min(chunks, 0xffff) & 255
+    out[start + 7] = (Math.min(chunks, 0xffff) >> 8) & 255
+    fill(start + 12, chunks)
+    fill(start, out.length - start)
+  })
+  fill(0, out.length)
+  return Uint8Array.from(out)
+}
+
+/** The smallest box around the visible pixels, or null when there are none. */
+function bounds(img: Img): { x: number; y: number; w: number; h: number } | null {
+  let x0 = img.width, y0 = img.height, x1 = -1, y1 = -1
+  for (let y = 0; y < img.height; y++)
+    for (let x = 0; x < img.width; x++)
+      if (img.data[(y * img.width + x) * 4 + 3]) {
+        if (x < x0) x0 = x
+        if (x > x1) x1 = x
+        if (y < y0) y0 = y
+        if (y > y1) y1 = y
+      }
+  return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }
 }

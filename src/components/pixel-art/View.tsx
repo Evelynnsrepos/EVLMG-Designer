@@ -17,7 +17,7 @@ import { pickFiles } from '@/shared/sketch/files/io'
 import { encodeGif } from '@/shared/sketch/files/gif'
 import { createLibrary, drawTile, FLIP_H, FLIP_V, LIBRARY_ID, tilePixel, tileRect, TRANSPOSE, turnFlags, type TileLibrary } from '@/shared/tileset'
 import { IMAGE_TARGETS, openComponent, sendImageTo } from '@/shell/editor/actions'
-import { readAse } from './ase'
+import { readAse, writeAse } from './ase'
 import { blit, celImg, decode, decodeFrames, encode, pngBytes, toCanvas, useDecoded } from '@/shared/pixel/codec'
 import { DEFAULT_SHEET, godotSpriteFrames, sheetJson, sheetLayout, type SheetOptions } from './exports'
 import {
@@ -1828,6 +1828,19 @@ function Editor({ doc, title, active, documentId }: { doc: UseDocumentResult<Pix
     })
     await saveBinaryFile({ title: 'Export GIF', defaultName: `${base}.gif`, bytes: encodeGif(frames), filter: { name: 'GIF animation', extensions: ['gif'] } })
   }
+  /** The whole sprite as one .aseprite file: layers (without tracing layers), frames, timing, palette and tags. */
+  const exportAse = async () => {
+    const own = d.layers.filter((l) => !l.reference)
+    const bytes = writeAse({
+      width: d.width,
+      height: d.height,
+      layers: own.map((l) => ({ name: l.name, visible: l.visible, opacity: l.opacity })),
+      frames: d.frames.map((f) => ({ duration: f.duration, cels: own.map((l) => imgOf(l.id, f.id)) })),
+      palette: d.palette ?? [],
+      tags: d.tags.map((t) => ({ name: t.name, from: t.from, to: t.to, loop: t.loop })),
+    })
+    await saveBinaryFile({ title: 'Save as .aseprite file', defaultName: `${base}.aseprite`, bytes, filter: { name: '.aseprite file', extensions: ['aseprite', 'ase'] } })
+  }
   const writeTo = async (folderTitle: string, sub: string[], files: [string, Uint8Array][]) => {
     const fs = getFs()
     const folder = await fs.pickFolder(folderTitle)
@@ -2139,6 +2152,9 @@ function Editor({ doc, title, active, documentId }: { doc: UseDocumentResult<Pix
                 <>
                   <button onClick={() => savePng(frameImg(fi), `${base}.png`)}>PNG of this frame</button>
                   <button onClick={() => void exportGif()}>GIF animation{playTag ? ' (the picked tag)' : ''}</button>
+                  <button onClick={() => void exportAse()} title="Layers, frames, timing, palette and tags in one .aseprite file for other pixel art apps. Blend modes and shape layers arrive as plain pixels.">
+                    .aseprite file
+                  </button>
                   <label className="px-row" onClick={(e) => e.stopPropagation()} title="How frames sit on the sprite sheet (also for Godot)">
                     Sheet
                     <select className="input" value={sheetOpts.layout} onChange={(e) => setSheetOpts({ ...sheetOpts, layout: e.target.value as SheetOptions['layout'] })}>

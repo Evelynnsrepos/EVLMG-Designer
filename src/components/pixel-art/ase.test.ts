@@ -58,3 +58,33 @@ describe('.ase import', () => {
     expect(f.tags).toEqual([{ name: 'walk', from: 0, to: 1, loop: 'pingpong' }])
   })
 })
+
+describe('.aseprite save', () => {
+  it('reads back what it wrote: layers, frames, durations, cels, links, palette and tags', async () => {
+    const { writeAse } = await import('./ase')
+    const { blank, setPx } = await import('@/shared/pixel/model')
+    const a = blank(4, 3)
+    setPx(a, 1, 1, [255, 0, 0, 255])
+    setPx(a, 3, 2, [0, 0, 255, 128])
+    const b = blank(4, 3)
+    setPx(b, 0, 0, [0, 255, 0, 255])
+    const file = {
+      width: 4,
+      height: 3,
+      layers: [{ name: 'Lines', visible: true, opacity: 1 }, { name: 'Färbung', visible: false, opacity: 0.5 }],
+      frames: [{ duration: 120, cels: [a, b] }, { duration: 80, cels: [a, undefined] }],
+      palette: ['#ff0000', '#00ff00'],
+      tags: [{ name: 'walk', from: 0, to: 1, loop: 'pingpong' as const }],
+    }
+    const back = readAse(writeAse(file))
+    expect(back.layers).toEqual([{ name: 'Lines', visible: true, opacity: 1 }, { name: 'Färbung', visible: false, opacity: 128 / 255 }])
+    expect(back.frames.map((f) => f.duration)).toEqual([120, 80])
+    expect(getPx(back.frames[0].cels[0]!, 1, 1)).toEqual([255, 0, 0, 255])
+    expect(getPx(back.frames[0].cels[0]!, 3, 2)).toEqual([0, 0, 255, 128])
+    expect(getPx(back.frames[1].cels[0]!, 1, 1)).toEqual([255, 0, 0, 255])
+    expect(getPx(back.frames[0].cels[1]!, 0, 0)).toEqual([0, 255, 0, 255])
+    expect(back.frames[1].cels[1]).toBeUndefined()
+    expect(back.palette).toEqual(['#ff0000', '#00ff00'])
+    expect(back.tags).toEqual(file.tags)
+  })
+})
