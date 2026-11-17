@@ -63,6 +63,7 @@ export const COMPONENT_TYPES = [
   'status-effects',
   'relationships',
   'live-ops',
+  'behaviour',
 ] as const
 
 export type BuiltInComponentType = (typeof COMPONENT_TYPES)[number]
