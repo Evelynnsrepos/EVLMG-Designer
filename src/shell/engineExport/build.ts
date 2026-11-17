@@ -28,6 +28,7 @@ type FlagCond = { flagId: string; op: string; value: number }
 export const DATA_TOOLS = [
   'abilities',
   'achievements',
+  'behaviour',
   'calendar',
   'crafting',
   'custom-list',

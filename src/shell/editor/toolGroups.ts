@@ -65,6 +65,7 @@ export const TOOL_INFO: Partial<Record<ComponentType, { group: ToolGroupId; useW
   crafting: { group: 'levels', useWhen: 'recipes and what they make' },
   achievements: { group: 'levels', useWhen: 'achievements and trophies' },
   'wave-planner': { group: 'levels', useWhen: 'enemy waves over time' },
+  behaviour: { group: 'levels', useWhen: 'how enemies and NPCs decide what to do' },
   code: { group: 'levels', useWhen: 'writing Godot scripts' },
   'damage-calculator': { group: 'numbers', useWhen: 'how much a hit does' },
   'level-calculator': { group: 'numbers', useWhen: 'experience and levels' },
