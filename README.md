@@ -245,6 +245,7 @@ beginner guides.
 | **Wiki** | Articles with `[[links]]`, articles made from any item, character, town or enemy (with a live info box), backlinks and a connection map. |
 | **Factions** | Factions with leaders, members and towns, and a matrix of how they feel about each other. |
 | **Family Tree** | Characters from the Character List as a family tree with parents, children and partners. |
+| **Relationships** | Friendship, romance and loyalty ranks per character: points per rank, loved and hated gifts, what each rank unlocks, when they're free and how many days it takes. |
 | **Map Creator** | Cities, streets, terrain stamps and zones (like the land of a faction) on a blank map, with PNG export. Cities are linked to the Town List; zones link to factions, characters, documents and more. |
 | **Cosmos Creator** | Universes, galaxies, solar systems, planets, moons and more in an isometric view, with your own pictures for any body. |
 | **Names & Languages** | Generate names in about 50 real-world styles (German, Polish, Japanese…) or from a made-up language's sounds, and build that language with a dictionary and translator. |
@@ -290,7 +291,9 @@ beginner guides.
 | **Level Layout** | Paint levels and dungeons on a square or isometric grid: doors, enemies, loot, spawns and numbered notes, select and move (per layer), brush sizes and zoom from 10 to 800 %, a see-through brush preview with snapping, stamps that repeat as you drag (fences, paths) and Shift for straight lines, and Scatter for details like rocks and flowers (scatter sets with tile groups, amount, spacing, clumping, only-on and re-roll). Tilesets shared by every level in a panel like Godot's (search, folders, colours, pop-out), multi-tile stamps, layers for see-through things, an import window with the grid, sharp pixel art, tiles that block movement (walls, fences, houses), and export as a Godot 4 TileMap scene with collision or a Tiled map (.tmx). |
 | **Gameplay Loop** | The loop players repeat as a circular timeline: flesh out each step, size steps by time, and branch notes off them. |
 | **Skill Tree** | Skill and talent trees with ranks, costs and requirements, plus a build planner. |
-| **Abilities & Spells** | Abilities and spells with costs, cooldowns and numbers from Damage Calculator formulas. |
+| **Abilities & Spells** | Abilities and spells with costs, cooldowns, numbers from Damage Calculator formulas and the status effects they apply. |
+| **Status Effects & Reactions** | Burn, Freeze, Stun and your own effects with durations, stacks, ticks and stat changes, and a grid of what happens when two elements meet. The Combat Simulator plays them out. |
+| **Behaviour Designer** | How enemies and NPCs decide what to do: states joined by arrows with conditions in plain words, a step-through test, and daily routines. |
 | **Crafting & Recipes** | Recipes with ingredients, stations and times, a crafting tree and the raw materials anything needs. |
 | **Wave Planner** | Waves of enemies with timing, health growth and drops, the damage per second each wave needs, and which weapons can keep up. |
 | **Achievements** | Achievements with how they unlock, points, rewards, hidden ones and how rare they should be. |
@@ -300,12 +303,12 @@ beginner guides.
 
 | Tool | What it does |
 |---|---|
-| **Damage Calculator** | A library of game damage formulas (elemental reactions, armor, crits, damage over time, resistances), plus your own formulas. |
+| **Damage Calculator** | A library of game damage formulas (elemental reactions, armor, crits, damage over time, resistances), plus your own formulas, a time-to-kill comparison of weapons over distance, and a score stack for card-game scoring. |
 | **Level Calculator** | XP curves, stat growth, and damage per level against a fixed defense or an enemy from your Enemy List. |
 | **Resource Calculator** | How many resources and how much play time a goal takes, using level-up costs and enemy drop rates. |
 | **Combat Simulator** | Two teams fight many times with a damage formula: win rates, fight length, damage and an example fight. |
-| **Economy Simulator** | Currency sources and sinks simulated over hours of play: balances, purchases and inflation warnings. |
-| **Gacha & Loot Simulator** | Banner rates, hard and soft pity and 50/50s simulated over thousands of players, plus chest and drop table chances. |
+| **Economy Simulator** | Currency sources and sinks simulated over hours of play: balances, purchases and inflation warnings, plus meters like hunger and stamina that change over time. |
+| **Gacha & Loot Simulator** | Banner rates, hard and soft pity and 50/50s simulated over thousands of players, chest and drop table chances, and pick-1-of-N offers for shops and level-ups. |
 | **Balance Dashboard** | Item and enemy numbers that stick out, the enemy difficulty curve and gaps in your data. |
 | **Spreadsheet** | Excel-style sheets: hundreds of Excel functions, formulas across sheets, a fill handle, cell formatting, Damage Calculator results in cells, `=STAT("Iron Sword", "Damage")` and live tables that read your lists (type over a STAT cell to change the entry), CSV import and export, charts, and frozen rows and columns. |
 
@@ -316,6 +319,7 @@ beginner guides.
 | **Vision & Pillars** | Elevator pitch, vision, player fantasy, selling points, design pillars, references and anti-goals on one page. |
 | **Scope Planner** | Every feature sorted into must, should, could, won't and cut, with effort against the days you have. |
 | **Task Board** | A to-do board with pictures, your own columns and categories, tasks linked to the entries they are about, estimates, milestones, "waits for" blockers and CSV for Jira or Linear. |
+| **Live-Service Planner** | The weeks after launch: versions and seasons, events, gacha banners, a battle pass and the store, with rerun warnings and battle pass days per player type. |
 | **Playtests** | Playtest sessions with scores and findings, scores per build and every open problem in one place. |
 | **Reviews** | Everything with a status or comments on one board, with a "needs review" filter. Approvals remember who signed off and show "changed since" when the content changes. |
 | **Pitch Deck** | Slides built from your vision, pillars, characters and items, presented full screen. |
