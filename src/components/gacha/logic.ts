@@ -59,7 +59,9 @@ export interface Loot {
 }
 
 export interface GachaDoc {
-  kind: 'banner' | 'loot'
+  /** 'offers' (missing tools 6a): older versions show these documents as a chest. */
+  kind: 'banner' | 'loot' | 'offers'
+  offers?: import('./offers').Offers
   banner: Banner
   loot: Loot
   runs: number

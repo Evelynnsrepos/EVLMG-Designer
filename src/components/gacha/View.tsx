@@ -7,6 +7,7 @@ import { LineChart, NumberInput, PresetHeader } from '@/shared/calculators'
 import { DEFAULT_RARITY_STYLES, isRarity, isStyled } from '@/shared/categories'
 import { formatNumber } from '@/shared/formulas'
 import { createGachaDoc, lootChances, newLootEntry, newTier, normalizeGachaDoc, simulateBanner, type Banner, type GachaDoc, type Loot, type LootEntry, type Tier } from './logic'
+import { createOffers, newOfferEntry, simulateOffers, type Offers } from './offers'
 import './gacha.css'
 
 const T = {
@@ -76,8 +77,13 @@ export default function View({ documentId, active }: PanelProps) {
           <button className={d.kind === 'loot' ? 'on' : ''} onClick={() => set({ kind: 'loot' })}>
             {T.loot}
           </button>
+          <button className={d.kind === 'offers' ? 'on' : ''} onClick={() => set({ kind: 'offers' })} title="Show a few, pick one: shops, level-up choices, card drafts">
+            Offers (pick 1 of N)
+          </button>
         </div>
-        {d.kind === 'banner' ? (
+        {d.kind === 'offers' ? (
+          <OffersView offers={d.offers ?? createOffers()} onChange={(offers) => set({ offers })} />
+        ) : d.kind === 'banner' ? (
           <BannerView banner={d.banner} runs={d.runs} onChange={(banner) => set({ banner })} onRuns={(runs) => set({ runs })} />
         ) : (
           <LootView loot={d.loot} onChange={(loot) => set({ loot })} />
@@ -384,6 +390,107 @@ function LootView({ loot, onChange }: { loot: Loot; onChange: (l: Loot) => void 
               ))}
             </tbody>
           </table>
+        )}
+      </section>
+    </>
+  )
+}
+
+function OffersView({ offers: o, onChange }: { offers: Offers; onChange: (o: Offers) => void }) {
+  const items = useProjectStore((s) => s.entities.item) as Item[]
+  const set = (patch: Partial<Offers>) => onChange({ ...o, ...patch })
+  const r = useMemo(() => simulateOffers(o), [o])
+  const nameOf = (e: Offers['entries'][number]) => (e.itemId ? items.find((i) => i.id === e.itemId)?.name || '(deleted)' : e.name)
+  const target = o.entries.find((e) => e.id === o.targetId)
+  const pct = (v: number) => `${formatNumber(Math.round(v * 1000) / 10)}%`
+  return (
+    <>
+      <section className="calc-section">
+        <h3>How offers work</h3>
+        <div className="calc-row">
+          <label className="calc-field">
+            <span>Choices shown</span>
+            <NumberInput value={o.shown} min={1} max={20} onChange={(shown) => set({ shown: Math.round(shown) })} />
+          </label>
+          <label className="calc-field">
+            <span>Offers per run</span>
+            <NumberInput value={o.rounds} min={1} max={200} onChange={(rounds) => set({ rounds: Math.round(rounds) })} />
+          </label>
+          <label className="calc-field">
+            <span>
+              <input type="checkbox" checked={o.takenLeaves} onChange={(e) => set({ takenLeaves: e.target.checked })} /> What you take leaves the pool
+            </span>
+          </label>
+        </div>
+      </section>
+      <section className="calc-section">
+        <h3>Pool</h3>
+        <table className="calc-table">
+          <thead>
+            <tr>
+              <th>{T.target}</th>
+              <th>{T.item}</th>
+              <th>Weight</th>
+              <th>Shows in</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {o.entries.map((e) => (
+              <tr key={e.id}>
+                <td>
+                  <input type="radio" name="offer-target" checked={o.targetId === e.id} onChange={() => set({ targetId: e.id })} aria-label="Target" />
+                </td>
+                <td>
+                  {e.itemId ? (
+                    nameOf(e)
+                  ) : (
+                    <input className="input" value={e.name} onChange={(x) => set({ entries: o.entries.map((y) => (y.id === e.id ? { ...y, name: x.target.value } : y)) })} />
+                  )}
+                </td>
+                <td>
+                  <NumberInput value={e.weight} min={0} onChange={(weight) => set({ entries: o.entries.map((y) => (y.id === e.id ? { ...y, weight } : y)) })} />
+                </td>
+                <td className="calc-muted">{pct(r.perOffer[e.id] ?? 0)} of offers</td>
+                <td>
+                  <button className="icon-btn" aria-label="Remove" onClick={() => set({ entries: o.entries.filter((y) => y.id !== e.id), targetId: o.targetId === e.id ? null : o.targetId })}>
+                    <Trash2 size={13} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="calc-row">
+          <button className="btn btn-ghost" onClick={() => set({ entries: [...o.entries, newOfferEntry()] })}>
+            <Plus size={14} /> {T.addEntry}
+          </button>
+          {items.length > 0 && (
+            <select className="input" value="" onChange={(e) => e.target.value && set({ entries: [...o.entries, { ...newOfferEntry(), itemId: e.target.value }] })}>
+              <option value="">Add from the Item List…</option>
+              {items.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.name || 'Untitled'}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      </section>
+      <section className="calc-section">
+        <h3>{T.results}</h3>
+        {!target ? (
+          <p className="calc-muted">{T.pickTarget}</p>
+        ) : (
+          <>
+            <div className="gacha-stats">
+              <Stat label={`Sees ${nameOf(target)} in the first offer`} value={pct(r.seenBy[0] ?? 0)} />
+              <Stat label={`…by offer ${o.rounds}`} value={pct(r.seenBy.at(-1) ?? 0)} />
+              <Stat label="First seen on average at offer" value={r.avgFirst === null ? 'never' : formatNumber(Math.round(r.avgFirst * 10) / 10)} />
+            </div>
+            <LineChart xs={r.seenBy.map((_, i) => i + 1)} series={[{ name: `% of runs that saw ${nameOf(target)}`, values: r.seenBy.map((v) => Math.round(v * 1000) / 10) }]} xLabel="Offer" />
+            <p className="calc-muted">The player takes the target as soon as it shows up and otherwise picks one of the choices at random. 5 000 runs.</p>
+          </>
         )}
       </section>
     </>
