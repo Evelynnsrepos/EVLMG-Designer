@@ -494,32 +494,33 @@ function Wheel({ open }: { open: Open }) {
               <filter id="hotwheel-goo" filterUnits="userSpaceOnUse" x={-w / 2} y={-w / 2} width={w} height={w} colorInterpolationFilters="sRGB">
                 <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur" />
                 <feColorMatrix in="blur" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" result="goo" />
+                {/* A thin bright rim, in both glass modes: it is what shows the shape on a dark background. */}
+                <feMorphology in="goo" operator="erode" radius="1.4" result="thin" />
+                <feComposite in="goo" in2="thin" operator="out" result="rim" />
+                <feFlood className="hotwheel-rim" />
+                <feComposite in2="rim" operator="in" result="rimLit" />
                 {fancy && (
                   <>
-                    {/* Full glass: light the liquid like a lens. A soft specular highlight from the top left, */}
-                    {/* a thin bright rim, and an accent glow caught in the bottom-right edge. */}
+                    {/* Full glass: light the liquid like a lens. A soft specular highlight from the top left */}
+                    {/* and an accent glow caught in the bottom-right edge. */}
                     <feGaussianBlur in="goo" stdDeviation="5" result="soft" />
                     <feSpecularLighting in="soft" surfaceScale="4" specularConstant="0.55" specularExponent="40" lightingColor="#fff" result="spec">
                       <fePointLight x={-160} y={-240} z={240} />
                     </feSpecularLighting>
                     <feComposite in="spec" in2="goo" operator="in" result="specIn" />
-                    <feMorphology in="goo" operator="erode" radius="1.4" result="thin" />
-                    <feComposite in="goo" in2="thin" operator="out" result="rim" />
-                    <feFlood className="hotwheel-rim" />
-                    <feComposite in2="rim" operator="in" result="rimLit" />
                     <feOffset in="goo" dx={-4} dy={-5} result="shift" />
                     <feComposite in="goo" in2="shift" operator="out" result="edge" />
                     <feGaussianBlur in="edge" stdDeviation="2" result="edgeSoft" />
                     <feFlood className="hotwheel-caustic" />
                     <feComposite in2="edgeSoft" operator="in" result="caustic" />
-                    <feMerge>
-                      <feMergeNode in="goo" />
-                      <feMergeNode in="caustic" />
-                      <feMergeNode in="specIn" />
-                      <feMergeNode in="rimLit" />
-                    </feMerge>
                   </>
                 )}
+                <feMerge>
+                  <feMergeNode in="goo" />
+                  {fancy && <feMergeNode in="caustic" />}
+                  {fancy && <feMergeNode in="specIn" />}
+                  <feMergeNode in="rimLit" />
+                </feMerge>
               </filter>
             </defs>
             {/* One goo layer for the middle and every ring, so the drops flow out of (and back into) the middle. */}

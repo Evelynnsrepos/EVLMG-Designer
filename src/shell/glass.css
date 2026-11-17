@@ -197,24 +197,34 @@
 
 /* --- 6. Hotwheel: liquid glass bubbles (Hotwheel.tsx draws them when the glass look is on) ------------
  * The drops and the middle blob are one "goo" layer, so they flow together; it is see-through as a whole.
- * The hovered drop (and its neck into the middle) fills with the accent; a soft rim light is the shine. */
+ * The hovered drop (and its neck into the middle) fills with the accent; a soft rim light is the shine.
+ * Dark theme: the panels are almost black, so the drops are a lighter grey, less see-through, with a brighter rim. */
+:root[data-glass] .hotwheel {
+  --hw-fill: var(--bg-elevated);
+}
 :root[data-glass] .hotwheel-goo {
   opacity: 0.74;
 }
 :root[data-glass='light'] .hotwheel-goo {
   opacity: 0.9;
 }
+:root[data-glass][data-theme='dark'] .hotwheel {
+  --hw-fill: color-mix(in srgb, var(--bg-elevated) 86%, #fff);
+}
+:root[data-glass][data-theme='dark'] .hotwheel-goo {
+  opacity: 0.92;
+}
 :root[data-glass] .hotwheel-goo circle {
-  fill: var(--bg-elevated);
+  fill: var(--hw-fill);
 }
 :root[data-glass] .hotwheel-goo .on {
-  fill: color-mix(in srgb, var(--accent) 35%, var(--bg-elevated));
+  fill: color-mix(in srgb, var(--accent) 35%, var(--hw-fill));
 }
 :root[data-glass] .hotwheel-goo .hotwheel-core {
-  fill: color-mix(in srgb, var(--bg-elevated) 82%, var(--accent));
+  fill: color-mix(in srgb, var(--hw-fill) 82%, var(--accent));
 }
 :root[data-glass] .hotwheel-goo .droplet {
-  fill: color-mix(in srgb, var(--bg-elevated) 70%, var(--accent));
+  fill: color-mix(in srgb, var(--hw-fill) 70%, var(--accent));
 }
 :root[data-glass] .hotwheel-goo circle.lit {
   fill: var(--accent);
@@ -226,6 +236,13 @@
 :root[data-glass] .hotwheel-rim {
   flood-color: #fff;
   flood-opacity: 0.32;
+}
+:root[data-glass][data-theme='dark'] .hotwheel-rim {
+  flood-opacity: 0.55;
+}
+/* Light glass in the light theme keeps its rimless look (white on white adds nothing). */
+:root[data-glass='light'][data-theme='light'] .hotwheel-rim {
+  flood-opacity: 0;
 }
 :root[data-glass] .hotwheel-caustic {
   flood-color: var(--accent);
