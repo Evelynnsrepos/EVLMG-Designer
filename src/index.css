@@ -175,3 +175,30 @@ input[type='range']:disabled::-webkit-slider-runnable-track {
   pointer-events: none;
   white-space: nowrap;
 }
+
+/* Strong contrast (Settings > Look): plain, solid colours, clear lines and thick focus rings. Beats project themes. */
+:root[data-contrast] {
+  --bg: #0b0b0d !important;
+  --bg-elevated: #141418 !important;
+  --bg-sunken: #000 !important;
+  --border: #8d92a0 !important;
+  --text: #ffffff !important;
+  --text-muted: #d5d7dd !important;
+  --focus: #ffd84a !important;
+}
+:root[data-contrast][data-theme='light'] {
+  --bg: #ffffff !important;
+  --bg-elevated: #ffffff !important;
+  --bg-sunken: #f0f0f2 !important;
+  --border: #50545f !important;
+  --text: #000000 !important;
+  --text-muted: #2b2d33 !important;
+  --focus: #6a00a8 !important;
+}
+:root[data-contrast] :focus-visible {
+  outline-width: 3px;
+  outline-offset: 2px;
+}
+:root[data-contrast] .muted {
+  opacity: 1;
+}

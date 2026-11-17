@@ -45,15 +45,74 @@ function initialGlass(): Glass {
   }
 }
 
-const useThemeStore = create<{ theme: Theme; glass: Glass }>()(() => ({ theme: initial(), glass: initialGlass() }))
+const CONTRAST_KEY = 'egd-contrast'
+const SCALE_KEY = 'egd-ui-scale'
+/** Interface size in percent (Settings > Look); canvas tools keep their own zoom on top. */
+export const UI_SCALES = { min: 80, max: 150 }
+
+function stored(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+function store(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // ignore
+  }
+}
+
+export const clampScale = (n: number) => Math.min(UI_SCALES.max, Math.max(UI_SCALES.min, Math.round(n / 5) * 5 || 100))
+
+const useThemeStore = create<{ theme: Theme; glass: Glass; contrast: boolean; scale: number }>()(() => ({
+  theme: initial(),
+  glass: initialGlass(),
+  contrast: stored(CONTRAST_KEY) === '1',
+  scale: clampScale(Number(stored(SCALE_KEY) ?? 100)),
+}))
 
 export function applyTheme() {
-  const { theme, glass } = useThemeStore.getState()
+  const { theme, glass, contrast, scale } = useThemeStore.getState()
   const root = document.documentElement
   root.dataset.theme = theme
-  if (glass === 'off') delete root.dataset.glass
+  // Strong contrast is always solid: glass lets the background show through the text.
+  if (glass === 'off' || contrast) delete root.dataset.glass
   else root.dataset.glass = glass
+  if (contrast) root.dataset.contrast = ''
+  else delete root.dataset.contrast
+  void applyScale(scale)
 }
+
+let appliedScale = 100
+async function applyScale(scale: number) {
+  if (scale === appliedScale) return
+  appliedScale = scale
+  if ('__TAURI_INTERNALS__' in window) {
+    // The webview's own zoom, like Ctrl+plus in a browser: canvases stay sharp and pointer maths stay right.
+    const { getCurrentWebview } = await import('@tauri-apps/api/webview')
+    await getCurrentWebview()
+      .setZoom(scale / 100)
+      .catch(() => {})
+  } else document.documentElement.style.zoom = scale === 100 ? '' : String(scale / 100)
+}
+
+export function setContrast(contrast: boolean) {
+  useThemeStore.setState({ contrast })
+  store(CONTRAST_KEY, contrast ? '1' : '0')
+  applyTheme()
+}
+
+export function setUiScale(scale: number) {
+  useThemeStore.setState({ scale: clampScale(scale) })
+  store(SCALE_KEY, String(clampScale(scale)))
+  applyTheme()
+}
+
+export const useContrast = () => useThemeStore((s) => s.contrast)
+export const useUiScale = () => useThemeStore((s) => s.scale)
 
 export function setGlass(glass: Glass) {
   useThemeStore.setState({ glass })

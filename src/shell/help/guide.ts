@@ -301,6 +301,13 @@ export const BASICS: Record<string, GuideTopic> = {
       'The small T in a tool’s header picks the font that tool shows its text in, for this project. Boards like the Brainstorm Board use it too.',
     ],
   },
+  access: {
+    title: 'Interface size and strong contrast',
+    body: [
+      'Settings > General > Interface size makes every menu, button and text bigger or smaller, from 80 to 150 %. Canvas tools keep their own zoom on top.',
+      'Strong contrast switches to plain, solid colours with darker text, clear lines and thick focus rings. It turns the glass look off while it is on, and it wins over a project’s own colours.',
+    ],
+  },
   glass: {
     title: 'Glass look',
     body: [

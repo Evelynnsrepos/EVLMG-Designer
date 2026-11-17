@@ -14,7 +14,7 @@ import { GitSettingsSection } from './GitSettingsSection'
 import { PresetsSection } from './PresetsSection'
 import { DrawingSection } from './DrawingSection'
 import { UpdatesSection } from '../updates/UpdatesSection'
-import { setGlass, useGlass, type Glass } from '../theme'
+import { setContrast, setGlass, setUiScale, UI_SCALES, useContrast, useGlass, useUiScale, type Glass } from '../theme'
 
 const UI = {
   title: 'Settings',
@@ -47,6 +47,11 @@ const UI = {
   writerSyntaxHint: 'Markdown Syntax lets you format by typing symbols, like ==highlight== or > [!note], and turns pasted Markdown into formatting. Each document has its own switch in its header.',
   glass: 'Glass look',
   glassLevels: { full: 'Full glass', light: 'Light glass (no blur, fastest)', off: 'Off (solid, the classic look)' } as Record<Glass, string>,
+  size: 'Interface size',
+  sizeHint: 'Makes every menu, button and text bigger or smaller. Canvas tools keep their own zoom on top. Ctrl+0 in a canvas still fits the picture.',
+  reset: 'Reset',
+  contrast: 'Strong contrast',
+  contrastOn: 'Plain, solid colours with darker text, clear lines and thick focus rings (turns the glass look off)',
   glassHint: 'The app gets a glass look: rounded see-through menus, dialogs, toolbars and panels over a soft background in your project colours. Full glass also blurs what is behind the sidebar, dialogs and menus. Canvases always stay solid. Choose Light or Off if the app feels slower.',
   pixels: 'Pictures',
   sharp: 'Sharp pixel art',
@@ -319,10 +324,33 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
-/** Glass look (Liquid Glass style), per machine like light/dark. */
+/** Glass look (Liquid Glass style), per machine like light/dark; interface size and strong contrast too (pro fixes step 9). */
 function GlassSection() {
   const glass = useGlass()
+  const contrast = useContrast()
+  const scale = useUiScale()
   return (
+    <>
+    <section data-section="size">
+      <h3>{UI.size}</h3>
+      <label className="settings-check">
+        <input type="range" min={UI_SCALES.min} max={UI_SCALES.max} step={5} value={scale} onChange={(e) => setUiScale(Number(e.target.value))} aria-label={UI.size} />
+        <span>{scale} %</span>
+        {scale !== 100 && (
+          <button className="btn btn-ghost" onClick={() => setUiScale(100)}>
+            {UI.reset}
+          </button>
+        )}
+      </label>
+      <p className="muted settings-hint">{UI.sizeHint}</p>
+    </section>
+    <section data-section="contrast">
+      <h3>{UI.contrast}</h3>
+      <label className="settings-check">
+        <input type="checkbox" checked={contrast} onChange={(e) => setContrast(e.target.checked)} />
+        {UI.contrastOn}
+      </label>
+    </section>
     <section data-section="glass">
       <h3>{UI.glass}</h3>
       {(Object.keys(UI.glassLevels) as Glass[]).map((g) => (
@@ -333,5 +361,6 @@ function GlassSection() {
       ))}
       <p className="muted settings-hint">{UI.glassHint}</p>
     </section>
+    </>
   )
 }
