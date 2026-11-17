@@ -313,6 +313,18 @@ export const BASICS: Record<string, GuideTopic> = {
       'When your computer asks for less transparency or less motion, the glass and its animations follow that.',
     ],
   },
+  updates: {
+    title: 'Updates',
+    body: [
+      'When a new version is out, the start screen shows a small card with what is new. Click Update, keep working while it downloads, then click Restart now. Later hides the card until the app starts again, and Skip this version hides it for that version.',
+      'Updates are signed: the app only installs a file that came from the official release. If the check fails, nothing is installed and nothing changes.',
+      'The Flatpak and the .deb are updated by your system: the card tells you a new version is out, and your Software app (GNOME Software or Discover) or flatpak update installs it.',
+    ],
+    tips: [
+      'Settings > General > Updates turns the check off, checks right now, and shows your version.',
+      'The check downloads one small file from GitHub. Nothing about you or your projects is sent.',
+    ],
+  },
   typing: {
     title: 'Typing shortcuts (Markdown Syntax)',
     body: [

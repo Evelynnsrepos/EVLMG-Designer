@@ -14,6 +14,7 @@ import { maybeStartTour, useHelp } from '../help/help'
 import { toggleTheme, useTheme } from '../theme'
 import { openSettings } from '../settings/open'
 import { BackupsDialog } from './BackupsDialog'
+import { UpdateCard } from '../updates/UpdateCard'
 import { homeLayout, moveSection, moveToFolder, WIDTH_COLUMNS } from './folders'
 import { JoinDialog } from '../collab/CollabDialogs'
 import './launcher.css'
@@ -266,6 +267,7 @@ export function Launcher() {
         </div>
       </header>
 
+      <UpdateCard />
       {error && <div className="launcher-error">{error}</div>}
       {busy && <div className="muted launcher-busy">{busy}</div>}
       {repos && (

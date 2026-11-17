@@ -49,11 +49,23 @@ jobs:
           f="docs/releases/v$(node -p "require('./package.json').version").md"
           { echo 'body<<NOTES_EOF'; if [ -f "$f" ]; then cat "$f"; fi; echo; echo 'NOTES_EOF'; } >> "$GITHUB_OUTPUT"
       # macOS disk image creation fails now and then (hdiutil); one retry below.
+      - name: The app has the real public update key
+        if: env.HAS_KEY == 'true'
+        shell: bash
+        env:
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          if grep -q PASTE_THE_PUBLIC_UPDATER_KEY_HERE src-tauri/tauri.conf.json; then
+            echo "::error::Put the public updater key into src-tauri/tauri.conf.json (plugins.updater.pubkey), see docs/UPDATES.md"; exit 1
+          fi
       - id: tauri
         continue-on-error: ${{ matrix.os == 'macos-latest' }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Update signing (see docs/UPDATES.md). Without the key the installers are built as before, with no update files.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
           releaseName: Eve.Lopment Games Designer v__VERSION__
@@ -65,11 +77,15 @@ jobs:
             Windows: download the `-setup.exe`. Linux: the `.AppImage` (any distro) or `.deb`.
             Mac: the `.dmg` (Apple Silicon and Intel). It is unsigned, see the README's Mac section for the one-time "Open Anyway" step.
           releaseDraft: false
-          args: ${{ matrix.args }}
+          updaterJsonPreferNsis: true
+          args: ${{ matrix.args }}${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && ' --config src-tauri/tauri.updater.conf.json' || '' }}
       - if: steps.tauri.outcome == 'failure'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Update signing (see docs/UPDATES.md). Without the key the installers are built as before, with no update files.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
           releaseName: Eve.Lopment Games Designer v__VERSION__
@@ -81,9 +97,33 @@ jobs:
             Windows: download the `-setup.exe`. Linux: the `.AppImage` (any distro) or `.deb`.
             Mac: the `.dmg` (Apple Silicon and Intel). It is unsigned, see the README's Mac section for the one-time "Open Anyway" step.
           releaseDraft: false
-          args: ${{ matrix.args }}
+          updaterJsonPreferNsis: true
+          args: ${{ matrix.args }}${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && ' --config src-tauri/tauri.updater.conf.json' || '' }}
 
   # The .flatpak for Linux (NixOS and every other distro with Flatpak), built from the .deb above.
   flatpak:
     needs: build
     uses: ./.github/workflows/flatpak.yml
+    secrets: inherit
+
+  # The update file must list every platform, or installed apps would get a broken update.
+  updater-check:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+    steps:
+      - if: env.HAS_KEY == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v=$(gh api repos/${{ github.repository }}/releases/latest --jq .tag_name)
+          gh release download "$v" -R ${{ github.repository }} -p latest.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open('latest.json'))
+          need = ['windows-x86_64', 'darwin-aarch64', 'darwin-x86_64', 'linux-x86_64']
+          missing = [p for p in need if not d.get('platforms', {}).get(p, {}).get('signature')]
+          print('version', d.get('version'), 'platforms', sorted(d.get('platforms', {})))
+          assert not missing, f'latest.json misses {missing}'
+          PY

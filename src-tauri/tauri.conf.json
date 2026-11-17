@@ -33,6 +33,12 @@
   "plugins": {
     "fs": {
       "requireLiteralLeadingDot": false
+    },
+    "updater": {
+      "pubkey": "PASTE_THE_PUBLIC_UPDATER_KEY_HERE",
+      "endpoints": ["https://github.com/Evelynnsrepos/EVLMG-Designer/releases/latest/download/latest.json"],
+      "requireSignedVersion": true,
+      "windows": { "installMode": "passive" }
     }
   },
   "bundle": {

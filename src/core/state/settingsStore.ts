@@ -59,6 +59,10 @@ export interface AppSettings {
   projectFolders: ProjectFolder[]
   /** Start screen sections: order and size. Ids are folder ids plus 'recent' and 'rest' (projects in no section). */
   homeSections: HomeSection[]
+  /** Desktop: look on GitHub for a new version about 10 s after start and once a day (Settings → Updates). */
+  updateCheck: boolean
+  /** A version the person chose to skip with "Skip this version"; '' = none. */
+  updateSkip: string
 }
 
 /** How big a start screen section is: width on a 12-column grid, height in rows. */
@@ -117,7 +121,7 @@ export interface HotwheelSettings {
 export const DEFAULT_INNER = ['close', 'scale', 'jump', 'layout', 'undo', 'search']
 const hotwheelDefaults = (): HotwheelSettings => ({ inner: DEFAULT_INNER, outer: {}, size: 'M', penButton: false, rightHold: false, middle: false })
 
-const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], spellRulesOff: [], spellCalm: false, learnedFixes: {}, spellAutoFix: false, aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, writerView: { size: 15, spacing: 1.6, width: 760, side: '' }, githubLogin: '', hotkeyHints: true, projectPresets: [], git: gitDefaults(), projectFolders: [], homeSections: [] })
+const defaults = (): AppSettings => ({ spellCheck: true, spellLanguages: ['en', 'de'], personalWords: [], spellRulesOff: [], spellCalm: false, learnedFixes: {}, spellAutoFix: false, aiHelper: true, aiModel: 'small', askProject: false, penSize: 3, penSmoothing: 0.5, penOpacity: 1, sharpPixels: true, shortcuts: {}, toolScale: {}, hotwheel: hotwheelDefaults(), writerMarkdownSyntax: false, writerView: { size: 15, spacing: 1.6, width: 760, side: '' }, githubLogin: '', hotkeyHints: true, projectPresets: [], git: gitDefaults(), projectFolders: [], homeSections: [], updateCheck: true, updateSkip: '' })
 
 async function settingsPath() {
   const fs = getFs()

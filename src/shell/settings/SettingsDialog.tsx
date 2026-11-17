@@ -13,6 +13,7 @@ import { HotwheelSection } from '../hotwheel/HotwheelSettings'
 import { GitSettingsSection } from './GitSettingsSection'
 import { PresetsSection } from './PresetsSection'
 import { DrawingSection } from './DrawingSection'
+import { UpdatesSection } from '../updates/UpdatesSection'
 import { setGlass, useGlass, type Glass } from '../theme'
 
 const UI = {
@@ -289,6 +290,9 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
               {UI.writingHintsOn}
             </label>
           </section>
+          </div>
+          <div data-tab="general">
+          <UpdatesSection />
           </div>
           <div data-tab="keys">
           <HotwheelSection />

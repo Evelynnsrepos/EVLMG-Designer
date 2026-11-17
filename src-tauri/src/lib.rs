@@ -10,6 +10,7 @@ mod plugins;
 mod server_link;
 mod spell;
 mod texpaint_commands;
+mod updates;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -18,6 +19,7 @@ pub fn run() {
     .plugin(tauri_plugin_fs::init())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_opener::init())
+    .plugin(tauri_plugin_updater::Builder::new().build())
     .manage(llm::LlmState::default())
     .manage(collab_commands::CollabState::default())
     .manage(server_link::ServerLinks::default())
@@ -59,6 +61,9 @@ pub fn run() {
       code::code_lsp_connect,
       code::code_lsp_send,
       code::code_lsp_close,
+      updates::update_check,
+      updates::update_install,
+      updates::update_restart,
     ])
     .setup(|app| {
       if let Some(window) = app.get_webview_window("main") {
