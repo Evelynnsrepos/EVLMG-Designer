@@ -36,6 +36,8 @@ export interface Ability {
   image: string | null
   /** v0.16: an icon from Pixel Art (and the tag that plays), shown instead of the picture. */
   sprite?: { doc: string; tag?: string } | null
+  /** Missing tools phase 1: Status Effects it puts on the target; chance in percent, seconds null = the effect's own. */
+  applies?: { effectId: Id; chance: number; seconds?: number | null }[]
 }
 
 export interface AbilitiesDoc {

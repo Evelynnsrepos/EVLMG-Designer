@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { Enemy } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
 import { useDocument, useProjectStore, useUndoRedoKeys } from '@/core/state'
+import { emptyStatusDoc, STATUS_DOC, type StatusDoc } from '@/components/status-effects/model'
 import { abilityFormula, createAbilitiesDoc, type AbilitiesDoc, type Ability } from '@/components/abilities/model'
 import { NumberInput, PresetHeader, useDamagePresets } from '@/shared/calculators'
 import { useItems } from '@/shared/listDetail'
@@ -28,8 +29,11 @@ export default function View({ documentId, active }: PanelProps) {
   const presets = useDamagePresets()
   const simAbilities: SimAbility[] = abilities.flatMap((a) => {
     const f = abilityFormula(a, presets)
-    return f ? [{ id: a.id, name: a.name, element: a.element, cooldown: Math.max(a.cooldown, a.castTime), ...f }] : []
+    return f ? [{ id: a.id, name: a.name, element: a.element, cooldown: Math.max(a.cooldown, a.castTime), applies: a.applies, ...f }] : []
   })
+  // Missing tools phase 1: status effects and reactions, only when the project has some.
+  const status = useDocument<StatusDoc>(STATUS_DOC.type, STATUS_DOC.id, emptyStatusDoc).data
+  const hasStatus = !!status && (status.items.length > 0 || status.reactions.length > 0)
   if (!doc.data) return null
   const d = doc.data
   const set = (fn: (d: CombatDoc) => CombatDoc) => doc.update(fn)
@@ -45,7 +49,7 @@ export default function View({ documentId, active }: PanelProps) {
     resist: e.resistances,
     abilities: abilities.filter((a) => a.users.includes(e.id)).map((a) => a.id),
   })
-  const run = () => setResult(simulateCombat(d, Date.now(), simAbilities))
+  const run = () => setResult(simulateCombat(d, Date.now(), simAbilities, hasStatus ? status : undefined))
   const totalRuns = result ? result.wins[0] + result.wins[1] + result.draws : 0
 
   const team = (side: 0 | 1) => (
@@ -201,6 +205,23 @@ export default function View({ documentId, active }: PanelProps) {
                 </div>
               ))}
             </div>
+            {result.effects && (
+              <>
+                <h4>Status effects per fight</h4>
+                <div className="ld-result">
+                  <div className="ld-stat">
+                    <span>Damage from effects</span>
+                    <strong>{Math.round(result.effects.damage)}</strong>
+                  </div>
+                  {Object.entries(result.effects.reactions).map(([name, n]) => (
+                    <div key={name} className="ld-stat">
+                      <span>{name}</span>
+                      <strong>{n.toFixed(1)}×</strong>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
             <h4>Example fight</h4>
             <pre className="cb-log">{result.log.join('\n')}</pre>
           </section>

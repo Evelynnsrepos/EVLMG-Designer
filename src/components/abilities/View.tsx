@@ -2,13 +2,14 @@ import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import type { Entity } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
-import { useProjectStore, useUndoRedoKeys } from '@/core/state'
+import { useDocument, useProjectStore, useUndoRedoKeys } from '@/core/state'
 import { NumberInput, useDamagePresets } from '@/shared/calculators'
 import { ImagePicker } from '@/shared/entityList'
 import { PixelSprite, SpritePicker } from '@/shared/pixel/PixelSprite'
 import { formatNumber, libraryFor } from '@/shared/formulas'
 import { Field, ListDetail, useItems } from '@/shared/listDetail'
 import { ProofTextarea } from '@/shared/spell'
+import { emptyStatusDoc, STATUS_DOC, type StatusDoc, type StatusEffect } from '@/components/status-effects/model'
 import { ABILITY_KINDS, abilityFormula, abilityStats, createAbilitiesDoc, kindColor, newAbility, type Ability, type AbilitiesDoc, type AbilityKind } from './model'
 
 /** Ability / spell list (v0.10): skills with costs and cooldowns, their numbers from Damage Calculator formulas. */
@@ -17,6 +18,7 @@ export default function View({ active }: PanelProps) {
   useUndoRedoKeys(list.doc, active)
   const presets = useDamagePresets()
   const characters = useProjectStore((s) => s.entities.character) as Entity[]
+  const effects = useDocument<StatusDoc>(STATUS_DOC.type, STATUS_DOC.id, emptyStatusDoc).data?.items ?? []
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [table, setTable] = useState(false)
   const a = list.items.find((x) => x.id === selectedId)
@@ -49,7 +51,7 @@ export default function View({ active }: PanelProps) {
       {table ? (
         <AbilityTable items={list.items} presets={presets} onOpen={(id) => (setSelectedId(id), setTable(false))} />
       ) : (
-        a && <AbilityPage a={a} edit={(p) => list.edit(a.id, p)} remove={() => (list.remove(a.id), setSelectedId(null))} presets={presets} characters={characters} />
+        a && <AbilityPage a={a} edit={(p) => list.edit(a.id, p)} remove={() => (list.remove(a.id), setSelectedId(null))} presets={presets} characters={characters} effects={effects} />
       )}
     </ListDetail>
   )
@@ -101,13 +103,17 @@ function AbilityPage({
   remove,
   presets,
   characters,
+  effects,
 }: {
   a: Ability
   edit(p: Partial<Ability>): void
   remove(): void
   presets: ReturnType<typeof useDamagePresets>
   characters: Entity[]
+  effects: StatusEffect[]
 }) {
+  const applies = a.applies ?? []
+  const setApplies = (next: NonNullable<Ability['applies']>) => edit({ applies: next })
   const stats = abilityStats(a, presets)
   const formula = abilityFormula(a, presets)
   const names = formula ? Object.keys(formula.values) : []
@@ -236,6 +242,37 @@ function AbilityPage({
               ))}
           </select>
         </div>
+      </div>
+      <div className="ld-section">
+        <strong>Status effects it applies</strong>
+        {effects.length === 0 ? (
+          <p className="muted">Make effects like Burn or Stun in Status Effects &amp; Reactions, then pick them here. The Combat Simulator plays them out.</p>
+        ) : (
+          <>
+            {applies.map((ap, i) => (
+              <div key={ap.effectId + i} className="ld-inline">
+                <span style={{ minWidth: 110 }}>{effects.find((e) => e.id === ap.effectId)?.name ?? '(deleted)'}</span>
+                <label className="ld-inline" title="Chance it lands, in percent">
+                  Chance % <NumberInput value={ap.chance} min={0} max={100} onChange={(chance) => setApplies(applies.map((x, j) => (j === i ? { ...x, chance } : x)))} />
+                </label>
+                <label className="ld-inline" title="Empty = the effect's own duration">
+                  Seconds <NumberInput value={ap.seconds ?? effects.find((e) => e.id === ap.effectId)?.seconds ?? 0} min={0} onChange={(seconds) => setApplies(applies.map((x, j) => (j === i ? { ...x, seconds } : x)))} />
+                </label>
+                <button className="btn btn-ghost" title="Remove" onClick={() => setApplies(applies.filter((_, j) => j !== i))}>
+                  ×
+                </button>
+              </div>
+            ))}
+            <select className="input" value="" onChange={(e) => e.target.value && setApplies([...applies, { effectId: e.target.value, chance: 100, seconds: null }])}>
+              <option value="">Add an effect…</option>
+              {effects.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
       </div>
       <button className="btn btn-danger ld-danger" onClick={remove}>
         <Trash2 size={14} /> Delete ability
