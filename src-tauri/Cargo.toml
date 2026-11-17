@@ -41,6 +41,8 @@ futures-util = "0.3"
 tauri-plugin-updater = "2"
 # Texture Paint's Rust core (model analysis, Fill a part, baking).
 texpaint = { path = "texpaint" }
+# Folders picked in Open/Save windows stay reachable after a restart (the fs scope is no longer everything).
+tauri-plugin-persisted-scope = "2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Already in the build through wry; used to turn the webview's graphics card use on for good (graphics.rs).
