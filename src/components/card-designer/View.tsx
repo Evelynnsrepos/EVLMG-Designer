@@ -588,8 +588,8 @@ function picturePaths(d: CardDoc, cards: Card[]): string[] {
 
 /** Thumbnail resolution: a poker card comes out about 50 px wide. */
 const THUMB_DPI = 20
-// shortcut: thumbnails for the first 200 cards only; render lazily on scroll if decks get bigger.
-const THUMB_MAX = 200
+/** Cards drawn per step; between steps the app gets a breath, so big decks don't freeze it. */
+const THUMB_STEP = 40
 
 /** Small pictures of every card (front) and of each layer of the shown side, redrawn a moment after changes. */
 function useThumbs(d: CardDoc | null | undefined, cards: Card[], cardId: Id | null, side: Side, root: string | null, fontsReady: number) {
@@ -603,10 +603,21 @@ function useThumbs(d: CardDoc | null | undefined, cards: Card[], cardId: Id | nu
       if (stop) return
       const draw = (c: Card | undefined, scene: Scene<CardNode>) =>
         renderCard(d, scene, cardNodeTypes({ colors: slotColors(d, c?.variantId, c?.id), fields: d.fields, values: c?.values ?? null, print: true, icons: ownIcons(d) }), resolve, THUMB_DPI, false).toDataURL()
-      setCardThumbs(new Map(cards.slice(0, THUMB_MAX).map((c) => [c.id, draw(c, composeScene(d, 'front', c.id))])))
       const shown = cards.find((c) => c.id === cardId)
       const s = composeScene(d, side, cardId)
       setLayerThumbs(new Map(s.layers.map((l) => [l.id, draw(shown, { ...s, layers: s.layers.map((x) => ({ ...x, hidden: x.id !== l.id })) })])))
+      // the shown card first, then the rest in steps; old pictures stay until their new one is ready
+      const order = shown ? [shown, ...cards.filter((c) => c !== shown)] : cards
+      const keep = new Set(cards.map((c) => c.id))
+      for (let i = 0; i < order.length && !stop; i += THUMB_STEP) {
+        const step = order.slice(i, i + THUMB_STEP).map((c) => [c.id, draw(c, composeScene(d, 'front', c.id))] as const)
+        setCardThumbs((old) => {
+          const next = new Map([...old].filter(([id]) => keep.has(id)))
+          for (const [id, url] of step) next.set(id, url)
+          return next
+        })
+        await new Promise((r) => setTimeout(r, 0))
+      }
     }, 600)
     return () => {
       stop = true
