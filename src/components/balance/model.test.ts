@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { curve, outliers, type Point } from './model'
+import { curve, outliers, strips, type Point } from './model'
 
 const p = (name: string, value: number, group = 'Common', level?: number): Point => ({ id: name, name, value, group, level })
 
@@ -16,5 +16,13 @@ describe('balance', () => {
     const c = curve(list)
     expect(c.levels).toEqual([1, 2, 3, 4, 5, 6])
     expect(c.spikes.map((s) => s.level)).toEqual([5, 6])
+  })
+
+  it('builds dot chart rows with the flagged dots marked', () => {
+    const rows = strips([p('a', 10), p('b', 11), p('c', 12), p('d', 10), p('e', 95), p('L1', 100, 'Legendary')])
+    expect(rows.map((r) => r.group)).toEqual(['Common', 'Legendary'])
+    expect(rows[0].median).toBe(11)
+    expect(rows[0].dots.filter((d) => d.flag).map((d) => [d.name, d.flag])).toEqual([['e', 'high']])
+    expect(rows[1].dots[0].flag).toBe(null)
   })
 })

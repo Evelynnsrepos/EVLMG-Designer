@@ -877,8 +877,10 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
     title: 'Balance Dashboard',
     body: [
       'A live look at the numbers in your Item and Enemy Lists, abilities and Custom Lists; there is nothing to fill in.',
-      'Numbers that stick out compares every stat with the other items or enemies of the same rarity and lists the ones far from the typical value, too high in red and too low in blue. Click the arrow to open the entry.',
-      'Difficulty curve charts the average of an enemy stat per level and points out levels where it jumps or drops much more than usual. Gaps lists entries without numbers and enemies that drop nothing.',
+      'The tiles at the top count your items, enemies, abilities and the numbers that stick out.',
+      'Numbers that stick out shows a dot chart for the number you pick: one row per rarity, one dot per entry, a bar at the typical value. Dots far from the rest of their row are big, too high in red and too low in the accent colour. Click a dot to open the entry. The table with every flagged number is one click away under the chart.',
+      'Difficulty curve charts the average, strongest and weakest enemy of each level for an enemy stat and points out levels where it jumps or drops much more than usual. Gaps shows bars for how many entries have numbers and how many enemies drop something.',
+      'While a section has no data yet it shows a faded Example chart, so you can see what it will do.',
       'Numbers that stick out also checks Abilities & Spells (damage per second and value per cost, against abilities of the same kind) and every number field of your Custom Lists.',
     ],
   },

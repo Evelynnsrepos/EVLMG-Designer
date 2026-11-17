@@ -44,7 +44,7 @@ export function outliers(points: Point[], threshold = 3): (Point & { score: numb
  * The difficulty curve: average value per level, and where it jumps or drops
  * a lot compared with the levels around it.
  */
-export function curve(points: Point[]): { levels: number[]; avg: number[]; spikes: { level: number; change: number }[] } {
+export function curve(points: Point[]): { levels: number[]; avg: number[]; min: number[]; max: number[]; spikes: { level: number; change: number }[] } {
   const by = new Map<number, number[]>()
   for (const p of points) if (p.level !== undefined) by.set(p.level, [...(by.get(p.level) ?? []), p.value])
   const levels = [...by.keys()].sort((a, b) => a - b)
@@ -52,5 +52,19 @@ export function curve(points: Point[]): { levels: number[]; avg: number[]; spike
   const growth = avg.slice(1).map((v, i) => (avg[i] > 0 ? v / avg[i] - 1 : 0))
   const typical = growth.length ? median(growth.map(Math.abs)) : 0
   const spikes = growth.map((g, i) => ({ level: levels[i + 1], change: g })).filter((x) => Math.abs(x.change) > Math.max(0.25, typical * 2.5))
-  return { levels, avg, spikes }
+  return { levels, avg, min: levels.map((l) => Math.min(...by.get(l)!)), max: levels.map((l) => Math.max(...by.get(l)!)), spikes }
+}
+
+export interface StripRow {
+  group: string
+  median: number
+  dots: (Point & { flag: 'high' | 'low' | null })[]
+}
+
+/** One row per group for the dot chart: every value, the group's typical value, and which dots are flagged by `outliers`. */
+export function strips(points: Point[]): StripRow[] {
+  const flagged = new Map(outliers(points).map((o) => [o.id, o.value > o.typical ? ('high' as const) : ('low' as const)]))
+  const groups = new Map<string, Point[]>()
+  for (const p of points) groups.set(p.group, [...(groups.get(p.group) ?? []), p])
+  return [...groups].map(([group, list]) => ({ group, median: median(list.map((p) => p.value)), dots: list.map((p) => ({ ...p, flag: flagged.get(p.id) ?? null })) }))
 }
