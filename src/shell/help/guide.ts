@@ -625,6 +625,16 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Plan a build tests the tree like a player: set the points at the start, per level and the level, then click skills and add or take back ranks. The planner explains why a rank is not possible yet.',
     ],
   },
+  relationships: {
+    title: 'Relationships',
+    body: [
+      'A bond is one character\'s friendship, romance, rivalry or loyalty with the player. New bond picks the next character from the Character List; change it at the top of the page.',
+      'Set how many ranks the bond has and how many points each rank needs: the same for every rank, a bit more each rank, growing by a percent, or typed by hand in the Ranks table.',
+      'Gifts marks items from the Item List as loved, liked, neutral, disliked or hated. Points & actions sets the points for each, plus actions like Talk or Hang out and how often a player does them per in-game day.',
+      'What each rank unlocks holds a line per rank; Link points it at a quest, dialogue, ability or anything else, and clicking it opens it. When they\'re free lists the days and times the character can be met.',
+      'The Plan shows the points a player earns per day and on which day each rank is reached. Make a flag adds a number flag like bond_mira that the Dialogue Editor and Quests can check, for example bond_mira >= 300.',
+    ],
+  },
   'status-effects': {
     title: 'Status Effects & Reactions',
     body: [

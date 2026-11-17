@@ -40,6 +40,7 @@ export const TOOL_INFO: Partial<Record<ComponentType, { group: ToolGroupId; useW
   'item-list': { group: 'world', useWhen: 'items, weapons and gear' },
   factions: { group: 'world', useWhen: 'groups and how they feel about each other' },
   'family-tree': { group: 'world', useWhen: 'who is related to whom' },
+  relationships: { group: 'world', useWhen: 'friendship and romance ranks, gifts and unlocks' },
   names: { group: 'world', useWhen: 'made-up names and languages' },
   calendar: { group: 'world', useWhen: 'your world’s calendar and eras' },
   cosmos: { group: 'world', useWhen: 'planets, stars and space' },

@@ -39,6 +39,7 @@ export const DATA_TOOLS = [
   'level-layout',
   'map',
   'pacing',
+  'relationships',
   'skill-tree',
   'status-effects',
   'timeline',
