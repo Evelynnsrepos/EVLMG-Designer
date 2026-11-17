@@ -22,6 +22,16 @@ export interface RemotePresence {
   location: string | null
   pointer: { key: string; x: number; y: number } | null
   selection: { key: string; ids: string[] } | null
+  /** One artist at a time (Draw): the drawing this device holds, since when, and its last stroke (ms). */
+  drawing: DrawingHold | null
+  /** Asking the holder of this drawing to let go. */
+  drawRequest: { key: string; at: number } | null
+}
+
+export interface DrawingHold {
+  key: string
+  since: number
+  lastStroke: number
 }
 
 interface PresenceState {
@@ -71,17 +81,25 @@ function readRemotes(a: Awareness): RemotePresence[] {
       location: typeof state.location === 'string' ? state.location : null,
       pointer: (state.pointer as RemotePresence['pointer']) ?? null,
       selection: (state.selection as RemotePresence['selection']) ?? null,
+      drawing: (state.drawing as DrawingHold) ?? null,
+      drawRequest: (state.drawRequest as RemotePresence['drawRequest']) ?? null,
     })
   })
   return out
 }
 
 /** Publish a presence field (canvas pointer, selection) for teammates. No-op when not shared. */
-export function setPresence(field: 'pointer' | 'selection', value: unknown) {
+export function setPresence(field: 'pointer' | 'selection' | 'drawing' | 'drawRequest', value: unknown) {
   if (!awareness) return
   const current = awareness.getLocalState()?.[field]
   if (JSON.stringify(current ?? null) === JSON.stringify(value ?? null)) return
   awareness.setLocalStateField(field, value)
+}
+
+/** This device's own presence id and published fields; null when not shared. */
+export function localPresence(): { clientId: number; drawing: DrawingHold | null } | null {
+  if (!awareness) return null
+  return { clientId: awareness.clientID, drawing: (awareness.getLocalState()?.drawing as DrawingHold) ?? null }
 }
 
 export function isPresenceActive() {

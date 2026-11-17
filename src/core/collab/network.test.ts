@@ -199,14 +199,13 @@ describe('collab network', () => {
     await until(() => guest.readyPeers().length === 0)
   })
 
-  it('keeps Sketch drawings out of the shared project list', async () => {
+  it('shares Draw drawings since 0.35 (one artist at a time)', async () => {
     const { sharedMeta } = await import('../state')
     await useProjectStore.getState().create({ name: 'Game', description: '', components: ['sketch', 'writer'] })
     const doc = useProjectStore.getState().addDocument('sketch', 'Drawing')
     const page = useProjectStore.getState().addDocument('writer', 'Page')
     const shared = sharedMeta(useProjectStore.getState().meta!)
-    expect(shared.documents.map((d) => d.id)).toEqual([page.id])
-    expect(doc.id).toBeTruthy()
+    expect(shared.documents.map((d) => d.id)).toEqual([doc.id, page.id])
   })
 })
 

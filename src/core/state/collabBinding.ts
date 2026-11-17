@@ -42,11 +42,10 @@ export function setCollabBinding(next: CollabBinding | null) {
 
 /**
  * Tools whose documents stay on each computer, even in shared projects.
- * Live sync of raster drawing was unreliable, so Sketch drawings are local;
- * pictures made from them (stickers on a Moodboard, images in the Asset Pool)
- * are normal assets and still sync.
+ * Draw drawings are shared since 0.35: layer files are no longer deleted on save (so a teammate can still fetch
+ * them), and one person draws at a time (components/sketch/drawLock.ts).
  */
-export const LOCAL_ONLY_TYPES: readonly ComponentType[] = ['sketch', 'history']
+export const LOCAL_ONLY_TYPES: readonly ComponentType[] = ['history']
 
 export const isLocalOnlyType = (type: ComponentType) => LOCAL_ONLY_TYPES.includes(type)
 
