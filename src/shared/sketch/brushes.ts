@@ -1246,7 +1246,8 @@ function clampArea(a: Area | undefined, w: number, h: number): Area {
  * into `out` (cleared first) so callers can composite it with the brush
  * opacity. `area` limits the slower effects to where the stroke is.
  */
-export function colorStroke(mask: HTMLCanvasElement, out: CanvasRenderingContext2D, color: string, brush: BrushSettings, area?: Area) {
+/** Returns the stroke's outline (to go behind the layer), or null. */
+export function colorStroke(mask: HTMLCanvasElement, out: CanvasRenderingContext2D, color: string, brush: BrushSettings, area?: Area): HTMLCanvasElement | null {
   const W = out.canvas.width
   const H = out.canvas.height
   out.save()
@@ -1318,7 +1319,7 @@ export function colorStroke(mask: HTMLCanvasElement, out: CanvasRenderingContext
     }
   }
   out.restore()
-  if (hasOutline(brush) && r.w > 0 && r.h > 0) outline2d(mask, out, color, brush, r)
+  const ring = hasOutline(brush) && r.w > 0 && r.h > 0 ? outline2d(mask, out, color, brush, r) : null
   if (brush.alphaThreshold > 0 && r.w > 0 && r.h > 0) {
     const img = out.getImageData(r.x, r.y, r.w, r.h)
     const d = img.data
@@ -1326,6 +1327,7 @@ export function colorStroke(mask: HTMLCanvasElement, out: CanvasRenderingContext
     for (let i = 3; i < d.length; i += 4) d[i] = d[i] >= t && d[i] > 0 ? 255 : 0
     out.putImageData(img, r.x, r.y)
   }
+  return ring
 }
 
 let scratchO: HTMLCanvasElement | null = null
@@ -1335,7 +1337,10 @@ export { OUTLINE_SIGMA }
  * The outline around a stroke (Canvas 2D): a blurred copy of the stroke mask is low but not zero up to about the
  * outline width away from it; that band outside the stroke is the outline. The fill inside is kept, removed or white.
  */
-function outline2d(mask: HTMLCanvasElement, out: CanvasRenderingContext2D, color: string, b: BrushSettings, r: { x: number; y: number; w: number; h: number }) {
+let ringOut: HTMLCanvasElement | null = null
+
+/** The outline of the last colorStroke (full size, in its colour), or null without one: compositeStroke puts it behind the layer. */
+function outline2d(mask: HTMLCanvasElement, out: CanvasRenderingContext2D, color: string, b: BrushSettings, r: { x: number; y: number; w: number; h: number }): HTMLCanvasElement | null {
   const W = out.canvas.width
   const H = out.canvas.height
   const sigma = b.outline! / OUTLINE_SIGMA
@@ -1344,7 +1349,7 @@ function outline2d(mask: HTMLCanvasElement, out: CanvasRenderingContext2D, color
   const by = Math.max(0, r.y - pad)
   const bw = Math.min(W, r.x + r.w + pad) - bx
   const bh = Math.min(H, r.y + r.h + pad) - by
-  if (bw <= 0 || bh <= 0) return
+  if (bw <= 0 || bh <= 0) return null
   scratchO = scratch(scratchO, bw, bh)
   const a = scratchO.getContext('2d', { willReadFrequently: true })!
   a.clearRect(0, 0, bw, bh)
@@ -1357,28 +1362,26 @@ function outline2d(mask: HTMLCanvasElement, out: CanvasRenderingContext2D, color
   const m = a.getImageData(0, 0, bw, bh).data
   const img = out.getImageData(bx, by, bw, bh)
   const d = img.data
+  const rimg = new ImageData(bw, bh)
+  const rd = rimg.data
   const [oc, fill] = [hexRgb(outlineColorOf(b, color)), b.outlineFill]
   const [e0, e1] = OUTLINE_EDGE
   for (let i = 0; i < d.length; i += 4) {
     const t = Math.min(1, Math.max(0, (blurred[i + 3] / 255 - e0) / (e1 - e0)))
     const ma = m[i + 3] / 255
-    const ring = t * t * (3 - 2 * t) * (1 - ma)
-    let fa = d[i + 3] / 255
-    let fr = d[i], fg = d[i + 1], fb = d[i + 2]
-    if (fill === 'none' || fill === 'clear') fa = 0
-    else if (fill === 'white') [fr, fg, fb, fa] = [255, 255, 255, ma]
-    const A = ring + fa * (1 - ring)
-    if (A <= 0) {
-      d[i + 3] = 0
-      continue
-    }
-    const k = (fa * (1 - ring)) / A
-    d[i] = oc[0] * (1 - k) + fr * k
-    d[i + 1] = oc[1] * (1 - k) + fg * k
-    d[i + 2] = oc[2] * (1 - k) + fb * k
-    d[i + 3] = A * 255
+    rd[i] = oc[0]
+    rd[i + 1] = oc[1]
+    rd[i + 2] = oc[2]
+    rd[i + 3] = t * t * (3 - 2 * t) * (1 - ma) * 255
+    if (fill === 'none' || fill === 'clear') d[i + 3] = 0
+    else if (fill === 'white') [d[i], d[i + 1], d[i + 2], d[i + 3]] = [255, 255, 255, m[i + 3]]
   }
+  ringOut = scratch(ringOut, W, H)
+  const rg = ringOut.getContext('2d')!
+  rg.clearRect(0, 0, W, H)
+  rg.putImageData(rimg, bx, by)
   out.putImageData(img, bx, by)
+  return ringOut
 }
 
 function hexRgb(hex: string): [number, number, number] {
@@ -1400,7 +1403,7 @@ export function compositeStroke(
   ctx: CanvasRenderingContext2D,
   paint: HTMLCanvasElement,
   brush: BrushSettings,
-  o: { erase: boolean; alphaLock: boolean; selection: Path2D | null; area?: Area; clearInside?: HTMLCanvasElement | null },
+  o: { erase: boolean; alphaLock: boolean; selection: Path2D | null; area?: Area; clearInside?: HTMLCanvasElement | null; ring?: HTMLCanvasElement | null },
 ) {
   const alpha = strokeAlpha(brush)
   if (o.clearInside && !o.erase) {
@@ -1409,6 +1412,15 @@ export function compositeStroke(
     if (o.selection) ctx.clip(o.selection)
     ctx.globalCompositeOperation = 'destination-out'
     ctx.drawImage(o.clearInside, 0, 0)
+    ctx.restore()
+  }
+  if (o.ring && !o.erase && !o.alphaLock) {
+    // The outline goes behind what is already on the layer, so filled shapes painted one after another join up.
+    ctx.save()
+    if (o.selection) ctx.clip(o.selection)
+    ctx.globalAlpha = alpha
+    ctx.globalCompositeOperation = 'destination-over'
+    ctx.drawImage(o.ring, 0, 0)
     ctx.restore()
   }
   if (brush.luminanceBlend && !o.erase) {
@@ -1464,6 +1476,7 @@ export function scaledBrush<B extends BrushSettings>(brush: B, k: number): B {
   return {
     ...brush,
     size: brush.size * k,
+    outline: brush.outline ? Math.max(1, brush.outline * k) : brush.outline,
     taperStart: brush.taperStart * k,
     taperEnd: brush.taperEnd * k,
     touchTaperStart: brush.touchTaperStart * k,
@@ -1488,6 +1501,6 @@ export function drawPreview(canvas: HTMLCanvasElement, brush: BrushSettings, col
   else for (const p of sampleStroke(w, h)) s.add(p)
   s.finish()
   const out = makeCanvas(w, h)
-  colorStroke(mask, out.getContext('2d')!, color, b)
-  compositeStroke(ctx, out, { ...b, blend: 'source-over', luminanceBlend: false }, { erase: false, alphaLock: false, selection: null })
+  const ring = colorStroke(mask, out.getContext('2d')!, color, b)
+  compositeStroke(ctx, out, { ...b, blend: 'source-over', luminanceBlend: false }, { erase: false, alphaLock: false, selection: null, ring })
 }

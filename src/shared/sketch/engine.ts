@@ -608,11 +608,11 @@ export class SketchEngine {
       mask = m.canvas
     }
     const area = this.strokeArea(opts) ?? undefined
-    colorStroke(mask, this.paint.ctx, opts.erase ? '#000' : opts.color, opts.brush, area)
+    const ring = colorStroke(mask, this.paint.ctx, opts.erase ? '#000' : opts.color, opts.brush, area)
     if (opts.brush.height > 0 && !opts.erase) applyRelief(this.paint.ctx, mask, area, opts.brush.height)
     this.keepSelected(this.paint.ctx)
     const clearInside = hasOutline(opts.brush) && opts.brush.outlineFill === 'clear' ? mask : null
-    compositeStroke(ctx, this.paint.canvas, opts.brush, { erase: opts.erase, alphaLock: opts.layer.alphaLock, selection: null, area, clearInside })
+    compositeStroke(ctx, this.paint.canvas, opts.brush, { erase: opts.erase, alphaLock: opts.layer.alphaLock, selection: null, area, clearInside, ring })
   }
 
   /** Finish the stroke: merge it into the layer and record undo. Returns the changed layer. */

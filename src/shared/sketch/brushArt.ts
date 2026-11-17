@@ -148,9 +148,9 @@ export function drawArt(g: G, shape: ArtShape, rnd: () => number) {
   g.lineJoin = 'round'
   switch (shape) {
     case 'rope':
-      return twisted(g, 4, (55 * Math.PI) / 180, 10, 118, 5, rnd)
+      return twisted(g, 3, (55 * Math.PI) / 180, 10, 118, 6, rnd)
     case 'cord':
-      return twisted(g, 3, (60 * Math.PI) / 180, 28, 100, 2, rnd)
+      return twisted(g, 2, (58 * Math.PI) / 180, 24, 104, 3, rnd)
     case 'twist':
       return twisted(g, 2, (48 * Math.PI) / 180, 12, 116, 14, rnd)
     case 'braid':
@@ -285,15 +285,15 @@ export function drawArt(g: G, shape: ArtShape, rnd: () => number) {
       g.fillStyle = grey(110)
       g.fillRect(0, 62.5, 128, 3)
       tiled(g, () => {
-        for (let i = 0; i < 3; i++) {
-          const cx = (128 / 3) * i + 21
-          const gr = g.createRadialGradient(cx - 6, 58, 1, cx, 64, 17)
+        for (let i = 0; i < 2; i++) {
+          const cx = 64 * i + 32
+          const gr = g.createRadialGradient(cx - 8, 56, 1, cx, 64, 26)
           gr.addColorStop(0, grey(235))
           gr.addColorStop(0.45, grey(140))
           gr.addColorStop(1, grey(40))
           g.fillStyle = gr
           g.beginPath()
-          g.arc(cx, 64, 17, 0, TAU)
+          g.arc(cx, 64, 26, 0, TAU)
           g.fill()
         }
       })

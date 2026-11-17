@@ -28,7 +28,7 @@ const pixel: S = { shape: 'square', hardness: 1, pressureSize: 0, streamline: 0,
 const blender: S = { dilution: 0, charge: 0, pull: 0.9, attack: 0.6, flow: 0.6, hardness: 0.4, pressureSize: 0.3, pressureOpacity: 0.7, spacing: 0.06 }
 
 const strip: S = { hardness: 1, ribbon: 'tile', shaded: true, pressureSize: 0.2, pressureOpacity: 0, streamline: 0.5, spacing: 0.05, stampPreview: false }
-const plant: S = { ...nature, shaded: true, rotation: 0, randomize: true, rotationJitter: 0.08, brightJitter: 0.15, hueJitter: 0.03 }
+const plant: S = { ...nature, shaded: true, rotation: 0, randomize: false, rotationJitter: 0.08, brightJitter: 0.15, hueJitter: 0.03 }
 const outlined: S = { hardness: 1, pressureSize: 0.2, streamline: 0.4, spacing: 0.04, outline: 4 }
 const coils: S = { shape: 'coil', rotation: 'random', randomize: true, scatter: 0.6, count: 4, spacing: 0.25, sizeJitter: 0.4, brightJitter: 0.08, pressureSize: 0.4, pressureOpacity: 0.3, stampPreview: false }
 
@@ -210,6 +210,7 @@ const SETS: [setId: string, name: string, icon: string, brushes: Def[]][] = [
       ['spot-black', 'Spot Black', { ...comic, size: 60, pressureSize: 0.2 }],
       ['gritty-ink', 'Gritty Ink', { ...comic, size: 14, shape: 'chalk', grain: 'rough', grainDepth: 0.5, pressureSize: 0.8, taperEnd: 30 }],
       ['outline-marker', 'Outline Marker (hollow)', { ...outlined, size: 40, outlineFill: 'clear' }],
+      ['outline-joins', 'Outline Marker (joins up)', { ...outlined, size: 40, outlineFill: 'white' }],
       ['bubble-outline', 'Bubble Outline', { ...outlined, size: 50, outline: 5, outlineFill: 'white' }],
       ['ink-fill', 'Ink Outline Fill', { ...outlined, size: 30, outlineColor: 'black' }],
       ['sticker-outline', 'Sticker Outline', { ...outlined, size: 30, outline: 12, outlineColor: 'white' }],
@@ -271,7 +272,7 @@ const SETS: [setId: string, name: string, icon: string, brushes: Def[]][] = [
       ['chain', 'Chain', { ...strip, size: 30, shape: 'chain', pressureSize: 0 }],
       ['flat-chain', 'Flat Chain', { ...strip, size: 26, shape: 'chain-flat', pressureSize: 0 }],
       ['ball-chain', 'Ball Chain', { ...strip, size: 18, shape: 'ball-chain', pressureSize: 0 }],
-      ['barbed-wire', 'Barbed Wire', { ...strip, size: 30, shape: 'barbed', pressureSize: 0 }],
+      ['barbed-wire', 'Barbed Wire', { ...strip, size: 44, shape: 'barbed', pressureSize: 0 }],
     ],
   ],
   [
@@ -294,11 +295,11 @@ const SETS: [setId: string, name: string, icon: string, brushes: Def[]][] = [
       ['grass-blades', 'Grass Blades', { ...plant, size: 70, shape: 'blade', count: 3, scatter: 0.5, spacing: 0.2, sizeJitter: 0.4 }],
       ['lawn', 'Lawn', { ...plant, size: 30, shape: 'grass', count: 4, scatter: 0.6, spacing: 0.1, shaded: false }],
       ['reeds', 'Tall Reeds', { ...plant, size: 120, shape: 'reed', spacing: 0.5, scatter: 0.4, sizeJitter: 0.3 }],
-      ['oak-leaves', 'Oak Leaves', { ...plant, size: 40, shape: 'oak-leaf', rotation: 'random', scatter: 0.9, count: 2 }],
-      ['maple-leaves', 'Maple Leaves', { ...plant, size: 40, shape: 'maple-leaf', rotation: 'random', scatter: 0.9, count: 2, hueJitter: 0.08 }],
-      ['round-leaves', 'Round Leaves', { ...plant, size: 36, shape: 'round-leaf', rotation: 'random', scatter: 0.8, count: 2 }],
-      ['fern', 'Fern Fronds', { ...plant, size: 90, shape: 'fern', rotation: 'random', spacing: 0.5, scatter: 0.6 }],
-      ['pine-needles', 'Pine Needles', { ...plant, size: 50, shape: 'pine', rotation: 'random', spacing: 0.35, scatter: 0.4 }],
+      ['oak-leaves', 'Oak Leaves', { ...plant, size: 40, shape: 'oak-leaf', rotation: 'random', randomize: true, scatter: 0.9, count: 2 }],
+      ['maple-leaves', 'Maple Leaves', { ...plant, size: 40, shape: 'maple-leaf', rotation: 'random', randomize: true, scatter: 0.9, count: 2, hueJitter: 0.08 }],
+      ['round-leaves', 'Round Leaves', { ...plant, size: 36, shape: 'round-leaf', rotation: 'random', randomize: true, scatter: 0.8, count: 2 }],
+      ['fern', 'Fern Fronds', { ...plant, size: 90, shape: 'fern', rotation: 'random', randomize: true, spacing: 0.5, scatter: 0.6 }],
+      ['pine-needles', 'Pine Needles', { ...plant, size: 50, shape: 'pine', rotation: 'random', randomize: true, spacing: 0.35, scatter: 0.4 }],
       ['vine', 'Vine', { ...strip, size: 40, shape: 'vine', pressureSize: 0.3 }],
     ],
   ],
@@ -338,7 +339,7 @@ const SETS: [setId: string, name: string, icon: string, brushes: Def[]][] = [
       ['straight-strands', 'Straight Strands (sheen)', { ...strip, ribbon: 'stretch', size: 60, shape: 'strands', taperStart: 40, taperEnd: 90, touchTaperStart: 40, touchTaperEnd: 90, taperSize: 1, taperTip: 0.1 }],
       ['fine-strands', 'Fine Strands', { ...strip, ribbon: 'stretch', size: 20, shape: 'strands', taperStart: 30, taperEnd: 60, touchTaperStart: 30, touchTaperEnd: 60, taperSize: 1, taperTip: 0.05 }],
       ['wavy-clump', 'Wavy Clump (twist-out)', { ...strip, size: 50, shape: 'wave-strands', taperEnd: 60, touchTaperEnd: 60, taperSize: 1 }],
-      ['smooth-wrap', 'Smooth Wrap (buns)', { ...strip, size: 40, shape: 'strands' }],
+      ['smooth-wrap', 'Smooth Wrap (buns)', { ...strip, ribbon: 'stretch', size: 40, shape: 'strands' }],
       ['edges', 'Edges (baby hairs)', { hardness: 1, size: 3, pressureSize: 1, taperStart: 10, taperEnd: 60, touchTaperStart: 10, touchTaperEnd: 60, taperTip: 0, streamline: 0.7, spacing: 0.04 }],
       ['wave-pattern', '360 Waves', { ...strip, size: 16, shape: 'wave-strands', opacity: 0.75 }],
       ['fade', 'Fade', { size: 80, hardness: 0, flow: 0.25, grain: 'noise', grainDepth: 0.6, pressureOpacity: 0.8, pressureSize: 0.2, spacing: 0.06 }],

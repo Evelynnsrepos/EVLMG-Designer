@@ -375,16 +375,19 @@ void main() {
     p = vec4(c * p.a, p.a);
   }
   float clearA = 0.0;
+  vec4 ringP = vec4(0.0);
   if (useOutline && !useWet && !erase) {
     // The blurred stroke is above zero up to about the outline width away: that band outside the stroke is the outline.
     float ring = smoothstep(outlEdge.x, outlEdge.y, texture(outl, uv).r) * (1.0 - m.a);
-    vec4 fill = outlFill == 0 ? p : outlFill == 3 ? vec4(m.a) : vec4(0.0);
+    ringP = vec4(outlColor * ring, ring);
+    p = outlFill == 0 ? p : outlFill == 3 ? vec4(m.a) : vec4(0.0);
     if (outlFill == 1) clearA = m.a;
-    p = vec4(outlColor * ring, ring) + fill * (1.0 - ring);
   }
   float selA = useSel ? texture(sel, uv).a : 1.0;
   p *= selA;
   d *= 1.0 - clearA * selA;
+  // The outline goes behind what is already on the layer, so filled shapes painted one after another join up.
+  if (!alphaLock) d += ringP * selA * opacity * (1.0 - d.a);
   if (useWet) { outColor = p + d * (1.0 - selA) * (1.0 - p.a); return; }
   if (erase) { outColor = d * (1.0 - p.a * opacity); return; }
   if (luminance) {
