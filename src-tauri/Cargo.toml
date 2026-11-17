@@ -37,6 +37,8 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rustls-platform-verifier = "0.7"
 sha2 = "0.10"
 futures-util = "0.3"
+# Self-update (desktop only: the mobile app has its own Cargo.toml and phones update through their stores).
+tauri-plugin-updater = "2"
 # Texture Paint's Rust core (model analysis, Fill a part, baking).
 texpaint = { path = "texpaint" }
 
