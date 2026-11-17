@@ -9,7 +9,7 @@ import { jumpTo } from '@/shared/entityList/navigation'
 import { IMAGE_TARGETS } from '../editor/actions'
 import { shownTool } from '../editor/optionalTools'
 import { leaves } from '../workspace/layoutTree'
-import { groupTools, layoutMap, mapEdges, neighbourIn, type MapEdge } from './graph'
+import { bendEdges, edgePath, groupTools, layoutMap, mapEdges, neighbourIn, type MapEdge } from './graph'
 import { closeToolMap, openToolMap, useToolMap } from './open'
 import './toolmap.css'
 
@@ -72,6 +72,8 @@ function ToolMap() {
     () => (meta ? mapEdges(shown, meta, allEntities(entities), IMAGE_TARGETS.map((t) => t.type), index) : []).filter((e) => routes || e.kind === 'link'),
     [shown, meta, entities, index, routes],
   )
+
+  const bends = useMemo(() => bendEdges(layout.nodes, edges), [layout, edges])
 
   // The mentions need every file read once; the bubbles and the other lines do not wait for that.
   useEffect(() => {
@@ -199,12 +201,12 @@ function ToolMap() {
               )}
             </g>
           ))}
-          {edges.map((e) => {
+          {edges.map((e, i) => {
             const a = layout.nodes.get(e.a)!
             const b = layout.nodes.get(e.b)!
             const lit = hot && (e.a === hot || e.b === hot)
-            // A slight bow, so a line between far bubbles does not run straight through the ones in between.
-            const bow = `M${a.x} ${a.y} Q${(a.x + b.x) / 2 + (b.y - a.y) * 0.16} ${(a.y + b.y) / 2 - (b.x - a.x) * 0.16} ${b.x} ${b.y}`
+            // Bowed, each to the side where it crosses the fewest lines and bubbles.
+            const bow = edgePath(a, b, bends[i])
             return (
               <path key={`${e.kind}:${e.a}:${e.b}`} className={`tm-edge ${e.kind}${lit ? ' on' : fading ? ' dim' : ''}`} d={bow} strokeWidth={e.kind === 'link' ? 1.6 + Math.min(e.count, 8) * 0.4 : 1.2}>
                 <title>{`${nameOf(e.a)} and ${nameOf(e.b)}: ${e.why}`}</title>

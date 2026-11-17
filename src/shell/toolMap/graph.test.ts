@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { COMPONENT_TYPES, type ComponentType, type Entity } from '@/core/model'
-import { groupTools, IMAGE_SENDERS, layoutMap, mapEdges, neighbourIn, ROUTES, STEP } from './graph'
+import { bendEdges, edgePath, groupTools, IMAGE_SENDERS, layoutMap, mapEdges, neighbourIn, ROUTES, STEP } from './graph'
 
 const types = COMPONENT_TYPES as readonly string[]
 
@@ -49,6 +49,19 @@ describe('tool map', () => {
       { a: 'item-list', b: 'writer', kind: 'link', count: 1, why: '1 mention' },
       { a: 'moodboard', b: 'sketch', kind: 'route', count: 1, why: 'Send to, Pictures' },
     ])
+  })
+
+  it('bends lines away from each other and around bubbles', () => {
+    // Two lines whose default bows cross: one of them has to give way.
+    const nodes = new Map<ComponentType, { x: number; y: number }>([['wiki', { x: 0, y: 0 }], ['map', { x: 400, y: 0 }], ['tasks', { x: 200, y: -10 }], ['writer', { x: 200, y: -200 }]])
+    const edges = [{ a: 'wiki' as const, b: 'map' as const }, { a: 'tasks' as const, b: 'writer' as const }]
+    expect(bendEdges(nodes, edges)).not.toEqual([0.16, 0.16])
+    // A bubble right on a line: the line goes round it.
+    const row = new Map<ComponentType, { x: number; y: number }>([['wiki', { x: 0, y: 0 }], ['map', { x: 400, y: 0 }], ['tasks', { x: 200, y: -32 }]])
+    expect(bendEdges(row, [edges[0]])).toEqual([-0.16])
+    // Nothing in the way: the gentle default, and the same answer every time.
+    expect(bendEdges(nodes, [edges[0]])).toEqual(bendEdges(nodes, [edges[0]]))
+    expect(edgePath({ x: 0, y: 0 }, { x: 100, y: 0 }, 0.1)).toBe('M0 0 Q50 -10 100 0')
   })
 
   it('moves with the arrow keys to the nearest bubble in that direction', () => {

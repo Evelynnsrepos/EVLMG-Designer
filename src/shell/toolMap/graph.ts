@@ -198,3 +198,58 @@ export function neighbourIn(nodes: Map<ComponentType, Point>, from: ComponentTyp
   }
   return best
 }
+
+// ---- Lines ----
+
+/** How far a line bows out sideways, as a share of its length; the sign is the side. Gentle bends are tried first. */
+const BENDS = [0.16, -0.16, 0.05, -0.05, 0.3, -0.3, 0.45, -0.45]
+const SAMPLES = 12
+/** A line this close to the middle of a bubble that is not its own runs through it. */
+const BUBBLE_CLEAR = 44
+
+const curve = (a: Point, b: Point, bend: number): Point[] => {
+  const c = { x: (a.x + b.x) / 2 + (b.y - a.y) * bend, y: (a.y + b.y) / 2 - (b.x - a.x) * bend }
+  return Array.from({ length: SAMPLES + 1 }, (_, i) => {
+    const t = i / SAMPLES
+    return { x: (1 - t) ** 2 * a.x + 2 * t * (1 - t) * c.x + t ** 2 * b.x, y: (1 - t) ** 2 * a.y + 2 * t * (1 - t) * c.y + t ** 2 * b.y }
+  })
+}
+const side = (p: Point, q: Point, r: Point) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x))
+const crossings = (p: Point[], q: Point[]) => {
+  let n = 0
+  for (let i = 0; i < SAMPLES; i++)
+    for (let j = 0; j < SAMPLES; j++) if (side(p[i], p[i + 1], q[j]) * side(p[i], p[i + 1], q[j + 1]) < 0 && side(q[j], q[j + 1], p[i]) * side(q[j], q[j + 1], p[i + 1]) < 0) n++
+  return n
+}
+
+/** The SVG path of a line with this bend. */
+export function edgePath(a: Point, b: Point, bend: number): string {
+  return `M${a.x} ${a.y} Q${(a.x + b.x) / 2 + (b.y - a.y) * bend} ${(a.y + b.y) / 2 - (b.x - a.x) * bend} ${b.x} ${b.y}`
+}
+
+/**
+ * A bend for every line, so that lines cross each other and run through bubbles as little as possible.
+ * The bubbles stay where they are (the map must look the same every time); only the lines give way.
+ * Greedy: each line in turn takes its best bend against the others, twice over. Same input, same result.
+ */
+export function bendEdges(nodes: Map<ComponentType, Point>, edges: Pick<MapEdge, 'a' | 'b'>[]): number[] {
+  const ends = edges.map((e) => [nodes.get(e.a), nodes.get(e.b)] as const)
+  const bends = edges.map(() => BENDS[0])
+  const lines = ends.map(([a, b]) => (a && b ? curve(a, b, BENDS[0]) : null))
+  const others = [...nodes]
+  for (let pass = 0; pass < 2; pass++)
+    edges.forEach((e, i) => {
+      const [a, b] = ends[i]
+      if (!a || !b) return
+      let best = Infinity
+      for (const bend of BENDS) {
+        const line = curve(a, b, bend)
+        let cost = Math.abs(bend) // of two equally good bends, the gentler one
+        for (const [t, p] of others) if (t !== e.a && t !== e.b && line.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < BUBBLE_CLEAR)) cost += 6
+        // Lines that share a bubble meet there anyway.
+        lines.forEach((l, j) => l && j !== i && edges[j].a !== e.a && edges[j].a !== e.b && edges[j].b !== e.a && edges[j].b !== e.b && (cost += crossings(line, l) * 10))
+        if (cost < best) [best, bends[i], lines[i]] = [cost, bend, line]
+      }
+    })
+  return bends
+}
