@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { COMPONENT_TYPES, type ComponentType, type Entity } from '@/core/model'
-import { bendEdges, edgePath, groupTools, IMAGE_SENDERS, layoutMap, mapEdges, neighbourIn, ROUTES, STEP } from './graph'
+import { bendEdges, edgePath, groupTools, toolNodes, IMAGE_SENDERS, layoutMap, mapEdges, neighbourIn, ROUTES, STEP } from './graph'
 
 const types = COMPONENT_TYPES as readonly string[]
 
@@ -41,14 +41,36 @@ describe('tool map', () => {
       ],
     }
     const index = new Map([[sword.id, [{ source: { kind: 'document' as const, componentType: 'writer' as const, documentId: meta.documents[0].id, title: 'Story' }, fields: ['html'] }]]])
+    const multi = new Set(['writer', 'sketch', 'moodboard', 'map'])
     const shown: ComponentType[] = ['map', 'item-list', 'character-list', 'writer', 'sketch', 'moodboard']
-    const edges = mapEdges(shown, meta as never, [sword], ['moodboard', 'asset-pool'], index)
+    const nodes = shown.flatMap((t) => toolNodes(t, multi.has(t), meta.documents))
+    const edges = mapEdges(nodes, meta as never, [sword], ['moodboard', 'asset-pool'], index)
     expect(edges).toEqual([
       { a: 'item-list', b: 'map', kind: 'link', count: 1, why: '1 jump point' },
       { a: 'character-list', b: 'item-list', kind: 'link', count: 1, why: '1 connection' },
-      { a: 'item-list', b: 'writer', kind: 'link', count: 1, why: '1 mention' },
+      { a: 'item-list', b: 'writer:bbbbbbbb-0000-4000-8000-000000000002', kind: 'link', count: 1, why: '1 mention' },
       { a: 'moodboard', b: 'sketch', kind: 'route', count: 1, why: 'Send to, Pictures' },
     ])
+  })
+
+  it('gives every document its own bubble and its own lines', () => {
+    const docs = [
+      { id: 'd1', type: 'sketch' as const, title: 'Forest' },
+      { id: 'd2', type: 'sketch' as const, title: '' },
+      { id: 'w1', type: 'writer' as const, title: 'Chapter 1' },
+    ]
+    expect(toolNodes('sketch', true, docs).map((n) => [n.key, n.title])).toEqual([['sketch:d1', 'Forest'], ['sketch:d2', 'Untitled']])
+    expect(toolNodes('moodboard', true, docs)).toEqual([{ key: 'moodboard', type: 'moodboard', documentId: null, title: null }]) // none yet: the tool
+    expect(toolNodes('wiki', false, docs)).toEqual([{ key: 'wiki', type: 'wiki', documentId: null, title: null }])
+    const nodes = [...toolNodes('sketch', true, docs), ...toolNodes('writer', true, docs), ...toolNodes('wiki', false, docs)]
+    const jump = (from: string, fromDoc: string | null, to: string, toDoc: string | null) => ({ id: from + to, from: { kind: 'document', type: from, documentId: fromDoc }, to: { kind: 'document', type: to, documentId: toDoc } })
+    const links = (jumps: unknown[]) => mapEdges(nodes, { documents: docs, jumps } as never, [], []).filter((e) => e.kind === 'link').map((e) => `${e.a} ${e.b}`)
+    // A jump from one drawing lands on that drawing only.
+    expect(links([jump('sketch', 'd2', 'writer', 'w1')])).toEqual(['sketch:d2 writer:w1'])
+    // A jump to Draw as a whole touches every drawing.
+    expect(links([jump('wiki', null, 'sketch', null)])).toEqual(['sketch:d1 wiki', 'sketch:d2 wiki'])
+    // A deleted document draws nothing.
+    expect(links([jump('wiki', null, 'sketch', 'gone')])).toEqual([])
   })
 
   it('bends lines away from each other and around bubbles', () => {

@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ComponentType, Id } from '@/core/model'
+import type { ComponentType } from '@/core/model'
 import { buildReferenceIndex, type ReferenceIndex } from '@/core/references'
 import { getManifest } from '@/core/registry'
 import { formatCombo, isShortcut, keysOf } from '@/core/shortcuts'
@@ -9,13 +9,14 @@ import { jumpTo } from '@/shared/entityList/navigation'
 import { IMAGE_TARGETS } from '../editor/actions'
 import { shownTool } from '../editor/optionalTools'
 import { leaves } from '../workspace/layoutTree'
-import { bendEdges, edgePath, groupTools, layoutMap, mapEdges, neighbourIn, type MapEdge, type Point } from './graph'
+import { bendEdges, edgePath, groupTools, layoutMap, mapEdges, neighbourIn, nodeKey, toolNodes, type MapEdge, type MapNode, type Point } from './graph'
 import { closeToolMap, openToolMap, useToolMap } from './open'
 import './toolmap.css'
 
 /**
- * The Tool map: Tab (when not typing) shows every tool of the project as a bubble, grouped like the
- * sidebar, with lines for the links between them. Click a bubble to go there; Tab or Esc closes it.
+ * The Tool map: Tab (when not typing) shows every tool of the project, and every document of a tool
+ * (each drawing, each Writer document), as a bubble, grouped like the sidebar, with lines for the links
+ * between them. Click a bubble to go there; Tab or Esc closes it.
  */
 export function ToolMapHost() {
   const open = useToolMap((s) => s.open)
@@ -55,7 +56,7 @@ function ToolMap() {
   const askProject = useSettings((s) => s.askProject)
   const herePanel = useToolMap((s) => s.panel)
   const [index, setIndex] = useState<ReferenceIndex>()
-  const [hot, setHot] = useState<ComponentType | null>(null)
+  const [hot, setHot] = useState<string | null>(null)
   const [routes, setRoutes] = useState(() => {
     try {
       return localStorage.getItem(ROUTES_KEY) !== '0'
@@ -63,20 +64,24 @@ function ToolMap() {
       return true
     }
   })
-  const buttons = useRef(new Map<ComponentType, HTMLButtonElement>())
-  /** Each tool's bubble with its document list; this is what floats. */
-  const items = useRef(new Map<ComponentType, HTMLDivElement>())
+  const buttons = useRef(new Map<string, HTMLButtonElement>())
   const cameFrom = useRef(document.activeElement as HTMLElement | null)
 
   const panels = useMemo(() => leaves(meta?.layout ?? null), [meta?.layout])
   const here = panels.find((p) => p.id === herePanel) ?? null
+  const hereKey = here ? nodeKey(here.type, here.documentId) : null
   const shown = useMemo(() => (meta?.enabledComponents ?? []).filter((t) => getManifest(t) && shownTool(t, askProject)), [meta?.enabledComponents, askProject])
-  const layout = useMemo(() => layoutMap(groupTools(meta ?? {}, shown)), [meta, shown])
+  const { nodes, byKey, layout } = useMemo(() => {
+    const docs = meta?.documents ?? []
+    const perTool = new Map(shown.map((t) => [t, toolNodes(t, !!getManifest(t)?.multiDocument, docs)]))
+    const groups = groupTools(meta ?? {}, shown).map((g) => ({ ...g, tools: g.tools.flatMap((t) => perTool.get(t as ComponentType)!.map((n) => n.key)) }))
+    const nodes = [...perTool.values()].flat()
+    return { nodes, byKey: new Map(nodes.map((n) => [n.key, n])), layout: layoutMap(groups) }
+  }, [meta, shown])
   const edges = useMemo(
-    () => (meta ? mapEdges(shown, meta, allEntities(entities), IMAGE_TARGETS.map((t) => t.type), index) : []).filter((e) => routes || e.kind === 'link'),
-    [shown, meta, entities, index, routes],
+    () => (meta ? mapEdges(nodes, meta, allEntities(entities), IMAGE_TARGETS.map((t) => t.type), index) : []).filter((e) => routes || e.kind === 'link'),
+    [nodes, meta, entities, index, routes],
   )
-
   const bends = useMemo(() => bendEdges(layout.nodes, edges), [layout, edges])
 
   // The mentions need every file read once; the bubbles and the other lines do not wait for that.
@@ -96,7 +101,7 @@ function ToolMap() {
     const fit = Math.min(window.innerWidth / (w + 60), (window.innerHeight - 150) / (h + 60))
     const k = Math.min(1, Math.max(0.55, fit))
     // Everything fits: show it all. Too big: start at "You are here".
-    const c = (fit < 0.55 && here && layout.nodes.get(here.type)) || { x: x + w / 2, y: y + h / 2 }
+    const c = (fit < 0.55 && hereKey && layout.nodes.get(hereKey)) || { x: x + w / 2, y: y + h / 2 }
     return { x: window.innerWidth / 2 - c.x * k, y: window.innerHeight / 2 - c.y * k + 8, k }
   })
   const drag = useRef<{ x: number; y: number } | null>(null)
@@ -106,26 +111,22 @@ function ToolMap() {
   /** The cursor in map coordinates; null while it is outside the map. */
   const cursor = useRef<Point | null>(null)
   const viewNow = useRef(view)
-  const offsets = useRef(new Map<ComponentType, { x: number; y: number; vx: number; vy: number }>())
-  const hotNow = useRef<ComponentType | null>(null)
-  hotNow.current = hot
   viewNow.current = view
+  const offsets = useRef(new Map<string, { x: number; y: number; vx: number; vy: number }>())
   useEffect(() => {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
     // Written straight to the elements, once per frame: React state would redraw the whole map 60 times a second.
     const at = offsets.current // kept across redraws, so a new line or the dotted-lines switch never makes them jump
-    for (const t of shown) if (!at.has(t)) at.set(t, { x: 0, y: 0, vx: 0, vy: 0 })
+    for (const n of nodes) if (!at.has(n.key)) at.set(n.key, { x: 0, y: 0, vx: 0, vy: 0 })
     let frame = requestAnimationFrame(function tick(now) {
-      shown.forEach((t, i) => {
-        const p = layout.nodes.get(t)
-        const s = at.get(t)
+      nodes.forEach((n, i) => {
+        const p = layout.nodes.get(n.key)
+        const s = at.get(n.key)
         if (!p || !s) return
         // Where it wants to be: a slow drift of its own, plus a pull toward a near cursor.
-        // The tool whose documents are showing holds still, so its list does not slide away from the mouse.
-        const still = hotNow.current === t
-        let tx = still ? 0 : Math.sin(now / 1700 + i * 1.7) * 3.5
-        let ty = still ? 0 : Math.cos(now / 2100 + i * 2.3) * 3.5
-        const c = still ? null : cursor.current
+        let tx = Math.sin(now / 1700 + i * 1.7) * 3.5
+        let ty = Math.cos(now / 2100 + i * 2.3) * 3.5
+        const c = cursor.current
         const dist = c ? Math.hypot(c.x - p.x, c.y - p.y) : Infinity
         if (c && dist < REACH) {
           const pull = 0.22 * (1 - dist / REACH) ** 2
@@ -137,27 +138,27 @@ function ToolMap() {
         s.vy = (s.vy + (ty - s.y) * 0.07) * 0.84
         s.x += s.vx
         s.y += s.vy
-        const el = items.current.get(t)
+        const el = buttons.current.get(n.key)
         if (el) el.style.transform = `translate(${s.x.toFixed(2)}px, ${s.y.toFixed(2)}px)`
       })
-      const pos = (t: ComponentType) => {
-        const p = layout.nodes.get(t)!
-        const s = at.get(t)
+      const pos = (k: string) => {
+        const p = layout.nodes.get(k)!
+        const s = at.get(k)
         return s ? { x: p.x + s.x, y: p.y + s.y } : p
       }
       edges.forEach((e, i) => paths.current[i]?.setAttribute('d', edgePath(pos(e.a), pos(e.b), bends[i])))
       frame = requestAnimationFrame(tick)
     })
     return () => cancelAnimationFrame(frame)
-  }, [shown, layout, edges, bends])
+  }, [nodes, layout, edges, bends])
   const zoom = (factor: number, cx: number, cy: number) =>
     setView((v) => {
       const k = Math.min(2, Math.max(0.3, v.k * factor))
       return { k, x: cx - ((cx - v.x) / v.k) * k, y: cy - ((cy - v.y) / v.k) * k }
     })
-  const bringIntoView = (t: ComponentType) =>
+  const bringIntoView = (key: string) =>
     setView((v) => {
-      const p = layout.nodes.get(t)
+      const p = layout.nodes.get(key)
       if (!p) return v
       const sx = v.x + p.x * v.k
       const sy = v.y + p.y * v.k
@@ -165,13 +166,13 @@ function ToolMap() {
       return inside ? v : { ...v, x: window.innerWidth / 2 - p.x * v.k, y: window.innerHeight / 2 - p.y * v.k }
     })
 
-  const focusTool = (t: ComponentType | null | undefined) => {
-    if (!t) return
-    bringIntoView(t)
-    buttons.current.get(t)?.focus({ preventScroll: true })
+  const focusNode = (key: string | null | undefined) => {
+    if (!key) return
+    bringIntoView(key)
+    buttons.current.get(key)?.focus({ preventScroll: true })
   }
   useEffect(() => {
-    focusTool(here && layout.nodes.has(here.type) ? here.type : shown[0])
+    focusNode(hereKey && layout.nodes.has(hereKey) ? hereKey : nodes[0]?.key)
     const from = cameFrom.current
     return () => from?.focus?.({ preventScroll: true })
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- only when the map opens
@@ -189,22 +190,25 @@ function ToolMap() {
 
   if (!meta) return null
 
-  const go = (type: ComponentType, beside: boolean, documentId: Id | null = null) => {
+  const go = (n: MapNode, beside: boolean) => {
     cameFrom.current = null
     closeToolMap() // the old panel is active again, so the jump knows where Back leads
-    if (here?.type === type && !beside && (!documentId || documentId === here.documentId)) return
-    jumpTo({ kind: 'document', type, documentId }, !beside)
+    if (n.key === hereKey && !beside) return
+    jumpTo({ kind: 'document', type: n.type, documentId: n.documentId }, !beside)
   }
-  /** A multi-document tool's documents, the last changed first. */
-  const docsOf = (t: ComponentType) => (getManifest(t)?.multiDocument ? meta.documents.filter((d) => d.type === t).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) : [])
 
-  const nameOf = (t: ComponentType) => getManifest(t)?.name ?? t
-  const other = (e: MapEdge, t: ComponentType) => (e.a === t ? e.b : e.a)
-  const edgesOf = (t: ComponentType) => edges.filter((e) => e.a === t || e.b === t)
-  // Pointing at a linked tool fades the rest; a tool without links leaves the map as it is.
+  /** "Forest concept (Draw)" for a document, "Wiki" for a tool. */
+  const nameOf = (key: string) => {
+    const n = byKey.get(key)
+    const tool = getManifest(n?.type ?? (key as ComponentType))?.name ?? key
+    return n?.title ? `${n.title} (${tool})` : tool
+  }
+  const other = (e: MapEdge, k: string) => (e.a === k ? e.b : e.a)
+  const edgesOf = (k: string) => edges.filter((e) => e.a === k || e.b === k)
+  const told = hot ?? hereKey
+  // Pointing at a linked bubble fades the rest; a bubble without links leaves the map as it is.
   const near = hot ? new Set(edgesOf(hot).map((e) => other(e, hot))) : null
   const fading = !!near?.size
-  const told = hot ?? here?.type ?? null
   const toldLinks = told ? edgesOf(told) : []
   const list = (kind: MapEdge['kind'], withWhy: boolean) =>
     toldLinks
@@ -234,43 +238,19 @@ function ToolMap() {
       onPointerUp={() => (drag.current = null)}
       onPointerCancel={() => (drag.current = null)}
       onKeyDown={(e) => {
-        const inList = (document.activeElement as HTMLElement | null)?.closest('.tm-docs')
-        if (inList) {
-          // In a document list: up and down walk it, left (or Esc in the list) goes back to the tool.
-          const chips = [...inList.querySelectorAll<HTMLButtonElement>('button')]
-          const i = chips.indexOf(document.activeElement as HTMLButtonElement)
-          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-            e.preventDefault()
-            chips[Math.min(chips.length - 1, Math.max(0, i + (e.key === 'ArrowDown' ? 1 : -1)))]?.focus()
-          } else if (e.key === 'ArrowLeft') {
-            e.preventDefault()
-            focusTool(hot)
-          } else if (e.key === 'Enter' && e.shiftKey) {
-            e.preventDefault()
-            chips[i]?.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }))
-          }
-          return
-        }
         const dir = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as Record<string, [number, number]>)[e.key]
         const at = [...buttons.current].find(([, b]) => b === document.activeElement)?.[0]
-        if (e.key === ' ' && at && docsOf(at).length) {
-          // Space steps into the tool's documents.
-          e.preventDefault()
-          setHot(at)
-          requestAnimationFrame(() => items.current.get(at)?.querySelector<HTMLButtonElement>('.tm-docs button')?.focus())
-          return
-        }
         if (dir) {
           e.preventDefault()
-          const to = at ? neighbourIn(layout.nodes, at, dir[0], dir[1]) : shown[0]
-          focusTool(to)
+          const to = at ? neighbourIn(layout.nodes, at, dir[0], dir[1]) : nodes[0]?.key
+          focusNode(to)
           if (to) setHot(to) // show its links, like pointing at it
         } else if (e.key === 'Home') {
           e.preventDefault()
-          focusTool(here?.type)
+          focusNode(hereKey)
         } else if (e.key === 'Enter' && e.shiftKey && at) {
           e.preventDefault()
-          go(at, true)
+          go(byKey.get(at)!, true)
         }
       }}
     >
@@ -289,73 +269,47 @@ function ToolMap() {
           {edges.map((e, i) => {
             const a = layout.nodes.get(e.a)!
             const b = layout.nodes.get(e.b)!
-            const lit = told && (e.a === told || e.b === told) // the tool pointed at, else where you are
-            // Bowed, each to the side where it crosses the fewest lines and bubbles.
-            const bow = edgePath(a, b, bends[i])
+            const lit = told && (e.a === told || e.b === told) // the bubble pointed at, else where you are
+            // Dotted "works together" lines only for that bubble: between every drawing and every moodboard they would be a web.
+            if (e.kind === 'route' && !lit) return <path key={`${e.kind}:${e.a}:${e.b}`} ref={(el) => void (paths.current[i] = el)} className="tm-edge route hidden" />
             return (
-              <path key={`${e.kind}:${e.a}:${e.b}`} ref={(el) => void (paths.current[i] = el)} className={`tm-edge ${e.kind}${lit ? ' on' : fading ? ' dim' : ''}`} d={bow} strokeWidth={e.kind === 'link' ? 1.6 + Math.min(e.count, 8) * 0.4 : 1.2}>
+              <path key={`${e.kind}:${e.a}:${e.b}`} ref={(el) => void (paths.current[i] = el)} className={`tm-edge ${e.kind}${lit ? ' on' : fading ? ' dim' : ''}`} d={edgePath(a, b, bends[i])} strokeWidth={e.kind === 'link' ? 1.6 + Math.min(e.count, 8) * 0.4 : 1.2}>
                 <title>{`${nameOf(e.a)} and ${nameOf(e.b)}: ${e.why}`}</title>
               </path>
             )
           })}
         </svg>
-        {shown.map((t) => {
-          const m = getManifest(t)!
-          const p = layout.nodes.get(t)!
-          const docList = docsOf(t)
-          const docs = docList.length
-          const isHere = here?.type === t
-          const isOpen = !isHere && panels.some((x) => x.type === t)
-          const mine = edgesOf(t)
-          const names = (kind: MapEdge['kind']) => mine.filter((e) => e.kind === kind).map((e) => nameOf(other(e, t))).join(', ')
-          const hereDoc = isHere && here?.documentId ? docList.find((d) => d.id === here.documentId) : undefined
-          const label = [m.name, hereDoc && `in ${hereDoc.title}`, docs > 1 && `${docs} documents, Space to pick one`, isHere && 'you are here', isOpen && 'open', names('link') && `linked with ${names('link')}`, names('route') && `works with ${names('route')}`].filter(Boolean).join(', ')
-          const color = meta.toolColors?.[t]
-          const shelf = hot === t && docs > 0
+        {nodes.map((n) => {
+          const m = getManifest(n.type)!
+          const p = layout.nodes.get(n.key)!
+          const isHere = n.key === hereKey
+          const isOpen = !isHere && panels.some((x) => nodeKey(x.type, x.documentId) === n.key)
+          const mine = edgesOf(n.key)
+          const names = (kind: MapEdge['kind']) => mine.filter((e) => e.kind === kind).map((e) => nameOf(other(e, n.key))).join(', ')
+          const label = [nameOf(n.key), isHere && 'you are here', isOpen && 'open', names('link') && `linked with ${names('link')}`, names('route') && `works with ${names('route')}`].filter(Boolean).join(', ')
+          const color = meta.toolColors?.[n.type]
           return (
-            <div
-              key={t}
-              ref={(el) => void (el ? items.current.set(t, el) : items.current.delete(t))}
-              className={`tm-item${shelf ? ' shelf' : ''}${fading && hot !== t && !near!.has(t) ? ' dim' : ''}`}
+            <button
+              key={n.key}
+              ref={(el) => void (el ? buttons.current.set(n.key, el) : buttons.current.delete(n.key))}
+              className={`tm-node${isHere ? ' here' : ''}${n.title ? ' doc' : ''}${fading && hot !== n.key && !near!.has(n.key) ? ' dim' : ''}`}
               style={{ left: p.x - NODE_W / 2, top: p.y - BUBBLE / 2, width: NODE_W, ...(color ? { ['--tool-color' as string]: color } : {}) }}
-              onMouseEnter={() => setHot(t)}
-              onMouseLeave={() => setHot(null)}
-              // Only this tool's own list closes when focus leaves it; another tool's blur must not close the list under the mouse.
-              onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setHot((h) => (h === t ? null : h))}
+              aria-label={label}
+              aria-current={isHere ? 'location' : undefined}
+              title={`${n.title ? `${m.name}: ${n.title}` : m.description}\nClick to go there, Shift+click to open it next to the others.`}
+              onClick={(e) => go(n, e.shiftKey)}
+              onMouseEnter={() => setHot(n.key)}
+              onMouseLeave={() => setHot((h) => (h === n.key ? null : h))}
+              onBlur={() => setHot((h) => (h === n.key ? null : h))}
             >
-              <button
-                ref={(el) => void (el ? buttons.current.set(t, el) : buttons.current.delete(t))}
-                className={`tm-node${isHere ? ' here' : ''}`}
-                aria-label={label}
-                aria-current={isHere ? 'location' : undefined}
-                title={`${m.description}\nClick to go there, Shift+click to open it next to the others.`}
-                onClick={(e) => go(t, e.shiftKey)}
-              >
-                <span className="tm-bubble">
-                  <m.icon size={26} />
-                  {isOpen && <span className="tm-open" />}
-                  {docs > 1 && <span className="tm-count">{docs}</span>}
-                </span>
-                <span className="tm-name">{m.name}</span>
-                {hereDoc && <span className="tm-doc-here">{hereDoc.title}</span>}
-                {isHere && <span className="tm-here">You are here</span>}
-              </button>
-              {shelf && (
-                // The tool's documents (each drawing, each Writer document), to go straight to one.
-                <div className="tm-docs" role="group" aria-label={`${m.name} documents`}>
-                  {docList.map((d) => {
-                    const at = isHere && here?.documentId === d.id
-                    const open = !at && panels.some((x) => x.documentId === d.id)
-                    return (
-                      <button key={d.id} className={`tm-doc${at ? ' here' : ''}`} aria-current={at ? 'location' : undefined} title="Click to open it, Shift+click to open it next to the others" onClick={(e) => go(t, e.shiftKey, d.id)}>
-                        <span className="tm-doc-title">{d.title || 'Untitled'}</span>
-                        {at ? <span className="tm-doc-tag">You are here</span> : open && <span className="tm-open-dot" aria-label="open" />}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+              <span className="tm-bubble">
+                <m.icon size={26} />
+                {isOpen && <span className="tm-open" />}
+              </span>
+              <span className="tm-name">{n.title ?? m.name}</span>
+              {n.title && <span className="tm-tool">{m.name}</span>}
+              {isHere && <span className="tm-here">You are here</span>}
+            </button>
           )
         })}
       </div>
@@ -365,7 +319,7 @@ function ToolMap() {
         <span className="tm-legend">
           <i className="tm-key link" /> your links
         </span>
-        <label className="tm-legend" title="Dotted lines: where the app can send things, even if you never did">
+        <label className="tm-legend" title="Dotted lines: where the app can send things, even if you never did; shown for the bubble you point at">
           <input
             type="checkbox"
             checked={routes}
@@ -391,14 +345,13 @@ function ToolMap() {
             <>
               <strong>{nameOf(told)}</strong>
               {list('link', true) && <span>Linked with {list('link', true)}</span>}
-              {list('route', false) && <span>Works with {list('route', false)}</span>}
-              {!toldLinks.length && <span>No links yet. Jump points and [[links]] you make show up here as lines.</span>}
+              {!list('link', true) && <span>No links yet. Jump points and [[links]] you make show up here as lines.</span>}
             </>
           ) : (
-            <span>Point at a tool to see what it is linked with.</span>
+            <span>Point at a bubble to see what it is linked with.</span>
           )}
         </div>
-        <div className="tm-hint">Click to go there · Point at a tool to pick a document (Space with the keys) · Shift+click opens next to the others · Arrows move · Drag and scroll to look around · {key ? `${formatCombo(key)} or ` : ''}Esc closes</div>
+        <div className="tm-hint">Every drawing, document and tool is a bubble · Click to go there · Shift+click opens it next to the others · Arrows move · Drag and scroll to look around · {key ? `${formatCombo(key)} or ` : ''}Esc closes</div>
       </div>
     </div>
   )

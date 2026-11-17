@@ -85,7 +85,7 @@ The whole app in five minutes.
 7. **Link everything.** Write `[[` in any text to link an article, entry, tool or document. Every entry
    shows what it points at and where it is used, one click away. Jump around and come back with `Alt+Left` and
    `Alt+Right`.
-8. **Find anything with `Ctrl+K`.** Tools, documents, items, characters, towns, enemies, wiki articles and commands. **`Tab` shows the Tool map:** every tool as a bubble with lines for the links between them; click one to go there.
+8. **Find anything with `Ctrl+K`.** Tools, documents, items, characters, towns, enemies, wiki articles and commands. **`Tab` shows the Tool map:** every tool and every document (each drawing, each Writer doc) as a bubble with lines for the links between them; click one to go there.
 9. **Don't worry about saving.** The app saves about a second after every edit, every tool has undo and redo, and the
    backups go back a month (the last 10, one per day for a week, one per week for a month).
 10. **Stuck?** Press `F1` for the built-in guide to every tool. The tour on first launch walks you through the basics.

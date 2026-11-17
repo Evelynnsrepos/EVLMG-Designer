@@ -3,15 +3,37 @@ import type { ReferenceIndex } from '@/core/references'
 import { ENTITY_COMPONENT } from '@/shared/entityList/navigation'
 
 /**
- * The data behind the Tool map (Tab): the project's tools in their sidebar groups, the links between
- * them, and where each bubble sits. Pure functions; nothing here is stored in the project.
+ * The data behind the Tool map (Tab): a bubble for every tool and for every document of a tool (each
+ * drawing, each Writer document), in their sidebar groups, the links between them, and where each
+ * bubble sits. Pure functions; nothing here is stored in the project.
  */
+
+/** A bubble: a tool with one document, or one document of a tool that has several. */
+export interface MapNode {
+  key: string
+  type: ComponentType
+  documentId: Id | null
+  /** The document's title; null for a tool's bubble. */
+  title: string | null
+}
+
+export const nodeKey = (type: ComponentType, documentId: Id | null | undefined) => (documentId ? `${type}:${documentId}` : type)
+
+/**
+ * The bubbles of one tool: one per document for tools with several documents (in the sidebar's
+ * order), else the tool itself; a multi-document tool without documents yet keeps one bubble.
+ */
+export function toolNodes(type: ComponentType, multiDocument: boolean, documents: { id: Id; type: ComponentType; title: string }[]): MapNode[] {
+  const docs = multiDocument ? documents.filter((d) => d.type === type) : []
+  return docs.length ? docs.map((d) => ({ key: nodeKey(type, d.id), type, documentId: d.id, title: d.title || 'Untitled' })) : [{ key: type, type, documentId: null, title: null }]
+}
 
 export interface MapGroup {
   id: string
   /** Empty for the only group of a project without stars or folders. */
   name: string
-  tools: ComponentType[]
+  /** Tool types from groupTools; bubble keys once expanded for the layout. */
+  tools: string[]
 }
 
 /** The sidebar's own order: starred tools, then each folder, then the rest. */
@@ -29,8 +51,9 @@ export function groupTools(meta: Pick<ProjectMeta, 'favorites' | 'folders'>, sho
 export type EdgeKind = 'link' | 'route'
 
 export interface MapEdge {
-  a: ComponentType
-  b: ComponentType
+  /** Bubble keys, a < b. */
+  a: string
+  b: string
   kind: EdgeKind
   /** Why the line is there, e.g. "2 jump points, 5 mentions" or "Send to". */
   why: string
@@ -56,40 +79,52 @@ export const ROUTES: readonly (readonly [ComponentType, ComponentType, string])[
 /** Tools with a "Send to…" menu; where they can send to is `IMAGE_TARGETS` (plugins may add targets). */
 export const IMAGE_SENDERS: readonly ComponentType[] = ['sketch', 'vector', 'texture-paint', 'card-designer']
 
-const toolOf = (t: LinkTarget): ComponentType => (t.kind === 'entity' ? ENTITY_COMPONENT[t.type] : t.type)
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
 
 /**
- * Every line of the map between two shown tools. `index` (the slow file scan) may come later; the
- * jump points and entry connections are known at once.
+ * Every line of the map between two bubbles. `index` (the slow file scan) may come later; the jump
+ * points and entry connections are known at once. A link to a whole tool (no document) goes to the
+ * tool's bubble, or to each of its documents' bubbles when it has several.
  */
 export function mapEdges(
-  shown: ComponentType[],
+  nodes: MapNode[],
   meta: Pick<ProjectMeta, 'jumps' | 'documents'>,
   entities: Entity[],
   imageTargets: ComponentType[],
   index?: ReferenceIndex,
 ): MapEdge[] {
-  const ok = new Set(shown)
-  const links = new Map<string, { a: ComponentType; b: ComponentType; jumps: number; connections: number; mentions: number }>()
-  const link = (a: ComponentType, b: ComponentType, what: 'jumps' | 'connections' | 'mentions') => {
-    if (a === b || !ok.has(a) || !ok.has(b)) return
-    const [x, y] = a < b ? [a, b] : [b, a]
-    const key = `${x}|${y}`
-    const e = links.get(key) ?? { a: x, b: y, jumps: 0, connections: 0, mentions: 0 }
-    e[what]++
-    links.set(key, e)
+  const keys = new Set(nodes.map((n) => n.key))
+  const ofType = new Map<ComponentType, string[]>()
+  for (const n of nodes) ofType.set(n.type, [...(ofType.get(n.type) ?? []), n.key])
+  const at = (t: LinkTarget): string[] => {
+    if (t.kind === 'entity') return ofType.get(ENTITY_COMPONENT[t.type]) ?? []
+    const own = nodeKey(t.type, t.documentId)
+    return keys.has(own) ? [own] : t.documentId ? [] : (ofType.get(t.type) ?? [])
   }
-  for (const j of meta.jumps ?? []) link(toolOf(j.from), toolOf(j.to), 'jumps')
-  for (const e of entities) for (const c of e.connections ?? []) link(ENTITY_COMPONENT[e.type], toolOf(c), 'connections')
+  const doc = (type: ComponentType, documentId: Id | null): LinkTarget => ({ kind: 'document', type, documentId })
+
+  const links = new Map<string, { a: string; b: string; jumps: number; connections: number; mentions: number }>()
+  const link = (from: string[], to: string[], what: 'jumps' | 'connections' | 'mentions') => {
+    for (const x0 of from)
+      for (const y0 of to) {
+        if (x0 === y0) continue
+        const [x, y] = x0 < y0 ? [x0, y0] : [y0, x0]
+        const key = `${x}|${y}`
+        const e = links.get(key) ?? { a: x, b: y, jumps: 0, connections: 0, mentions: 0 }
+        e[what]++
+        links.set(key, e)
+      }
+  }
+  for (const j of meta.jumps ?? []) link(at(j.from), at(j.to), 'jumps')
+  for (const e of entities) for (const c of e.connections ?? []) link(at({ kind: 'entity', type: e.type, id: e.id }), at(c), 'connections')
   if (index) {
     // shortcut: only ids of list entries and documents are known here; ids inside a document (assets, wiki articles) are skipped, map them when someone misses those lines.
-    const owner = new Map<Id, ComponentType>()
-    for (const e of entities) owner.set(e.id.toLowerCase(), ENTITY_COMPONENT[e.type])
-    for (const d of meta.documents) owner.set(d.id.toLowerCase(), d.type)
+    const owner = new Map<Id, LinkTarget>()
+    for (const e of entities) owner.set(e.id.toLowerCase(), { kind: 'entity', type: e.type, id: e.id })
+    for (const d of meta.documents) owner.set(d.id.toLowerCase(), doc(d.type, d.id))
     for (const [id, refs] of index) {
       const to = owner.get(id)
-      if (to) for (const r of refs) link(r.source.kind === 'entity' ? ENTITY_COMPONENT[r.source.entityType] : r.source.componentType, to, 'mentions')
+      if (to) for (const r of refs) link(r.source.kind === 'entity' ? at({ kind: 'entity', type: r.source.entityType, id: r.source.entityId }) : at(doc(r.source.componentType, r.source.documentId)), at(to), 'mentions')
     }
   }
   const out: MapEdge[] = [...links.values()].map((e) => ({
@@ -102,12 +137,15 @@ export function mapEdges(
 
   const routes = new Map<string, MapEdge>()
   const route = (a: ComponentType, b: ComponentType, why: string) => {
-    if (a === b || !ok.has(a) || !ok.has(b)) return
-    const [x, y] = a < b ? [a, b] : [b, a]
-    const key = `${x}|${y}`
-    const e = routes.get(key)
-    if (!e) routes.set(key, { a: x, b: y, kind: 'route', count: 1, why })
-    else if (!e.why.split(', ').includes(why)) e.why += `, ${why}`
+    if (a === b) return
+    for (const x0 of ofType.get(a) ?? [])
+      for (const y0 of ofType.get(b) ?? []) {
+        const [x, y] = x0 < y0 ? [x0, y0] : [y0, x0]
+        const key = `${x}|${y}`
+        const e = routes.get(key)
+        if (!e) routes.set(key, { a: x, b: y, kind: 'route', count: 1, why })
+        else if (!e.why.split(', ').includes(why)) e.why += `, ${why}`
+      }
   }
   for (const from of IMAGE_SENDERS) for (const to of imageTargets) route(from, to, 'Send to')
   for (const [a, b, why] of ROUTES) route(a, b, why)
@@ -127,7 +165,7 @@ const GROUP_PAD = 86
 const GROUP_GAP = 36
 
 export interface MapLayout {
-  nodes: Map<ComponentType, Point>
+  nodes: Map<string, Point>
   groups: (MapGroup & Point & { r: number })[]
   bounds: { x: number; y: number; w: number; h: number }
 }
@@ -169,7 +207,7 @@ export function layoutMap(groups: MapGroup[]): MapLayout {
   while (n > 1 && overlaps(centers(R))) R += 20
   const cs = centers(R)
 
-  const nodes = new Map<ComponentType, Point>()
+  const nodes = new Map<string, Point>()
   let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity
   groups.forEach((g, i) => {
     g.tools.forEach((t, k) => nodes.set(t, { x: cs[i].x + combs[i].points[k].x, y: cs[i].y + combs[i].points[k].y }))
@@ -183,10 +221,10 @@ export function layoutMap(groups: MapGroup[]): MapLayout {
 }
 
 /** Arrow keys: the nearest bubble in that direction (sideways distance counts double). */
-export function neighbourIn(nodes: Map<ComponentType, Point>, from: ComponentType, dx: number, dy: number): ComponentType | null {
+export function neighbourIn(nodes: Map<string, Point>, from: string, dx: number, dy: number): string | null {
   const p = nodes.get(from)
   if (!p) return null
-  let best: ComponentType | null = null
+  let best: string | null = null
   let bestScore = Infinity
   for (const [t, q] of nodes) {
     const along = (q.x - p.x) * dx + (q.y - p.y) * dy
@@ -232,8 +270,9 @@ export function edgePath(a: Point, b: Point, bend: number): string {
  * The bubbles stay where they are (the map must look the same every time); only the lines give way.
  * Greedy: each line in turn takes its best bend against the others, twice over. Same input, same result.
  */
-export function bendEdges(nodes: Map<ComponentType, Point>, edges: Pick<MapEdge, 'a' | 'b'>[]): number[] {
-  const ends = edges.map((e) => [nodes.get(e.a), nodes.get(e.b)] as const)
+export function bendEdges(nodes: Map<string, Point>, edges: (Pick<MapEdge, 'a' | 'b'> & { kind?: MapEdge['kind'] })[]): number[] {
+  // Dotted "works together" lines only show for the bubble pointed at; they keep the default bend and are not avoided.
+  const ends = edges.map((e): [Point | undefined, Point | undefined] => (e.kind === 'route' ? [undefined, undefined] : [nodes.get(e.a), nodes.get(e.b)]))
   const bends = edges.map(() => BENDS[0])
   const lines = ends.map(([a, b]) => (a && b ? curve(a, b, BENDS[0]) : null))
   const others = [...nodes]

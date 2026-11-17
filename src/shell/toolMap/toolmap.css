@@ -91,17 +91,11 @@
   opacity: 0.06;
 }
 
-.tm-item {
-  position: absolute;
-}
-.tm-item.shelf {
-  z-index: 2;
-}
-.tm-item.dim {
+.tm-node.dim {
   opacity: 0.3;
 }
 .tm-node {
-  width: 100%;
+  position: absolute;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -247,88 +241,12 @@
   }
 }
 
-/* The documents of the tool the mouse is on: a small glass list beside the bubble. Not blurred (it sits on the blurred map). */
-.tm-doc-here {
-  max-width: 100%;
-  margin-top: -3px;
-  font-size: 11px;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tm-docs {
-  position: absolute;
-  left: calc(50% + 36px);
-  top: -6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: max-content;
-  min-width: 170px;
-  max-width: 260px;
-  max-height: 280px;
-  overflow-y: auto;
-  padding: 6px;
-  border-radius: var(--radius, 10px);
-  background: var(--glass-fill-thick, var(--bg-elevated));
-  border: 1px solid var(--glass-border, var(--border));
-  box-shadow:
-    inset 0 1px 0 var(--glass-hi, transparent),
-    var(--glass-shadow-sm, var(--shadow));
-  cursor: default;
-}
-/* A bridge over the gap between the bubble and the list, so the mouse can cross it without the list closing. */
-.tm-docs::before {
-  content: '';
-  position: absolute;
-  right: 100%;
-  top: 0;
-  width: 14px;
-  height: 64px;
-}
-.tm-doc {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 6px 10px;
-  border: 0;
-  border-radius: var(--radius-sm, 6px);
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-}
-.tm-doc:hover,
-.tm-doc:focus-visible {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  outline: none;
-}
-.tm-doc.here {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  font-weight: 600;
-}
-.tm-doc-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tm-doc-tag {
-  flex: none;
-  padding: 0 7px;
-  border-radius: 999px;
+/* A document's bubble names its tool small, under the document's own name. */
+.tm-tool {
+  margin-top: -4px;
   font-size: 10.5px;
-  font-weight: 700;
-  color: var(--accent-text);
-  background: var(--accent);
+  color: var(--text-muted);
 }
-.tm-open-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
+.tm-edge.hidden {
+  display: none;
 }
