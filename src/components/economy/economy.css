@@ -63,3 +63,10 @@
 .eco-th {
   padding-left: 18px;
 }
+.eco-meter .input {
+  width: 140px;
+  flex: none;
+}
+.eco-meter .calc-number {
+  width: 80px;
+}

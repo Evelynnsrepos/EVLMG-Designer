@@ -6,3 +6,6 @@
   background: var(--accent);
   color: #fff;
 }
+.ld-page .ld-inline .calc-number {
+  width: 80px;
+}

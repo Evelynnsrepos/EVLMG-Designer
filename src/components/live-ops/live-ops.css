@@ -125,3 +125,6 @@
   margin: 2px 0;
   font-size: 13px;
 }
+.lo-body .calc-number {
+  width: 80px;
+}

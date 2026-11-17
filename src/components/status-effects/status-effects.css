@@ -67,3 +67,6 @@
   font-size: 13px;
   color: var(--text-muted);
 }
+.ld-page .ld-inline .calc-number {
+  width: 80px;
+}
