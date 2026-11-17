@@ -40,6 +40,7 @@ export const DATA_TOOLS = [
   'map',
   'pacing',
   'skill-tree',
+  'status-effects',
   'timeline',
   'wave-planner',
 ] as const

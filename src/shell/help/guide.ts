@@ -625,6 +625,15 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Plan a build tests the tree like a player: set the points at the start, per level and the level, then click skills and add or take back ranks. The planner explains why a rank is not possible yet.',
     ],
   },
+  'status-effects': {
+    title: 'Status Effects & Reactions',
+    body: [
+      'Effects are things that stay on a character for a while: Burn, Poison, Freeze, Stun, Haste, Regeneration, or a survival game\'s Hungry. Start with examples fills in seven to change.',
+      'Each effect has how long it lasts, whether it helps or hurts, damage or healing every few seconds, stat changes while it is active (ATK, DEF, SPD, CRIT in percent), whether the target can\'t act, and how it stacks when it lands again: the timer starts over, it gets one stack stronger, or nothing happens. Removes these when it lands lets Wet put out Burn.',
+      'Reactions is a grid of elements. A row is the element already on the target, a column is the element of the new hit. Click a cell to say what happens: a name like Melt, extra damage, an effect it adds (Water then Lightning stuns) and whether the first element is used up. Arrow keys move between cells, Enter opens one, Delete clears it.',
+      'In Abilities & Spells, Status effects it applies picks which effects an ability puts on its target and how likely. The Combat Simulator then plays them out: ticks hurt or heal, stunned fighters skip turns, stat changes count, and an element hit leaves its element on the target for 8 seconds so the next different element can react. The results show the damage from effects and how often each reaction happened.',
+    ],
+  },
   abilities: {
     title: 'Abilities & Spells',
     body: [

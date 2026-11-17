@@ -59,6 +59,7 @@ export const TOOL_INFO: Partial<Record<ComponentType, { group: ToolGroupId; useW
   'gameplay-loop': { group: 'levels', useWhen: 'what the player does again and again' },
   'skill-tree': { group: 'levels', useWhen: 'skills that unlock each other' },
   abilities: { group: 'levels', useWhen: 'spells and abilities' },
+  'status-effects': { group: 'levels', useWhen: 'burn, freeze, stun and element reactions' },
   crafting: { group: 'levels', useWhen: 'recipes and what they make' },
   achievements: { group: 'levels', useWhen: 'achievements and trophies' },
   'wave-planner': { group: 'levels', useWhen: 'enemy waves over time' },
