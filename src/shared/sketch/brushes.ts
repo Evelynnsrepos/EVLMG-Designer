@@ -1015,7 +1015,7 @@ export class StrokeStamper {
       })
     for (const strip of strips) {
       if (to instanceof GpuSurface) to.ribbon(Float32Array.from(strip), { image: tip, shade, repeat: b.ribbon === 'tile', filtering: b.shapeFiltering, color: color ? rgb(color) : null })
-      else ribbon2d(to, strip, painted(tip, shade, color), b.ribbon === 'tile')
+      else ribbon2d(to, strip, shrunk(painted(tip, shade, color), Math.max(...halves) * 2), b.ribbon === 'tile')
     }
     // Caps: centred on the ends, turned to point out of the stroke, as tall as the ribbon is wide there.
     const n = pts.length - 1
@@ -1154,8 +1154,24 @@ function painted(img: HTMLCanvasElement, shade: HTMLCanvasElement | null, color:
 }
 
 /**
+ * The image halved until it is at most about twice `h` tall: Canvas 2D has no mipmaps, so a big image drawn very
+ * small sparkles and loses its shading (the GPU strip uses mipmaps).
+ */
+function shrunk(img: HTMLCanvasElement, h: number): HTMLCanvasElement {
+  let c = img
+  while (c.height > Math.max(8, h * 2) && c.width >= 8) {
+    const n = makeCanvas(Math.max(1, Math.round(c.width / 2)), Math.max(1, Math.round(c.height / 2)))
+    const g = n.getContext('2d')!
+    g.imageSmoothingQuality = 'high'
+    g.drawImage(c, 0, 0, n.width, n.height)
+    c = n
+  }
+  return c
+}
+
+/**
  * Canvas 2D ribbon: each quad of the strip is two triangles, each filled with the image under the affine
- * transform that maps its image corners onto it. Slower than the GPU strip, same picture apart from faint seams.
+ * transform that maps its image corners onto it. Slower than the GPU strip, same picture.
  */
 function ribbon2d(ctx: CanvasRenderingContext2D, v: number[], img: HTMLCanvasElement, repeat: boolean) {
   const W = img.width
@@ -1176,9 +1192,17 @@ function ribbon2d(ctx: CanvasRenderingContext2D, v: number[], img: HTMLCanvasEle
     const d = ((y2 - y0) * (sx1 - sx0) - (y1 - y0) * (sx2 - sx0)) / det
     ctx.save()
     ctx.beginPath()
-    ctx.moveTo(x0, y0)
-    ctx.lineTo(x1, y1)
-    ctx.lineTo(x2, y2)
+    // Clip a little past the triangle's edges so neighbours overlap: anti-aliased clips leave light seams otherwise.
+    const cx = (x0 + x1 + x2) / 3
+    const cy = (y0 + y1 + y2) / 3
+    for (const [x, y] of [
+      [x0, y0],
+      [x1, y1],
+      [x2, y2],
+    ]) {
+      const l = Math.hypot(x - cx, y - cy) || 1
+      ctx.lineTo(x + ((x - cx) / l) * 0.75, y + ((y - cy) / l) * 0.75)
+    }
     ctx.closePath()
     ctx.clip()
     ctx.globalAlpha = (a0 + a1 + a2) / 3

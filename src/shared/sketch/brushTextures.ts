@@ -504,8 +504,12 @@ export function shapeShade(shape: BrushShape): HTMLCanvasElement | null {
   if (!isArtShape(shape)) return null
   let c = artShades.get(shape)
   if (!c) {
-    const data = artCanvas(shape).getContext('2d')!.getImageData(0, 0, TIP, TIP).data
-    c = shadeCanvas(data, TIP, TIP)
+    // Over mid grey (no change to the colour): blurred (mipmapped) edges then don't pick up black from empty space.
+    c = canvas(TIP)
+    const g = c.getContext('2d')!
+    g.fillStyle = '#808080'
+    g.fillRect(0, 0, TIP, TIP)
+    g.drawImage(artCanvas(shape), 0, 0)
     artShades.set(shape, c)
   }
   return c

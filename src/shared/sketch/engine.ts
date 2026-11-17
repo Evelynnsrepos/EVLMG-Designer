@@ -664,10 +664,12 @@ export class SketchEngine {
         if (!this.wetWork) {
           rects.forEach((t, i) => {
             const m = gpu.read(g.surf.t, t).data
+            // An outline paints just outside the stroke: where the stroke's blurred copy reaches counts as covered.
+            const ol = g.look.outline ? gpu.read(gpu.temp('outline'), t).data : null
             const a = after[i].data
             const b = before[i].data
             for (let p = 0; p < a.length; p += 4) {
-              if (m[p + 3]) continue
+              if (m[p + 3] || (ol && ol[p])) continue
               // Compared premultiplied: faint pixels round very differently between the GPU and Canvas 2D (a colour
               // can jump by 60 at alpha 4) without looking any different, and those were counted as foreign.
               const aa = a[p + 3]

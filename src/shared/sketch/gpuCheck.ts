@@ -216,6 +216,12 @@ export async function runSketchGpuCheck(): Promise<{ strokes: GpuDiff[]; adjust:
     ['hard-eraser', 'erase'],
     ['ribbon-shaded-caps', 'paint'],
     ['stamps-shaded', 'paint'],
+    ['rope', 'paint'],
+    ['box-braid', 'paint'],
+    ['oak-leaves', 'paint'],
+    ['outline-marker', 'paint'],
+    ['ink-fill', 'paint'],
+    ['bubble-outline', 'paint'],
   ]
   const strokes = cases.map(([id, mode]) => {
     const g = stroke(id, true, mode)
