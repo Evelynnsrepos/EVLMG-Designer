@@ -45,11 +45,19 @@ style.css     optional (named in "style")
   "description": "Shown in Add tool.",
   "apiVersion": 1,
   "main": "index.js",
-  "style": "style.css"
+  "style": "style.css",
+  "permissions": ["project"],
+  "needsApp": ">=0.35"
 }
 ```
 
 - `id`: lowercase letters, digits and dashes. It must never change; projects store data under it.
+- `permissions` (optional, since 0.35): what the plugin uses, any of `files` (files outside the open project),
+  `network` (the internet) and `project` (the open project's data). The install warning shows them in plain words.
+  It is a promise to the person installing, not a sandbox: a plugin without the list gets the strongest warning.
+- `needsApp` (optional, since 0.35): the app versions the plugin works with, as space-separated `>=`, `>`, `<=`, `<`, `=`
+  comparisons, e.g. `">=0.35 <0.40"`. Other versions list the plugin with a clear message instead of loading it.
+  Older apps ignore both fields.
 - `apiVersion`: must be `1`. If a future app changes the API, it raises this number and old plugins show a clear error
   instead of breaking.
 

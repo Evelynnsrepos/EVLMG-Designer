@@ -34,6 +34,32 @@ export interface PluginInfo {
   style?: string
   /** Set by the app: where it was installed from. */
   source?: string
+  /** What the plugin says it uses; shown in plain words before installing. Missing = the strongest warning. */
+  permissions?: PluginPermission[]
+  /** App versions it works with, e.g. ">=0.35" or ">=0.35 <0.40". Other versions show a clear message instead of breaking. */
+  needsApp?: string
+}
+
+export const PLUGIN_PERMISSIONS = ['files', 'network', 'project'] as const
+export type PluginPermission = (typeof PLUGIN_PERMISSIONS)[number]
+
+/** Does `version` (e.g. "0.35.0") fit `range` (space-separated >=, >, <=, <, = comparators)? A bad range never fits. */
+export function appVersionFits(range: string, version: string): boolean {
+  const num = (v: string) => v.split('.').map((p) => parseInt(p, 10) || 0)
+  const cmp = (a: number[], b: number[]) => {
+    for (let i = 0; i < 3; i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) - (b[i] ?? 0)
+    return 0
+  }
+  const v = num(version)
+  return range
+    .trim()
+    .split(/\s+/)
+    .every((part) => {
+      const m = /^(>=|<=|>|<|=)?v?(\d+(?:\.\d+){0,2})$/.exec(part)
+      if (!m) return false
+      const c = cmp(v, num(m[2]!))
+      return { '>=': c >= 0, '<=': c <= 0, '>': c > 0, '<': c < 0, '=': c === 0 }[m[1] ?? '=']!
+    })
 }
 
 export interface InstalledPlugin {
@@ -88,6 +114,9 @@ export function validateInfo(raw: unknown): PluginInfo {
   if (typeof info.version !== 'string') throw new Error('plugin.json needs a "version".')
   if (info.apiVersion !== PLUGIN_API_VERSION) throw new Error(`This plugin is made for plugin API ${info.apiVersion}; this app supports ${PLUGIN_API_VERSION}.`)
   for (const f of [info.main, info.style]) if (f !== undefined && (typeof f !== 'string' || !isSafeEntryPath(f))) throw new Error('plugin.json has an invalid file name.')
+  if (info.permissions !== undefined && (!Array.isArray(info.permissions) || info.permissions.some((p) => !PLUGIN_PERMISSIONS.includes(p))))
+    throw new Error(`plugin.json "permissions" can only list ${PLUGIN_PERMISSIONS.join(', ')}.`)
+  if (info.needsApp !== undefined && typeof info.needsApp !== 'string') throw new Error('plugin.json "needsApp" must be text like ">=0.35".')
   return info as PluginInfo
 }
 
@@ -122,6 +151,8 @@ async function loadPlugin(dir: string, info: PluginInfo) {
   }
 }
 
+const getAppVersion = () => import('@tauri-apps/api/app').then((m) => m.getVersion()).catch(() => '')
+
 /** Load every installed plugin; a broken plugin is listed with its error and skipped. */
 export async function loadAllPlugins() {
   const fs = getFs()
@@ -134,6 +165,10 @@ export async function loadAllPlugins() {
     let info: PluginInfo | null = null
     try {
       info = validateInfo(JSON.parse(await fs.readText(await fs.join(dir, 'plugin.json'))))
+      if (info.needsApp) {
+        const app = await getAppVersion()
+        if (app && !appVersionFits(info.needsApp, app)) throw new Error(`Made for app version ${info.needsApp}; this is ${app}. Look for a newer version of the plugin.`)
+      }
       await loadPlugin(dir, info)
       installed.push({ info, error: null })
     } catch (e) {

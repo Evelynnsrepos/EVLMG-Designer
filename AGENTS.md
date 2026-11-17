@@ -123,6 +123,10 @@ Components get this for free as long as they follow the data rules above and:
   `event.preventDefault()` in your keydown handler and the shell will ignore it (ED-7).
 - Confirmations and text prompts: `await confirmDialog({...})`, `await promptDialog(title, initial)` from `@/shared/dialogs`.
 - Text visible to users is English but kept in plain string constants so it can be translated later.
+- **Security rules (0.35):** the window has a Content-Security-Policy (`tauri.conf.json` `app.security.csp`): no `eval`, no
+  scripts from the internet, no inline scripts. Loading something new (a CDN font, an iframe site) needs a CSP change there.
+  File access is limited to the person's own folders, folders picked in Open/Save windows (remembered across restarts),
+  and project folders (`allowProjectFolder`, `src-tauri/src/scope.rs`). Rust commands are not limited by this.
 
 ### Releases
 
