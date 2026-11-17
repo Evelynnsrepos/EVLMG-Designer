@@ -7,6 +7,7 @@ import { CARD_SIZES, mmToPx } from '@/shared/print'
 import { useInputSettings } from '@/shared/sketch/inputSettings'
 import { promptDialog } from '@/shared/dialogs'
 import { SendMenu } from '@/shell/editor/SendMenu'
+import { useDrawLock } from './drawLock'
 import './sketch-tool.css'
 
 const UI = {
@@ -21,6 +22,12 @@ const UI = {
   mine: 'My sizes',
   cards: 'Card sizes (300 DPI, 3 mm bleed; the guide lines show the cut and the safe area)',
   cardGuides: 'Card guide lines',
+  viewing: (name: string) => `${name} is drawing: view only. You see each save of theirs.`,
+  takeOver: 'Take over',
+  asked: (name: string) => `Asked ${name}. You can draw once they let go.`,
+  asking: (names: string) => `${names} would like to draw here.`,
+  letGo: 'Let them draw',
+  keep: 'Keep drawing',
 }
 
 /** A sketch document; `started` is false until the canvas size is chosen. */
@@ -36,12 +43,45 @@ export default function View({ documentId, active }: PanelProps) {
   const title = useProjectStore((s) => s.meta?.documents.find((d) => d.id === documentId)?.title ?? 'Draw')
   if (!doc.data) return null
   if (!doc.data.started) return <SizePicker onStart={(width, height, cardGuides) => doc.update((d) => ({ ...d, ...createSketchDoc(width, height), cardGuides, started: true }))} />
+  return <Drawing documentId={documentId!} active={active} doc={doc} title={title} />
+}
+
+/** The editor, view-only while a teammate draws on the same drawing (shared projects). */
+function Drawing({ documentId, active, doc, title }: { documentId: string; active: boolean; doc: ReturnType<typeof useDocument<SketchToolDoc>>; title: string }) {
+  const lock = useDrawLock(`sketch/${documentId}`, () => flushDocument('sketch', documentId))
+  const [ignored, setIgnored] = useState(0)
+  if (!doc.data) return null
   const guides = doc.data.cardGuides
+  const askers = lock.askers.filter((a) => (a.drawRequest?.at ?? 0) > ignored)
   return (
+    <div className="sketch-lock-host" onPointerDownCapture={lock.touch}>
+      {lock.viewOnly && lock.holder && (
+        <div className="sketch-lock-bar" role="status">
+          <span className="sketch-lock-dot" style={{ background: lock.holder.color }} />
+          {lock.asked ? UI.asked(lock.holder.name) : UI.viewing(lock.holder.name)}
+          {!lock.asked && (
+            <button className="btn" onClick={lock.takeOver}>
+              {UI.takeOver}
+            </button>
+          )}
+        </div>
+      )}
+      {askers.length > 0 && (
+        <div className="sketch-lock-bar" role="alert">
+          {UI.asking(askers.map((a) => a.name).join(', '))}
+          <button className="btn btn-primary" onClick={() => void lock.letGo()}>
+            {UI.letGo}
+          </button>
+          <button className="btn" onClick={() => setIgnored(Date.now())}>
+            {UI.keep}
+          </button>
+        </div>
+      )}
+      {lock.viewOnly && <div className="sketch-lock-shield" />}
     <SketchEditor
       growable
-      historyId={documentId!}
-      flushDoc={() => flushDocument('sketch', documentId!)}
+      historyId={documentId}
+      flushDoc={() => flushDocument('sketch', documentId)}
       panel={
         guides && (
           <label className="sketch-row">
@@ -52,10 +92,11 @@ export default function View({ documentId, active }: PanelProps) {
       }
       doc={doc.data}
       update={(fn) => doc.update((d) => ({ ...d, ...fn(d) }), { undoable: false })}
-      active={active}
+      active={active && !lock.viewOnly}
       title={title}
       actions={(flatten) => <SendMenu title={title} picture={flatten} />}
     />
+    </div>
   )
 }
 

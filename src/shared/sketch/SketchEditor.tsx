@@ -495,6 +495,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     void historyFile.load(engine, new Set(docRef.current.layers.map((l) => l.id))).then((n) => n && setVersion(engine.version))
   }
 
+  /** Layer files that weren't there yet (path -> tries), and a tick to load them again. */
+  const missing = useRef(new Map<string, number>())
+  const [retry, setRetry] = useState(0)
   useEffect(() => {
     if (!root) return
     // No cancel on cleanup: a stale result is dropped by the path check below, and
@@ -522,7 +525,17 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
           else engine.setLayerImage(layer.id, bmp)
           setVersion(engine.version)
         })
-        .catch(() => {})
+        .catch(() => {
+          // In a shared project the layer file may still be on its way from a teammate: try again for a while.
+          const tries = (missing.current.get(path) ?? 0) + 1
+          missing.current.set(path, tries)
+          if (tries <= 90)
+            setTimeout(() => {
+              if (loaded.current.get(layer.id) !== path) return
+              loaded.current.delete(layer.id)
+              setRetry((n) => n + 1)
+            }, 2000)
+        })
         .finally(() => {
           loading.current.delete(layer.id)
           // Paint that waited for the picture can be saved now.
@@ -537,7 +550,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         engine.dropLayer(id)
       }
     }
-  }, [doc.layers, root, engine])
+  }, [doc.layers, root, engine, retry])
 
   const stickerKey = useRef(`${root}|sketch-sticker/${newId()}`).current
   /** The sticker: the whole picture without background, for Storyboard, Moodboards and pickers. */

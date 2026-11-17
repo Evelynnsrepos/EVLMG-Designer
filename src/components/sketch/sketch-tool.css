@@ -44,3 +44,40 @@
   color: inherit;
   opacity: 0.75;
 }
+
+/* One artist at a time in shared projects. */
+.sketch-lock-host {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.sketch-lock-host > :last-child {
+  flex: 1;
+  min-height: 0;
+}
+.sketch-lock-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elevated));
+  font-size: 13px;
+  position: relative;
+  z-index: 6;
+}
+.sketch-lock-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+/* Watching only: the picture shows, the pen and keys do nothing. */
+.sketch-lock-shield {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  cursor: not-allowed;
+}
