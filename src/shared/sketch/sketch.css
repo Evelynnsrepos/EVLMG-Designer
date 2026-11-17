@@ -173,13 +173,6 @@
 .sketch-row select {
   flex: 1;
 }
-/* Draw beyond the canvas: the switch and its memory note. */
-.sketch-beyond-note {
-  margin: 4px 0 0 24px;
-  font-size: 12px;
-  line-height: 1.35;
-  color: var(--text-muted);
-}
 .sketch-check {
   display: inline-flex;
   align-items: center;
