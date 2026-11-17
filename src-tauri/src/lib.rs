@@ -7,6 +7,7 @@ mod git;
 mod graphics;
 mod llm;
 mod plugins;
+mod scope;
 mod server_link;
 mod spell;
 mod texpaint_commands;
@@ -17,6 +18,7 @@ pub fn run() {
   graphics::apply_env();
   tauri::Builder::default()
     .plugin(tauri_plugin_fs::init())
+    .plugin(tauri_plugin_persisted_scope::init())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
@@ -64,6 +66,7 @@ pub fn run() {
       updates::update_check,
       updates::update_install,
       updates::update_restart,
+      scope::fs_allow_project,
     ])
     .setup(|app| {
       if let Some(window) = app.get_webview_window("main") {

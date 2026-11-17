@@ -21,6 +21,17 @@
     "fs:allow-rename",
     "fs:allow-copy-file",
     "fs:allow-stat",
-    { "identifier": "fs:scope", "allow": [{ "path": "$DOCUMENT/**" }, { "path": "$APPDATA/**" }, { "path": "**" }] }
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$HOME/**" },
+        { "path": "$DOCUMENT/**" },
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$APPDATA/**" },
+        { "path": "$APPLOCALDATA/**" },
+        { "path": "$TEMP/**" },
+        { "path": "$RESOURCE/**" }
+      ]
+    }
   ]
 }

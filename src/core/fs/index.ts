@@ -17,6 +17,17 @@ export function getFs(): FileSystem {
   return current
 }
 
+/**
+ * Desktop: lets the app reach a project folder outside the person's own folders (another drive, a USB stick).
+ * Rust only accepts folders that hold a project.json (src-tauri/src/scope.rs). Elsewhere it does nothing.
+ */
+export async function allowProjectFolder(root: string): Promise<void> {
+  if (!isTauri()) return
+  const { invoke } = await import('@tauri-apps/api/core')
+  // The phone app has no such command and no such limit.
+  await invoke('fs_allow_project', { path: root }).catch(() => {})
+}
+
 /** Tests swap in a MemoryFs. */
 export function setFs(fs: FileSystem) {
   current = fs

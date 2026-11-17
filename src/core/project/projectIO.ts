@@ -1,4 +1,4 @@
-import { getFs, safeFolderName } from '../fs'
+import { allowProjectFolder, getFs, safeFolderName } from '../fs'
 import {
   builtInCategories,
   ENTITY_TYPES,
@@ -79,6 +79,7 @@ export async function isProjectFolder(root: string): Promise<boolean> {
 }
 
 export async function loadProject(root: string): Promise<LoadedProject> {
+  await allowProjectFolder(root)
   const meta = await readVersioned<ProjectMeta>(await projectPaths.meta(root))
   const entities = emptyCollections()
   for (const type of ENTITY_TYPES) {

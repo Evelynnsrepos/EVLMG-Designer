@@ -77,7 +77,7 @@ export class TauriFs implements FileSystem {
     return fs.copyFile(from, to)
   }
   async pickFolder(title: string) {
-    const result = await open({ directory: true, multiple: false, title, defaultPath: await startFolder(documentDir) })
+    const result = await open({ directory: true, recursive: true, multiple: false, title, defaultPath: await startFolder(documentDir) })
     if (typeof result !== 'string') return null
     rememberFolder(await dirname(result))
     return result
