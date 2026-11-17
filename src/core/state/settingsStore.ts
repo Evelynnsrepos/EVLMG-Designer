@@ -39,7 +39,7 @@ export interface AppSettings {
   shortcuts: Record<string, string[]>
   /** v0.18: size of each tool in percent (by tool type), e.g. bigger for a graphics tablet; missing = 100. */
   toolScale: Record<string, number>
-  /** v0.18: the Hotwheel (hold Q). */
+  /** v0.18: the QuickSelect (hold Q). */
   hotwheel: HotwheelSettings
   /** 0.19: new Writer documents start with the Markdown Syntax switch on. */
   writerMarkdownSyntax: boolean

@@ -195,7 +195,7 @@
   box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.15);
 }
 
-/* --- 6. Hotwheel: liquid glass bubbles (Hotwheel.tsx draws them when the glass look is on) ------------
+/* --- 6. QuickSelect: liquid glass bubbles (Hotwheel.tsx draws them when the glass look is on) ------------
  * The drops and the middle blob are one "goo" layer, so they flow together; it is see-through as a whole.
  * The hovered drop (and its neck into the middle) fills with the accent; a soft rim light is the shine.
  * Dark theme: the panels are almost black, so the drops are a lighter grey, less see-through, with a brighter rim. */

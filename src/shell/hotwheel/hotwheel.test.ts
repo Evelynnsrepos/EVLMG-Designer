@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { hitTest } from './Hotwheel'
 
-describe('Hotwheel hit test', () => {
+describe('QuickSelect hit test', () => {
   it('picks by direction and distance, with halves', () => {
     expect(hitTest(0, -10, 1, 6, 8)).toBeNull() // the centre cancels
     expect(hitTest(0, -60, 1, 6, 8)).toEqual({ ring: 'in', i: 0, half: 1 }) // straight up: slice 0, right half
@@ -12,7 +12,7 @@ describe('Hotwheel hit test', () => {
   })
 })
 
-describe('Hotwheel bubbles and sliders', () => {
+describe('QuickSelect bubbles and sliders', () => {
   it('makes fewer actions into bigger drops that never touch', async () => {
     const { bubbleLayout } = await import('./Hotwheel')
     const few = bubbleLayout(3, 46, 102)

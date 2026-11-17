@@ -82,7 +82,7 @@ The whole app in five minutes.
    right-click a tool for colors, folders and closing it. Right-click a document under a tool (a deck, a board, a
    drawing) to rename, duplicate or delete it.
 4. **Rearrange with `Esc`** (or the Arrange button next to Projects). Layout Mode shows big, easy targets to close, swap or move tool windows.
-5. **Hold `Q` for the Hotwheel.** A round menu under your pointer or pen: program actions inside, the current tool's
+5. **Hold `Q` for the QuickSelect.** A round menu under your pointer or pen: program actions inside, the current tool's
    actions outside. Point and let go. Every tool's header also has its shortcuts and a size button for tablets.
 6. **Jump points.** The crossing-arrows button in every tool's header links it to any other tool, document or entry,
    and lists what points back. On boards, the jump tool (`J`) places a jump point right on the board. Drag a jump point
@@ -122,7 +122,7 @@ The whole app in five minutes.
 - **Rarities**: as many rarity systems as you like (Rarity, Tier, Quality…) with colors, borders, icons or your own
   pictures, star or number ratings, and your own fields like drop rates.
 - **Safe deleting**: before you delete something, the app shows every place it is used. Links follow renames.
-- **Looks**: a glass look (Full, Light or Off in Settings > General) with a bubble Hotwheel, the accent colour everywhere, light and dark themes, a Project look per project (accent, background, wallpaper), a project picture,
+- **Looks**: a glass look (Full, Light or Off in Settings > General) with a bubble QuickSelect, the accent colour everywhere, light and dark themes, a Project look per project (accent, background, wallpaper), a project picture,
   and a font for every tool.
 - **Spell check** in English and German with your own word list; names from your project count as correct.
   Made for mixed English and German text and for people who spell by sound: each part of a sentence is checked in
@@ -138,7 +138,7 @@ The whole app in five minutes.
   restores one (undo works).
 - **Hotkey hints** are on from the start: every button with a key shows it small in its corner. Turn them off in
   Settings > General.
-- **Settings with tabs and search**: General, Writing, Keys & Hotwheel, Project presets, Git and Plugins.
+- **Settings with tabs and search**: General, Writing, Keys & QuickSelect, Project presets, Git and Plugins.
 - **Your own shortcuts**: change any key in Settings; the user guide (`F1`) has a cheatsheet with the default and your key.
 
 </details>

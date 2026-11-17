@@ -99,7 +99,7 @@ const UI_DE: Partial<typeof UI_EN> = {
   writerSyntaxHint: 'Mit Markdown-Syntax formatierst du durch Zeichen, wie ==Markierung== oder > [!note], und eingefügtes Markdown wird zu Formatierung. Jedes Dokument hat seinen eigenen Schalter oben.',
   glass: 'Glas-Look',
   glassLevels: { full: 'Volles Glas', light: 'Leichtes Glas (ohne Unschärfe, am schnellsten)', off: 'Aus (einfarbig, der klassische Look)' },
-  glassHint: 'Die App bekommt einen Glas-Look: runde, durchscheinende Menüs, Fenster, Werkzeugleisten und Bereiche über einem weichen Hintergrund in deinen Projektfarben. Volles Glas macht außerdem unscharf, was hinter der Seitenleiste, den Fenstern und Menüs liegt. Zeichenflächen bleiben immer einfarbig. Wähle Leicht oder Aus, wenn sich die App langsamer anfühlt.',
+  glassHint: 'Die App bekommt einen Glas-Look: runde, durchscheinende Menüs, Fenster, Werkzeugleisten und Bereiche über einem weichen Hintergrund in deinen Projektfarben. Volles Glas macht außerdem unscharf, was hinter der Seitenleiste, den Fenstern und Menüs liegt. Leinwände bleiben immer einfarbig. Wähle Leicht oder Aus, wenn sich die App langsamer anfühlt.',
   pixels: 'Bilder',
   sharp: 'Scharfe Pixel-Art',
   sharpHint: 'Kleine Bilder, wie Pixel-Art-Kacheln im Level Layout, werden mit harten, eckigen Pixeln gezeigt statt geglättet. Schalte es für gemalte Bilder oder Foto-Tilesets aus.',
@@ -110,7 +110,7 @@ const UI_DE: Partial<typeof UI_EN> = {
   hintsOn: 'Die Taste jedes Knopfs in seiner Ecke zeigen',
   keysHint: 'Klicke auf Ändern und drücke die neue Taste. Einzelne Buchstaben wirken nur im Werkzeug, das du zuletzt angeklickt hast. Das Handbuch (F1) hat dieselbe Liste als Spickzettel.',
   size: 'Größe der Oberfläche',
-  sizeHint: 'Macht alle Menüs, Knöpfe und Texte größer oder kleiner. Zeichenwerkzeuge behalten ihren eigenen Zoom obendrauf. Strg+0 in einer Zeichenfläche passt das Bild weiterhin ein.',
+  sizeHint: 'Macht alle Menüs, Knöpfe und Texte größer oder kleiner. Zeichenwerkzeuge behalten ihren eigenen Zoom obendrauf. Strg+0 auf einer Leinwand passt das Bild weiterhin ein.',
   reset: 'Zurücksetzen',
   contrast: 'Starker Kontrast',
   contrastOn: 'Einfache, einfarbige Farben mit dunklerem Text, klaren Linien und dicken Fokusrahmen (schaltet den Glas-Look aus)',
@@ -122,8 +122,8 @@ const UI = localized(UI_EN, UI_DE)
 
 /** v0.20: the tabs of the Settings window; each section says which tab it is on with data-tab. */
 const TAB_NAMES = localized(
-  { general: 'General', writing: 'Writing', keys: 'Keys & Hotwheel', presets: 'Project presets', git: 'Git', plugins: 'Plugins' },
-  { general: 'Allgemein', writing: 'Schreiben', keys: 'Tasten & Hotwheel', presets: 'Projektvorlagen' },
+  { general: 'General', writing: 'Writing', keys: 'Keys & QuickSelect', presets: 'Project presets', git: 'Git', plugins: 'Plugins' },
+  { general: 'Allgemein', writing: 'Schreiben', keys: 'Tasten & QuickSelect', presets: 'Projektvorlagen' },
 )
 const TABS = [
   { id: 'general' },

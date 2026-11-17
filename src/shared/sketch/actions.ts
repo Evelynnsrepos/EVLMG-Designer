@@ -34,9 +34,9 @@ export const ACTIONS = [
   { id: 'rotateLeft', label: 'Turn view left', keys: [','] },
   { id: 'rotateRight', label: 'Turn view right', keys: ['.'] },
   { id: 'flipView', label: 'Mirror view', keys: ['shift+h'] },
-  // v0.18: the Hotwheel replaces the QuickMenu; Q opens it everywhere (app shortcut), so Draw has no key of its own.
-  { id: 'quickMenu', label: 'Hotwheel', keys: [] },
-  { id: 'nextMenu', label: 'Next Hotwheel profile', keys: [] },
+  // v0.18: the QuickSelect replaces the QuickMenu; Q opens it everywhere (app shortcut), so Draw has no key of its own.
+  { id: 'quickMenu', label: 'QuickSelect', keys: [] },
+  { id: 'nextMenu', label: 'Next QuickSelect profile', keys: [] },
   { id: 'pair.size', label: 'Brush size (smaller | bigger)', keys: [] },
   { id: 'pair.turn', label: 'Turn view (left | right)', keys: [] },
   { id: 'pair.undo', label: 'Undo | Redo', keys: [] },
@@ -87,7 +87,7 @@ export function conflicts(combo: string, except: ActionId, custom: ShortcutMap):
 
 export const QUICK_SLOTS = 10
 
-/** Slots that hold two actions, one per half (Hotwheel). */
+/** Slots that hold two actions, one per half (QuickSelect). */
 export const PAIRS: Partial<Record<ActionId, [ActionId, ActionId]>> = { 'pair.size': ['sizeDown', 'sizeUp'], 'pair.turn': ['rotateLeft', 'rotateRight'], 'pair.undo': ['undo', 'redo'] }
 
 export interface QuickMenuProfile {

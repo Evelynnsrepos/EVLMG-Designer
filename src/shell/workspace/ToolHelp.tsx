@@ -84,7 +84,7 @@ export function ToolKeysButton({ panel }: { panel: Panel }) {
                 <KeyList rows={g.rows} />
               </section>
             ))}
-            <h4>Hotwheel: outer ring (hold {hotwheelKey()})</h4>
+            <h4>QuickSelect: outer ring (hold {hotwheelKey()})</h4>
             <ToolRingEditor panel={panel} />
             <h4>Linking things</h4>
             {LINK_HELP.map((p) => (

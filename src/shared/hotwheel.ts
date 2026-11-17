@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 import { usePanelContext } from '@/core/state'
 
 /**
- * v0.18 Hotwheel: the round menu (hold Q). Tools hand it their actions with `useHotwheel`;
+ * v0.18 QuickSelect: the round menu (hold Q). Tools hand it their actions with `useHotwheel`;
  * tools that don't get their shortcuts and toolbar buttons instead (shell/hotwheel).
  */
 export interface HotAction {
@@ -52,7 +52,7 @@ export interface HotSlider {
 /** Panel id -> what its tool offers. Read when the wheel opens, so the actions are always current. */
 export const hotwheelSources = new Map<string, HotwheelSource>()
 
-/** Give the Hotwheel this tool's actions (its outer ring). */
+/** Give the QuickSelect this tool's actions (its outer ring). */
 export function useHotwheel(actions: () => HotAction[], ownOrder = false, size?: HotwheelSource['size'], sliders?: () => HotSlider[]) {
   const panel = usePanelContext()
   const ref = useRef(actions)
@@ -77,7 +77,7 @@ export function useHotwheel(actions: () => HotAction[], ownOrder = false, size?:
   }, [panel, ownOrder])
 }
 
-/** Program-wide actions from plugins: they can be put on the inner ring (Settings, Hotwheel). Returns a remover. */
+/** Program-wide actions from plugins: they can be put on the inner ring (Settings, QuickSelect). Returns a remover. */
 export const extraHotActions: HotAction[] = []
 export function addHotwheelAction(action: HotAction) {
   extraHotActions.push(action)

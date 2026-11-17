@@ -107,7 +107,7 @@ export default function View({ documentId, active }: PanelProps) {
     if (editingId) apiRef.current?.select([])
   }, [editingId])
 
-  // Hotwheel (hold Q): the story's tools and actions, the node ones only while one node is selected.
+  // QuickSelect (hold Q): the story's tools and actions, the node ones only while one node is selected.
   useHotwheel(() => {
     if (!doc.data) return []
     const tool = (id: string, label: string, icon: HotAction['icon']): HotAction => ({ id: `story.${id}`, label, icon, on: canvas.toolId === id, run: () => apiRef.current?.setTool(id) })
@@ -172,7 +172,7 @@ export default function View({ documentId, active }: PanelProps) {
     if (r.isBranch) setColorOfferId(r.node.id)
     setEditingId(r.node.id)
   }
-  // Declared as functions so the Hotwheel (set up above the loading check) can call them.
+  // Declared as functions so the QuickSelect (set up above the loading check) can call them.
   function tidy() {
     binding.onChange((s) => tidyLayout(s, heightOf))
     requestAnimationFrame(() => apiRef.current?.fitToContent())

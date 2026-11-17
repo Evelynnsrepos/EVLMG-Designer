@@ -102,9 +102,9 @@ and mark `react` as external.
 | `promptDialog(title, initial)` | Text prompt, resolves to a string or null. |
 | `RichTextEditor` | The app's rich text editor with spell check and `[[` links: `h(egd.RichTextEditor, { value, onChange })`. |
 | `newId()` | A new unique id. |
-| `useHotwheel(() => actions)` | (0.18) Put your tool's actions on the Hotwheel's outer ring (hold Q). Call it in your `View`; see below. |
-| `addHotwheelAction(action)` | (0.18) Add a program-wide action that people can put on the inner ring (Settings → Hotwheel). Returns a function that removes it. |
-| `openHotwheel({ x, y }?)` | (0.18) Open the Hotwheel, e.g. from your own button. |
+| `useHotwheel(() => actions)` | (0.18) Put your tool's actions on the QuickSelect's outer ring (hold Q). Call it in your `View`; see below. |
+| `addHotwheelAction(action)` | (0.18) Add a program-wide action that people can put on the inner ring (Settings → QuickSelect). Returns a function that removes it. |
+| `openHotwheel({ x, y }?)` | (0.18) Open the QuickSelect, e.g. from your own button. |
 | `SendMenu` | (0.28) The app's "Send to…" button: `h(egd.SendMenu, { title, picture: async () => pngBlob })`. Sends the picture to the Asset Pool, Moodboard, Card Designer and the other picture tools. |
 | `sendImageTo(type, blob, name)` | (0.28) The same without the button: save a picture into the project and give it to that tool. |
 | `addImageTarget(type, label)` | (0.28) Let your tool receive pictures from Send to…: `type` is `plugin.<your id>`. Returns a function that removes it. |
@@ -113,9 +113,9 @@ and mark `react` as external.
 
 Only additions are made to API version 1; nothing is renamed or removed.
 
-### Hotwheel actions (0.18)
+### QuickSelect actions (0.18)
 
-The Hotwheel is the round menu that opens when people hold Q. Its outer ring belongs to the tool in focus.
+The QuickSelect is the round menu that opens when people hold Q. Its outer ring belongs to the tool in focus.
 Give it your tool's actions; the function is called each time the wheel opens, so the actions can use current state:
 
 ```js
@@ -138,7 +138,7 @@ An action is `{ id, label, run(shift), icon?, halves?, on? }`:
 - `on`: shows the slice as switched on (a toggle or the current tool).
 - `icon`: a lucide-style React component, or an SVG string.
 
-The first ten actions are the default ring; people can choose others in your tool's keyboard button (Hotwheel).
+The first ten actions are the default ring; people can choose others in your tool's keyboard button (QuickSelect).
 A tool that doesn't call `useHotwheel` gets its visible buttons on the ring instead.
 
 ## Rules for a good plugin

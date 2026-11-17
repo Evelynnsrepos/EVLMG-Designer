@@ -247,7 +247,7 @@ const TOOLS: { id: Tool; icon: LucideIcon; label: string; key: string }[] = [
   { id: 'text', icon: Type, label: 'Text (T): click to add text, drag a text box to move it', key: 't' },
 ]
 
-/** Icons for the Hotwheel bubbles (the glass look shows these instead of words). Actions without one keep their name. */
+/** Icons for the QuickSelect bubbles (the glass look shows these instead of words). Actions without one keep their name. */
 const ACTION_ICON: Partial<Record<ActionId, LucideIcon>> = {
   undo: Undo2,
   redo: Redo2,

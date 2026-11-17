@@ -8,7 +8,7 @@ import { defaultInputSettings, SHAKY_HANDS, useInputSettings } from './inputSett
 import { applyCurve, LINEAR, PEN_BITS, tiltToAngles, withNativePen, type CurvePoint } from './pen'
 import './input.css'
 
-const SECTIONS = ['Pressure', 'Smoothing', 'Test your pen', 'Shortcuts', 'Pen buttons', 'Hotwheel', 'Touch'] as const
+const SECTIONS = ['Pressure', 'Smoothing', 'Test your pen', 'Shortcuts', 'Pen buttons', 'QuickSelect', 'Touch'] as const
 type Section = (typeof SECTIONS)[number]
 
 const UI = {
@@ -53,7 +53,7 @@ const UI = {
   upper: 'Upper button',
   nothing: 'Nothing',
   eraserNote: 'Turning the pen around to the eraser end always erases.',
-  quickIntro: 'Draw\'s outer ring of the Hotwheel (hold Q, or a pen button): up to ten actions, clockwise from the top. Make several profiles, like Sketching and Inking, and switch with the Next Hotwheel profile action.',
+  quickIntro: 'Draw\'s outer ring of the QuickSelect (hold Q, or a pen button): up to ten actions, clockwise from the top. Make several profiles, like Sketching and Inking, and switch with the Next QuickSelect profile action.',
   menu: 'Menu',
   newMenu: 'New menu',
   renameMenu: 'Name',
@@ -141,7 +141,7 @@ export function InputSettingsDialog({ onClose, initial = 'Pressure' }: { onClose
                 <p className="input-help">{UI.eraserNote}</p>
               </>
             )}
-            {section === 'Hotwheel' && <QuickMenuEditor />}
+            {section === 'QuickSelect' && <QuickMenuEditor />}
             {section === 'Touch' && (
               <>
                 <p className="input-help">{UI.touchIntro}</p>

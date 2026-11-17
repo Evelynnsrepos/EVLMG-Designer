@@ -1,6 +1,6 @@
 # German interface: word list
 
-Words that must stay the same everywhere in the German interface. Evelynn reviews these first, then each
+Words that must stay the same everywhere in the German interface. Evelynn reviewed these on 2026-11-17, then each
 translated part. Code: `localized(UI_EN, UI_DE)` from `src/shared/i18n`. Translated so far: Settings window.
 
 | English | German | Note |
@@ -12,10 +12,10 @@ translated part. Code: `localized(UI_EN, UI_DE)` from `src/shared/i18n`. Transla
 | Sidebar | Seitenleiste | |
 | Start screen | Startseite | |
 | Layer | Ebene | |
-| Canvas | Zeichenfläche | |
+| Canvas | Leinwand | |
 | Brush | Pinsel | |
-| Undo / Redo | Rückgängig / Wiederholen | |
-| Hotwheel | Hotwheel | name, not translated |
+| Undo / Redo | Rückgängig / Wiederherstellen | |
+| QuickSelect (was Hotwheel) | QuickSelect | name, same in both languages |
 | Jump point | Sprungpunkt | |
 | Layout Mode | Layout-Modus | |
 | Glass look | Glas-Look | |
@@ -24,8 +24,8 @@ translated part. Code: `localized(UI_EN, UI_DE)` from `src/shared/i18n`. Transla
 | Hotkey hints | Tastenhinweise | |
 | Keyboard shortcuts | Tastenkürzel | |
 | Work together | Zusammenarbeiten | |
-| Backup | Sicherung | |
-| Asset Pool | Asset Pool | tool name, not translated |
-| Tool names (Draw, Writer, Pixel Art, …) | stay English for now | her call: translate or keep? |
+| Backup | Backup | |
+| Asset Pool | Asset-Sammlung | the one tool name that is translated |
+| Tool names (Draw, Writer, Pixel Art, …) | stay English | her call (2026-11-17) |
 | user guide | Handbuch | |
 | you / your | du / dein | informal everywhere |

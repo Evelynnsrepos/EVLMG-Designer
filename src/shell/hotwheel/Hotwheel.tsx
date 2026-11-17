@@ -51,7 +51,7 @@ const GROUP_OF: Partial<Record<ComponentType, string>> = { 'level-layout': 'Leve
 /** Shortcut pairs that share one slice (left half, right half). */
 const KEY_PAIRS: Record<string, [string, string, string]> = { 'pixel.size': ['pixel.smaller', 'pixel.bigger', 'Pencil size'], 'pixel.frame': ['pixel.prev', 'pixel.next', 'Frame'] }
 
-/** Default outer rings from the Hotwheel plan; other tools get their first ten. */
+/** Default outer rings from the QuickSelect plan; other tools get their first ten. */
 const DEFAULT_RING: Record<string, string[]> = {
   boards: ['board.note', 'btn:Add image or audio', 'board.pen', 'board.eraser', 'board.arrow', 'board.select', 'btn:Any colour', 'board.jump'],
   'level-layout': ['level.paint', 'level.erase', 'level.fill', 'level.select', 'level.block', 'level.note', 'btn:New layer'],
@@ -485,7 +485,7 @@ function Wheel({ open }: { open: Open }) {
   // Outer drops are a size smaller than the inner ones: big in the middle, getting smaller outwards.
   const outer = open.outer.length ? bubbles(open.outer, MID + 6, OUT, hit, 'out', 70, true, bubbleLayout(open.inner.length, HOLE + 6, MID).radius * 0.74) : null
   return (
-    <div className={`hotwheel${glass ? ' bubbles' : ''}${open.closing ? ' closing' : ''}`} style={{ left: cx, top: cy, '--s': scale } as React.CSSProperties} role="menu" aria-label="Hotwheel">
+    <div className={`hotwheel${glass ? ' bubbles' : ''}${open.closing ? ' closing' : ''}`} style={{ left: cx, top: cy, '--s': scale } as React.CSSProperties} role="menu" aria-label="QuickSelect">
       <svg width={w} height={w} viewBox={`${-w / 2} ${-w / 2} ${w} ${w}`}>
         {glass ? (
           <>
@@ -543,7 +543,7 @@ function Wheel({ open }: { open: Open }) {
         )}
         {open.sliders.length > 0 && <Sliders sliders={open.sliders} values={values} radius={sliderR} />}
       </svg>
-      <div className="hotwheel-name">{name || 'Hotwheel'}</div>
+      <div className="hotwheel-name">{name || 'QuickSelect'}</div>
     </div>
   )
 }
