@@ -1,4 +1,5 @@
 import { Plus, X } from 'lucide-react'
+import { useState } from 'react'
 import { newId } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
 import { useDocument, useUndoRedoKeys } from '@/core/state'
@@ -6,6 +7,7 @@ import { LineChart, NumberInput, PresetHeader } from '@/shared/calculators'
 import '@/shared/listDetail/listDetail.css'
 import { createEconomyDoc, daysFor, DEFAULT_PROFILES, newSink, newSource, questGoldSource, simulateEconomy, type EconomyDoc, type Profile, type Sink, type Source } from './model'
 import './economy.css'
+import { Meters } from './Meters'
 
 const fmt = (n: number) => Math.round(n).toLocaleString()
 
@@ -13,6 +15,7 @@ const fmt = (n: number) => Math.round(n).toLocaleString()
 export default function View({ documentId, active }: PanelProps) {
   const doc = useDocument<EconomyDoc>('economy', documentId!, createEconomyDoc)
   useUndoRedoKeys(doc, active)
+  const [tab, setTab] = useState<'money' | 'meters'>('money')
   const quests = useDocument<{ quests: { rewardGold: number }[] }>('quests', 'quests', () => ({ quests: [] })).data?.quests ?? []
   if (!doc.data) return null
   const d = doc.data
@@ -39,7 +42,18 @@ export default function View({ documentId, active }: PanelProps) {
     <div className="eco">
       <div className="eco-head">
         <PresetHeader documentId={documentId!} kind="Economy" undo={doc.undo} redo={doc.redo} canUndo={doc.canUndo} canRedo={doc.canRedo} />
+        <div className="eco-tabs">
+          <button className={`btn btn-ghost${tab === 'money' ? ' on' : ''}`} onClick={() => setTab('money')}>
+            Money
+          </button>
+          <button className={`btn btn-ghost${tab === 'meters' ? ' on' : ''}`} onClick={() => setTab('meters')} title="Hunger, stamina, energy: bars that change over time">
+            Meters{d.meters?.length ? ` (${d.meters.length})` : ''}
+          </button>
+        </div>
       </div>
+      {tab === 'meters' ? (
+        <Meters d={d} set={set} />
+      ) : (
       <div className="eco-body">
         <section>
           <h3>Currencies</h3>
@@ -199,7 +213,7 @@ export default function View({ documentId, active }: PanelProps) {
             ))}
           {r.shortfalls.map((x) => (
             <p key={x.sinkId} className="eco-bad">
-              The player cannot pay for {d.sinks.find((s) => s.id === x.sinkId)?.name} at hour {x.hour}.
+              The player cannot pay for {(d.sinks.find((s) => s.id === x.sinkId) ?? d.meterActions?.find((s) => s.id === x.sinkId))?.name} at hour {x.hour}.
             </p>
           ))}
           {d.currencies.map((c) =>
@@ -211,6 +225,7 @@ export default function View({ documentId, active }: PanelProps) {
           )}
         </section>
       </div>
+      )}
     </div>
   )
 }

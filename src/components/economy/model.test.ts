@@ -36,3 +36,23 @@ describe('economy profiles and quest gold (0.28)', () => {
     expect(s).toMatchObject({ currencyId: 'gold', perHour: 15, name: 'Quest rewards (2 quests)' })
   })
 })
+
+describe('meters (missing tools phase 3)', () => {
+  it('falls, reaches a level, and actions refill', async () => {
+    const { simulateMeters, simulateEconomy, createEconomyDoc } = await import('./model')
+    const food = { id: 'f', name: 'Food', start: 100, max: 100, perHour: -5, offline: false, thresholds: [{ id: 's', below: 20, name: 'Starving', effectId: null, meterId: 'h', perHour: -10 }] }
+    const health = { id: 'h', name: 'Health', start: 100, max: 100, perHour: 0, offline: false, thresholds: [] }
+    const base = { ...createEconomyDoc(), hours: 24, meters: [food, health], meterActions: [] }
+    const r = simulateMeters(base)
+    expect(r.firstBelow.s).toBe(16.25) // 100 - 5h: just below 20 after 16 h
+    expect(r.values.h.at(-1)).toBeLessThan(100)
+    expect(r.values.h[Math.round(16 / 0.25)]).toBe(100) // health only falls once starving
+    const fed = simulateMeters({ ...base, meterActions: [{ id: 'e', name: 'Eat', meterId: 'f', amount: 40, every: 4, costCurrencyId: null, cost: 0 }] })
+    expect(fed.firstBelow.s).toBeNull()
+    // a paid action shows up as spending on the Money tab
+    const gold = base.currencies[0].id
+    const paid = simulateEconomy({ ...base, sinks: [], meterActions: [{ id: 'e', name: 'Eat', meterId: 'f', amount: 40, every: 4, costCurrencyId: gold, cost: 10 }] })
+    expect(paid.spent[gold]).toBe(60)
+    expect(simulateMeters(createEconomyDoc()).times.length).toBeGreaterThan(1)
+  })
+})

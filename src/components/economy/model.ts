@@ -39,6 +39,44 @@ export interface EconomyDoc {
   sources: Source[]
   sinks: Sink[]
   hours: number
+  /** Missing tools phase 3: bars that change over time (hunger, stamina, resin). Missing = none. */
+  meters?: Meter[]
+  meterActions?: MeterAction[]
+}
+
+/** A bar from 0 to max that changes by itself every hour of play. */
+export interface Meter {
+  id: Id
+  name: string
+  start: number
+  max: number
+  /** Change per hour of play, e.g. -5 for hunger. */
+  perHour: number
+  /** Keeps going while the game is closed (resin, energy refills): shown in real hours. */
+  offline: boolean
+  thresholds: MeterThreshold[]
+}
+
+/** While a meter is below `below`: a name (Hungry), an optional Status Effect, and an optional change to another meter. */
+export interface MeterThreshold {
+  id: Id
+  below: number
+  name: string
+  effectId: Id | null
+  meterId: Id | null
+  perHour: number
+}
+
+/** Something the player does that changes a meter: Eat +40 every 4 hours, maybe for a price. */
+export interface MeterAction {
+  id: Id
+  name: string
+  meterId: Id
+  amount: number
+  /** Every this many hours of play. */
+  every: number
+  costCurrencyId: Id | null
+  cost: number
 }
 
 /** 0.28: how much different players play, to turn hours of play into days. */
@@ -103,7 +141,8 @@ export function simulateEconomy(d: EconomyDoc): EconomyResult {
   const balance: Record<Id, number[]> = Object.fromEntries(d.currencies.map((c) => [c.id, [c.start]]))
   const earned: Record<Id, number> = Object.fromEntries(d.currencies.map((c) => [c.id, 0]))
   const spent: Record<Id, number> = Object.fromEntries(d.currencies.map((c) => [c.id, 0]))
-  const bought: Record<Id, number | null> = Object.fromEntries(d.sinks.filter((s) => s.kind === 'once').map((s) => [s.id, null]))
+  const sinks = [...d.sinks, ...meterSinks(d)]
+  const bought: Record<Id, number | null> = Object.fromEntries(sinks.filter((s) => s.kind === 'once').map((s) => [s.id, null]))
   const shortfalls: EconomyResult['shortfalls'] = []
   const lastPaid: Record<Id, number> = {}
   const times = [0]
@@ -116,7 +155,7 @@ export function simulateEconomy(d: EconomyDoc): EconomyResult {
       bal[s.currencyId] += gain
       earned[s.currencyId] += gain
     }
-    for (const k of d.sinks) {
+    for (const k of sinks) {
       if (t <= k.fromHour || !(k.currencyId in bal)) continue
       let cost = 0
       if (k.kind === 'perHour') cost = k.cost * STEP
@@ -137,3 +176,81 @@ export function simulateEconomy(d: EconomyDoc): EconomyResult {
   }
   return { times, balance, earned, spent, bought, shortfalls }
 }
+
+// ---- Meters (missing tools phase 3) ------------------------------------------------
+
+export function survivalExample(): Pick<EconomyDoc, 'meters' | 'meterActions'> {
+  const health: Meter = { id: newId(), name: 'Health', start: 100, max: 100, perHour: 0, offline: false, thresholds: [{ id: newId(), below: 30, name: 'Badly hurt', effectId: null, meterId: null, perHour: 0 }] }
+  const hunger: Meter = {
+    id: newId(),
+    name: 'Food',
+    start: 80,
+    max: 100,
+    perHour: -5,
+    offline: false,
+    thresholds: [
+      { id: newId(), below: 25, name: 'Hungry', effectId: null, meterId: null, perHour: 0 },
+      { id: newId(), below: 5, name: 'Starving', effectId: null, meterId: health.id, perHour: -10 },
+    ],
+  }
+  const thirst: Meter = { id: newId(), name: 'Water', start: 80, max: 100, perHour: -8, offline: false, thresholds: [{ id: newId(), below: 10, name: 'Parched', effectId: null, meterId: health.id, perHour: -15 }] }
+  const energy: Meter = { id: newId(), name: 'Energy', start: 100, max: 100, perHour: -6, offline: false, thresholds: [{ id: newId(), below: 15, name: 'Exhausted', effectId: null, meterId: null, perHour: 0 }] }
+  return {
+    meters: [hunger, thirst, energy, health],
+    meterActions: [
+      { id: newId(), name: 'Eat', meterId: hunger.id, amount: 40, every: 5, costCurrencyId: null, cost: 0 },
+      { id: newId(), name: 'Drink', meterId: thirst.id, amount: 50, every: 4, costCurrencyId: null, cost: 0 },
+      { id: newId(), name: 'Sleep', meterId: energy.id, amount: 100, every: 14, costCurrencyId: null, cost: 0 },
+    ],
+  }
+}
+
+export interface MeterResult {
+  /** Same quarter-hour samples as the money simulation. */
+  times: number[]
+  values: Record<Id, number[]>
+  /** First hour each threshold is reached, null = never. */
+  firstBelow: Record<Id, number | null>
+  /** Hours each threshold is active in total. */
+  hoursBelow: Record<Id, number>
+}
+
+const clamp = (v: number, max: number) => Math.min(Math.max(0, max), Math.max(0, v))
+
+export function simulateMeters(d: EconomyDoc): MeterResult {
+  const meters = d.meters ?? []
+  const actions = d.meterActions ?? []
+  const v: Record<Id, number> = Object.fromEntries(meters.map((m) => [m.id, clamp(m.start, m.max)]))
+  const values: Record<Id, number[]> = Object.fromEntries(meters.map((m) => [m.id, [v[m.id]]]))
+  const firstBelow: Record<Id, number | null> = {}
+  const hoursBelow: Record<Id, number> = {}
+  for (const m of meters) for (const th of m.thresholds) ((firstBelow[th.id] = v[m.id] < th.below ? 0 : null), (hoursBelow[th.id] = 0))
+  const times = [0]
+  const steps = Math.round(Math.min(1000, Math.max(0, d.hours)) / STEP)
+  for (let i = 1; i <= steps; i++) {
+    const t = i * STEP
+    const delta: Record<Id, number> = Object.fromEntries(meters.map((m) => [m.id, m.perHour * STEP]))
+    // Thresholds look at the meters as they were at the start of this step, so the order of meters doesn't matter.
+    for (const m of meters)
+      for (const th of m.thresholds) {
+        if (v[m.id] >= th.below) continue
+        hoursBelow[th.id] += STEP
+        if (th.meterId && th.meterId in delta) delta[th.meterId] += th.perHour * STEP
+      }
+    for (const a of actions) if (a.meterId in delta && a.every > 0 && Math.abs(t / a.every - Math.round(t / a.every)) < 1e-9) delta[a.meterId] += a.amount
+    for (const m of meters) {
+      v[m.id] = clamp(v[m.id] + delta[m.id], m.max)
+      values[m.id].push(Math.round(v[m.id] * 10) / 10)
+      for (const th of m.thresholds) if (firstBelow[th.id] === null && v[m.id] < th.below) firstBelow[th.id] = t
+    }
+    times.push(t)
+  }
+  return { times, values, firstBelow, hoursBelow }
+}
+
+/** Meter actions that cost money, as sinks for the money simulation (paid every time the action happens). */
+export const meterSinks = (d: EconomyDoc): Sink[] =>
+  (d.meterActions ?? []).filter((a) => a.costCurrencyId && a.cost > 0).map((a) => ({ id: a.id, name: a.name, currencyId: a.costCurrencyId!, cost: a.cost, kind: 'every' as const, hours: a.every, fromHour: 0 }))
+
+/** Real hours for an offline meter to go from empty to full (or full to empty); null when it doesn't move. */
+export const realHoursToFill = (m: Meter): number | null => (m.perHour ? Math.round((m.max / Math.abs(m.perHour)) * 10) / 10 : null)

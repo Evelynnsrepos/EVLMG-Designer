@@ -839,6 +839,8 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'The simulation plays the hours you choose and charts each currency. It shows what was earned and spent, when one-time purchases become affordable, and when the player cannot pay for something.',
       'Players under the chart turn hours of play into real days for different kinds of players (Casual, Regular, Core by default; rename them and set their hours per day). Add quest gold makes one source from every quest\'s gold reward, spread over the hours of play.',
       'If players spend less than half of what they earn, the money piles up and loses its meaning; the simulator warns you so you can add sinks or lower income.',
+      'The Meters tab is for bars that change over time: hunger, thirst, stamina, mood, or energy that refills while the game is closed. Each meter has a start, a maximum and a change per hour. When it falls below… adds a level like Hungry below 25, which can name a Status Effect and change another meter (Starving takes 10 Health per hour). Add survival example fills in food, water, energy and health.',
+      'Actions like Eat +40 every 5 hours refill a meter; give one a cost and it is paid on the Money tab each time. The chart shows every meter over the hours of play and says when and for how long a meter sits below a level.',
     ],
   },
   combat: {

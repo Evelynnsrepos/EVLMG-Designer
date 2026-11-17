@@ -43,3 +43,23 @@
 .eco-body h3 .calc-number {
   width: 90px;
 }
+.eco-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px 0;
+}
+.eco-tabs .btn.on {
+  background: var(--accent);
+  color: #fff;
+}
+.eco-meter {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.eco-th {
+  padding-left: 18px;
+}
