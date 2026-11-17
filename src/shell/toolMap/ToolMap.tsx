@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ComponentType } from '@/core/model'
+import type { ComponentType, Id } from '@/core/model'
 import { buildReferenceIndex, type ReferenceIndex } from '@/core/references'
 import { getManifest } from '@/core/registry'
 import { formatCombo, isShortcut, keysOf } from '@/core/shortcuts'
@@ -64,6 +64,8 @@ function ToolMap() {
     }
   })
   const buttons = useRef(new Map<ComponentType, HTMLButtonElement>())
+  /** Each tool's bubble with its document list; this is what floats. */
+  const items = useRef(new Map<ComponentType, HTMLDivElement>())
   const cameFrom = useRef(document.activeElement as HTMLElement | null)
 
   const panels = useMemo(() => leaves(meta?.layout ?? null), [meta?.layout])
@@ -105,6 +107,8 @@ function ToolMap() {
   const cursor = useRef<Point | null>(null)
   const viewNow = useRef(view)
   const offsets = useRef(new Map<ComponentType, { x: number; y: number; vx: number; vy: number }>())
+  const hotNow = useRef<ComponentType | null>(null)
+  hotNow.current = hot
   viewNow.current = view
   useEffect(() => {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
@@ -117,9 +121,11 @@ function ToolMap() {
         const s = at.get(t)
         if (!p || !s) return
         // Where it wants to be: a slow drift of its own, plus a pull toward a near cursor.
-        let tx = Math.sin(now / 1700 + i * 1.7) * 3.5
-        let ty = Math.cos(now / 2100 + i * 2.3) * 3.5
-        const c = cursor.current
+        // The tool whose documents are showing holds still, so its list does not slide away from the mouse.
+        const still = hotNow.current === t
+        let tx = still ? 0 : Math.sin(now / 1700 + i * 1.7) * 3.5
+        let ty = still ? 0 : Math.cos(now / 2100 + i * 2.3) * 3.5
+        const c = still ? null : cursor.current
         const dist = c ? Math.hypot(c.x - p.x, c.y - p.y) : Infinity
         if (c && dist < REACH) {
           const pull = 0.22 * (1 - dist / REACH) ** 2
@@ -131,7 +137,7 @@ function ToolMap() {
         s.vy = (s.vy + (ty - s.y) * 0.07) * 0.84
         s.x += s.vx
         s.y += s.vy
-        const el = buttons.current.get(t)
+        const el = items.current.get(t)
         if (el) el.style.transform = `translate(${s.x.toFixed(2)}px, ${s.y.toFixed(2)}px)`
       })
       const pos = (t: ComponentType) => {
@@ -183,12 +189,14 @@ function ToolMap() {
 
   if (!meta) return null
 
-  const go = (type: ComponentType, beside: boolean) => {
+  const go = (type: ComponentType, beside: boolean, documentId: Id | null = null) => {
     cameFrom.current = null
     closeToolMap() // the old panel is active again, so the jump knows where Back leads
-    if (here?.type === type && !beside) return
-    jumpTo({ kind: 'document', type, documentId: null }, !beside)
+    if (here?.type === type && !beside && (!documentId || documentId === here.documentId)) return
+    jumpTo({ kind: 'document', type, documentId }, !beside)
   }
+  /** A multi-document tool's documents, the last changed first. */
+  const docsOf = (t: ComponentType) => (getManifest(t)?.multiDocument ? meta.documents.filter((d) => d.type === t).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) : [])
 
   const nameOf = (t: ComponentType) => getManifest(t)?.name ?? t
   const other = (e: MapEdge, t: ComponentType) => (e.a === t ? e.b : e.a)
@@ -226,8 +234,32 @@ function ToolMap() {
       onPointerUp={() => (drag.current = null)}
       onPointerCancel={() => (drag.current = null)}
       onKeyDown={(e) => {
+        const inList = (document.activeElement as HTMLElement | null)?.closest('.tm-docs')
+        if (inList) {
+          // In a document list: up and down walk it, left (or Esc in the list) goes back to the tool.
+          const chips = [...inList.querySelectorAll<HTMLButtonElement>('button')]
+          const i = chips.indexOf(document.activeElement as HTMLButtonElement)
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault()
+            chips[Math.min(chips.length - 1, Math.max(0, i + (e.key === 'ArrowDown' ? 1 : -1)))]?.focus()
+          } else if (e.key === 'ArrowLeft') {
+            e.preventDefault()
+            focusTool(hot)
+          } else if (e.key === 'Enter' && e.shiftKey) {
+            e.preventDefault()
+            chips[i]?.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }))
+          }
+          return
+        }
         const dir = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as Record<string, [number, number]>)[e.key]
         const at = [...buttons.current].find(([, b]) => b === document.activeElement)?.[0]
+        if (e.key === ' ' && at && docsOf(at).length) {
+          // Space steps into the tool's documents.
+          e.preventDefault()
+          setHot(at)
+          requestAnimationFrame(() => items.current.get(at)?.querySelector<HTMLButtonElement>('.tm-docs button')?.focus())
+          return
+        }
         if (dir) {
           e.preventDefault()
           const to = at ? neighbourIn(layout.nodes, at, dir[0], dir[1]) : shown[0]
@@ -270,35 +302,60 @@ function ToolMap() {
         {shown.map((t) => {
           const m = getManifest(t)!
           const p = layout.nodes.get(t)!
-          const docs = m.multiDocument ? meta.documents.filter((d) => d.type === t).length : 0
+          const docList = docsOf(t)
+          const docs = docList.length
           const isHere = here?.type === t
           const isOpen = !isHere && panels.some((x) => x.type === t)
           const mine = edgesOf(t)
           const names = (kind: MapEdge['kind']) => mine.filter((e) => e.kind === kind).map((e) => nameOf(other(e, t))).join(', ')
-          const label = [m.name, docs > 1 && `${docs} documents`, isHere && 'you are here', isOpen && 'open', names('link') && `linked with ${names('link')}`, names('route') && `works with ${names('route')}`].filter(Boolean).join(', ')
+          const hereDoc = isHere && here?.documentId ? docList.find((d) => d.id === here.documentId) : undefined
+          const label = [m.name, hereDoc && `in ${hereDoc.title}`, docs > 1 && `${docs} documents, Space to pick one`, isHere && 'you are here', isOpen && 'open', names('link') && `linked with ${names('link')}`, names('route') && `works with ${names('route')}`].filter(Boolean).join(', ')
           const color = meta.toolColors?.[t]
+          const shelf = hot === t && docs > 0
           return (
-            <button
+            <div
               key={t}
-              ref={(el) => void (el ? buttons.current.set(t, el) : buttons.current.delete(t))}
-              className={`tm-node${isHere ? ' here' : ''}${fading && hot !== t && !near!.has(t) ? ' dim' : ''}`}
+              ref={(el) => void (el ? items.current.set(t, el) : items.current.delete(t))}
+              className={`tm-item${shelf ? ' shelf' : ''}${fading && hot !== t && !near!.has(t) ? ' dim' : ''}`}
               style={{ left: p.x - NODE_W / 2, top: p.y - BUBBLE / 2, width: NODE_W, ...(color ? { ['--tool-color' as string]: color } : {}) }}
-              aria-label={label}
-              aria-current={isHere ? 'location' : undefined}
-              title={`${m.description}\nClick to go there, Shift+click to open it next to the others.`}
-              onClick={(e) => go(t, e.shiftKey)}
               onMouseEnter={() => setHot(t)}
               onMouseLeave={() => setHot(null)}
-              onBlur={() => setHot(null)}
+              // Only this tool's own list closes when focus leaves it; another tool's blur must not close the list under the mouse.
+              onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setHot((h) => (h === t ? null : h))}
             >
-              <span className="tm-bubble">
-                <m.icon size={26} />
-                {isOpen && <span className="tm-open" />}
-                {docs > 1 && <span className="tm-count">{docs}</span>}
-              </span>
-              <span className="tm-name">{m.name}</span>
-              {isHere && <span className="tm-here">You are here</span>}
-            </button>
+              <button
+                ref={(el) => void (el ? buttons.current.set(t, el) : buttons.current.delete(t))}
+                className={`tm-node${isHere ? ' here' : ''}`}
+                aria-label={label}
+                aria-current={isHere ? 'location' : undefined}
+                title={`${m.description}\nClick to go there, Shift+click to open it next to the others.`}
+                onClick={(e) => go(t, e.shiftKey)}
+              >
+                <span className="tm-bubble">
+                  <m.icon size={26} />
+                  {isOpen && <span className="tm-open" />}
+                  {docs > 1 && <span className="tm-count">{docs}</span>}
+                </span>
+                <span className="tm-name">{m.name}</span>
+                {hereDoc && <span className="tm-doc-here">{hereDoc.title}</span>}
+                {isHere && <span className="tm-here">You are here</span>}
+              </button>
+              {shelf && (
+                // The tool's documents (each drawing, each Writer document), to go straight to one.
+                <div className="tm-docs" role="group" aria-label={`${m.name} documents`}>
+                  {docList.map((d) => {
+                    const at = isHere && here?.documentId === d.id
+                    const open = !at && panels.some((x) => x.documentId === d.id)
+                    return (
+                      <button key={d.id} className={`tm-doc${at ? ' here' : ''}`} aria-current={at ? 'location' : undefined} title="Click to open it, Shift+click to open it next to the others" onClick={(e) => go(t, e.shiftKey, d.id)}>
+                        <span className="tm-doc-title">{d.title || 'Untitled'}</span>
+                        {at ? <span className="tm-doc-tag">You are here</span> : open && <span className="tm-open-dot" aria-label="open" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           )
         })}
       </div>
@@ -341,7 +398,7 @@ function ToolMap() {
             <span>Point at a tool to see what it is linked with.</span>
           )}
         </div>
-        <div className="tm-hint">Click to go there · Shift+click opens it next to the others · Arrow keys move · Drag and scroll to look around · {key ? `${formatCombo(key)} or ` : ''}Esc closes</div>
+        <div className="tm-hint">Click to go there · Point at a tool to pick a document (Space with the keys) · Shift+click opens next to the others · Arrows move · Drag and scroll to look around · {key ? `${formatCombo(key)} or ` : ''}Esc closes</div>
       </div>
     </div>
   )
