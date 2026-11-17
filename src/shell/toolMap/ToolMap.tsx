@@ -9,7 +9,7 @@ import { jumpTo } from '@/shared/entityList/navigation'
 import { IMAGE_TARGETS } from '../editor/actions'
 import { shownTool } from '../editor/optionalTools'
 import { leaves } from '../workspace/layoutTree'
-import { bendEdges, edgePath, groupTools, layoutMap, mapEdges, neighbourIn, type MapEdge } from './graph'
+import { bendEdges, edgePath, groupTools, layoutMap, mapEdges, neighbourIn, type MapEdge, type Point } from './graph'
 import { closeToolMap, openToolMap, useToolMap } from './open'
 import './toolmap.css'
 
@@ -44,6 +44,8 @@ export function ToolMapHost() {
 
 const ROUTES_KEY = 'egd.toolmap.routes'
 const NODE_W = 124
+/** How near (in map pixels) the cursor has to be for a bubble to lean toward it. */
+const REACH = 260
 const BUBBLE = 64
 
 function ToolMap() {
@@ -96,6 +98,52 @@ function ToolMap() {
     return { x: window.innerWidth / 2 - c.x * k, y: window.innerHeight / 2 - c.y * k + 8, k }
   })
   const drag = useRef<{ x: number; y: number } | null>(null)
+
+  // ---- Alive: the bubbles float a little and lean toward the cursor; their lines follow ----
+  const paths = useRef<(SVGPathElement | null)[]>([])
+  /** The cursor in map coordinates; null while it is outside the map. */
+  const cursor = useRef<Point | null>(null)
+  const viewNow = useRef(view)
+  const offsets = useRef(new Map<ComponentType, { x: number; y: number; vx: number; vy: number }>())
+  viewNow.current = view
+  useEffect(() => {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    // Written straight to the elements, once per frame: React state would redraw the whole map 60 times a second.
+    const at = offsets.current // kept across redraws, so a new line or the dotted-lines switch never makes them jump
+    for (const t of shown) if (!at.has(t)) at.set(t, { x: 0, y: 0, vx: 0, vy: 0 })
+    let frame = requestAnimationFrame(function tick(now) {
+      shown.forEach((t, i) => {
+        const p = layout.nodes.get(t)
+        const s = at.get(t)
+        if (!p || !s) return
+        // Where it wants to be: a slow drift of its own, plus a pull toward a near cursor.
+        let tx = Math.sin(now / 1700 + i * 1.7) * 3.5
+        let ty = Math.cos(now / 2100 + i * 2.3) * 3.5
+        const c = cursor.current
+        const dist = c ? Math.hypot(c.x - p.x, c.y - p.y) : Infinity
+        if (c && dist < REACH) {
+          const pull = 0.22 * (1 - dist / REACH) ** 2
+          tx += (c.x - p.x) * pull
+          ty += (c.y - p.y) * pull
+        }
+        // A soft spring gets it there, so it overshoots and wiggles a little.
+        s.vx = (s.vx + (tx - s.x) * 0.07) * 0.84
+        s.vy = (s.vy + (ty - s.y) * 0.07) * 0.84
+        s.x += s.vx
+        s.y += s.vy
+        const el = buttons.current.get(t)
+        if (el) el.style.transform = `translate(${s.x.toFixed(2)}px, ${s.y.toFixed(2)}px)`
+      })
+      const pos = (t: ComponentType) => {
+        const p = layout.nodes.get(t)!
+        const s = at.get(t)
+        return s ? { x: p.x + s.x, y: p.y + s.y } : p
+      }
+      edges.forEach((e, i) => paths.current[i]?.setAttribute('d', edgePath(pos(e.a), pos(e.b), bends[i])))
+      frame = requestAnimationFrame(tick)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [shown, layout, edges, bends])
   const zoom = (factor: number, cx: number, cy: number) =>
     setView((v) => {
       const k = Math.min(2, Math.max(0.3, v.k * factor))
@@ -169,7 +217,12 @@ function ToolMap() {
         drag.current = { x: e.clientX - view.x, y: e.clientY - view.y }
         e.currentTarget.setPointerCapture(e.pointerId)
       }}
-      onPointerMove={(e) => drag.current && setView((v) => ({ ...v, x: e.clientX - drag.current!.x, y: e.clientY - drag.current!.y }))}
+      onPointerMove={(e) => {
+        const v = viewNow.current
+        cursor.current = e.pointerType === 'mouse' ? { x: (e.clientX - v.x) / v.k, y: (e.clientY - v.y) / v.k } : null
+        if (drag.current) setView({ ...v, x: e.clientX - drag.current.x, y: e.clientY - drag.current.y })
+      }}
+      onPointerLeave={() => (cursor.current = null)}
       onPointerUp={() => (drag.current = null)}
       onPointerCancel={() => (drag.current = null)}
       onKeyDown={(e) => {
@@ -208,7 +261,7 @@ function ToolMap() {
             // Bowed, each to the side where it crosses the fewest lines and bubbles.
             const bow = edgePath(a, b, bends[i])
             return (
-              <path key={`${e.kind}:${e.a}:${e.b}`} className={`tm-edge ${e.kind}${lit ? ' on' : fading ? ' dim' : ''}`} d={bow} strokeWidth={e.kind === 'link' ? 1.6 + Math.min(e.count, 8) * 0.4 : 1.2}>
+              <path key={`${e.kind}:${e.a}:${e.b}`} ref={(el) => void (paths.current[i] = el)} className={`tm-edge ${e.kind}${lit ? ' on' : fading ? ' dim' : ''}`} d={bow} strokeWidth={e.kind === 'link' ? 1.6 + Math.min(e.count, 8) * 0.4 : 1.2}>
                 <title>{`${nameOf(e.a)} and ${nameOf(e.b)}: ${e.why}`}</title>
               </path>
             )
