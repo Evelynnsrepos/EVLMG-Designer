@@ -25,6 +25,49 @@ export interface DamagePresetDoc {
   expression: string
   values: Record<string, number>
   range: RangeSettings
+  /** Missing tools 6b: weapons compared by time to kill over distance. Missing = not used. */
+  ttk?: TtkSettings
+  /** Missing tools 6c: two numbers changed by steps in order, then multiplied (chips × mult). Missing = not used. */
+  stack?: ScoreStack
+}
+
+export interface TtkWeapon {
+  id: Id
+  name: string
+  damage: number
+  /** Shots per minute. */
+  rpm: number
+  /** Full damage up to here (m), then falls to `minPercent` at `falloffEnd`. */
+  falloffStart: number
+  falloffEnd: number
+  minPercent: number
+}
+
+export interface TtkSettings {
+  weapons: TtkWeapon[]
+  /** Target health, plus armour that takes damage first. */
+  hp: number
+  armor: number
+  maxRange: number
+}
+
+export interface ScoreStep {
+  id: Id
+  name: string
+  /** add or multiply the first (a) or second (b) number. */
+  op: 'add-a' | 'add-b' | 'mul-a' | 'mul-b'
+  amount: number
+  /** How many times it happens (one per card played, for example). */
+  times: number
+  on: boolean
+}
+
+export interface ScoreStack {
+  aName: string
+  bName: string
+  a: number
+  b: number
+  steps: ScoreStep[]
 }
 
 export type GrowthMode = 'flat' | 'percent' | 'formula'
@@ -86,6 +129,8 @@ export function normalizeDamagePresetDoc(d: Partial<DamagePresetDoc> | undefined
     expression: d?.expression ?? '',
     values: { ...(d?.values ?? def.values) },
     range: { ...def.range, ...d?.range },
+    ...(d?.ttk ? { ttk: d.ttk } : {}),
+    ...(d?.stack ? { stack: d.stack } : {}),
   }
 }
 
