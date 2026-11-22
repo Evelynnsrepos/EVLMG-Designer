@@ -12,6 +12,7 @@ import {
   GRAIN_BLENDS,
   OUTLINE_COLORS,
   OUTLINE_FILLS,
+  WIGGLE_STYLES,
   isRibbon,
   normalizeBrush,
   normalizeSettings,
@@ -246,6 +247,8 @@ export function BrushStudio({ brushId, color, onClose }: { brushId: Id; color: s
                 {num('outline', 'Outline', 0, 60, 'px', 'A line around the shape you paint, following it as you draw')}
                 {(s.outline ?? 0) > 0 && choice('outlineFill', 'Inside the outline', OUTLINE_FILLS)}
                 {s.grain !== 'none' || s.grainImage ? num('grainDepth', 'Texture', 0, 1, '%', 'How strongly the paper grain shows') : null}
+                {num('wiggle', 'Wiggle (animated)', 0, 1, '%', 'The line moves in a loop. Strokes go on an Animated layer, which exports as GIF, animated PNG, video or sprite sheet')}
+                {(s.wiggle ?? 0) > 0 && choice('wiggleStyle', 'How it wiggles', WIGGLE_STYLES)}
                 <div className="studio-note muted">{UI.easyMore}</div>
               </>
             )}
@@ -257,6 +260,8 @@ export function BrushStudio({ brushId, color, onClose }: { brushId: Id; color: s
                 {num('count', 'Stamps per point', 1, 16, 'n')}
                 {num('countJitter', 'Count jitter', 0, 1)}
                 {num('falloff', 'Fall off', 0, 1, '%', 'The stroke fades as it gets longer')}
+                {num('wiggle', 'Wiggle (animated)', 0, 1, '%', 'The line moves in a loop on an Animated layer')}
+                {(s.wiggle ?? 0) > 0 && choice('wiggleStyle', 'How it wiggles', WIGGLE_STYLES)}
               </>
             )}
             {page === 'Stabilization' && (

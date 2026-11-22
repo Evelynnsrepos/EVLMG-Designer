@@ -270,3 +270,8 @@
 .sketch-outline-dialog .modal-actions {
   flex-wrap: wrap;
 }
+/* 0.35: Animated layers */
+.sketch-anim-badge {
+  color: var(--accent);
+  padding: 2px;
+}

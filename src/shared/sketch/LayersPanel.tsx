@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, CircleDashed, Ellipsis, Eye, EyeOff, Folder, FolderPlus, ListChecks, Lock, Merge, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, CircleDashed, Ellipsis, Eye, EyeOff, Folder, FolderPlus, ListChecks, Lock, Merge, Plus, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react'
 import { dragFromRowOnly } from '@/shared/dragGuard'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Id } from '@/core/model'
@@ -25,6 +25,7 @@ import {
   ungroup,
 } from './layers'
 import './layers.css'
+import { rasterized } from './animatedLayers'
 import { FilterControls } from './adjust/AdjustStudio'
 import { OutlineDialog } from './OutlineDialog'
 import type { OutlineSettings } from './outline'
@@ -50,6 +51,8 @@ const UI = {
   groupPicked: 'Group',
   deletePicked: 'Delete',
   rename: 'Rename',
+  rasterize: 'Make it a normal still layer (stops the animation)',
+  animated: 'Animated layer: it moves. Click for its settings and exports',
   selectContents: 'Select contents',
   copy: 'Copy',
   paste: 'Paste as new layer',
@@ -101,6 +104,8 @@ export interface LayerHost {
   discard(layers: SketchLayer[]): void
   /** v0.17: change the layer list as one undo step together with the pixel edit just made on `layerId`. */
   restructure(layers: SketchLayer[], layerId: Id, pushesBefore: number): void
+  /** 0.35: open the active Animated layer's settings. */
+  openAnimated?(): void
   limit: number
   /** The layer the Layer picker points at, highlighted in the list. */
   pointedId?: Id | null
@@ -304,6 +309,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
     const below = siblingBelow(doc.layers, l.id)
     const items: (Item | false)[] = [
       { label: UI.rename, run: () => void promptDialog(UI.rename, l.name).then((n) => n?.trim() && set(l.id, { name: n.trim() })) },
+      !!l.wiggle && { label: UI.rasterize, run: () => update((d) => ({ ...d, layers: d.layers.map((x) => (x.id === l.id ? rasterized(x) : x)) })) },
       !group && { label: UI.selectContents, run: () => host.selectFrom(engine.layerCanvas(l.id)) },
       !group && { label: UI.copy, run: () => copyPixels(engine.layerCanvas(l.id)) },
       { label: UI.paste, run: paste, off: !copiedPixels() },
@@ -499,6 +505,20 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
                     }}
                   >
                     <CircleDashed size={12} />
+                  </button>
+                )}
+                {l.wiggle && (
+                  <button
+                    className="icon-btn sketch-anim-badge"
+                    title={UI.animated}
+                    aria-label={UI.animated}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      host.setActive(l.id)
+                      host.openAnimated?.()
+                    }}
+                  >
+                    <Sparkles size={12} />
                   </button>
                 )}
                 {l.locked && <Lock size={11} aria-label={UI.locked} />}

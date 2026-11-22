@@ -34,7 +34,9 @@ import { newId, type Id } from '@/core/model'
 import { flush as flushSave, IDLE_SAVE_MS, scheduleSave, useProjectStore } from '@/core/state'
 import { saveBinaryFile, safeFileName } from '@/core/export'
 import { alphaBounds, SketchEngine } from './engine'
-import { drawPreview } from './brushes'
+import { drawPreview, isAnimatedBrush } from './brushes'
+import { hasAnimatedLayers, newWiggle, rasterized, useAnimatedLayers, wiggled, withStroke, framesOf } from './animatedLayers'
+import { AnimatedPanel } from './AnimatedPanel'
 import { BrushLibrary } from './BrushLibrary'
 import { useBrushLibrary } from './library'
 import {
@@ -79,7 +81,8 @@ import { BrushCursor, GuideOverlay, ShapeNodes } from './GuideOverlay'
 import { GuidePanel } from './GuidePanel'
 import { InputSettingsDialog } from './InputSettingsDialog'
 import { holdTolerance, useInputSettings } from './inputSettings'
-import { confirmDialog } from '../dialogs'
+import { choiceDialog, confirmDialog } from '../dialogs'
+import { exportDrawing } from './files/io'
 import { isEraserEnd, penButton, penData, PenPipeline, type PenPoint } from './pen'
 import { flipAbout, pinch, rotateAbout, toDocPoint, viewMatrix, zoomAbout, type View } from './view'
 // Sketch Pro: canvas, time-lapse and files.
@@ -110,6 +113,15 @@ const UI_PRO = {
   overrideHint: "Tick to use your own value for every brush. Unticked, each brush uses its own setting (shown greyed out).",
   layers: 'Layers',
   textOptions: 'Text',
+  animatedTitle: 'Animated layer',
+  animatedLayer: 'Animated',
+  animatedFirst: 'Animated brushes paint on an Animated layer, so this one was added above. It moves, so it is not a regular image any more: still exports keep only its first frame.',
+  stillOnly: 'Animated layers take brush strokes and the eraser only. To fill, move or filter it, make it a normal still layer first.',
+  makeStill: 'Make it a normal layer',
+  dismiss: 'OK',
+  stillTitle: 'This drawing moves',
+  stillMessage: 'It has animated layers. A PNG keeps only their first frame. Export the moving loop as an animated GIF instead?',
+  stillChoices: ['Animated GIF', 'PNG (first frame)'],
   showLayers: 'Show the layers',
   lightPreview: 'Light preview: lamps around 3D objects, to see where shadows fall',
   lightPreviewTitle: 'Light preview',
@@ -716,8 +728,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     return () => (gpuView.removeEventListener('webglcontextlost', lost), gpuView.remove())
   }, [gpuView])
 
-  // Redraw the visible canvas.
-  useEffect(() => {
+  // Redraw the visible canvas (0.35: Animated layers' playback calls it on its own, without a React render).
+  const redrawView = useRef(() => {})
+  redrawView.current = () => {
     const canvas = viewCanvas.current
     const box = boxRef.current
     if (!canvas || !box || !view) return
@@ -786,7 +799,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     ctx.lineWidth = (doc.backgroundColor ? 1 : 1.5) * px
     ctx.strokeRect(f.x - 0.5 * px, f.y - 0.5 * px, f.w + px, f.h + px)
     ctx.restore()
-  })
+  }
+  useEffect(() => redrawView.current())
 
   const toDoc = (e: { clientX: number; clientY: number }, r = viewCanvas.current!.getBoundingClientRect()) => {
     const z = zoomOf(viewCanvas.current)
@@ -810,7 +824,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         rest: { x: number; y: number }
         timer?: ReturnType<typeof setTimeout>
         /** Set once the stroke snapped to a shape; further moves resize it. */
-        snapped?: { shape: Shape; at: { x: number; y: number }; pressure: number; drawn?: Shape; perfect?: boolean }
+        snapped?: { shape: Shape; at: { x: number; y: number }; pressure: number; drawn?: Shape; perfect?: boolean; line?: InputPoint[] }
+        /** 0.35: the stroke goes on an Animated layer (its strokes are kept so every frame can paint it). */
+        animated?: boolean
       }
     | { kind: 'pan'; sx: number; sy: number; vx: number; vy: number }
     | { kind: 'select'; pts: { x: number; y: number }[]; rect: boolean }
@@ -874,9 +890,20 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       // Near the working area's edge: grow it first, so the stroke can go past the canvas.
       const at = growTo({ x: p.x - strokeBrush.size, y: p.y - strokeBrush.size, w: strokeBrush.size * 2, h: strokeBrush.size * 2 }, 128) ? toDoc(e) : p
       const pt = pipeline.push({ ...at, ...penData(e.nativeEvent, input.pressureCurve) }, e.timeStamp)[0] ?? { ...at, pressure: 1 }
-      const opts = { layer: activeLayer, brush: strokeBrush, color, symmetry: 'off' as const, erase: t === 'eraser', smudge: t === 'smudge', mirror: symmetryMirror(liveGuide, activeLayer.id) }
+      // 0.35: an animated brush paints on an Animated layer; one is added above when the active layer isn't one.
+      let target = activeLayer
+      if (t === 'brush' && isAnimatedBrush(strokeBrush) && !activeLayer.wiggle && doc.layers.filter((l) => !isGroup(l)).length < layerLimit) {
+        target = { ...newLayer(UI_PRO.animatedLayer), wiggle: newWiggle() }
+        adoptLayer(target.id)
+        engine.setLayerImage(target.id, null)
+        const layer = target
+        update((d) => ({ ...d, layers: insertAbove(d.layers, layer, activeLayer.id) }))
+        setActiveLayerId(layer.id)
+        if (!hasAnimated) setAnimNote('first')
+      }
+      const opts = { layer: target, brush: strokeBrush, color, symmetry: 'off' as const, erase: t === 'eraser', smudge: t === 'smudge', mirror: symmetryMirror(liveGuide, target.id) }
       engine.beginStroke(opts, pt)
-      gesture.current = { kind: 'paint', pipeline, last: pt, rect: e.currentTarget.getBoundingClientRect(), opts, pts: [pt], rest: pt }
+      gesture.current = { kind: 'paint', pipeline, last: pt, rect: e.currentTarget.getBoundingClientRect(), opts, pts: [pt], rest: pt, animated: !!target.wiggle }
       armHold()
       setVersion(engine.version)
     } else if (t === 'lasso' || t === 'rect') {
@@ -996,8 +1023,13 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       setTether(null)
       clearTimeout(g.timer)
       // Let stabilization catch up with the pen (not for a snapped shape, which is redrawn whole).
-      if (!g.snapped) for (const q of g.pipeline.flush()) engine.strokeTo(q)
-      markDirty(engine.endStroke())
+      if (!g.snapped)
+        for (const q of g.pipeline.flush()) {
+          engine.strokeTo(q)
+          g.pts.push(q)
+        }
+      if (g.animated) endAnimatedStroke(g.opts, g.snapped?.line ?? g.pts)
+      else markDirty(engine.endStroke())
       files.stroked()
       // Room for the next stroke when this one came near the edge.
       const b = boundsOf(g.pts, g.opts.brush.size)
@@ -1048,8 +1080,23 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     let shape = resize(g.snapped.shape, g.snapped.at, to)
     shape = keys.shift || g.snapped.perfect ? perfect(shape) : gentle(shape)
     g.snapped.drawn = shape
-    engine.restroke(shapeOutline(shape, 2, g.pts[0]).map((q) => ({ ...q, pressure: g.snapped!.pressure })))
+    g.snapped.line = shapeOutline(shape, 2, g.pts[0]).map((q) => ({ ...q, pressure: g.snapped!.pressure }))
+    engine.restroke(g.snapped.line)
     setVersion(engine.version)
+  }
+
+  /**
+   * 0.35: finish a stroke on an Animated layer. Frame 1 (the layer) is painted again with its own wiggle and a fixed
+   * seed, so every frame comes from the same points; the stroke is kept on the layer, in the same undo step.
+   */
+  const endAnimatedStroke = (opts: Extract<NonNullable<typeof gesture.current>, { kind: 'paint' }>['opts'], points: InputPoint[]) => {
+    const id = opts.layer.id
+    const w = docRef.current.layers.find((l) => l.id === id)?.wiggle ?? opts.layer.wiggle
+    const seed = Math.floor(Math.random() * 1e6)
+    if (points.length) engine.restroke(wiggled(points, opts.brush, seed, 0, w ? framesOf(w) : 4))
+    markDirty(engine.endStroke())
+    if (!points.length) return
+    update((d) => ({ ...d, layers: d.layers.map((l) => (l.id === id ? { ...l, wiggle: withStroke(l.wiggle, { brush: opts.brush, color: opts.color, erase: opts.erase, smudge: !!opts.smudge, points, seed }) } : l)) }))
   }
 
   const onWheel = (e: React.WheelEvent) => {
@@ -1102,7 +1149,43 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     title,
     color,
     selectFrom: (canvas) => sel.fromCanvas(canvas),
+    openAnimated: () => setAnimPanel(true),
   }
+  // 0.35: Animated layers: their frames follow their strokes and play in the view.
+  const hasAnimated = doc.layers.some((l) => l.wiggle)
+  const [animPaused, setAnimPausedState] = useState(() => {
+    try {
+      return localStorage.getItem('egd.sketch.animPaused') === '1'
+    } catch {
+      return false
+    }
+  })
+  const setAnimPaused = (v: boolean) => {
+    setAnimPausedState(v)
+    try {
+      localStorage.setItem('egd.sketch.animPaused', v ? '1' : '0')
+    } catch {
+      // Only a convenience.
+    }
+  }
+  useAnimatedLayers(engine, doc.layers, { paused: animPaused || !active, redraw: () => redrawView.current(), mirror: (id) => symmetryMirror(liveGuide, id) })
+  /** 'first' = the first Animated layer was just added; 'still' = an edit an Animated layer can't take. */
+  const [animNote, setAnimNote] = useState<null | 'first' | { still: Id }>(null)
+  const [animPanel, setAnimPanel] = useState(true)
+  const [animSpot, setAnimSpot] = useSpot('egd.sketch.animSpot', () => ({ x: window.innerWidth - 700, y: 140 }))
+  useEffect(() => {
+    engine.refuseEdit = (id) => {
+      if (!docRef.current.layers.find((l) => l.id === id)?.wiggle) return false
+      setAnimNote({ still: id })
+      return true
+    }
+    return () => void (engine.refuseEdit = null)
+  }, [engine])
+  const rasterizeLayer = (id: Id) => {
+    update((d) => ({ ...d, layers: d.layers.map((l) => (l.id === id ? rasterized(l) : l)) }))
+    setAnimNote(null)
+  }
+
   // Sketch Pro: text layers are drawn again when their settings or fonts change.
   const fontsReady = useImportedFonts(root, doc.fonts)
   useTextLayers(layerHost, fontsReady)
@@ -1175,7 +1258,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   // v0.14: strokes from outside the canvas (Texture Paint's 3D view), through the same brush, pipeline and undo.
   const outside = useRef<PenPipeline | null>(null)
   const paintDown = (p: InputPoint, time: number) => {
-    if (!activeLayer || !activeLayer.visible || !hasPixels(activeLayer) || activeLayer.text || lockedInTree(doc.layers, activeLayer.id)) return false
+    if (!activeLayer || !activeLayer.visible || !hasPixels(activeLayer) || activeLayer.text || activeLayer.wiggle || lockedInTree(doc.layers, activeLayer.id)) return false
     const erase = tool === 'eraser'
     const own = lib.brushes.find((b) => b.id === (erase ? lib.eraserId : lib.brushId)) ?? brush
     const ov = input.overrides
@@ -1211,6 +1294,15 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   useImperativeHandle(editorRef, () => ({ insertImage, setColor, color, engine, render: () => engine.render({ ...docRef.current, layers: exportLayers(docRef.current.layers) }), paintDown, paintMove, paintUp, paintShape, insertPicture, replacePixels }))
 
   const exportPng = async () => {
+    // 0.35: animated layers aren't a regular image: offer the moving loop first.
+    if (hasAnimatedLayers(exportLayers(doc.layers))) {
+      const pick = await choiceDialog({ title: UI_PRO.stillTitle, message: UI_PRO.stillMessage, choices: UI_PRO.stillChoices })
+      if (pick === null) return
+      if (pick === 0) {
+        const file = await exportDrawing('gif', engine, doc)
+        return saveBinaryFile({ title: UI.export, defaultName: `${safeFileName(title)}.gif`, bytes: file.bytes, filter: file.filter })
+      }
+    }
     await saveBinaryFile({
       title: UI.export,
       defaultName: `${safeFileName(title)}.png`,
@@ -1717,6 +1809,24 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         <FloatingPanel title={UI_PRO.layers} at={layersSpot} onMove={setLayersSpot} onClose={() => setLayersShown(false)} width={300}>
           <LayersPanel host={layerHost} headerExtra={layersButtons} />
         </FloatingPanel>
+      )}
+      {activeLayer?.wiggle && animPanel && (
+        <FloatingPanel title={UI_PRO.animatedTitle} at={animSpot} onMove={setAnimSpot} onClose={() => setAnimPanel(false)} width={300}>
+          <AnimatedPanel layer={activeLayer} doc={doc} engine={engine} title={title} update={update} paused={animPaused} setPaused={setAnimPaused} onRasterize={() => rasterizeLayer(activeLayer.id)} />
+        </FloatingPanel>
+      )}
+      {animNote && (
+        <div className="sketch-anim-note" role="status">
+          <span>{animNote === 'first' ? UI_PRO.animatedFirst : UI_PRO.stillOnly}</span>
+          {typeof animNote === 'object' && (
+            <button className="btn btn-small" onClick={() => rasterizeLayer(animNote.still)}>
+              {UI_PRO.makeStill}
+            </button>
+          )}
+          <button className="btn btn-small" onClick={() => setAnimNote(null)}>
+            {UI_PRO.dismiss}
+          </button>
+        </div>
       )}
       {activeLayer?.text && tool === 'text' && (
         <FloatingPanel title={UI_PRO.textOptions} at={textSpot} onMove={setTextSpot} onClose={() => setTool('move')} width={290}>

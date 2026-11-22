@@ -45,6 +45,7 @@ export const STARTERS: { id: string; label: string; hint: string; settings: S }[
   { id: 'ribbon', label: 'Ribbon strip', hint: 'One image bent along the whole line (ropes, braids, chains). Pick the image on the Shape page', settings: { hardness: 1, pressureSize: 0.3, streamline: 0.5, ribbon: 'tile' } },
   { id: 'outline', label: 'Outline', hint: 'Hollow: only a line around the shape you paint, and touching shapes join up', settings: { hardness: 1, pressureSize: 0, streamline: 0.4, spacing: 0.04, outline: 4, outlineFill: 'clear' } },
   { id: 'pixel', label: 'Pixel', hint: 'Hard square pixels', settings: pixel },
+  { id: 'squiggle', label: 'Squiggle (animated)', hint: 'A line that wiggles in a loop, on an Animated layer you can export as GIF', settings: { ...ink, wiggle: 0.5 } },
 ]
 
 const SETS: [setId: string, name: string, icon: string, brushes: Def[]][] = [
@@ -344,6 +345,22 @@ const SETS: [setId: string, name: string, icon: string, brushes: Def[]][] = [
       ['wave-pattern', '360 Waves', { ...strip, size: 16, shape: 'wave-strands', opacity: 0.75 }],
       ['fade', 'Fade', { size: 80, hardness: 0, flow: 0.25, grain: 'noise', grainDepth: 0.6, pressureOpacity: 0.8, pressureSize: 0.2, spacing: 0.06 }],
       ['line-up', 'Line-up Edge', { hardness: 1, size: 4, pressureSize: 0, streamline: 0.9, spacing: 0.04 }],
+    ],
+  ],
+  [
+    'animated',
+    'Animated',
+    'sparkles',
+    [
+      ['squiggle-pen', 'Squiggle Pen', { ...ink, size: 6, wiggle: 0.5 }],
+      ['boiling-ink', 'Boiling Ink', { ...ink, size: 9, wiggle: 0.3, taperStart: 10, taperEnd: 15 }],
+      ['wobble-marker', 'Wobble Marker', { ...marker, size: 18, wiggle: 0.35 }],
+      ['jitter-pencil', 'Jitter Pencil', { ...pencil, size: 6, wiggle: 0.45 }],
+      ['wavy-line', 'Wavy Line', { ...ink, size: 6, wiggle: 0.6, wiggleStyle: 'wave', taperStart: 0, taperEnd: 0 }],
+      ['jelly-brush', 'Jelly Brush', { ...paint, size: 30, wiggle: 0.4, wiggleStyle: 'wave' }],
+      ['shaky-outline', 'Shaky Outline', { ...outlined, size: 14, wiggle: 0.35 }],
+      ['fizzy-chalk', 'Fizzy Chalk', { ...charcoal, size: 20, wiggle: 0.3 }],
+      ['sparkle-trail', 'Sparkle Trail', { ...nature, shape: 'star', size: 18, wiggle: 0.5 }],
     ],
   ],
   [

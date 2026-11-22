@@ -646,3 +646,46 @@
   top: 0;
   pointer-events: none;
 }
+/* 0.35: Animated layers */
+.sketch-anim-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sketch-anim-panel p {
+  margin: 0;
+  font-size: 12px;
+}
+.sketch-anim-row {
+  display: grid;
+  grid-template-columns: 1fr 90px 24px;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.sketch-anim-exports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sketch-anim-note {
+  position: fixed;
+  left: 50%;
+  bottom: 72px;
+  transform: translateX(-50%);
+  max-width: min(560px, calc(100% - 32px));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--bg-elevated, var(--bg));
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+  z-index: 30;
+}
+.sketch-anim-note .btn {
+  white-space: nowrap;
+}
