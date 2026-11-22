@@ -322,7 +322,7 @@ beginner guides.
 | Tool | What it does |
 |---|---|
 | **Vision & Pillars** | Elevator pitch, vision, player fantasy, selling points, design pillars, references and anti-goals on one page. |
-| **Scope Planner** | Every feature sorted into must, should, could, won't and cut, with effort against the days you have. |
+| **Scope Planner** | Every feature sorted into must, should, could, won't and cut, with effort against the days you have. Versions and updates with release days, scope lock, planned / added / cut with reasons and history, shipping with carry-over, a roadmap of all versions and Markdown patch notes. |
 | **Task Board** | A to-do board with pictures, your own columns and categories, tasks linked to the entries they are about, estimates, milestones, "waits for" blockers and CSV for Jira or Linear. |
 | **Live-Service Planner** | The weeks after launch: versions and seasons, events, gacha banners, a battle pass and the store, with rerun warnings and battle pass days per player type. |
 | **Playtests** | Playtest sessions with scores and findings, scores per build and every open problem in one place. |

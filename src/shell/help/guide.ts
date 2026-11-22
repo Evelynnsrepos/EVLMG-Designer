@@ -921,6 +921,10 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Sort every feature by priority: must have, should have, could have, won’t have (now) and cut. Drag cards between the columns or reorder them; click a card to edit it.',
       'Each feature has an effort in days, a status and the design pillar it serves (from Vision & Pillars). Enter the days until release: the planner adds up must and should and tells you when they do not fit, so you know what to move or cut.',
       'Optionally split a feature’s days by discipline (design, code, art, sound, writing, QA). The toolbar then shows how many must and should days each discipline has, so you see when the artist is booked out while code has room.',
+      'Versions work like in a studio. The full release plan holds everything the game needs. New version makes a release or update (0.1, 1.0, 1.1 …) with its own release day, days of work, state (planned, in progress, shipped) and notes. Put features in from the list beside the board, or make features only this version has with +; Add to the full release plan moves such a feature into the full plan, and its card there says which version added it.',
+      'Lock scope when the version is planned: anything put in after that counts as Added, so you see what crept in. Drag a card to Cut when it was dropped and write why. Each card keeps its history in the version (planned, added, cut, moved).',
+      'Setting a version to Shipped asks what happens with features that are not done: move them on to the next version (or a new one) or keep them. Moved ones stay in the shipped version as cut, “Moved to …”.',
+      'Roadmap shows every version side by side, plus what is not in a version yet. Drag features between them; a locked or shipped version keeps what leaves as cut. Patch notes (one version) and Changelog (all versions) save Markdown with what is in, what was added later and what was cut, and why.',
     ],
   },
   tasks: {
