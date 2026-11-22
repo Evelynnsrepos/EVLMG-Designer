@@ -33,7 +33,8 @@ import { ImageFiles, RichImage, type ImageImporter } from './imageExtension'
 import { FindBar, FindText } from './find'
 import { FontMark } from './fontExtension'
 import { SlashMenu } from './inserts'
-import { FontControls, Ribbon, type RibbonTab } from './ribbon'
+import { FontControls, Ribbon, type RibbonExtras, type RibbonTab } from './ribbon'
+import { reviewExtensions } from './review'
 import { wordExtensions } from './wordExtensions'
 import { RefCard, RefExtension } from './refExtension'
 import { syntaxExtensions } from './syntaxExtensions'
@@ -74,6 +75,10 @@ export interface RichTextEditorProps {
   markdownSyntax?: boolean
   /** Writer (0.35): with `extraFormats`, the tool's own ribbon tabs after Home, Insert and Review. */
   ribbonTabs?: RibbonTab[]
+  /** Writer (0.35): the tool's own buttons at the end of the Home, Insert or Review tab. */
+  ribbonExtras?: RibbonExtras
+  /** Writer (0.35): typing is marked as added and deleting only crosses out, until accepted. */
+  trackChanges?: boolean
 }
 
 const UI = {
@@ -119,6 +124,7 @@ interface LiveProps {
   inserts: boolean
   /** Opens the find bar; missing = no Ctrl+F here. */
   onFind?: () => void
+  track: boolean
 }
 
 /** After a teammate's edit, save the merged text once things are quiet. */
@@ -143,6 +149,10 @@ function buildExtensions(live: RefObject<LiveProps>, onMisspelling: (hit: ProofH
       () => live.current.provider,
     ),
     ...wordExtensions(),
+    ...reviewExtensions(
+      () => live.current.track,
+      () => (useCollab.getState().profile.name || 'You'),
+    ),
     SpellCheck.configure({ onMisspelling }),
     SlashMenu.configure({ enabled: () => live.current.inserts }),
     FindText.configure({ onOpen: () => !!live.current.onFind && (live.current.onFind(), true) }),
@@ -172,6 +182,8 @@ export function RichTextEditor({
   extraFormats = false,
   markdownSyntax = false,
   ribbonTabs,
+  ribbonExtras,
+  trackChanges = false,
 }: RichTextEditorProps) {
   const entityRefs = useEntityRefProvider()
   const provider = refs ?? entityRefs
@@ -180,9 +192,9 @@ export function RichTextEditor({
   const [misspelling, setMisspelling] = useState<ProofHit | null>(null)
   const [finding, setFinding] = useState(false)
   const onFind = toolbar && editable ? () => setFinding(true) : undefined
-  const live = useRef<LiveProps>({ provider, resolveImageSrc, importImages, onChange, placeholder, syntax: markdownSyntax, inserts: extraFormats, onFind })
+  const live = useRef<LiveProps>({ provider, resolveImageSrc, importImages, onChange, placeholder, syntax: markdownSyntax, inserts: extraFormats, onFind, track: trackChanges })
   useEffect(() => {
-    live.current = { provider, resolveImageSrc, importImages, onChange, placeholder, syntax: markdownSyntax, inserts: extraFormats, onFind }
+    live.current = { provider, resolveImageSrc, importImages, onChange, placeholder, syntax: markdownSyntax, inserts: extraFormats, onFind, track: trackChanges }
   })
   const lastEmitted = useRef<RichTextDoc | null>(null)
   // The extensions only read `live` inside editor callbacks, never during render.
@@ -273,7 +285,7 @@ export function RichTextEditor({
   return (
     <div className={['richtext', className].filter(Boolean).join(' ')}>
       {toolbar && editable && (extraFormats ? (
-        <Ribbon editor={editor} onImage={insertImage} syntax={markdownSyntax} tabs={ribbonTabs} onFind={() => setFinding((f) => !f)} onCheck={() => setMisspelling(nextHit(editor.view, editor.state.selection.head - 1))} />
+        <Ribbon editor={editor} onImage={insertImage} syntax={markdownSyntax} tabs={ribbonTabs} extras={ribbonExtras} onFind={() => setFinding((f) => !f)} onCheck={() => setMisspelling(nextHit(editor.view, editor.state.selection.head - 1))} />
       ) : (
         <Toolbar editor={editor} onImage={insertImage} onFind={() => setFinding((f) => !f)} onCheck={() => setMisspelling(nextHit(editor.view, editor.state.selection.head - 1))} />
       ))}

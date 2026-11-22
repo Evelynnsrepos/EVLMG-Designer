@@ -66,9 +66,9 @@ export type LabelResolver = (target: RefTarget) => string | undefined
 export const MISSING_REF_LABEL = 'missing link'
 
 /** A link's shown text: its own text from `[[Name|text]]`, else the target's current name. */
-const refLabel = (n: RichTextDoc, resolve?: LabelResolver) =>
+export const refLabel = (n: RichTextDoc, resolve?: LabelResolver) =>
   (n.attrs?.text as string | null) || (resolve?.({ kind: n.attrs?.kind, id: n.attrs?.id }) ?? MISSING_REF_LABEL)
-const targetLabel = (n: RichTextDoc, resolve?: LabelResolver) => resolve?.({ kind: n.attrs?.kind, id: n.attrs?.id }) ?? MISSING_REF_LABEL
+export const targetLabel = (n: RichTextDoc, resolve?: LabelResolver) => resolve?.({ kind: n.attrs?.kind, id: n.attrs?.id }) ?? MISSING_REF_LABEL
 
 const hasMark = (n: RichTextDoc, type: string) => n.marks?.some((m) => m.type === type) ?? false
 
@@ -78,7 +78,7 @@ export function countRichTextWords(doc: RichTextDoc, resolve?: LabelResolver): n
 }
 
 function inlineText(n: RichTextDoc, resolve?: LabelResolver, forCount = false): string {
-  if (n.type === 'text') return hasMark(n, 'comment') || (forCount && hasMark(n, 'tag')) ? '' : (n.text ?? '')
+  if (n.type === 'text') return hasMark(n, 'comment') || hasMark(n, 'deletion') || (forCount && hasMark(n, 'tag')) ? '' : (n.text ?? '')
   if (n.type === REF_NODE) return refLabel(n, resolve)
   if (n.type === 'hardBreak') return '\n'
   if (n.type === 'footnote') return ''
@@ -146,6 +146,8 @@ function inlineMarkdown(nodes: RichTextDoc[] | undefined, resolve?: LabelResolve
       if (n.type !== 'text') return inlineMarkdown(n.content, resolve, note)
       const marks = n.marks ?? []
       const has = (type: string) => marks.some((m) => m.type === type)
+      // Text crossed out by track changes is left out, as if accepted.
+      if (has('deletion')) return ''
       if (has('tag')) return n.text ?? ''
       let text = has('code') ? '`' + (n.text ?? '') + '`' : escapeMarkdown(n.text ?? '')
       if (has('comment')) return `%%${n.text ?? ''}%%`
@@ -223,7 +225,7 @@ export function richTextToMarkdown(doc: RichTextDoc, resolve?: LabelResolver): s
 
 /** Alignment and indent of a paragraph or heading (0.35) as a style attribute. */
 const blockStyle = (n: RichTextDoc) => {
-  const css = `${n.attrs?.textAlign ? `text-align:${n.attrs.textAlign};` : ''}${n.attrs?.indent ? `margin-left:${n.attrs.indent * 2}em;` : ''}`
+  const css = `${n.attrs?.textAlign ? `text-align:${n.attrs.textAlign};` : ''}${n.attrs?.indent ? `margin-left:${n.attrs.indent * 2}em;` : ''}${n.attrs?.lineHeight ? `line-height:${n.attrs.lineHeight};` : ''}`
   return css ? ` style="${escapeHtml(css)}"` : ''
 }
 
@@ -246,7 +248,7 @@ export function richTextToHtml(doc: RichTextDoc, resolve?: LabelResolver, image:
         if (n.type === 'hardBreak') return '<br>'
         if (n.type === 'footnote') return `<sup title="${escapeHtml(n.attrs?.note ?? '')}">${++noteCount}</sup>`
         if (n.type !== 'text') return inline(n.content)
-        if (hasMark(n, 'comment')) return ''
+        if (hasMark(n, 'comment') || hasMark(n, 'deletion')) return ''
         const marks = n.marks ?? []
         let html = escapeHtml(n.text ?? '')
         for (const m of marks) {
@@ -296,9 +298,12 @@ export function richTextToHtml(doc: RichTextDoc, resolve?: LabelResolver, image:
       case 'tableRow':
         return `<tr>${inner()}</tr>`
       case 'tableHeader':
-        return `<th>${inner()}</th>`
-      case 'tableCell':
-        return `<td>${inner()}</td>`
+      case 'tableCell': {
+        const tag = n.type === 'tableHeader' ? 'th' : 'td'
+        const span = (n.attrs?.colspan ?? 1) > 1 ? ` colspan="${n.attrs!.colspan}"` : ''
+        const bg = n.attrs?.background ? ` style="background:${escapeHtml(n.attrs.background)}"` : ''
+        return `<${tag}${span}${bg}>${inner()}</${tag}>`
+      }
       case REF_CARD_NODE:
         return `<p class="ref">${escapeHtml(targetLabel(n, resolve))}</p>`
       case 'codeBlock':

@@ -784,3 +784,44 @@
 .richtext-ribbon-row + .richtext-ribbon-row {
   margin-left: 10px;
 }
+
+/* Table tab (0.35): column resizing and the contextual tab */
+.richtext-content .tableWrapper {
+  overflow-x: auto;
+}
+.richtext-content table td,
+.richtext-content table th {
+  position: relative;
+}
+.richtext-content .column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.richtext-content.resize-cursor,
+.richtext-content .resize-cursor {
+  cursor: col-resize;
+}
+.richtext-ribbon-tab.is-context {
+  color: var(--accent);
+}
+
+/* Review (0.35): comments and tracked changes */
+.richtext-remark {
+  background: color-mix(in srgb, #f5c542 35%, transparent);
+  border-bottom: 2px solid #e0a800;
+  cursor: pointer;
+}
+.richtext-insertion {
+  color: #2f9e44;
+  text-decoration: underline;
+  text-decoration-color: #2f9e44;
+}
+.richtext-deletion {
+  color: #d33a3a;
+  text-decoration: line-through;
+}

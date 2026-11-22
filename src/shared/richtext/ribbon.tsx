@@ -18,6 +18,16 @@ import {
   IndentIncrease,
   Info,
   Italic,
+  MessageSquarePlus,
+  Check,
+  X,
+  Merge,
+  Split,
+  Rows3,
+  Columns3,
+  Trash2,
+  PanelTop,
+  PaintBucket,
   Link2,
   List,
   ListChecks,
@@ -49,7 +59,12 @@ import { allLocalFonts, GENERIC_FONTS, systemFonts } from '../fontList'
 import { guessLang } from '../spell/proof'
 import { INSERTS, InsertList } from './inserts'
 import { FONT_SIZES } from './styles'
+import { addRemark, listChanges, resolveChanges } from './review'
 import { changeSelectionCase, type CaseMode } from './wordExtensions'
+import { useCollab } from '@/core/collab'
+
+/** A tool's own buttons at the end of a built-in tab. */
+export type RibbonExtras = Partial<Record<'home' | 'insert' | 'review' | 'table', ReactNode>>
 
 /** An extra ribbon tab a tool adds (the Writer's View and Markdown tabs). */
 export interface RibbonTab {
@@ -60,7 +75,25 @@ export interface RibbonTab {
 
 const UI = {
   toolbar: 'Formatting',
-  tabs: { home: 'Home', insert: 'Insert', review: 'Review' },
+  tabs: { home: 'Home', insert: 'Insert', review: 'Review', table: 'Table' },
+  lineHeight: 'Line spacing for this paragraph',
+  lineHeights: [['', 'Spacing'], ['1', '1.0'], ['1.15', '1.15'], ['1.5', '1.5'], ['2', '2.0'], ['2.5', '2.5']] as [string, string][],
+  remark: 'Comment: select words, click, type your comment on the side',
+  remarkHint: 'Comment: select some words first',
+  accept: 'Accept all changes',
+  reject: 'Reject all changes',
+  rowAbove: 'Row above',
+  rowBelow: 'Row below',
+  colLeft: 'Column left',
+  colRight: 'Column right',
+  delRow: 'Delete row',
+  delCol: 'Delete column',
+  delTable: 'Delete table',
+  merge: 'Merge the selected cells (select them with Shift+click or by dragging)',
+  split: 'Split a merged cell',
+  headerRow: 'Header row on / off',
+  cellColor: 'Cell colour',
+  noColor: 'No colour',
   undo: 'Undo (Ctrl+Z)',
   redo: 'Redo (Ctrl+Y)',
   style: 'Paragraph style',
@@ -110,7 +143,7 @@ const UI = {
   find: 'Find and replace (Ctrl+F)',
   read: 'Read aloud: the selected text, or the paragraph the caret is in',
   stop: 'Stop reading',
-  comment: 'Hidden comment: a note to yourself, left out of exports and the word count',
+  comment: 'Hidden note: greyed text for yourself, left out of exports and the word count',
   selected: (words: number, chars: number) => `${words.toLocaleString()} ${words === 1 ? 'word' : 'words'}, ${chars.toLocaleString()} characters selected`,
   noSelection: 'Select text to count it',
   font: 'Font',
@@ -151,6 +184,7 @@ export function Ribbon({
   onFind,
   onCheck,
   tabs = [],
+  extras = {},
 }: {
   editor: Editor
   onImage: () => void
@@ -158,20 +192,25 @@ export function Ribbon({
   onFind: () => void
   onCheck: () => void
   tabs?: RibbonTab[]
+  extras?: RibbonExtras
 }) {
-  const [tab, setTab] = useState('home')
+  const [picked, setTab] = useState('home')
+  const inTable = useEditorState({ editor, selector: ({ editor: e }) => e.isActive('table') })
+  // The Table tab only exists while the caret is in a table.
+  const tab = picked === 'table' && !inTable ? 'home' : picked
   const all = [
     { id: 'home', label: UI.tabs.home },
     { id: 'insert', label: UI.tabs.insert },
     { id: 'review', label: UI.tabs.review },
     ...tabs,
+    ...(inTable ? [{ id: 'table', label: UI.tabs.table }] : []),
   ]
   const own = tabs.find((t) => t.id === tab)
   return (
     <div className="richtext-ribbon">
       <div className="richtext-ribbon-tabs" role="tablist" aria-label={UI.toolbar}>
         {all.map((t) => (
-          <button key={t.id} role="tab" type="button" aria-selected={tab === t.id} className={tab === t.id ? 'richtext-ribbon-tab is-active' : 'richtext-ribbon-tab'} onMouseDown={(e) => e.preventDefault()} onClick={() => setTab(t.id)}>
+          <button key={t.id} role="tab" type="button" aria-selected={tab === t.id} className={['richtext-ribbon-tab', tab === t.id && 'is-active', t.id === 'table' && 'is-context'].filter(Boolean).join(' ')} onMouseDown={(e) => e.preventDefault()} onClick={() => setTab(t.id)}>
             {t.label}
           </button>
         ))}
@@ -182,6 +221,13 @@ export function Ribbon({
         {tab === 'home' && <HomeTab editor={editor} />}
         {tab === 'insert' && <InsertTab editor={editor} onImage={onImage} syntax={syntax} />}
         {tab === 'review' && <ReviewTab editor={editor} onFind={onFind} onCheck={onCheck} />}
+        {tab === 'table' && <TableTab editor={editor} />}
+        {(tab === 'home' || tab === 'insert' || tab === 'review' || tab === 'table') && extras[tab] && (
+          <>
+            <Sep />
+            {extras[tab]}
+          </>
+        )}
         {own?.content}
       </div>
     </div>
@@ -238,6 +284,7 @@ function HomeTab({ editor }: { editor: Editor }) {
       checklist: e.isActive('taskList'),
       quote: e.isActive('blockquote'),
       align: (e.getAttributes('paragraph').textAlign ?? e.getAttributes('heading').textAlign ?? 'left') as string,
+      lineHeight: String(e.getAttributes('paragraph').lineHeight ?? e.getAttributes('heading').lineHeight ?? ''),
       family: (e.getAttributes('font').family as string | null) ?? '',
       size: (e.getAttributes('font').size as number | null) ?? 0,
       empty: e.state.selection.empty,
@@ -309,6 +356,13 @@ function HomeTab({ editor }: { editor: Editor }) {
       <ToolButton icon={AlignCenter} label={UI.center} run={() => chain().setTextAlign('center').run()} active={s.align === 'center'} />
       <ToolButton icon={AlignRight} label={UI.right} run={() => chain().setTextAlign('right').run()} active={s.align === 'right'} />
       <ToolButton icon={AlignJustify} label={UI.justify} run={() => chain().setTextAlign('justify').run()} active={s.align === 'justify'} />
+      <select className="input richtext-style" title={UI.lineHeight} aria-label={UI.lineHeight} value={s.lineHeight} onChange={(e) => chain().setLineHeight(Number(e.target.value) || null).run()}>
+        {UI.lineHeights.map(([v, label]) => (
+          <option key={v} value={v}>
+            {label}
+          </option>
+        ))}
+      </select>
     </>
   )
 }
@@ -471,7 +525,7 @@ function ReviewTab({ editor, onFind, onCheck }: { editor: Editor; onFind: () => 
     selector: ({ editor: e }) => {
       const { from, to, empty } = e.state.selection
       const text = empty ? '' : e.state.doc.textBetween(from, to, ' ')
-      return { comment: e.isActive('comment'), words: text.split(/\s+/).filter(Boolean).length, chars: text.length }
+      return { comment: e.isActive('comment'), empty, changes: listChanges(e.state.doc).length, words: text.split(/\s+/).filter(Boolean).length, chars: text.length }
     },
   })
   const read = () => {
@@ -496,9 +550,44 @@ function ReviewTab({ editor, onFind, onCheck }: { editor: Editor; onFind: () => 
       <ToolButton icon={SpellCheck2} label={UI.check} run={onCheck} text="Fix my text" />
       <ToolButton icon={Search} label={UI.find} run={onFind} text="Find" />
       {typeof speechSynthesis !== 'undefined' && <ToolButton icon={Volume2} label={reading ? UI.stop : UI.read} run={read} active={reading} text={reading ? 'Stop' : 'Read aloud'} />}
-      <ToolButton icon={MessageSquareOff} label={UI.comment} run={() => editor.chain().focus().toggleMark('comment').run()} active={s.comment} text="Comment" />
+      <ToolButton icon={MessageSquarePlus} label={s.empty ? UI.remarkHint : UI.remark} run={() => addRemark(editor, (useCollab.getState().profile.name || 'You'))} disabled={s.empty} text="Comment" />
+      <ToolButton icon={MessageSquareOff} label={UI.comment} run={() => editor.chain().focus().toggleMark('comment').run()} active={s.comment} text="Hidden note" />
+      {s.changes > 0 && (
+        <>
+          <Sep />
+          <ToolButton icon={Check} label={UI.accept} run={() => resolveChanges(editor, true)} text="Accept all" />
+          <ToolButton icon={X} label={UI.reject} run={() => resolveChanges(editor, false)} text="Reject all" />
+        </>
+      )}
       <Sep />
       <span className="richtext-ribbon-note">{s.words ? UI.selected(s.words, s.chars) : UI.noSelection}</span>
+    </>
+  )
+}
+
+const CELL_COLORS = ['#f0efec', '#fbebeb', '#f9ece7', '#f9eeda', '#e5f4e4', '#e7f1fb', '#efedff', '#d0ebff']
+
+function TableTab({ editor }: { editor: Editor }) {
+  const s = useEditorState({
+    editor,
+    selector: ({ editor: e }) => ({ merge: e.can().mergeCells(), split: e.can().splitCell(), bg: (e.getAttributes('tableCell').background ?? e.getAttributes('tableHeader').background ?? '') as string }),
+  })
+  const chain = () => editor.chain().focus()
+  return (
+    <>
+      <ToolButton icon={Rows3} label={UI.rowAbove} run={() => chain().addRowBefore().run()} text="Row above" />
+      <ToolButton icon={Rows3} label={UI.rowBelow} run={() => chain().addRowAfter().run()} text="Row below" />
+      <ToolButton icon={Columns3} label={UI.colLeft} run={() => chain().addColumnBefore().run()} text="Column left" />
+      <ToolButton icon={Columns3} label={UI.colRight} run={() => chain().addColumnAfter().run()} text="Column right" />
+      <Sep />
+      <ToolButton icon={Merge} label={UI.merge} run={() => chain().mergeCells().run()} disabled={!s.merge} />
+      <ToolButton icon={Split} label={UI.split} run={() => chain().splitCell().run()} disabled={!s.split} />
+      <ToolButton icon={PanelTop} label={UI.headerRow} run={() => chain().toggleHeaderRow().run()} />
+      <ColorMenu icon={PaintBucket} label={UI.cellColor} colors={CELL_COLORS} current={s.bg} resetLabel={UI.noColor} onPick={(c) => chain().setCellAttribute('background', c).run()} />
+      <Sep />
+      <ToolButton icon={Trash2} label={UI.delRow} run={() => chain().deleteRow().run()} text="Row" />
+      <ToolButton icon={Trash2} label={UI.delCol} run={() => chain().deleteColumn().run()} text="Column" />
+      <ToolButton icon={Trash2} label={UI.delTable} run={() => chain().deleteTable().run()} text="Table" />
     </>
   )
 }

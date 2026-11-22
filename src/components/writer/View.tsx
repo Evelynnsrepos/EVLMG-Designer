@@ -1,7 +1,12 @@
 import type { Editor } from '@tiptap/core'
-import { CircleHelp, Copy, Download, FileCode2, FileText, Highlighter, Info, ListTree, Upload } from 'lucide-react'
+import { CircleHelp, Copy, Download, FileCode2, FileText, GitCompareArrows, Highlighter, Info, ListTree, MessagesSquare, PanelsTopLeft, Sheet, Upload } from 'lucide-react'
+import { useEditorState } from '@tiptap/react'
+import { newDocument } from '@/shell/editor/actions'
+import { listRemarks } from '@/shared/richtext/review'
+import { ReviewPanel } from './ReviewPanel'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { saveTextFile } from '@/core/export'
+import { saveBinaryFile, saveTextFile } from '@/core/export'
+import { loadDocxImages, richTextToDocx } from './docx'
 import { printHtml } from '@/shared/print'
 import type { PanelProps } from '@/core/registry'
 import { collabNames, useDocument, useProjectStore, useSettings } from '@/core/state'
@@ -24,7 +29,7 @@ import { ToolButton, type RibbonTab } from '@/shared/richtext/ribbon'
 import { ProofTextarea } from '@/shared/spell'
 import { useArticleRefProvider } from '@/shared/wiki'
 import { importTextFiles } from './importFiles'
-import { createWriterDoc, EXPORT_FORMATS, SPEC_TEMPLATES, exportDocument, printPage, type ExportFormat, type WriterDoc } from './document'
+import { createWriterDoc, EXPORT_FORMATS, SPEC_TEMPLATES, TRACK_CHANGES_DEFAULT, exportDocument, printPage, type ExportFormat, type WriterDoc, type WriterPage } from './document'
 import './writer.css'
 
 const UI = {
@@ -55,6 +60,8 @@ const UI = {
   export: 'Export',
   pdf: 'PDF (print dialog)…',
   htmlLabel: 'Web page (.html)',
+  docx: 'Document (.docx): opens in other word processors, with headers, page numbers and tables',
+  docxLabel: 'Document (.docx)',
   exportTitle: (f: string) => `Export as ${f}`,
   syntax: 'Markdown Syntax',
   syntaxTitle: 'Format by typing symbols (==highlight==, > [!note], - [ ], #tag, ^[footnote]…) and turn pasted Markdown into formatting. Only for this document.',
@@ -62,6 +69,16 @@ const UI = {
   importTitle: 'Import Markdown files as new documents',
   callout: 'Insert callout',
   highlight: 'Highlight',
+  review: 'Comments and changes',
+  reviewTitle: 'Comments and tracked changes, on the side',
+  track: 'Track changes',
+  trackTitle: 'While on, what you type shows as added and what you delete stays crossed out, until you accept or reject it. Only for this document.',
+  headerFooter: 'Header & footer',
+  headerFooterTitle: 'Text at the top and bottom of every printed page, and page numbers',
+  header: 'Header (top of every page)',
+  footer: 'Footer (bottom of every page)',
+  numbers: 'Page numbers',
+  spreadsheet: 'Lots of numbers or sums? A spreadsheet calculates them for you. Opens a new Spreadsheet next to this.',
   missing: 'This document no longer exists.',
   loading: 'Loading…',
 }
@@ -81,7 +98,13 @@ export default function View({ documentId }: PanelProps) {
   const syntaxOn = !!doc.data?.markdownSyntax
   const view = useSettings((s) => s.writerView)
   const setView = (patch: Partial<typeof view>) => useSettings.getState().update({ writerView: { ...view, ...patch } })
-  const side = (which: 'outline' | 'help') => setView({ side: view.side === which ? '' : which })
+  const side = (which: 'outline' | 'help' | 'review') => setView({ side: view.side === which ? '' : which })
+  // A new comment waits for its text on the side, so open the side panel for it.
+  const newRemark = useEditorState({ editor, selector: ({ editor: e }) => !!e && listRemarks(e.state.doc).some((r) => !r.attrs.text) })
+  useEffect(() => {
+    if (newRemark && view.side !== 'review') setView({ side: 'review' })
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [newRemark])
   const toggleSyntax = () => doc.update((d) => ({ ...d, markdownSyntax: !d.markdownSyntax }))
   /** The Markdown being edited in "Edit as Markdown", or null in the normal view. */
   const [source, setSource] = useState<{ start: string; text: string } | null>(null)
@@ -98,6 +121,22 @@ export default function View({ documentId }: PanelProps) {
   const body = doc.data.body
   const setBody = (next: RichTextDoc) => doc.update((d) => ({ ...d, body: next }), { undoable: false })
 
+  const track = doc.data.trackChanges ?? TRACK_CHANGES_DEFAULT
+  const page: WriterPage = doc.data.page ?? {}
+  const setPage = (patch: Partial<WriterPage>) => doc.update((d) => ({ ...d, page: { ...d.page, ...patch } }))
+  const ribbonExtras = {
+    insert: <PageSetup page={page} setPage={setPage} />,
+    review: (
+      <>
+        <label className="writer-syntax" title={UI.trackTitle}>
+          <input type="checkbox" checked={track} onChange={() => doc.update((d) => ({ ...d, trackChanges: !track }))} />
+          <GitCompareArrows size={15} /> {UI.track}
+        </label>
+        <ToolButton icon={MessagesSquare} label={UI.reviewTitle} run={() => side('review')} active={view.side === 'review'} text="Show comments" />
+      </>
+    ),
+    table: <ToolButton icon={Sheet} label={UI.spreadsheet} run={() => newDocument('spreadsheet')} text="Spreadsheet" />,
+  }
   const markdown = () => exportDocument('', body, 'markdown', resolve).text
   const closeSource = () => {
     // Untouched Markdown leaves the text as it was, formatting and all.
@@ -167,15 +206,20 @@ export default function View({ documentId }: PanelProps) {
         <ImportButton refs={refs} />
         <ExportMenu
           onExport={runExport}
-          onPdf={() => editor && printHtml(printPage(ref.title, editor.view.dom.innerHTML))}
+          onPdf={() => editor && printHtml(printPage(ref.title, editor.view.dom.innerHTML, page))}
           onHtml={() =>
             editor &&
-            void saveTextFile({ title: UI.html, defaultName: exportDocument(ref.title, body, 'text', resolve).name.replace(/\.txt$/, '.html'), text: printPage(ref.title, editor.view.dom.innerHTML), filter: { name: 'Web page', extensions: ['html'] } })
+            void saveTextFile({ title: UI.html, defaultName: exportDocument(ref.title, body, 'text', resolve).name.replace(/\.txt$/, '.html'), text: printPage(ref.title, editor.view.dom.innerHTML, page), filter: { name: 'Web page', extensions: ['html'] } })
           }
+          onDocx={async () => {
+            const name = exportDocument(ref.title, body, 'text', resolve).name.replace(/\.txt$/, '.docx')
+            const imgs = await loadDocxImages(body, images.resolveImageSrc ?? ((s) => s))
+            await saveBinaryFile({ title: UI.docx, defaultName: name, bytes: richTextToDocx(ref.title, body, page, resolve, imgs), filter: { name: 'Document', extensions: ['docx'] } })
+          }}
           onCopy={() => navigator.clipboard.writeText(exportDocument(ref.title, body, 'markdown', resolve).text)} />
       </header>
       <div className="writer-body">
-      <div className={view.paper ? 'writer-page is-paper' : 'writer-page'} style={{ '--writer-size': `${view.size}px`, '--writer-spacing': view.spacing, '--writer-width': view.width ? `${view.width}px` : 'none' } as CSSProperties}>
+      <div className={view.paper ? 'writer-page is-paper' : 'writer-page'} style={{ '--writer-header': JSON.stringify(page.header ?? ''), '--writer-footer': JSON.stringify(page.footer ?? ''),  '--writer-size': `${view.size}px`, '--writer-spacing': view.spacing, '--writer-width': view.width ? `${view.width}px` : 'none' } as CSSProperties}>
         {source && (
           <div className="writer-source">
             <p className="muted">
@@ -190,6 +234,8 @@ export default function View({ documentId }: PanelProps) {
         <RichTextEditor
           className={source ? 'is-hidden' : undefined}
           ribbonTabs={ribbonTabs}
+          ribbonExtras={ribbonExtras}
+          trackChanges={track}
           key={documentId}
           value={body}
           onChange={setBody}
@@ -204,9 +250,11 @@ export default function View({ documentId }: PanelProps) {
         />
       </div>
       {view.side && editor && (
-        <aside className="writer-side" aria-label={view.side === 'outline' ? UI.outline : UI.help}>
-          <h3>{view.side === 'outline' ? UI.outline : UI.help}</h3>
-          {view.side === 'outline' ? (
+        <aside className="writer-side" aria-label={view.side === 'outline' ? UI.outline : view.side === 'review' ? UI.review : UI.help}>
+          <h3>{view.side === 'outline' ? UI.outline : view.side === 'review' ? UI.review : UI.help}</h3>
+          {view.side === 'review' ? (
+            <ReviewPanel editor={editor} />
+          ) : view.side === 'outline' ? (
             <Outline body={body} editor={editor} />
           ) : (
             <>
@@ -320,6 +368,44 @@ const WIDTHS: [string, number][] = [['Narrow', 600], ['Normal', 760], ['Wide', 1
 
 type WriterView = ReturnType<typeof useSettings.getState>['writerView']
 
+/** Header, footer and page numbers for printing and .docx, kept with the document. */
+function PageSetup({ page, setPage }: { page: WriterPage; setPage: (patch: Partial<WriterPage>) => void }) {
+  const [open, setOpen] = useState(false)
+  const root = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => !root.current?.contains(e.target as Node) && setOpen(false)
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [open])
+  return (
+    <span className="richtext-pop" ref={root}>
+      <ToolButton icon={PanelsTopLeft} label={UI.headerFooterTitle} run={() => setOpen((o) => !o)} active={open} text={UI.headerFooter} />
+      {open && (
+        <div className="richtext-pop-menu writer-page-setup" onKeyDown={(e) => {
+            if (e.key !== 'Escape') return
+            // Esc closes this box only, not the tool layout mode.
+            e.stopPropagation()
+            setOpen(false)
+          }}>
+          <label>
+            {UI.header}
+            <input className="input" value={page.header ?? ''} onChange={(e) => setPage({ header: e.target.value })} autoFocus />
+          </label>
+          <label>
+            {UI.footer}
+            <input className="input" value={page.footer ?? ''} onChange={(e) => setPage({ footer: e.target.value })} />
+          </label>
+          <label className="writer-syntax">
+            <input type="checkbox" checked={!!page.numbers} onChange={(e) => setPage({ numbers: e.target.checked })} />
+            {UI.numbers}
+          </label>
+        </div>
+      )}
+    </span>
+  )
+}
+
 /** Reading comfort for every Writer document on this computer: text size, line spacing, page width. */
 function ViewRows({ view, setView }: { view: WriterView; setView: (patch: Partial<WriterView>) => void }) {
   const row = (label: string, field: 'size' | 'spacing' | 'width', options: [string, number][]) => (
@@ -341,7 +427,7 @@ function ViewRows({ view, setView }: { view: WriterView; setView: (patch: Partia
   )
 }
 
-function ExportMenu({ onExport, onPdf, onHtml, onCopy }: { onExport: (format: ExportFormat) => Promise<void>; onPdf: () => void; onHtml: () => void; onCopy: () => Promise<void> }) {
+function ExportMenu({ onExport, onPdf, onHtml, onDocx, onCopy }: { onExport: (format: ExportFormat) => Promise<void>; onPdf: () => void; onHtml: () => void; onDocx: () => Promise<void>; onCopy: () => Promise<void> }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const root = useRef<HTMLDivElement>(null)
@@ -402,6 +488,17 @@ function ExportMenu({ onExport, onPdf, onHtml, onCopy }: { onExport: (format: Ex
             }}
           >
             {UI.htmlLabel}
+          </button>
+          <button
+            role="menuitem"
+            className="writer-menu-item"
+            title={UI.docx}
+            onClick={() => {
+              setOpen(false)
+              void onDocx()
+            }}
+          >
+            {UI.docxLabel}
           </button>
           <button role="menuitem" className="writer-menu-item" onClick={() => void onCopy().then(() => setCopied(true))}>
             {copied ? UI.copied : UI.copy}
