@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, CircleDashed, Ellipsis, Eye, EyeOff, Folder, FolderPlus, ListChecks, Lock, Merge, Plus, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, CircleDashed, Type as LetterIcon, Ellipsis, Eye, EyeOff, Folder, FolderPlus, ListChecks, Lock, Merge, Plus, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react'
 import { dragFromRowOnly } from '@/shared/dragGuard'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Id } from '@/core/model'
@@ -28,6 +28,9 @@ import './layers.css'
 import { rasterized } from './animatedLayers'
 import { FilterControls } from './adjust/AdjustStudio'
 import { OutlineDialog } from './OutlineDialog'
+import { AsciiDialog, defaultAscii, type AsciiStart } from './AsciiDialog'
+import { ASCII_FORMATS, asciiGridOf, exportAscii, type AsciiFormat } from './asciiExport'
+import type { AdjustValues } from './adjust/filters'
 import type { OutlineSettings } from './outline'
 import { defaultValues, filterDef } from './adjust/filters'
 import type { LayerAdjust } from './model'
@@ -88,6 +91,13 @@ const UI = {
   outlineSettings: 'Outline settings',
   rasterizeOutline: 'Rasterize outline (normal layer again)',
   isOutline: 'Outline layer: edit the outline',
+  newAscii: 'New ASCII layer: everything you paint on it is shown as letters (or turn a layer or the picture into letters)',
+  asciiName: 'ASCII layer',
+  makeAscii: 'Make ASCII layer',
+  asciiSettings: 'ASCII settings and export',
+  rasterizeAscii: 'Rasterize letters (normal layer again)',
+  isAscii: 'ASCII layer: letters, settings and export',
+  exportAscii: 'Export the letters',
 }
 
 /** What the layer list needs from the editor. */
@@ -148,6 +158,43 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
     const pushes = engine.pushes
     host.markDirty(engine.mergeInto([{ ...l, opacity: 1, blend: 'source-over', clip: false, visible: true, parent: null }], l.id))
     host.restructure(doc.layers.map((x) => (x.id === l.id ? plain : x)), l.id, pushes)
+  }
+
+  // 0.35: ASCII layers. 'new' = the dialog for a new ASCII layer.
+  const [asciiFor, setAsciiFor] = useState<Id | 'new' | null>(null)
+  const asciiLayer = asciiFor && asciiFor !== 'new' ? doc.layers.find((l) => l.id === asciiFor) : undefined
+  const setAscii = (id: Id, a: AdjustValues | null) =>
+    update((d) => ({
+      ...d,
+      layers: d.layers.map((l) => {
+        if (l.id !== id) return l
+        const { ascii: _, ...rest } = l
+        return a ? { ...rest, ascii: a } : rest
+      }),
+    }))
+  /** Paint the letters into the layer's pixels, as one undo step with the layer turning normal. */
+  const rasterizeAscii = (l: SketchLayer) => {
+    const { ascii: _, ...plain } = l
+    const pushes = engine.pushes
+    host.markDirty(engine.mergeInto([{ ...l, opacity: 1, blend: 'source-over', clip: false, visible: true, parent: null }], l.id))
+    host.restructure(doc.layers.map((x) => (x.id === l.id ? plain : x)), l.id, pushes)
+  }
+  /** A new ASCII layer above the active one: empty, or with a copy of the active layer or of the whole picture. */
+  const newAscii = (a: AdjustValues, start: AsciiStart) => {
+    if (count >= host.limit) return
+    const layer: SketchLayer = { ...newLayer(UI.asciiName), ascii: a }
+    host.adopt(layer.id)
+    const from = start === 'layer' && host.activeId ? engine.layerCanvas(host.activeId) : start === 'picture' ? engine.render({ ...doc, layers: doc.layers.filter((l) => !l.private) }, false) : null
+    engine.setLayerImage(layer.id, from)
+    update((d) => ({ ...d, layers: insertAbove(d.layers, layer, host.activeId) }))
+    host.setActive(layer.id)
+    if (from) host.markDirty(layer.id)
+  }
+  /** The letters of an ASCII layer, or of the picture below an ASCII adjustment layer. */
+  const asciiExport = (l: SketchLayer, format: AsciiFormat, a: AdjustValues) => {
+    const below = doc.layers.slice(0, doc.layers.findIndex((x) => x.id === l.id))
+    const px = l.kind === 'adjust' ? engine.render({ ...doc, layers: below }, true) : engine.layerCanvas(l.id)
+    return exportAscii(asciiGridOf(px, a), format, `${host.title} ${l.name}`)
   }
 
   /** A new pixel layer above `aboveId`, optionally filled by `paint`. */
@@ -318,6 +365,8 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
       !group && { label: UI.invert, run: () => host.markDirty(engine.invert(l.id)) },
       !group && !mask && { label: l.outline ? UI.outlineSettings : UI.makeOutline, run: () => setOutlineFor(l.id) },
       !!l.outline && { label: UI.rasterizeOutline, run: () => rasterizeOutline(l) },
+      !group && !mask && { label: l.ascii ? UI.asciiSettings : UI.makeAscii, run: () => (l.ascii || setAscii(l.id, defaultAscii(engine.width, engine.height)), setAsciiFor(l.id)) },
+      !!l.ascii && { label: UI.rasterizeAscii, run: () => rasterizeAscii(l) },
       !mask && { label: UI.duplicate, run: () => duplicate(l.id) },
       !group && !mask && { label: UI.alphaLock, run: () => set(l.id, { alphaLock: !l.alphaLock }), on: l.alphaLock },
       !mask && { label: UI.clip, run: () => set(l.id, { clip: !l.clip }), on: l.clip },
@@ -390,7 +439,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
           </button>
           {adjustMenu && (
             <div className="menu sketch-adjust-menu">
-              {(['hsb', 'balance', 'curves', 'gradient'] as const).map((id) => (
+              {(['hsb', 'balance', 'curves', 'gradient', 'ascii'] as const).map((id) => (
                 <button key={id} onClick={() => addAdjust(id)}>
                   {filterDef(id).label}
                 </button>
@@ -398,6 +447,9 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
             </div>
           )}
         </span>
+        <button className="icon-btn sketch-tool" title={UI.newAscii} aria-label={UI.newAscii} onClick={() => count < host.limit && setAsciiFor('new')}>
+          <LetterIcon size={16} />
+        </button>
         <button className="icon-btn sketch-tool" title={UI.newOutline} aria-label={UI.newOutline} onClick={() => count < host.limit && setOutlineFor('new')}>
           <CircleDashed size={16} />
         </button>
@@ -416,6 +468,15 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
       {active?.kind === 'adjust' && active.adjust && (
         <div className="sketch-adjust-settings">
           <FilterControls id={active.adjust.id} values={active.adjust.values} onChange={(values) => set(active.id, { adjust: { ...active.adjust!, values } })} />
+          {active.adjust.id === 'ascii' && (
+            <div className="sketch-outline-row" aria-label={UI.exportAscii}>
+              {ASCII_FORMATS.map((f) => (
+                <button key={f.id} className="btn btn-ghost sketch-small" title={f.title} onClick={() => void asciiExport(active, f.id, active.adjust!.values)}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {picked.size > 1 && (
@@ -494,6 +555,19 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
                   </span>
                 )}
                 <span className="sketch-layer-name">{l.name}</span>
+                {l.ascii && (
+                  <button
+                    className="icon-btn sketch-outline-btn"
+                    title={UI.isAscii}
+                    aria-label={UI.isAscii}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setAsciiFor(l.id)
+                    }}
+                  >
+                    <LetterIcon size={12} />
+                  </button>
+                )}
                 {l.outline && (
                   <button
                     className="icon-btn sketch-outline-btn"
@@ -599,6 +673,21 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
           }}
           onOff={outlineLayer?.outline ? () => (setOutlineFor(null), setOutline(outlineLayer.id, null)) : undefined}
           onRasterize={outlineLayer?.outline ? () => (setOutlineFor(null), rasterizeOutline(outlineLayer)) : undefined}
+        />
+      )}
+      {asciiFor && (asciiFor === 'new' || asciiLayer) && (
+        <AsciiDialog
+          initial={asciiLayer?.ascii}
+          canCopyLayer={!!active && !isGroup(active) && active.kind !== 'adjust' && hasPixels(active)}
+          onClose={() => setAsciiFor(null)}
+          onOk={(a, start) => {
+            setAsciiFor(null)
+            if (asciiLayer) return setAscii(asciiLayer.id, a)
+            newAscii(a, start)
+          }}
+          onOff={asciiLayer?.ascii ? () => (setAsciiFor(null), setAscii(asciiLayer.id, null)) : undefined}
+          onRasterize={asciiLayer?.ascii ? () => (setAsciiFor(null), rasterizeAscii(asciiLayer)) : undefined}
+          onExport={asciiLayer ? (f, a) => asciiExport(asciiLayer, f, a) : undefined}
         />
       )}
       {shownMenu && (
