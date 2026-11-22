@@ -70,3 +70,25 @@
 .eco-meter .calc-number {
   width: 80px;
 }
+.eco-formula {
+  width: 150px;
+  font-family: var(--font-mono, monospace);
+}
+.eco-formula-bad {
+  border-color: var(--danger) !important;
+}
+.eco-picked td {
+  background: var(--bg-hover);
+}
+.eco-io {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.eco-io .calc-number {
+  width: 56px;
+}
+.eco-recipe {
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}

@@ -9,7 +9,7 @@ import type { PanelProps } from '@/core/registry'
 import { useDocumentsOfType, useProjectStore } from '@/core/state'
 import { LineChart } from '@/shared/calculators'
 import { entityLook } from '@/shared/categories'
-import { openEntity } from '@/shared/entityList'
+import { openDocument, openEntity } from '@/shared/entityList'
 import { formatNumber } from '@/shared/formulas'
 import { localized, useLang } from '@/shared/i18n'
 import '@/shared/listDetail/listDetail.css'
@@ -20,6 +20,8 @@ import './balance.css'
 
 const UI = localized(
   {
+    intro: 'A checker for your numbers. You type nothing here: it reads the tools below and shows what sticks out, how difficulty grows, and what is missing. Click a tool to go there.',
+    readsFrom: 'Reads from',
     items: 'Items',
     enemies: 'Enemies',
     abilities: 'Abilities',
@@ -51,11 +53,13 @@ const UI = localized(
     itemsNumbers: 'Items with numbers',
     enemiesNumbers: 'Enemies with numbers',
     enemiesDrops: 'Enemies that drop something',
-    missingNumbers: (n: number, names: string) => `${n} have no numbers yet: ${names}.`,
-    missingDrops: (n: number, names: string) => `${n} enemies drop nothing: ${names}.`,
+    missingNumbers: (n: number) => `${n} have no numbers yet: `,
+    missingDrops: (n: number) => `${n} enemies drop nothing: `,
     allGood: 'Everything has numbers and every enemy drops something.',
   },
   {
+    intro: 'Ein Prüfer für deine Zahlen. Hier tippst du nichts ein: Er liest die Tools unten und zeigt, was auffällt, wie die Schwierigkeit wächst und was fehlt. Klick auf ein Tool, um dorthin zu springen.',
+    readsFrom: 'Liest aus',
     items: 'Items',
     enemies: 'Gegner',
     abilities: 'Fähigkeiten',
@@ -87,13 +91,13 @@ const UI = localized(
     itemsNumbers: 'Items mit Zahlen',
     enemiesNumbers: 'Gegner mit Zahlen',
     enemiesDrops: 'Gegner, die etwas fallen lassen',
-    missingNumbers: (n: number, names: string) => `${n} haben noch keine Zahlen: ${names}.`,
-    missingDrops: (n: number, names: string) => `${n} Gegner lassen nichts fallen: ${names}.`,
+    missingNumbers: (n: number) => `${n} haben noch keine Zahlen: `,
+    missingDrops: (n: number) => `${n} Gegner lassen nichts fallen: `,
     allGood: 'Alles hat Zahlen und jeder Gegner lässt etwas fallen.',
   },
 )
 
-type NumberSet = { key: string; label: string; type: EntityType | string; points: Point[]; colors: Record<string, string> }
+type NumberSet = { key: string; label: string; type: EntityType | string; points: Point[]; colors: Record<string, string>; open?: (id: string) => void }
 
 // Made-up numbers for the "Example" previews, so an empty project still shows what the charts do.
 const SAMPLE_ROWS = strips([
@@ -138,7 +142,7 @@ export default function View(_props: PanelProps) {
       }
       for (const s of stats) {
         const points = list.filter((e) => typeof e.stats[s] === 'number').map((e) => ({ id: e.id, name: e.name || 'Untitled', value: e.stats[s], group: group(e) }))
-        out.push({ key: `${type}:${s}`, label: `${type === 'item' ? UI.items : UI.enemies}: ${s}`, type, points, colors })
+        out.push({ key: `${type}:${s}`, label: `${type === 'item' ? UI.items : UI.enemies}: ${s}`, type, points, colors, open: (id) => openEntity(type, id) })
       }
     }
     const numbers = abilities.map((a) => ({ a, n: abilityStats(a, presets) }))
@@ -147,17 +151,17 @@ export default function View(_props: PanelProps) {
       ['Value per cost', (x: (typeof numbers)[number]) => x.n.perCost],
     ] as const) {
       const points = numbers.flatMap((x) => (get(x) === null ? [] : [{ id: x.a.id, name: x.a.name || 'Untitled', value: get(x)!, group: x.a.kind }]))
-      out.push({ key: `ability:${label}`, label: `${UI.abilities}: ${label}`, type: 'ability', points, colors: {} })
+      out.push({ key: `ability:${label}`, label: `${UI.abilities}: ${label}`, type: 'ability', points, colors: {}, open: () => openComponent('abilities') })
     }
     for (const l of lists)
       for (const f of l.doc.fields.filter((f) => f.kind === 'number')) {
         const points = l.doc.items.flatMap((r) => (typeof r.values[f.id] === 'number' ? [{ id: r.id, name: r.name, value: r.values[f.id] as number, group: l.title }] : []))
-        out.push({ key: `${l.title}:${f.id}`, label: `${l.title}: ${f.name}`, type: l.title, points, colors: {} })
+        out.push({ key: `${l.title}:${f.id}`, label: `${l.title}: ${f.name}`, type: l.title, points, colors: {}, open: () => openDocument('custom-list', l.id) })
       }
     return out.filter((x) => x.points.length > 0)
   }, [items, enemies, categories, abilities, presets, lists])
 
-  const flagged = useMemo(() => sets.flatMap((x) => outliers(x.points).map((o) => ({ ...o, stat: x.label, type: x.type, key: x.key }))).sort((a, b) => b.score - a.score), [sets])
+  const flagged = useMemo(() => sets.flatMap((x) => outliers(x.points).map((o) => ({ ...o, stat: x.label, type: x.type, key: x.key, open: x.open }))).sort((a, b) => b.score - a.score), [sets])
   const outCount = (key: string) => flagged.filter((f) => f.key === key).length
   // Default: the number with the biggest outlier, else the one with the most entries.
   const shown = sets.find((x) => x.key === set) ?? sets.find((x) => x.key === flagged[0]?.key) ?? [...sets].sort((a, b) => b.points.length - a.points.length)[0]
@@ -166,7 +170,20 @@ export default function View(_props: PanelProps) {
   const c = useMemo(() => curve(enemies.filter((e) => typeof e.stats[chosen] === 'number').map((e) => ({ id: e.id, name: e.name, value: e.stats[chosen], group: 'all', level: e.levelMin }))), [enemies, chosen])
   const noStats = [...items.filter((i) => !Object.keys(i.stats).length), ...enemies.filter((e) => !Object.keys(e.stats).length)]
   const noDrops = enemies.filter((e) => !e.dropTable.length)
-  const names = (list: Entity[]) => `${list.slice(0, 8).map((e) => e.name || 'Untitled').join(', ')}${list.length > 8 ? '…' : ''}`
+  // 0.35: names in the gaps are one-way jumps to the entry.
+  const names = (list: Entity[]) => (
+    <>
+      {list.slice(0, 8).map((e, i) => (
+        <span key={e.id}>
+          {i > 0 && ', '}
+          <button className="bal-link" onClick={() => openEntity(items.includes(e as Item) ? 'item' : 'enemy', e.id)}>
+            {e.name || 'Untitled'}
+          </button>
+        </span>
+      ))}
+      {list.length > 8 ? '…' : ''}
+    </>
+  )
 
   const openButtons = (
     <div className="bal-cta">
@@ -179,8 +196,24 @@ export default function View(_props: PanelProps) {
     </div>
   )
 
+  const sources: { label: string; n: number; go: () => void }[] = [
+    { label: UI.items, n: items.length, go: () => openComponent('item-list') },
+    { label: UI.enemies, n: enemies.length, go: () => openComponent('enemy-list') },
+    { label: UI.abilities, n: abilities.length, go: () => openComponent('abilities') },
+    ...lists.map((l) => ({ label: l.title || 'Custom List', n: l.doc.items.length, go: () => openDocument('custom-list', l.id) })),
+  ]
+
   return (
     <div className="bal">
+      <p className="muted bal-intro">{UI.intro}</p>
+      <div className="bal-sources">
+        <span className="muted">{UI.readsFrom}:</span>
+        {sources.map((x) => (
+          <button key={x.label} className="bal-source" onClick={x.go}>
+            {x.label} <b>{x.n}</b> <ExternalLink size={11} />
+          </button>
+        ))}
+      </div>
       <div className="bal-tiles">
         <div className="bal-tile">
           <b>{items.length}</b>
@@ -217,7 +250,7 @@ export default function View(_props: PanelProps) {
         {shown ? (
           <>
             <p className="muted">{UI.stickHelp}</p>
-            <StripChart rows={rows} colors={shown.colors} label={shown.label} onOpen={shown.type === 'item' || shown.type === 'enemy' ? (id) => openEntity(shown.type as EntityType, id) : undefined} />
+            <StripChart rows={rows} colors={shown.colors} label={shown.label} onOpen={shown.open} />
             {outCount(shown.key) === 0 && <p>{UI.nothing}</p>}
           </>
         ) : (
@@ -253,8 +286,8 @@ export default function View(_props: PanelProps) {
                       {formatNumber(o.typical)} <span className="muted">({o.group})</span>
                     </td>
                     <td>
-                      {(o.type === 'item' || o.type === 'enemy') && (
-                        <button className="icon-btn" title={UI.open} aria-label={UI.open} onClick={() => openEntity(o.type as EntityType, o.id)}>
+                      {o.open && (
+                        <button className="icon-btn" title={UI.open} aria-label={UI.open} onClick={() => o.open!(o.id)}>
                           <ExternalLink size={13} />
                         </button>
                       )}
@@ -322,8 +355,18 @@ export default function View(_props: PanelProps) {
             { label: UI.enemiesDrops, have: enemies.length - noDrops.length, total: enemies.length },
           ]}
         />
-        {noStats.length > 0 && <p className="muted">{UI.missingNumbers(noStats.length, names(noStats))}</p>}
-        {noDrops.length > 0 && <p className="muted">{UI.missingDrops(noDrops.length, names(noDrops))}</p>}
+        {noStats.length > 0 && (
+          <p className="muted">
+            {UI.missingNumbers(noStats.length)}
+            {names(noStats)}.
+          </p>
+        )}
+        {noDrops.length > 0 && (
+          <p className="muted">
+            {UI.missingDrops(noDrops.length)}
+            {names(noDrops)}.
+          </p>
+        )}
         {noStats.length === 0 && noDrops.length === 0 && items.length + enemies.length > 0 && <p>{UI.allGood}</p>}
       </section>
     </div>
@@ -333,5 +376,5 @@ export default function View(_props: PanelProps) {
 /** Every Custom List of the project, loaded (0.28). */
 function useCustomLists() {
   const lists = useDocumentsOfType<CustomListDoc>('custom-list', createCustomListDoc)
-  return useMemo(() => lists.map((l) => ({ title: l.title, doc: l.data })), [lists])
+  return useMemo(() => lists.map((l) => ({ id: l.id, title: l.title, doc: l.data })), [lists])
 }

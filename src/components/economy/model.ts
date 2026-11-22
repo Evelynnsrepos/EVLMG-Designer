@@ -1,4 +1,6 @@
 import { newId, type Id } from '@/core/model'
+import { tryCompile, type CompiledFormula } from '@/shared/formulas'
+import type { Market } from './market'
 
 /**
  * Economy simulator (v0.10): where currencies come from (sources) and where
@@ -19,6 +21,8 @@ export interface Source {
   /** Income grows by this percent per hour played (better areas, upgrades). */
   growth: number
   fromHour: number
+  /** 0.35: per hour as a formula of t (hours played); replaces perHour and growth when set. */
+  formula?: string
 }
 
 export interface Sink {
@@ -30,6 +34,8 @@ export interface Sink {
   kind: 'once' | 'every' | 'perHour'
   hours: number
   fromHour: number
+  /** 0.35: the cost as a formula of t (hours played) and n (times paid so far); replaces cost when set. */
+  formula?: string
 }
 
 export interface EconomyDoc {
@@ -42,6 +48,8 @@ export interface EconomyDoc {
   /** Missing tools phase 3: bars that change over time (hunger, stamina, resin). Missing = none. */
   meters?: Meter[]
   meterActions?: MeterAction[]
+  /** 0.35: goods, places, routes and recipes (Markets tab). Missing = not used. */
+  market?: Market
 }
 
 /** A bar from 0 to max that changes by itself every hour of play. */
@@ -132,6 +140,24 @@ export interface EconomyResult {
   bought: Record<Id, number | null>
   /** First time a sink could not be paid. */
   shortfalls: { sinkId: Id; hour: number }[]
+  /** 0.35: formulas with a typo or a name other than t and n, by source or sink id. */
+  formulaErrors: Record<Id, string>
+}
+
+/** Compiles a source or sink formula; only t and n are known. */
+function formulaOf(text: string | undefined): { f: CompiledFormula | null; error: string | null } {
+  if (!text?.trim()) return { f: null, error: null }
+  const c = tryCompile(text)
+  if (!c.ok) return { f: null, error: c.error.message }
+  const bad = c.value.variables.filter((v) => v !== 't' && v !== 'n')
+  return bad.length ? { f: null, error: `Unknown name ${bad.join(', ')} (use t for hours played, n for times paid)` } : { f: c.value, error: null }
+}
+const run = (f: CompiledFormula, t: number, n = 0) => {
+  try {
+    return Math.max(0, f.evaluate({ t, n }))
+  } catch {
+    return 0
+  }
 }
 
 const STEP = 0.25
@@ -146,21 +172,32 @@ export function simulateEconomy(d: EconomyDoc): EconomyResult {
   const shortfalls: EconomyResult['shortfalls'] = []
   const lastPaid: Record<Id, number> = {}
   const times = [0]
+  const formulaErrors: Record<Id, string> = {}
+  const fs = new Map<Id, CompiledFormula>()
+  for (const x of [...d.sources, ...d.sinks]) {
+    const r = formulaOf(x.formula)
+    if (r.error) formulaErrors[x.id] = r.error
+    if (r.f) fs.set(x.id, r.f)
+  }
+  const paidCount: Record<Id, number> = {}
   const steps = Math.round(Math.min(1000, Math.max(0, d.hours)) / STEP)
   for (let i = 1; i <= steps; i++) {
     const t = i * STEP
     for (const s of d.sources) {
       if (t <= s.fromHour || !(s.currencyId in bal)) continue
-      const gain = s.perHour * STEP * Math.pow(1 + s.growth / 100, t - s.fromHour)
+      const f = fs.get(s.id)
+      const gain = f ? run(f, t) * STEP : s.perHour * STEP * Math.pow(1 + s.growth / 100, t - s.fromHour)
       bal[s.currencyId] += gain
       earned[s.currencyId] += gain
     }
     for (const k of sinks) {
       if (t <= k.fromHour || !(k.currencyId in bal)) continue
       let cost = 0
-      if (k.kind === 'perHour') cost = k.cost * STEP
-      else if (k.kind === 'every' && t - (lastPaid[k.id] ?? k.fromHour) >= Math.max(STEP, k.hours) - 1e-9) cost = k.cost
-      else if (k.kind === 'once' && bought[k.id] === null && bal[k.currencyId] >= k.cost) cost = k.cost
+      const f = fs.get(k.id)
+      const price = f ? run(f, t, paidCount[k.id] ?? 0) : k.cost
+      if (k.kind === 'perHour') cost = price * STEP
+      else if (k.kind === 'every' && t - (lastPaid[k.id] ?? k.fromHour) >= Math.max(STEP, k.hours) - 1e-9) cost = price
+      else if (k.kind === 'once' && bought[k.id] === null && bal[k.currencyId] >= price) cost = price
       if (!cost) continue
       if (bal[k.currencyId] < cost && k.kind !== 'once') {
         if (!shortfalls.some((x) => x.sinkId === k.id)) shortfalls.push({ sinkId: k.id, hour: t })
@@ -169,12 +206,13 @@ export function simulateEconomy(d: EconomyDoc): EconomyResult {
       bal[k.currencyId] -= cost
       spent[k.currencyId] += cost
       lastPaid[k.id] = t
+      paidCount[k.id] = (paidCount[k.id] ?? 0) + 1
       if (k.kind === 'once') bought[k.id] = t
     }
     times.push(t)
     for (const c of d.currencies) balance[c.id].push(Math.round(bal[c.id]))
   }
-  return { times, balance, earned, spent, bought, shortfalls }
+  return { times, balance, earned, spent, bought, shortfalls, formulaErrors }
 }
 
 // ---- Meters (missing tools phase 3) ------------------------------------------------

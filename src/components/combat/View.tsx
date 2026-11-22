@@ -1,5 +1,5 @@
-import { Play, Plus, X } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronDown, ChevronRight, Play, Plus, X } from 'lucide-react'
+import { Fragment, useState } from 'react'
 import type { Enemy } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
 import { useDocument, useProjectStore, useUndoRedoKeys } from '@/core/state'
@@ -7,9 +7,11 @@ import { emptyStatusDoc, STATUS_DOC, type StatusDoc } from '@/components/status-
 import { abilityFormula, createAbilitiesDoc, type AbilitiesDoc, type Ability } from '@/components/abilities/model'
 import { NumberInput, PresetHeader, useDamagePresets } from '@/shared/calculators'
 import { useItems } from '@/shared/listDetail'
-import { libraryFor } from '@/shared/formulas'
+import { FUNCTION_HELP, libraryFor } from '@/shared/formulas'
+import { confirmDialog } from '@/shared/dialogs'
 import '@/shared/listDetail/listDetail.css'
-import { createCombatDoc, newFighter, simulateCombat, type CombatDoc, type CombatResult, type Fighter, type SimAbility } from './model'
+import { FighterDetails } from './Details'
+import { createCombatDoc, CUSTOM_FORMULA, exampleElementalTeam, exampleTurnBoss, newFighter, PRESET_PREFIX, simulateCombat, summary, type CombatDoc, type CombatResult, type Fighter, type SimAbility } from './model'
 import './combat.css'
 
 const STAT_KEYS = { hp: ['HP', 'Health', 'Hp', 'hp'], atk: ['ATK', 'Attack', 'atk'], def: ['DEF', 'Defense', 'Defence', 'def'], speed: ['SPD', 'Speed', 'spd'] }
@@ -24,6 +26,7 @@ export default function View({ documentId, active }: PanelProps) {
   useUndoRedoKeys(doc, active)
   const enemies = useProjectStore((s) => s.entities.enemy) as Enemy[]
   const [result, setResult] = useState<CombatResult | null>(null)
+  const [open, setOpen] = useState<string | null>(null)
   // 0.28: fighters use Abilities & Spells, with their formulas and cooldowns.
   const abilities = useItems<Ability, AbilitiesDoc>('abilities', 'abilities', createAbilitiesDoc).items
   const presets = useDamagePresets()
@@ -49,7 +52,16 @@ export default function View({ documentId, active }: PanelProps) {
     resist: e.resistances,
     abilities: abilities.filter((a) => a.users.includes(e.id)).map((a) => a.id),
   })
-  const run = () => setResult(simulateCombat(d, Date.now(), simAbilities, hasStatus ? status : undefined))
+  const run = () => setResult(simulateCombat(d, Date.now(), simAbilities, hasStatus ? status : undefined, presets))
+  const turns = d.mode === 'turns'
+  const unit = turns ? 'rounds' : 's'
+  const loadExample = async (make: () => CombatDoc) => {
+    if (await confirmDialog({ title: 'Load example', message: 'This replaces the fighters and settings of this fight. You can undo it.', confirmLabel: 'Load example' })) {
+      set(() => make())
+      setResult(null)
+    }
+  }
+  const damageTotal = result ? Object.values(result.damage).reduce((a, b) => a + b, 0) : 0
   const totalRuns = result ? result.wins[0] + result.wins[1] + result.draws : 0
 
   const team = (side: 0 | 1) => (
@@ -63,7 +75,7 @@ export default function View({ documentId, active }: PanelProps) {
             <th>HP</th>
             <th>ATK</th>
             <th>DEF</th>
-            <th>Attacks/s</th>
+            <th title={turns ? 'Who goes first each round' : 'Attacks per second'}>{turns ? 'Speed' : 'Attacks/s'}</th>
             <th>Crit %</th>
             <th>Crit dmg %</th>
             <th title="Used whenever one is ready, instead of a basic attack. Resistances come from the Enemy List.">Abilities</th>
@@ -72,8 +84,12 @@ export default function View({ documentId, active }: PanelProps) {
         </thead>
         <tbody>
           {d.teams[side].map((f) => (
-            <tr key={f.id}>
-              <td>
+            <Fragment key={f.id}>
+            <tr>
+              <td className="cb-namecell">
+                <button className="icon-btn" aria-label="Details" aria-expanded={open === f.id} title="Extra stats, element, resistances, wave, buffs and phases" onClick={() => setOpen(open === f.id ? null : f.id)}>
+                  {open === f.id ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                </button>
                 <input className="input" value={f.name} onChange={(e) => editFighter(side, f.id, { name: e.target.value })} />
               </td>
               {(['count', 'hp', 'atk', 'def', 'speed', 'crit', 'critDamage'] as const).map((k) => (
@@ -107,6 +123,14 @@ export default function View({ documentId, active }: PanelProps) {
                 </button>
               </td>
             </tr>
+            {open === f.id && (
+              <tr>
+                <td colSpan={10}>
+                  <FighterDetails f={f} turns={turns} abilities={abilities} edit={(patch) => editFighter(side, f.id, patch)} />
+                </td>
+              </tr>
+            )}
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -141,13 +165,32 @@ export default function View({ documentId, active }: PanelProps) {
         <PresetHeader documentId={documentId!} kind="Combat" undo={doc.undo} redo={doc.redo} canUndo={doc.canUndo} canRedo={doc.canRedo} />
       </div>
       <div className="cb-body">
+        <div className="ld-inline cb-examples">
+          <span className="cb-muted">Start from an example:</span>
+          <button className="btn btn-ghost" onClick={() => loadExample(exampleElementalTeam)} title="Four elemental characters with supports against two waves, 60 seconds to clear">
+            Elemental team vs waves (real time)
+          </button>
+          <button className="btn btn-ghost" onClick={() => loadExample(exampleTurnBoss)} title="Four party members against a boss with a weakness and a second phase">
+            Turn-based boss with phases
+          </button>
+        </div>
         {team(0)}
         <div className="cb-vs">vs</div>
         {team(1)}
         <section className="ld-inline cb-settings">
           <label className="ld-field">
-            <span>Damage formula (ATK of the attacker, DEF of the target)</span>
+            <span>Damage formula of the basic attack</span>
             <select className="input" value={d.formulaId} onChange={(e) => set((x) => ({ ...x, formulaId: e.target.value }))}>
+              <option value={CUSTOM_FORMULA}>Write your own…</option>
+              {presets.length > 0 && (
+                <optgroup label="Your Damage Calculator presets">
+                  {presets.map((p) => (
+                    <option key={p.id} value={PRESET_PREFIX + p.id}>
+                      {p.title || 'Untitled preset'}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
               {libraryFor('damage').map((g) => (
                 <optgroup key={g.id} label={g.name}>
                   {g.formulas.map((f) => (
@@ -158,6 +201,22 @@ export default function View({ documentId, active }: PanelProps) {
                 </optgroup>
               ))}
             </select>
+          </label>
+          <label className="ld-field">
+            <span>How the fight runs</span>
+            <select className="input" value={d.mode ?? 'realtime'} onChange={(e) => set((x) => ({ ...x, mode: e.target.value as CombatDoc['mode'] }))}>
+              <option value="realtime">Real time (attacks per second)</option>
+              <option value="turns">Turn based (rounds in speed order)</option>
+            </select>
+          </label>
+          {turns && (
+            <label className="cb-drow" title="Hitting a weakness (resistance above 1) gives one more action that round">
+              <input type="checkbox" checked={!!d.weaknessTurn} onChange={(e) => set((x) => ({ ...x, weaknessTurn: e.target.checked }))} /> Weakness gives one more turn
+            </label>
+          )}
+          <label className="ld-field" title={`${d.teamNames[0]} must win within this time. 0 = no limit.`}>
+            <span>Time limit ({unit}, 0 = none)</span>
+            <NumberInput value={d.timeLimit ?? 0} min={0} onChange={(timeLimit) => set((x) => ({ ...x, timeLimit }))} />
           </label>
           <label className="ld-field">
             <span>Damage spread ± %</span>
@@ -172,9 +231,20 @@ export default function View({ documentId, active }: PanelProps) {
           </button>
         </section>
 
+        {d.formulaId === CUSTOM_FORMULA && (
+          <section className="cb-formula">
+            <input className="input" value={d.expression ?? ''} placeholder="ATK * 2 - T_DEF" onChange={(e) => set((x) => ({ ...x, expression: e.target.value }))} aria-label="Your formula" />
+            <p className="cb-muted">
+              Attacker: ATK, HP, MAXHP, SPD, CRIT and every extra stat by its name. Target: the same with T_ in front (T_DEF, T_HP). DEF alone is the target's DEF. Buffs change these numbers first. Functions:{' '}
+              {FUNCTION_HELP.map((f) => f.name).join(', ')}. To reuse it in other tools, make it a Damage Calculator preset.
+            </p>
+          </section>
+        )}
         {result?.error && <p className="cb-bad">{result.error}</p>}
+        {result?.missing && <p className="cb-bad">These count as 0: {result.missing.join('; ')}. Add them as extra stats (open a fighter with the arrow).</p>}
         {result && !result.error && (
           <section>
+            <p className="cb-summary">{summary(d, result)}</p>
             <div className="cb-bar">
               {result.wins[0] > 0 && <div style={{ flex: result.wins[0], background: '#3e8ef7' }}>{Math.round((result.wins[0] / totalRuns) * 100)}%</div>}
               {result.draws > 0 && <div style={{ flex: result.draws, background: 'var(--text-muted)' }}>{Math.round((result.draws / totalRuns) * 100)}%</div>}
@@ -193,18 +263,29 @@ export default function View({ documentId, active }: PanelProps) {
               </div>
               <div className="ld-stat">
                 <span>Average fight</span>
-                <strong>{result.avgSeconds.toFixed(1)} s</strong>
+                <strong>
+                  {turns ? Math.round(result.avgSeconds) : result.avgSeconds.toFixed(1)} {unit}
+                </strong>
               </div>
             </div>
-            <h4>Damage per fight</h4>
-            <div className="ld-result">
-              {[...d.teams[0], ...d.teams[1]].map((f) => (
-                <div key={f.id} className="ld-stat">
-                  <span>{f.name}</span>
-                  <strong>{Math.round(result.damage[f.id] ?? 0)}</strong>
-                </div>
-              ))}
-            </div>
+            <h4>Who does the damage (per fight)</h4>
+            {d.teams.map((t, side) => (
+              <div key={side} className="cb-share">
+                {t.map((f) => {
+                  const v = result.damage[f.id] ?? 0
+                  return (
+                    <div key={f.id} className="cb-share-row">
+                      <span>{f.name}</span>
+                      <div className="cb-share-bar">
+                        <div style={{ width: `${damageTotal ? (v / damageTotal) * 100 : 0}%`, background: side ? '#e03131' : '#3e8ef7' }} />
+                      </div>
+                      <strong>{Math.round(v).toLocaleString()}</strong>
+                      <span className="cb-muted">{damageTotal ? Math.round((v / damageTotal) * 100) : 0}%</span>
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
             {result.effects && (
               <>
                 <h4>Status effects per fight</h4>

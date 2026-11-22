@@ -149,7 +149,10 @@ export function hitDamage(f: CompiledFormula, base: Record<string, number>, atta
   // Names nobody filled count as 0 (missingVars tells the person).
   for (const v of f.variables) if (!(v in vars)) vars[v] = 0
   if (extra) {
-    for (const [k, v] of Object.entries(extra.a)) ((vars[k] = v), (vars[`A_${k}`] = v))
+    for (const [k, v] of Object.entries(extra.a)) {
+      vars[k] = v
+      vars[`A_${k}`] = v
+    }
     for (const [k, v] of Object.entries(extra.t)) vars[`T_${k}`] = v
   }
   vars.ATK = attacker.atk
@@ -315,7 +318,9 @@ export function simulateCombat(d: CombatDoc, seed = 1, abilities: SimAbility[] =
           for (const b of g.f.buffs) {
             if (norm(b.stat) !== stat || !buffOn(b, t)) continue
             const hits = b.to === 'self' ? g === u : b.to === 'team' ? g.side === u.side : g.side !== u.side
-            if (hits) ((pct += b.percent), (flat += b.flat))
+            if (!hits) continue
+            pct += b.percent
+            flat += b.flat
           }
         }
       return { pct, flat }

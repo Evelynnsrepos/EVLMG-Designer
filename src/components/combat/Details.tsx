@@ -106,6 +106,11 @@ export function FighterDetails({ f, edit, abilities, turns }: { f: Fighter; edit
           </button>
         </div>
       ))}
+      <datalist id="cb-stats">
+        {['ATK', 'DEF', 'SPD', 'CRIT', 'CRITDMG', 'DMG', 'TAKEN', ...Object.keys(stats)].map((k) => (
+          <option key={k} value={k} />
+        ))}
+      </datalist>
     </div>
   )
 }

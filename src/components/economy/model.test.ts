@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createEconomyDoc, simulateEconomy, type EconomyDoc } from './model'
+import { createEconomyDoc, newSink, newSource, simulateEconomy, type EconomyDoc } from './model'
 
 describe('economy', () => {
   it('earns, spends and buys one-time items when affordable', () => {
@@ -54,5 +54,18 @@ describe('meters (missing tools phase 3)', () => {
     const paid = simulateEconomy({ ...base, sinks: [], meterActions: [{ id: 'e', name: 'Eat', meterId: 'f', amount: 40, every: 4, costCurrencyId: gold, cost: 10 }] })
     expect(paid.spent[gold]).toBe(60)
     expect(simulateMeters(createEconomyDoc()).times.length).toBeGreaterThan(1)
+  })
+})
+
+describe('economy formulas (0.35)', () => {
+  it('source and sink amounts can be formulas of t and n', () => {
+    const base = createEconomyDoc()
+    const gold = base.currencies[0]
+    const d = { ...base, hours: 10, currencies: [{ ...gold, start: 0 }], sources: [{ ...newSource(gold.id), formula: 'if(t > 5, 200, 100)' }], sinks: [{ ...newSink(gold.id), hours: 1, formula: '10 * (n + 1)' }] }
+    const r = simulateEconomy(d)
+    expect(r.earned[gold.id]).toBeCloseTo(100 * 5 + 200 * 5, 0)
+    expect(r.spent[gold.id]).toBe(10 + 20 + 30 + 40 + 50 + 60 + 70 + 80 + 90 + 100)
+    const bad = simulateEconomy({ ...d, sources: [{ ...newSource(gold.id), formula: 'x * 2' }] })
+    expect(Object.values(bad.formulaErrors)[0]).toContain('Unknown name x')
   })
 })
