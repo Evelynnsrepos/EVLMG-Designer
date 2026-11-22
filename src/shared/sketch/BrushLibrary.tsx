@@ -70,9 +70,9 @@ const SET_ICONS: Record<string, LucideIcon> = {
   heart: Heart,
   link: Link,
   ribbon: Ribbon,
+  sparkles: Sparkles,
   sprout: Sprout,
   waves: Waves,
-  sparkles: Sparkles,
 }
 
 const UI = {

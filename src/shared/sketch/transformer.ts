@@ -111,6 +111,7 @@ export class Transformer {
 
   /** Lift the layer's selected pixels. False when there is nothing to transform. */
   begin(layerId: Id): boolean {
+    if (this.engine.refuseEdit?.(layerId)) return false
     if (this.engine.moving) this.engine.cancelMove()
     this.engine.beginMove(layerId)
     const piece = this.engine.floatingPiece!

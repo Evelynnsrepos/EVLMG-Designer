@@ -288,3 +288,8 @@
   stroke: var(--bg);
   vector-effect: non-scaling-stroke;
 }
+/* 0.35: Animated layers */
+.sketch-anim-badge {
+  color: var(--accent);
+  padding: 2px;
+}
