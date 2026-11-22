@@ -900,6 +900,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Sort every feature by priority: must have, should have, could have, won’t have (now) and cut. Drag cards between the columns or reorder them; click a card to edit it.',
       'Each feature has an effort in days, a status and the design pillar it serves (from Vision & Pillars). Enter the days until release: the planner adds up must and should and tells you when they do not fit, so you know what to move or cut.',
       'Optionally split a feature’s days by discipline (design, code, art, sound, writing, QA). The toolbar then shows how many must and should days each discipline has, so you see when the artist is booked out while code has room.',
+      'Versions work like in a studio: the full release plan holds everything the game needs. New version makes a release or update (0.1, 1.0, 1.1 …) with its own days. Pick features from the full plan with Add from the full plan, or make features only this version has with +. Drag a card to Added when it came in after planning, or to Cut when it was dropped from this version. A version-only feature can go into the full plan with Add to the full release plan; its card there says which version added it. Full-plan cards show the versions they are in, and the notes field holds what the version is about or its patch notes.',
     ],
   },
   tasks: {
