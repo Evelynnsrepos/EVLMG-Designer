@@ -916,11 +916,14 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   }
   useEffect(() => () => cancelAnimationFrame(pendingMove.current?.raf ?? 0), [])
 
+  const contrastAt = useRef(-Infinity)
   const moveNow = (e: React.PointerEvent<HTMLCanvasElement>, queued?: PointerEvent[]) => {
     if (!view) return
     const p = toDoc(e)
     setCursor(p)
-    if (!gesture.current && (tool === 'brush' || tool === 'eraser' || tool === 'smudge')) {
+    // Reading a pixel back from the graphics card stalls it, so the outline's contrast is checked at most every 100 ms, not on every move.
+    if (!gesture.current && (tool === 'brush' || tool === 'eraser' || tool === 'smudge') && e.timeStamp - contrastAt.current > 100) {
+      contrastAt.current = e.timeStamp
       // Over see-through areas (past the canvas, or a transparent canvas) the app's own background is what's behind.
       const under = engine.pickColor(doc, p.x, p.y) ?? appBackground()
       const [r, g, b] = hexToRgb(under)
@@ -1495,7 +1498,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
             ref={viewCanvas}
             className="sketch-canvas"
             // On the canvas only: toolbars and panels floating over the stage keep the normal pointer.
-            style={{ cursor: tool === 'hand' ? 'grab' : tool === 'brush' || tool === 'eraser' || tool === 'smudge' ? 'none' : 'crosshair' }}
+            // Painting tools keep the system's crosshair too: the brush outline is drawn by the page and always trails the real mouse a little.
+            style={{ cursor: tool === 'hand' ? 'grab' : 'crosshair' }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
