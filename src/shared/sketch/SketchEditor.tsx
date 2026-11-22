@@ -867,7 +867,10 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       // Near the working area's edge: grow it first, so the stroke can go past the canvas.
       const at = growTo({ x: p.x - strokeBrush.size, y: p.y - strokeBrush.size, w: strokeBrush.size * 2, h: strokeBrush.size * 2 }, 128) ? toDoc(e) : p
       const pt = pipeline.push({ ...at, ...penData(e.nativeEvent, input.pressureCurve) }, e.timeStamp)[0] ?? { ...at, pressure: 1 }
-      const opts = { layer: activeLayer, brush: strokeBrush, color, symmetry: 'off' as const, erase: t === 'eraser', smudge: t === 'smudge', mirror: symmetryMirror(liveGuide, activeLayer.id) }
+      const opts = { layer: activeLayer, brush: strokeBrush, color, symmetry: 'off' as const, erase: t === 'eraser', smudge: t === 'smudge', mirror: symmetryMirror(liveGuide, activeLayer.id),
+        // Off: a drawing that grew earlier keeps its extra area, but new paint stays on the canvas.
+        limit: doc.frame && !input.beyondCanvas ? doc.frame : null,
+      }
       engine.beginStroke(opts, pt)
       gesture.current = { kind: 'paint', pipeline, last: pt, rect: e.currentTarget.getBoundingClientRect(), opts, pts: [pt], rest: pt }
       armHold()
