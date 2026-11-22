@@ -1,5 +1,6 @@
 import {
   Brush as BrushIcon,
+  CircleDashed,
   Eraser,
   FlipHorizontal2,
   FlipVertical2,
@@ -31,7 +32,7 @@ import { retireAssets } from '@/core/backups'
 import { newId, type Id } from '@/core/model'
 import { flush as flushSave, IDLE_SAVE_MS, scheduleSave, useProjectStore } from '@/core/state'
 import { saveBinaryFile, safeFileName } from '@/core/export'
-import { SketchEngine } from './engine'
+import { alphaBounds, SketchEngine } from './engine'
 import { drawPreview } from './brushes'
 import { BrushLibrary } from './BrushLibrary'
 import { useBrushLibrary } from './library'
@@ -56,7 +57,9 @@ import { SketchHistoryFile } from './historyFile'
 import { boundsOf, maxLayers, type Rect } from './tiles'
 import './sketch.css'
 // Sketch Pro: layers, selections (feat/sketch-layers)
-import { addMask, exportLayers, hasPixels, insertAbove, isGroup, lockedInTree } from './layers'
+import { addMask, exportLayers, hasPixels, insertAbove, isGroup, lockedInTree, moveSibling } from './layers'
+import { OutlineDialog } from './OutlineDialog'
+import { outlineInto, outlineReach } from './outline'
 import { LayersPanel, type LayerHost } from './LayersPanel'
 import { SelectionBar, SelectionMaskView, SelectionOutline } from './SelectionTools'
 import { useSelector } from './selector'
@@ -131,6 +134,8 @@ interface ShapeOffer {
 }
 
 const UI = {
+  outliner: 'Outliner: draw an outline around the selection or the drawing on this layer',
+  outlineName: 'Outline',
   beyondCanvas: 'Draw beyond the canvas',
   beyondCanvasTitle: 'Draw beyond the canvas?',
   beyondCanvasNote: 'Painting or moving far past the edge, or doing it on a big canvas, needs a lot more memory and can make drawing slower. Exports still only take what is on the canvas. You can turn it off again any time.',
@@ -452,6 +457,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const setGuide = (g: DrawingGuide) => update((d) => ({ ...d, guide: g }))
   const [editingGuide, setEditingGuide] = useState(false)
   const [inputOpen, setInputOpen] = useState(false)
+  const [outlinerOpen, setOutlinerOpen] = useState(false)
   const [shapeOffer, setShapeOffer] = useState<ShapeOffer | null>(null)
   const [hoverEraser, setHoverEraser] = useState(false)
   const [touch] = useState(() => new TouchGestures())
@@ -1446,6 +1452,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         <ToolButton icon={FlipVertical2} label={UI.flipX} onClick={(e) => runAction(e?.shiftKey ? 'flipLayerX' : 'flipCanvasX')} />
         <ToolButton icon={FlipHorizontal2} label={UI.flipY} onClick={(e) => runAction(e?.shiftKey ? 'flipLayerY' : 'flipCanvasY')} />
         <AdjustMenu open={adjustMenu} onOpen={setAdjustMenu} onPick={setAdjust} />
+        <ToolButton icon={CircleDashed} label={UI.outliner} onClick={() => setOutlinerOpen(true)} disabled={!activeLayer || !hasPixels(activeLayer)} />
         {sel.active && (
           <>
             <button className={`btn sketch-move-sel${tool === 'move' ? ' is-active' : ''}`} title={UI.moveSelection} onClick={() => setTool('move')}>
@@ -1663,6 +1670,42 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       </div>
 
       {inputOpen && <InputSettingsDialog onClose={() => setInputOpen(false)} />}
+      {outlinerOpen && activeLayer && (
+        <OutlineDialog
+          mode="tool"
+          hasSelection={!!engine.selectionMask}
+          onClose={() => setOutlinerOpen(false)}
+          onOk={(o, source) => {
+            setOutlinerOpen(false)
+            if (doc.layers.filter((l) => !isGroup(l)).length >= layerLimit) return
+            // What gets the outline: the selection's shape, or this layer's drawing (inside the selection, if any).
+            const src = engine.canvas()
+            const mask = engine.selectionMask
+            if (source === 'selection' && mask) src.ctx.drawImage(mask, 0, 0)
+            else {
+              src.ctx.drawImage(engine.layerCanvas(activeLayer.id), 0, 0)
+              if (mask) {
+                src.ctx.globalCompositeOperation = 'destination-in'
+                src.ctx.drawImage(mask, 0, 0)
+              }
+            }
+            const b = alphaBounds(src.ctx.getImageData(0, 0, engine.width, engine.height), 0, 0)
+            if (!b) return
+            const m = outlineReach(o)
+            const ring = engine.canvas()
+            outlineInto(src.canvas, ring.ctx, o, { x: b.x - m, y: b.y - m, w: b.w + 2 * m, h: b.h + 2 * m }, true)
+            // A new layer: under the drawing it outlines, or over everything for a selection's shape.
+            const layer = newLayer(UI.outlineName)
+            loaded.current.set(layer.id, null)
+            engine.setLayerImage(layer.id, ring.canvas)
+            update((d) => {
+              const layers = insertAbove(d.layers, layer, activeLayer.id)
+              return { ...d, layers: source === 'selection' && mask ? layers : moveSibling(layers, layer.id, -1) }
+            })
+            markDirty(layer.id)
+          }}
+        />
+      )}
       {sheetOpen && <ShortcutSheet onClose={() => setSheetOpen(false)} />}
       {layersMode === 'floating' && layersShown && (
         <FloatingPanel title={UI_PRO.layers} at={layersSpot} onMove={setLayersSpot} onClose={() => setLayersShown(false)} width={300}>

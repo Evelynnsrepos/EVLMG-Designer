@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Ellipsis, Eye, EyeOff, Folder, FolderPlus, ListChecks, Lock, Merge, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, CircleDashed, Ellipsis, Eye, EyeOff, Folder, FolderPlus, ListChecks, Lock, Merge, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { dragFromRowOnly } from '@/shared/dragGuard'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Id } from '@/core/model'
@@ -26,6 +26,8 @@ import {
 } from './layers'
 import './layers.css'
 import { FilterControls } from './adjust/AdjustStudio'
+import { OutlineDialog } from './OutlineDialog'
+import type { OutlineSettings } from './outline'
 import { defaultValues, filterDef } from './adjust/filters'
 import type { LayerAdjust } from './model'
 import { BLEND_MODES, newLayer, nextLayerName, updateLayer, type BlendMode, type SketchDoc, type SketchLayer } from './model'
@@ -77,6 +79,12 @@ const UI = {
   deleteTitle: (n: string) => `Delete ${n}?`,
   deleteMsg: 'The layer and its drawing are removed.',
   deleteMany: (n: number) => `Delete ${n} layers?`,
+  newOutline: 'New outline layer: everything you draw on it gets an outline',
+  outlineName: 'Outline layer',
+  makeOutline: 'Make outline layer',
+  outlineSettings: 'Outline settings',
+  rasterizeOutline: 'Rasterize outline (normal layer again)',
+  isOutline: 'Outline layer: edit the outline',
 }
 
 /** What the layer list needs from the editor. */
@@ -116,6 +124,26 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
   const count = doc.layers.filter((l) => !isGroup(l)).length
 
   const set = (id: Id, patch: Partial<SketchLayer>) => update((d) => updateLayer(d, id, patch))
+
+  // 0.35: outline layers. 'new' = the dialog for a new outline layer.
+  const [outlineFor, setOutlineFor] = useState<Id | 'new' | null>(null)
+  const outlineLayer = outlineFor && outlineFor !== 'new' ? doc.layers.find((l) => l.id === outlineFor) : undefined
+  const setOutline = (id: Id, o: OutlineSettings | null) =>
+    update((d) => ({
+      ...d,
+      layers: d.layers.map((l) => {
+        if (l.id !== id) return l
+        const { outline: _, ...rest } = l
+        return o ? { ...rest, outline: o } : rest
+      }),
+    }))
+  /** Paint the outline into the layer's pixels, as one undo step with the layer turning normal. */
+  const rasterizeOutline = (l: SketchLayer) => {
+    const { outline: _, ...plain } = l
+    const pushes = engine.pushes
+    host.markDirty(engine.mergeInto([{ ...l, opacity: 1, blend: 'source-over', clip: false, visible: true, parent: null }], l.id))
+    host.restructure(doc.layers.map((x) => (x.id === l.id ? plain : x)), l.id, pushes)
+  }
 
   /** A new pixel layer above `aboveId`, optionally filled by `paint`. */
   const addLayer = (paint?: (ctx: CanvasRenderingContext2D) => void, name = nextLayerName(doc)) => {
@@ -178,7 +206,8 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
 
   /** Merge `ids` (bottom to top, groups included) into the lowest pixel layer among them. */
   const mergeInto = (target: SketchLayer, ids: Id[]) => {
-    const stack = [{ ...target, opacity: 1, blend: 'source-over' as BlendMode, clip: false, visible: true, parent: null }, ...ids.flatMap((id) => subtreeStack(doc.layers, id))]
+    // An outline layer receiving others keeps its outline as a setting (it is not painted in).
+    const stack = [{ ...target, opacity: 1, blend: 'source-over' as BlendMode, clip: false, visible: true, parent: null, outline: undefined }, ...ids.flatMap((id) => subtreeStack(doc.layers, id))]
     const pushes = engine.pushes
     host.markDirty(engine.mergeInto(stack, target.id))
     let layers = doc.layers
@@ -281,6 +310,8 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
       !group && { label: UI.fill, run: () => host.markDirty(engine.fill(l.id, host.color, l.alphaLock)) },
       !group && { label: UI.clear, run: () => host.markDirty(engine.clear(l.id)) },
       !group && { label: UI.invert, run: () => host.markDirty(engine.invert(l.id)) },
+      !group && !mask && { label: l.outline ? UI.outlineSettings : UI.makeOutline, run: () => setOutlineFor(l.id) },
+      !!l.outline && { label: UI.rasterizeOutline, run: () => rasterizeOutline(l) },
       !mask && { label: UI.duplicate, run: () => duplicate(l.id) },
       !group && !mask && { label: UI.alphaLock, run: () => set(l.id, { alphaLock: !l.alphaLock }), on: l.alphaLock },
       !mask && { label: UI.clip, run: () => set(l.id, { clip: !l.clip }), on: l.clip },
@@ -361,6 +392,9 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
             </div>
           )}
         </span>
+        <button className="icon-btn sketch-tool" title={UI.newOutline} aria-label={UI.newOutline} onClick={() => count < host.limit && setOutlineFor('new')}>
+          <CircleDashed size={16} />
+        </button>
         <button className="icon-btn sketch-tool" title={UI.addGroup} aria-label={UI.addGroup} onClick={addGroup}>
           <FolderPlus size={16} />
         </button>
@@ -454,6 +488,19 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
                   </span>
                 )}
                 <span className="sketch-layer-name">{l.name}</span>
+                {l.outline && (
+                  <button
+                    className="icon-btn sketch-outline-btn"
+                    title={UI.isOutline}
+                    aria-label={UI.isOutline}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setOutlineFor(l.id)
+                    }}
+                  >
+                    <CircleDashed size={12} />
+                  </button>
+                )}
                 {l.locked && <Lock size={11} aria-label={UI.locked} />}
                 {l.reference && <span className="sketch-badge" title={UI.isReference}>R</span>}
                 {l.private && <EyeOff size={11} aria-label={UI.isPrivate} className="sketch-private" />}
@@ -516,6 +563,24 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
           )
         })}
       </div>
+      {outlineFor && (outlineFor === 'new' || outlineLayer) && (
+        <OutlineDialog
+          mode="layer"
+          initial={outlineLayer?.outline}
+          onClose={() => setOutlineFor(null)}
+          onOk={(o) => {
+            setOutlineFor(null)
+            if (outlineLayer) return setOutline(outlineLayer.id, o)
+            const layer: SketchLayer = { ...newLayer(UI.outlineName), outline: o }
+            host.adopt(layer.id)
+            engine.setLayerImage(layer.id, null)
+            update((d) => ({ ...d, layers: insertAbove(d.layers, layer, host.activeId) }))
+            host.setActive(layer.id)
+          }}
+          onOff={outlineLayer?.outline ? () => (setOutlineFor(null), setOutline(outlineLayer.id, null)) : undefined}
+          onRasterize={outlineLayer?.outline ? () => (setOutlineFor(null), rasterizeOutline(outlineLayer)) : undefined}
+        />
+      )}
       {shownMenu && (
         <>
           <div className="menu-backdrop" onClick={() => setMenu(null)} />
