@@ -888,7 +888,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       if (activeLayer.text) return t === 'move' ? textTool.down(p, true) : undefined
       // Transform: the first press lifts the pixels; later presses move, scale, turn or bend them.
       if (!xf.active && !xf.begin(activeLayer.id)) return
-      xf.down(p, view.scale)
+      xf.down(p, view.scale, e.altKey)
       gesture.current = { kind: 'move', from: p, to: p }
     }
   }

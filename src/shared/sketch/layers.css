@@ -246,3 +246,8 @@
   font-weight: 600;
   margin: 0 6px;
 }
+.sketch-xf-pin {
+  fill: var(--accent);
+  stroke: var(--bg);
+  vector-effect: non-scaling-stroke;
+}

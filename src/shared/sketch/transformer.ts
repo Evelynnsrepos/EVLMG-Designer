@@ -13,6 +13,9 @@ import {
   magnetMove,
   mapPoint,
   moldDrag,
+  moldKeepShape,
+  moldLive,
+  paintedCells,
   outerBounds,
   rotateAbout,
   scaleAlong,
@@ -66,9 +69,15 @@ export class Transformer {
   private model3d: { base: XfState; shape: Shape3d; model: ReturnType<typeof buildModel> } | null = null
   private shown3d = false
   /** Mold: cells per side, how far (canvas px) and how strongly (0..1) other points follow a drag. */
-  moldGrid = 8
+  moldGrid = 12
   moldReach = 100
   moldPull = 0.6
+  /** Keep shape: pieces of the mesh only turn, never stretch (a puppet warp). Off: nearby points follow by Reach and Follow. */
+  moldKeep = true
+  /** What a click on a mold point does: drag it, or pin it in place. */
+  moldTool: 'drag' | 'pin' = 'drag'
+  private settle: Map<number, Pt> | null = null
+  private alpha: { data: Uint8ClampedArray; w: number } | null = null
   state: XfState | null = null
   layerId: Id | null = null
   guides: { gx: number[]; gy: number[] } = { gx: [], gy: [] }
@@ -119,7 +128,8 @@ export class Transformer {
     this.turn = { ...FLAT }
     this.turnBase = null
     if (this.mode === 'turn') this.turnBase = this.state
-    if (this.mode === 'mold') this.state = toMold(this.state, this.moldGrid)
+    this.alpha = null
+    if (this.mode === 'mold') this.state = this.moldOf(this.state, this.moldGrid)
     this.uploaded = false
     this.out = this.engine.canvas()
     this.changed()
@@ -160,6 +170,22 @@ export class Transformer {
     return true
   }
 
+  /** A mold over `s` with n cells per side, leaving out the cells without paint. */
+  private moldOf(s: XfState, n: number): XfState {
+    const piece = this.engine.floatingPiece
+    if (piece && !this.alpha) this.alpha = { data: piece.getContext('2d')!.getImageData(0, 0, piece.width, piece.height).data, w: piece.width }
+    const a = this.alpha
+    return toMold({ ...s, mold: null }, n, a ? paintedCells((x, y) => a.data[(y * a.w + x) * 4 + 3], (this.first ?? s).src, n) : undefined)
+  }
+
+  /** Take every pin off the mold. */
+  clearPins() {
+    const s = this.state
+    if (!s?.mold?.pins?.length) return
+    this.mark()
+    this.set({ ...s, mold: { ...s.mold, pins: [] } })
+  }
+
   /** Change the 3D model's thickness, roundness or light. */
   setShape(p: Partial<Shape3d>) {
     this.shape = { ...this.shape, ...p }
@@ -181,12 +207,12 @@ export class Transformer {
     this.show()
   }
 
-  patch(p: Partial<Pick<Transformer, 'mode' | 'interp' | 'snapping' | 'snapDistance' | 'magnetics' | 'moldReach' | 'moldPull'>>) {
+  patch(p: Partial<Pick<Transformer, 'mode' | 'interp' | 'snapping' | 'snapDistance' | 'magnetics' | 'moldReach' | 'moldPull' | 'moldKeep' | 'moldTool'>>) {
     const s = this.state
     if (s && p.mode && p.mode !== this.mode) {
       this.mark()
       if (p.mode === 'warp') this.state = toWarp(s)
-      if (p.mode === 'mold' && !s.mold) this.state = toMold(s, this.moldGrid)
+      if (p.mode === 'mold' && !s.mold) this.state = this.moldOf(s, this.moldGrid)
     }
     Object.assign(this, p)
     if (p.mode) {
@@ -211,7 +237,7 @@ export class Transformer {
     this.moldGrid = n
     if (!this.state) return this.changed()
     this.mark()
-    this.set(toMold({ ...this.state, mold: null }, n))
+    this.set(this.moldOf(this.state, n))
   }
 
   /** Remember the shape before a change, for Ctrl+Z while transforming. */
@@ -253,6 +279,7 @@ export class Transformer {
     if (this.turnBase) this.turnBase = move(this.turnBase)
     this.field3d = null
     this.uploaded3d = false
+    this.alpha = null
     this.past = this.future = []
     this.out = this.engine.canvas()
     this.uploaded = false
@@ -323,7 +350,7 @@ export class Transformer {
     return { x: top.x + ((top.x - c.x) / l) * (28 / scale), y: top.y + ((top.y - c.y) / l) * (28 / scale) }
   }
 
-  down(p: Pt, scale: number) {
+  down(p: Pt, scale: number, alt = false) {
     const s = this.state
     if (!s) return
     this.mark()
@@ -331,13 +358,19 @@ export class Transformer {
     if (this.mode === 'turn') return void (this.drag = inside(s, p) ? { kind: 'move', from: p, s0: s, b0: this.turnBase } : { kind: 'turn', from: p, t0: this.turn })
     if (this.mode === 'mold') {
       // The nearest mold point within reach of the pointer, so small grids are easy to grab.
-      const pts = s.mold?.pts ?? []
+      const m = s.mold
+      const live = m ? moldLive(m) : []
       let best = -1
       let bd = 14 / scale
-      pts.forEach((q, i) => {
+      m?.pts.forEach((q, i) => {
         const d = Math.hypot(q.x - p.x, q.y - p.y)
-        if (d < bd) [best, bd] = [i, d]
+        if (live[i] && d < bd) [best, bd] = [i, d]
       })
+      if (m && best >= 0 && (this.moldTool === 'pin' || alt)) {
+        const pins = m.pins ?? []
+        this.set({ ...s, mold: { ...m, pins: pins.includes(best) ? pins.filter((i) => i !== best) : [...pins, best] } })
+        return void (this.drag = null)
+      }
       return void (this.drag = best >= 0 ? { kind: 'mesh', index: best, from: p, s0: s } : { kind: 'move', from: p, s0: s })
     }
     const rot = this.rotateHandle(scale)
@@ -383,7 +416,16 @@ export class Transformer {
       if (this.magnetics || shift) a = magnetAngle(a)
       return this.set(transformState(s0, rotateAbout(c, a)))
     }
-    if (d.kind === 'mesh' && s0.mold) return this.set({ ...s0, mold: moldDrag(s0.mold, d.index, dx, dy, this.moldReach, this.moldPull) })
+    if (d.kind === 'mesh' && s0.mold) {
+      const m0 = s0.mold
+      if (!this.moldKeep) return this.set({ ...s0, mold: moldDrag(m0, d.index, dx, dy, this.moldReach, this.moldPull) })
+      // Keep shape: pins stay, the grabbed point follows the pointer, the rest bends along (starting from the last result).
+      const fixed = new Map((m0.pins ?? []).map((i) => [i, m0.pts[i]]))
+      fixed.set(d.index, { x: m0.pts[d.index].x + dx, y: m0.pts[d.index].y + dy })
+      const now = this.state?.mold ?? m0
+      this.settle = fixed
+      return this.set({ ...s0, mold: moldKeepShape({ ...m0, pts: now.pts }, fixed, 20 + m0.n * 2) })
+    }
     if (d.kind === 'mesh') {
       const warp = s0.warp!.map((q, i) => (i === d.index ? { x: q.x + dx, y: q.y + dy } : q))
       return this.set({ ...s0, warp })
@@ -427,6 +469,10 @@ export class Transformer {
   }
 
   up() {
+    // Keep shape: a few more rounds on release, so the far end of a long piece catches up too.
+    const m = this.state?.mold
+    if (this.settle && m) this.set({ ...this.state!, mold: moldKeepShape(m, this.settle, 150) })
+    this.settle = null
     // A click that changed nothing is no undo step.
     if (this.past.at(-1)?.s === this.state) this.past.pop()
     this.drag = null
@@ -468,7 +514,7 @@ export class Transformer {
     this.mark()
     this.turn = { ...FLAT }
     this.turnBase = this.mode === 'turn' ? this.first : null
-    this.set(this.mode === 'warp' ? toWarp(this.first) : this.mode === 'mold' ? toMold(this.first, this.moldGrid) : this.first)
+    this.set(this.mode === 'warp' ? toWarp(this.first) : this.mode === 'mold' ? this.moldOf(this.first, this.moldGrid) : this.first)
   }
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { initialState, mapPoint, moldDrag, toMold, toWarp, turn3d } from './transform'
+import { buildMesh, initialState, mapPoint, moldDrag, moldKeepShape, moldLive, paintedCells, toMold, toWarp, turn3d } from './transform'
 
 const s = initialState({ x: 0, y: 0, w: 100, h: 50 })
 
@@ -42,5 +42,41 @@ describe('mold', () => {
   })
   it('going to Warp leaves the mold', () => {
     expect(toWarp(toMold(s, 4)).mold).toBeNull()
+  })
+})
+
+describe('mold keep shape', () => {
+  // A bar 100 × 20 as 10 × 10 cells; only the middle row of cells... all cells hold paint here.
+  const bar = toMold(initialState({ x: 0, y: 0, w: 100, h: 20 }), 10)
+  it('bending the free end keeps the bar about as long (it turns, does not stretch)', () => {
+    const m = bar.mold!
+    const n = m.n
+    const fixed = new Map<number, { x: number; y: number }>()
+    // Pin the left column, pull the right end up and in, as if bending at a joint.
+    for (let j = 0; j <= n; j++) fixed.set(j * (n + 1), m.pts[j * (n + 1)])
+    const tip = 5 * (n + 1) + n
+    fixed.set(tip, { x: 70, y: -60 })
+    let out = m
+    for (let k = 0; k < 20; k++) out = moldKeepShape(out, fixed)
+    // Length along the middle row stays near 100 (a stretchy pull would be much shorter or longer).
+    let len = 0
+    for (let i = 0; i < n; i++) {
+      const a = out.pts[5 * (n + 1) + i]
+      const b = out.pts[5 * (n + 1) + i + 1]
+      len += Math.hypot(b.x - a.x, b.y - a.y)
+    }
+    expect(len).toBeGreaterThan(85)
+    expect(len).toBeLessThan(125)
+  })
+  it('empty cells are left out of the mesh', () => {
+    const on = paintedCells((x) => (x < 50 ? 255 : 0), { x: 0, y: 0, w: 100, h: 20 }, 10)
+    expect(on.filter(Boolean).length).toBe(50)
+    const s = toMold(initialState({ x: 0, y: 0, w: 100, h: 20 }), 10, on)
+    expect(buildMesh(s).pos.length).toBe(50 * 12)
+    expect(moldLive(s.mold!).filter(Boolean).length).toBe(6 * 11)
+  })
+  it('pinned points do not follow a plain drag', () => {
+    const m = { ...bar.mold!, pins: [1] }
+    expect(moldDrag(m, 0, 10, 0, 100, 1).pts[1]).toBe(m.pts[1])
   })
 })
