@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, CornerLeftUp, ImagePlus, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, CornerLeftUp, ImagePlus, Palette, Plus, Shuffle, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import type { Id } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
@@ -28,6 +28,7 @@ import {
   type BodyKind,
   type Cosmos,
 } from './model'
+import { ART_STYLES, artFor, lookCount, STYLE_LABEL, variantOf, type ArtStyle, type Layer } from './art'
 import './cosmos.css'
 import { ProofTextarea } from '@/shared/spell'
 
@@ -51,6 +52,12 @@ const UI = {
   emptyHere: 'Nothing inside yet. Use Add to place something here.',
   dropTop: 'Drop here to move to the top level',
   inside: (n: number) => `${n} inside`,
+  style: 'Art style',
+  yourSet: 'Your set',
+  yourSetHint: 'Pick a picture for each kind. Kinds without one use the Painted look. Grey pictures tint best.',
+  tint: 'Tint with each body\'s colour',
+  nextLook: 'Next look',
+  look: (i: number, n: number) => `Look ${i} of ${n}`,
   hint: 'Click to select, double-click to look inside. Drag in the list to move things.',
   graphHint: 'Click to select, double-click a galaxy or solar system to see its orbits. Drag in the list to move things.',
 }
@@ -65,11 +72,15 @@ export default function View({ documentId, active }: PanelProps) {
   const [addKind, setAddKind] = useState<BodyKind | ''>('')
   const [collapsed, setCollapsed] = useState<Record<Id, boolean>>({})
   const root = useProjectStore((s) => s.root)
-  const urlOf = useAssetUrls(doc.data?.bodies.map((b) => b.image) ?? [])
+  const [setOpen, setSetOpen] = useState(false)
+  const urlOf = useAssetUrls([...(doc.data?.bodies.map((b) => b.image) ?? []), ...Object.values(doc.data?.customArt ?? {})])
 
   const cosmos = doc.data
   if (!cosmos) return null
   const edit = (fn: (c: Cosmos) => Cosmos) => doc.update(fn)
+  const style: ArtStyle = cosmos.style ?? 'painted'
+  const tint = style !== 'custom' || cosmos.customTint !== false
+  const customUrl = (k: BodyKind) => (cosmos.customArt?.[k] ? urlOf(cosmos.customArt[k]) : '')
 
   // A body deleted (or undone away) elsewhere must not stay focused.
   const focus = findBody(cosmos, focusId) ?? null
@@ -168,6 +179,9 @@ export default function View({ documentId, active }: PanelProps) {
       label={label}
       inside={childrenOf(cosmos, b.id).length}
       image={b.image ? urlOf(b.image) : ''}
+      art={artFor(style, b.kind, variantOf(b.id, b.look ?? undefined), customUrl(b.kind) || undefined)}
+      tint={tint}
+      pixel={style === 'pixel'}
     />
   )
 
@@ -176,6 +190,18 @@ export default function View({ documentId, active }: PanelProps) {
     const [asset] = await pickAndImportAssets(root, 'image', UI.choosePicture)
     if (asset) edit((c) => updateBody(c, b.id, { image: asset.path }))
   }
+
+  const pickKindPicture = async (k: BodyKind) => {
+    if (!root) return
+    const [asset] = await pickAndImportAssets(root, 'image', UI.choosePicture)
+    if (asset) edit((c) => ({ ...c, customArt: { ...c.customArt, [k]: asset.path } }))
+  }
+  const removeKindPicture = (k: BodyKind) =>
+    edit((c) => {
+      const { [k]: _gone, ...rest } = c.customArt ?? {}
+      return { ...c, customArt: rest }
+    })
+  const looks = selected ? lookCount(style, selected.kind) : 1
 
   return (
     <div className="cosmos-root">
@@ -211,7 +237,65 @@ export default function View({ documentId, active }: PanelProps) {
           <button className="btn btn-primary" onClick={() => add(focus?.id ?? null, addKind || undefined)}>
             <Plus size={14} /> {UI.add}
           </button>
+          <select
+            className="input cosmos-kind"
+            value={style}
+            aria-label={UI.style}
+            title={UI.style}
+            onChange={(e) => {
+              const next = e.target.value as ArtStyle
+              edit((c) => ({ ...c, style: next }))
+              setSetOpen(next === 'custom')
+            }}
+          >
+            {ART_STYLES.map((st) => (
+              <option key={st} value={st}>
+                {STYLE_LABEL[st]}
+              </option>
+            ))}
+          </select>
+          {style === 'custom' && (
+            <button className={`btn${setOpen ? ' btn-primary' : ''}`} onClick={() => setSetOpen(!setOpen)}>
+              <Palette size={14} /> {UI.yourSet}
+            </button>
+          )}
         </div>
+        {style === 'custom' && setOpen && (
+          <div className="cosmos-set">
+            <p className="cosmos-set-hint">{UI.yourSetHint}</p>
+            <label className="cosmos-set-tint">
+              <input type="checkbox" checked={cosmos.customTint !== false} onChange={(e) => edit((c) => ({ ...c, customTint: e.target.checked }))} />
+              {UI.tint}
+            </label>
+            <div className="cosmos-set-grid">
+              {BODY_KINDS.map((k) => (
+                <div key={k} className="cosmos-set-item">
+                  <svg viewBox="-40 -40 80 80" className="cosmos-set-preview">
+                    <BodyMark
+                      body={{ id: k, parentId: null, kind: k, name: '', notes: '', color: null }}
+                      x={0}
+                      y={0}
+                      scale={18 / KIND_STYLE[k].size}
+                      selected={false}
+                      label={false}
+                      image=""
+                      art={artFor('custom', k, 0, customUrl(k) || undefined)}
+                      tint={tint}
+                      pixel={false}
+                    />
+                  </svg>
+                  <span>{KIND_LABEL[k]}</span>
+                  <button className="btn btn-ghost" title={UI.choosePicture} onClick={() => void pickKindPicture(k)}>
+                    <ImagePlus size={14} />
+                  </button>
+                  <button className="btn btn-ghost" title={UI.removePicture} disabled={!cosmos.customArt?.[k]} onClick={() => removeKindPicture(k)}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {orbitView ? (
           <svg className="cosmos-orbits" viewBox="-330 -190 660 380" onClick={() => setSelectedId(focus?.id ?? null)}>
@@ -273,6 +357,15 @@ export default function View({ documentId, active }: PanelProps) {
               </button>
             </span>
           </label>
+          {looks > 1 && !selected.image && (
+            <button
+              className="btn"
+              title={UI.look((variantOf(selected.id, selected.look ?? undefined) % looks) + 1, looks)}
+              onClick={() => edit((c) => updateBody(c, selected.id, { look: (variantOf(selected.id, selected.look ?? undefined) % looks) + 1 }))}
+            >
+              <Shuffle size={14} /> {UI.nextLook} ({UI.look((variantOf(selected.id, selected.look ?? undefined) % looks) + 1, looks)})
+            </button>
+          )}
           <div className="cosmos-field">
             {UI.picture}
             <span className="cosmos-color">
@@ -345,12 +438,45 @@ function GraphView(p: {
   )
 }
 
-function BodyMark(p: { body: Body; x: number; y: number; scale: number; selected: boolean; label: boolean; inside?: number; image: string }) {
+function BodyMark(p: {
+  body: Body
+  x: number
+  y: number
+  scale: number
+  selected: boolean
+  label: boolean
+  inside?: number
+  image: string
+  art: Layer[] | null
+  tint: boolean
+  pixel: boolean
+}) {
   const r = KIND_STYLE[p.body.kind].size * p.scale
   const color = colorOf(p.body)
   const diffuse = p.body.kind === 'galaxy' || p.body.kind === 'nebula' || p.body.kind === 'universe'
-  const clip = `cosmos-clip-${p.body.id}-${p.scale}`
-  const shade = `cosmos-shade-${p.body.id}-${p.scale}`
+  const uid = `${p.body.id}-${p.scale}`
+  const clip = `cosmos-clip-${uid}`
+  const tintId = `cosmos-tint-${uid}`
+  const layer = (l: Layer, i: number) => {
+    const w = r * (l.s ?? 1)
+    const at = `translate(${r * (l.x ?? 0)} ${r * (l.y ?? 0)})${l.flat ? ` scale(1 ${ISO})` : ''}${l.rot ? ` rotate(${l.rot})` : ''}`
+    if (l.src.startsWith('#')) return <circle key={i} r={w} fill={l.src} transform={at} opacity={l.op} />
+    return (
+      <image
+        key={i}
+        href={l.src}
+        x={-w}
+        y={-w}
+        width={w * 2}
+        height={w * 2}
+        transform={at}
+        opacity={l.op}
+        filter={p.tint && !l.plain ? `url(#${tintId})` : undefined}
+        style={p.pixel ? { imageRendering: 'pixelated' } : undefined}
+        preserveAspectRatio="xMidYMid meet"
+      />
+    )
+  }
   return (
     <g transform={`translate(${p.x} ${p.y})`} className="cosmos-body">
       {p.selected && <circle r={r + 6} className="cosmos-selection" />}
@@ -361,20 +487,41 @@ function BodyMark(p: { body: Body; x: number; y: number; scale: number; selected
           </clipPath>
           <image href={p.image} x={-r} y={-r} width={r * 2} height={r * 2} clipPath={`url(#${clip})`} preserveAspectRatio="xMidYMid slice" />
         </>
+      ) : p.art ? (
+        <>
+          {p.tint && (
+            /* Grey picture -> body colour: dark greys darken it, light greys lighten it (overlay), shape kept from the picture. */
+            <filter id={tintId} colorInterpolationFilters="sRGB">
+              <feColorMatrix type="saturate" values="0" result="grey" />
+              <feFlood floodColor={color} result="colour" />
+              <feBlend in="colour" in2="grey" mode="overlay" result="tinted" />
+              <feComposite in="tinted" in2="SourceAlpha" operator="in" />
+            </filter>
+          )}
+          {p.art.map(layer)}
+        </>
       ) : p.body.kind === 'asteroid-belt' ? (
         <ellipse rx={r} ry={r * ISO} fill="none" stroke={color} strokeWidth={3} strokeDasharray="2 3" />
       ) : diffuse ? (
-        <ellipse rx={r * 1.3} ry={r * 0.75} fill={color} opacity={0.75} />
+        <>
+          <ellipse rx={r * 1.4} ry={r * 0.8} fill={color} opacity={0.35} />
+          <ellipse rx={r * 0.9} ry={r * 0.5} fill={color} opacity={0.6} />
+          <ellipse rx={r * 0.35} ry={r * 0.2} fill="#fff" opacity={0.8} />
+        </>
+      ) : p.body.kind === 'black-hole' ? (
+        <>
+          <circle r={r * 1.25} fill="none" stroke={color} strokeWidth={r * 0.25} opacity={0.8} />
+          <circle r={r} fill="#000" />
+        </>
       ) : (
         <>
-          {/* Lit from the top left so the balls read as spheres in the tilted view. */}
-          <radialGradient id={shade} cx="35%" cy="30%" r="75%">
-            <stop offset="0%" stopColor="#fff" stopOpacity={0.55} />
-            <stop offset="45%" stopColor={color} stopOpacity={0} />
-            <stop offset="100%" stopColor="#000" stopOpacity={0.55} />
-          </radialGradient>
+          {/* Flat disc with a shadow on the night side and a lit rim. */}
+          <clipPath id={clip}>
+            <circle r={r} />
+          </clipPath>
           <circle r={r} fill={color} />
-          <circle r={r} fill={`url(#${shade})`} stroke={p.body.kind === 'black-hole' ? 'var(--accent)' : 'none'} strokeWidth={2} />
+          <circle r={r} cx={r * 0.45} cy={r * 0.35} fill="#000" opacity={0.22} clipPath={`url(#${clip})`} />
+          <circle r={r * 0.3} cx={-r * 0.35} cy={-r * 0.35} fill="#fff" opacity={0.25} />
         </>
       )}
       {p.label && (

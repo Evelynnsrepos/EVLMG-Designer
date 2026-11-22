@@ -76,3 +76,21 @@ describe('v0.4 views', () => {
     expect(showsOrbits(g.body)).toBe(true)
   })
 })
+
+describe('art styles (v0.35)', () => {
+  it('gives every kind pictures in every style, and Next look cycles', async () => {
+    const { ART_STYLES, artFor, lookCount, variantOf } = await import('./art')
+    const { BODY_KINDS } = await import('./model')
+    for (const style of ART_STYLES)
+      for (const kind of BODY_KINDS) {
+        const art = artFor(style, kind, 3)
+        if (style === 'flat' && art === null) continue // plain disc
+        expect(art!.length).toBeGreaterThan(0)
+        expect(lookCount(style, kind)).toBeGreaterThan(0)
+      }
+    expect(artFor('custom', 'planet', 0, 'blob:me')).toEqual([{ src: 'blob:me', s: 1.2 }])
+    expect(artFor('painted', 'planet', 0)).not.toEqual(artFor('painted', 'planet', 1))
+    expect(variantOf('abc')).toBe(variantOf('abc'))
+    expect(variantOf('abc', 4)).toBe(4)
+  })
+})
