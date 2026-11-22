@@ -510,3 +510,26 @@ export function asciiInto(grid: AsciiGrid, src: HTMLCanvasElement, out: CanvasRe
   grid.paint(img.data, p)
   out.putImageData(img, p.x, p.y)
 }
+
+/**
+ * Letter brush (0.35): `text` as a strip picture for a tiled ribbon brush, so the letters follow the line and turn
+ * with it. Upside down on purpose: the ribbon puts the picture's top on the right of the stroke's direction.
+ */
+export function letterStrip(text: string): string {
+  const t = (text.replace(/\s+/g, ' ').trim() || 'ASCII') + ' '
+  const H = 64
+  const size = 52
+  const c = document.createElement('canvas')
+  const g = c.getContext('2d')!
+  const font = `${size}px "${ASCII_FONT}", ui-monospace, monospace`
+  g.font = font
+  c.width = Math.max(8, Math.ceil(g.measureText(t).width))
+  c.height = H
+  g.font = font
+  g.fillStyle = '#fff'
+  g.textBaseline = 'middle'
+  g.translate(0, H)
+  g.scale(1, -1)
+  g.fillText(t, 0, H / 2 + 2)
+  return c.toDataURL('image/png')
+}
