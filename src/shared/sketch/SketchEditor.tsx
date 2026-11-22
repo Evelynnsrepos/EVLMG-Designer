@@ -143,7 +143,7 @@ const UI = {
   lasso: 'Lasso selection (L)',
   rectSelect: 'Rectangle selection (M)',
   move: 'Move (V): drags the selection, or the whole layer',
-  rotate3d: 'Rotate object (R): turn the selection (or layer) in 3D like a flat card; drag outside it to orbit',
+  rotate3d: 'Rotate object (R): turn the selection (or layer) as a 3D shape; drag outside it to orbit',
   mold: 'Mold object (W): a triangle mesh over the selection (or layer); drag its points, nearby points follow',
   eyedropper: 'Eyedropper (I, or hold Alt)',
   layerPick: 'Layer picker (K, or hold Ctrl): point at paint to see its layer, click to make it active',
