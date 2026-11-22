@@ -148,3 +148,158 @@
 .dlg-play-flags {
   font-size: 12px;
 }
+
+/* ---- cards (2026-11-22) ---- */
+.dlg-cards-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+.dlg-cards {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 64px;
+  width: max-content;
+  padding-bottom: 40px;
+}
+.dlg-arrows {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.dlg-arrows marker path {
+  fill: var(--text-muted);
+}
+.dlg-arrow {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.6;
+}
+.dlg-arrow.back {
+  stroke-dasharray: 5 4;
+}
+.dlg-arrow.drafting {
+  stroke: var(--accent);
+  stroke-dasharray: 4 3;
+}
+.dlg-col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 320px;
+}
+.dlg-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 8px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  box-shadow: inset 4px 0 0 var(--dlg-speaker);
+}
+.dlg-card.selected {
+  border-color: var(--accent);
+}
+.dlg-card.lost {
+  border-style: dashed;
+}
+.dlg-card-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dlg-card-head .input {
+  width: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 130px;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+.dlg-card-text {
+  width: 100%;
+  resize: vertical;
+  min-height: 48px;
+}
+.dlg-card-out {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.dlg-card-choice .input {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+.dlg-port-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  min-width: 0;
+}
+.dlg-card-choice .dlg-port-row {
+  margin-left: 0;
+}
+.dlg-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.dlg-target:hover {
+  color: var(--danger);
+}
+.dlg-end {
+  font-size: 11px;
+}
+.dlg-port {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-right: -17px;
+  border-radius: 50%;
+  border: 2px solid var(--text-muted);
+  background: var(--bg);
+  cursor: crosshair;
+  touch-action: none;
+}
+.dlg-port.on,
+.dlg-port:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.dlg-mini {
+  padding: 2px 6px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.dlg-add-choice {
+  align-self: flex-start;
+}
+.dlg-count {
+  font-size: 10px;
+  margin-left: 1px;
+}
+.dlg-seg {
+  display: inline-flex;
+  gap: 2px;
+}
