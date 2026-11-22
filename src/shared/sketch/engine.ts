@@ -49,6 +49,8 @@ export interface StrokeOptions {
   mirror?: ((p: { x: number; y: number }) => { x: number; y: number }[]) | null
   /** Smudge tool: drag the colours already on the layer with the brush's shape. */
   smudge?: boolean
+  /** Paint stays inside this rectangle: the canvas, when drawing beyond it is off but the working area already grew. */
+  limit?: Rect | null
 }
 
 type LayerStack = Pick<SketchDoc, 'layers' | 'backgroundColor'>
@@ -454,7 +456,7 @@ export class SketchEngine {
     if (!r) return
     // Wet and burnt edges and 3D paint look at the mask around a pixel, so a stamp changes a bit more.
     const pad = final ? 0 : Math.ceil(Math.max(g.look.wetEdges || g.look.burntEdges ? g.look.edgeBlur * 3 : 0, g.look.height > 0 ? 6 : 0, (g.look.outline?.width ?? 0) * 1.2)) + 1
-    r = clip({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad }, this.width, this.height)
+    r = this.within({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad }, opts)
     if (!r) return
     this.gpu!.applyStroke(this.tex(g.layerId), g.surf.t, final ? null : (g.pred?.t ?? null), g.preview, g.look, r, this.sel?.canvas ?? null, this.wetWork)
     this.growDirty(r)
@@ -505,7 +507,7 @@ export class SketchEngine {
   private repaint(r: Rect) {
     const g = this.g!
     const pad = Math.ceil(Math.max(g.look.wetEdges || g.look.burntEdges ? g.look.edgeBlur * 3 : 0, (g.look.outline?.width ?? 0) * 1.2)) + 8
-    const c = clip({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad }, this.width, this.height)
+    const c = this.within({ x: r.x - pad, y: r.y - pad, w: r.w + 2 * pad, h: r.h + 2 * pad }, g.layerId === this.strokeOpts?.layer.id ? this.strokeOpts : null)
     if (!c) return
     this.gpu!.applyStroke(this.tex(g.layerId), g.surf.t, g.pred?.t ?? null, g.preview, g.look, c, this.sel?.canvas ?? null, this.wetWork)
     this.growDirty(c)
@@ -580,7 +582,28 @@ export class SketchEngine {
   private strokeArea(opts: StrokeOptions): Rect | null {
     const b = this.strokeBounds
     const reach = brushReach(opts.brush)
-    return b ? { x: b.x0 - reach, y: b.y0 - reach, w: b.x1 - b.x0 + 2 * reach, h: b.y1 - b.y0 + 2 * reach } : null
+    const r = b ? { x: b.x0 - reach, y: b.y0 - reach, w: b.x1 - b.x0 + 2 * reach, h: b.y1 - b.y0 + 2 * reach } : null
+    const l = opts.limit
+    // A stroke wholly outside the limit gets an empty area (null would mean the whole layer).
+    return r && l ? (this.within(r, opts) ?? { x: l.x, y: l.y, w: 0, h: 0 }) : r
+  }
+
+  /** `r` cut to the working area and to the stroke's limit (see StrokeOptions.limit). */
+  private within(r: Rect, opts: StrokeOptions | null): Rect | null {
+    const c = clip(r, this.width, this.height)
+    const l = opts?.limit
+    if (!c || !l) return c
+    const i = clip({ ...c, x: c.x - l.x, y: c.y - l.y }, l.w, l.h)
+    return i && { ...i, x: i.x + l.x, y: i.y + l.y }
+  }
+
+  /** The stroke's limit as a clip path for Canvas 2D drawing, or null. */
+  private limitPath(opts: StrokeOptions): Path2D | null {
+    const l = opts.limit
+    if (!l) return null
+    const p = new Path2D()
+    p.rect(l.x, l.y, l.w, l.h)
+    return p
   }
 
   /** Draw the stroke into `ctx` the way it will land on the layer (with predicted points for the live view only). */
@@ -595,6 +618,8 @@ export class SketchEngine {
       if (opts.brush.height > 0) applyRelief(p, this.stroke!.canvas, this.strokeArea(opts) ?? undefined, opts.brush.height)
       this.keepSelected(p)
       ctx.save()
+      const lp = this.limitPath(opts)
+      if (lp) ctx.clip(lp)
       if (this.sel) {
         ctx.globalCompositeOperation = 'destination-out'
         ctx.drawImage(this.sel.canvas, 0, 0)
@@ -618,7 +643,7 @@ export class SketchEngine {
     if (opts.brush.height > 0 && !opts.erase) applyRelief(this.paint.ctx, mask, area, opts.brush.height)
     this.keepSelected(this.paint.ctx)
     const clearInside = hasOutline(opts.brush) && opts.brush.outlineFill === 'clear' ? mask : null
-    compositeStroke(ctx, this.paint.canvas, opts.brush, { erase: opts.erase, alphaLock: opts.layer.alphaLock, selection: null, area, clearInside, ring })
+    compositeStroke(ctx, this.paint.canvas, opts.brush, { erase: opts.erase, alphaLock: opts.layer.alphaLock, selection: this.limitPath(opts), area, clearInside, ring })
   }
 
   /** Finish the stroke: merge it into the layer and record undo. Returns the changed layer. */

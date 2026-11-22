@@ -922,7 +922,10 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         setActiveLayerId(layer.id)
         if (!hasAnimated) setAnimNote('first')
       }
-      const opts = { layer: target, brush: strokeBrush, color, symmetry: 'off' as const, erase: t === 'eraser', smudge: t === 'smudge', mirror: symmetryMirror(liveGuide, target.id) }
+      const opts = { layer: target, brush: strokeBrush, color, symmetry: 'off' as const, erase: t === 'eraser', smudge: t === 'smudge', mirror: symmetryMirror(liveGuide, target.id),
+        // Off: a drawing that grew earlier keeps its extra area, but new paint stays on the canvas.
+        limit: doc.frame && !input.beyondCanvas ? doc.frame : null,
+      }
       engine.beginStroke(opts, pt)
       gesture.current = { kind: 'paint', pipeline, last: pt, rect: e.currentTarget.getBoundingClientRect(), opts, pts: [pt], rest: pt, animated: !!target.wiggle }
       armHold()
