@@ -70,6 +70,18 @@ void main() {
   o = pre(r, c.a);
 }`
 
+/** Values to opacity: see cpu.ts valueAlpha. */
+export const VALUE_ALPHA = `${HEAD}
+uniform float mode, amount;
+void main() {
+  vec4 c = unpre(texture(src, uv));
+  vec3 k = mode > 0.5 ? c.rgb : 1.0 - c.rgb;
+  float na = max(k.r, max(k.g, k.b));
+  vec3 nk = na > 0.0 ? k / na : vec3(0.0);
+  vec3 un = mode > 0.5 ? nk : 1.0 - nk;
+  o = pre(mix(c.rgb, un, amount), c.a * mix(1.0, na, amount));
+}`
+
 /** One direction of a Gaussian blur (run twice). */
 export const GAUSS = `${HEAD}
 uniform vec2 dir;

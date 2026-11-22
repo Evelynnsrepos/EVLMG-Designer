@@ -1,17 +1,52 @@
-import { Check, FlipHorizontal2, FlipVertical2, Magnet, Maximize, RotateCw, Undo2, X } from 'lucide-react'
+import { Check, FlipHorizontal2, FlipVertical2, Hand, Magnet, Maximize, Pin, PinOff, RotateCw, Undo2, X } from 'lucide-react'
 import type { Interpolation } from './meshRender'
-import { mapPoint } from './transform'
+import { mapPoint, moldLive, type Pt } from './transform'
 import type { Transformer, XfMode } from './transformer'
 import './layers.css'
 
 const UI = {
-  modes: { free: 'Freeform', uniform: 'Uniform', distort: 'Distort', warp: 'Warp' } as Record<XfMode, string>,
+  modes: {
+    free: 'Freeform',
+    uniform: 'Uniform',
+    distort: 'Distort',
+    warp: 'Warp',
+    turn: 'Rotate object',
+    mold: 'Mold object',
+  } as Record<XfMode, string>,
   modeHints: {
     free: 'Stretch freely; Shift keeps the shape',
     uniform: 'Scale keeping the shape',
     distort: 'Move each corner on its own',
     warp: 'Bend the picture with a mesh',
+    turn: 'Turn the drawing as a 3D shape: drag outside it to orbit, inside to move, or use the sliders',
+    mold: 'Pin what should stay, then drag points of the triangle mesh: the drawing bends and keeps its shape',
   } as Record<XfMode, string>,
+  turnX: 'Tilt',
+  turnXHelp: 'Tilt forward or back (around the across axis, X)',
+  turnY: 'Turn',
+  turnYHelp: 'Turn left or right (around the up axis, Y)',
+  turnZ: 'Spin',
+  turnZHelp: 'Spin flat (around the view axis, Z)',
+  depth: 'Perspective',
+  depthHelp: 'How much nearer parts grow: none is flat, full is a close camera',
+  turnNote: 'The drawing becomes a 3D shape from its outline. Sides it cannot see are guessed: the back shows the front mirrored, the edges stretch around.',
+  thick: 'Thickness',
+  thickHelp: 'How thick the 3D shape is: 0 is a flat card',
+  round: 'Roundness',
+  roundHelp: 'Straight sides (cut out and extruded) or round (puffed up like a pillow)',
+  light: 'Light',
+  lightHelp: 'Shading from a light at the top left, so the shape reads as 3D',
+  grid: 'Points',
+  gridHelp: 'How many cells the mesh has per side (changing it starts the mesh over the current shape)',
+  reach: 'Reach',
+  reachHelp: 'How far away other points still follow the one you drag',
+  keep: 'Keep shape',
+  keepHelp: 'Bend like a puppet: pin what should stay (hip, shoulder), drag the rest; pieces turn instead of stretching. Off: nearby points simply follow by Reach and Follow.',
+  moldTools: { drag: 'Drag points (Alt-click pins)', pin: 'Click points to pin or unpin them; pinned points stay put' },
+  moldToolNames: { drag: 'Drag', pin: 'Pin' },
+  clearPins: 'Take all pins off',
+  pull: 'Follow',
+  pullHelp: 'How strongly the other points follow: 0 only the dragged point moves',
   flipX: 'Flip horizontally',
   flipY: 'Flip vertically',
   rotate: 'Rotate 45°',
@@ -20,23 +55,70 @@ const UI = {
   snapping: 'Snapping: edges and centre stick to the canvas',
   distance: 'Distance',
   magnetics: 'Magnetics: moves keep to 45°, turns to 15° (or hold Shift)',
-  interp: { nearest: 'Nearest (crisp pixels)', bilinear: 'Bilinear (smooth)', bicubic: 'Bicubic (sharp and smooth)' } as Record<Interpolation, string>,
+  interp: {
+    nearest: 'Nearest (crisp pixels)',
+    bilinear: 'Bilinear (smooth)',
+    bicubic: 'Bicubic (sharp and smooth)',
+  } as Record<Interpolation, string>,
   done: 'Done (Enter)',
   doneShort: 'Done',
   cancel: 'Cancel (Esc)',
   hint: 'Drag inside to move, handles to scale, the round handle to turn.',
 }
 
+/** The Move tool's own modes; Rotate object and Mold object are tools of their own. */
+const MOVE_MODES: XfMode[] = ['free', 'uniform', 'distort', 'warp']
+
 /** The bar shown while transforming. */
 export function TransformBar({ xf, onDone, onCancel }: { xf: Transformer; onDone(): void; onCancel(): void }) {
   if (!xf.active) return null
   return (
     <div className="sketch-selbar sketch-xfbar" title={UI.hint} onPointerDown={(e) => e.stopPropagation()}>
-      {(Object.keys(UI.modes) as XfMode[]).map((m) => (
-        <button key={m} className={`btn btn-ghost sketch-small${xf.mode === m ? ' is-active' : ''}`} title={UI.modeHints[m]} onClick={() => xf.patch({ mode: m })}>
-          {UI.modes[m]}
-        </button>
-      ))}
+      {xf.mode === 'turn' || xf.mode === 'mold' ? (
+        <span className="sketch-xf-title" title={UI.modeHints[xf.mode]}>
+          {UI.modes[xf.mode]}
+        </span>
+      ) : (
+        MOVE_MODES.map((m) => (
+          <button key={m} className={`btn btn-ghost sketch-small${xf.mode === m ? ' is-active' : ''}`} title={UI.modeHints[m]} onClick={() => xf.patch({ mode: m })}>
+            {UI.modes[m]}
+          </button>
+        ))
+      )}
+      {xf.mode === 'turn' && (
+        <span className="sketch-xf-extra" title={UI.turnNote}>
+          <Slider label={UI.turnX} help={UI.turnXHelp} min={-180} max={180} value={xf.turn.x} unit="°" xf={xf} onChange={(x) => xf.setTurn({ x })} />
+          <Slider label={UI.turnY} help={UI.turnYHelp} min={-180} max={180} value={xf.turn.y} unit="°" xf={xf} onChange={(y) => xf.setTurn({ y })} />
+          <Slider label={UI.turnZ} help={UI.turnZHelp} min={-180} max={180} value={xf.turn.z} unit="°" xf={xf} onChange={(z) => xf.setTurn({ z })} />
+          <Slider label={UI.thick} help={UI.thickHelp} min={0} max={100} value={Math.round(xf.shape.thick * 100)} unit="%" xf={xf} onChange={(v) => xf.setShape({ thick: v / 100 })} />
+          <Slider label={UI.round} help={UI.roundHelp} min={0} max={100} value={Math.round(xf.shape.round * 100)} unit="%" xf={xf} onChange={(v) => xf.setShape({ round: v / 100 })} />
+          <Slider label={UI.light} help={UI.lightHelp} min={0} max={100} value={Math.round(xf.shape.light * 100)} unit="%" xf={xf} onChange={(v) => xf.setShape({ light: v / 100 })} />
+          <Slider label={UI.depth} help={UI.depthHelp} min={0} max={100} value={Math.round(xf.turn.depth * 100)} unit="%" xf={xf} onChange={(d) => xf.setTurn({ depth: d / 100 })} />
+        </span>
+      )}
+      {xf.mode === 'mold' && (
+        <span className="sketch-xf-extra">
+          <Slider label={UI.grid} help={UI.gridHelp} min={2} max={20} value={xf.moldGrid} xf={xf} onChange={(n) => xf.setMoldGrid(n)} noMark />
+          {(['drag', 'pin'] as const).map((t) => (
+            <button key={t} className={`btn btn-ghost sketch-small${xf.moldTool === t ? ' is-active' : ''}`} title={UI.moldTools[t]} onClick={() => xf.patch({ moldTool: t })}>
+              {t === 'pin' ? <Pin size={13} /> : <Hand size={13} />} {UI.moldToolNames[t]}
+            </button>
+          ))}
+          <button className="btn btn-ghost sketch-small" title={UI.clearPins} onClick={() => xf.clearPins()}>
+            <PinOff size={13} />
+          </button>
+          <label className="sketch-selbar-slider" title={UI.keepHelp}>
+            <input type="checkbox" checked={xf.moldKeep} onChange={(e) => xf.patch({ moldKeep: e.target.checked })} />
+            {UI.keep}
+          </label>
+          {!xf.moldKeep && (
+            <>
+              <Slider label={UI.reach} help={UI.reachHelp} min={0} max={1000} value={xf.moldReach} unit="px" xf={xf} onChange={(moldReach) => xf.patch({ moldReach })} noMark />
+              <Slider label={UI.pull} help={UI.pullHelp} min={0} max={100} value={Math.round(xf.moldPull * 100)} unit="%" xf={xf} onChange={(p) => xf.patch({ moldPull: p / 100 })} noMark />
+            </>
+          )}
+        </span>
+      )}
       <span className="sketch-sep" />
       <button className="icon-btn sketch-tool" title={UI.flipX} aria-label={UI.flipX} onClick={() => xf.flip('x')}>
         <FlipVertical2 size={15} />
@@ -79,31 +161,69 @@ export function TransformBar({ xf, onDone, onCancel }: { xf: Transformer; onDone
   )
 }
 
+/** A labelled slider of the transform bar; starting to drag it makes one undo step (unless `noMark`). */
+function Slider(p: { label: string; help: string; min: number; max: number; value: number; unit?: string; xf: Transformer; noMark?: boolean; onChange(v: number): void }) {
+  return (
+    <label className="sketch-selbar-slider" title={p.help}>
+      {p.label}
+      <input type="range" min={p.min} max={p.max} value={p.value} aria-label={p.label} onPointerDown={() => !p.noMark && p.xf.mark()} onKeyDown={() => !p.noMark && p.xf.mark()} onChange={(e) => p.onChange(Number(e.target.value))} />
+      <span className="sketch-xf-num">
+        {Math.round(p.value)}
+        {p.unit}
+      </span>
+    </label>
+  )
+}
+
 /** Box, mesh, handles and snap guides, drawn in the editor's canvas-space SVG group. */
 export function TransformOverlay({ xf, scale, width, height }: { xf: Transformer; scale: number; width: number; height: number }) {
   const s = xf.state
   if (!xf.active || !s) return null
   const line = (pts: { x: number; y: number }[]) => pts.map((p) => `${p.x},${p.y}`).join(' ')
   const curves: string[] = []
-  const steps = s.warp ? 24 : 1
+  const steps = s.warp || s.mold ? 24 : 1
   const lines = xf.mode === 'warp' ? [0, 1 / 3, 2 / 3, 1] : [0, 1]
-  for (const t of lines) {
-    curves.push(line(Array.from({ length: steps + 1 }, (_, i) => mapPoint(s, i / steps, t))))
-    curves.push(line(Array.from({ length: steps + 1 }, (_, i) => mapPoint(s, t, i / steps))))
-  }
+  const m = xf.mode === 'mold' ? s.mold : null
+  let meshPath = ''
+  if (m) {
+    // The triangles themselves (only cells with paint): two sides and the diagonal, plus the far sides.
+    const n = m.n
+    const at = (i: number, j: number) => m.pts[j * (n + 1) + i]
+    const seg = (a: Pt, b: Pt) => `M${a.x} ${a.y}L${b.x} ${b.y}`
+    for (let j = 0; j < n; j++)
+      for (let i = 0; i < n; i++) {
+        if (m.on && !m.on[j * n + i]) continue
+        meshPath += seg(at(i, j), at(i + 1, j)) + seg(at(i, j), at(i, j + 1)) + seg(at(i + 1, j), at(i, j + 1)) + seg(at(i + 1, j), at(i + 1, j + 1)) + seg(at(i, j + 1), at(i + 1, j + 1))
+      }
+  } else
+    for (const t of lines) {
+      curves.push(line(Array.from({ length: steps + 1 }, (_, i) => mapPoint(s, i / steps, t))))
+      curves.push(line(Array.from({ length: steps + 1 }, (_, i) => mapPoint(s, t, i / steps))))
+    }
   const r = 5 / scale
   const rot = xf.rotateHandle(scale)
   const top = mapPoint(s, 0.5, 0)
   return (
     <g className="sketch-xf">
-      {xf.guides.gx.map((x) => <line key={`x${x}`} x1={x} y1={0} x2={x} y2={height} className="sketch-xf-guide" />)}
-      {xf.guides.gy.map((y) => <line key={`y${y}`} x1={0} y1={y} x2={width} y2={y} className="sketch-xf-guide" />)}
-      {curves.map((c, i) => <polyline key={i} points={c} className="sketch-xf-line" />)}
+      {xf.guides.gx.map((x) => (
+        <line key={`x${x}`} x1={x} y1={0} x2={x} y2={height} className="sketch-xf-guide" />
+      ))}
+      {xf.guides.gy.map((y) => (
+        <line key={`y${y}`} x1={0} y1={y} x2={width} y2={y} className="sketch-xf-guide" />
+      ))}
+      {curves.map((c, i) => (
+        <polyline key={i} points={c} className="sketch-xf-line" />
+      ))}
+      {meshPath && <path d={meshPath} className="sketch-xf-line" />}
       {rot && <line x1={top.x} y1={top.y} x2={rot.x} y2={rot.y} className="sketch-xf-line" />}
       {rot && <circle cx={rot.x} cy={rot.y} r={r * 1.2} className="sketch-xf-rot" />}
-      {xf.handles().map((p, i) => (
-        <rect key={i} x={p.x - r} y={p.y - r} width={r * 2} height={r * 2} rx={xf.mode === 'warp' ? r : 1 / scale} className="sketch-xf-handle" />
-      ))}
+      {m
+        ? (() => {
+            const live = moldLive(m)
+            const pins = new Set(m.pins)
+            return m.pts.map((p, i) => live[i] && <circle key={i} cx={p.x} cy={p.y} r={r * (pins.has(i) ? 1 : 0.6)} className={pins.has(i) ? 'sketch-xf-pin' : 'sketch-xf-handle'} />)
+          })()
+        : xf.handles().map((p, i) => <rect key={i} x={p.x - r} y={p.y - r} width={r * 2} height={r * 2} rx={xf.mode === 'warp' ? r : 1 / scale} className="sketch-xf-handle" />)}
     </g>
   )
 }

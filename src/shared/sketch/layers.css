@@ -270,3 +270,21 @@
 .sketch-outline-dialog .modal-actions {
   flex-wrap: wrap;
 }
+.sketch-xf-extra {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.sketch-xf-num {
+  min-width: 34px;
+  font-variant-numeric: tabular-nums;
+}
+.sketch-xf-title {
+  font-weight: 600;
+  margin: 0 6px;
+}
+.sketch-xf-pin {
+  fill: var(--accent);
+  stroke: var(--bg);
+  vector-effect: non-scaling-stroke;
+}
