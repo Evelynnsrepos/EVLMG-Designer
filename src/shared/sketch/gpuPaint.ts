@@ -4,6 +4,8 @@ import { blendIndex, GLSL_BLEND, type BlendMode } from './blend'
 import { glAllowed } from './gl'
 import { MESH_FRAG } from './meshRender'
 import type { LayerAdjust } from './model'
+import { asciiReach, AsciiGrid, prepareGrid, type Atlas } from './ascii'
+import type { AdjustValues } from './adjust/filters'
 import { OUTLINE_H_FRAG, OUTLINE_V_FRAG, outlineParams, outlineReach, type OutlineSettings } from './outline'
 import type { Filtering } from './brushes'
 import type { Rect } from './tiles'
@@ -89,6 +91,8 @@ export interface GpuLayer {
   adjust?: LayerAdjust
   /** An outline layer: its pixels with their outline are what gets blended; `version` -1 = changing right now. */
   outline?: { o: OutlineSettings; version: number }
+  /** An ASCII layer: its pixels as letters are what gets blended; `version` -1 = changing right now. */
+  ascii?: { a: AdjustValues; version: number }
 }
 
 const HEADER = '#version 300 es\nprecision highp float;\n'
@@ -98,6 +102,48 @@ const QUAD_VERT = `${HEADER}
 in vec2 pos;
 out vec2 uv;
 void main() { uv = pos * 0.5 + 0.5; gl_Position = vec4(pos, 0.0, 1.0); }`
+
+/** ASCII art, pass 1: one pixel per cell, the average (premultiplied) of the cell's pixels. */
+const ASCII_CELLS_FRAG = `${HEADER}
+uniform sampler2D src;
+uniform vec2 cell, size;
+out vec4 outColor;
+void main() {
+  ivec2 c = ivec2(gl_FragCoord.xy);
+  ivec2 cs = ivec2(cell);
+  ivec2 lim = ivec2(size);
+  vec4 s = vec4(0.0);
+  float n = 0.0;
+  for (int j = 0; j < cs.y; j++) {
+    int y = c.y * cs.y + j;
+    if (y >= lim.y) break;
+    for (int i = 0; i < cs.x; i++) {
+      int x = c.x * cs.x + i;
+      if (x >= lim.x) break;
+      s += texelFetch(src, ivec2(x, y), 0);
+      n += 1.0;
+    }
+  }
+  outColor = s / max(n, 1.0);
+}`
+
+/** ASCII art, pass 2: each pixel takes its cell's letter (pick: colour + atlas index) from the glyph atlas. */
+const ASCII_DRAW_FRAG = `${HEADER}
+uniform sampler2D pick, atlas;
+uniform vec2 cell;
+uniform bool usePaper;
+uniform vec3 paper;
+out vec4 outColor;
+void main() {
+  vec2 p = floor(gl_FragCoord.xy);
+  vec2 c = floor(p / cell);
+  vec4 k = texelFetch(pick, ivec2(c), 0);
+  float g = floor(k.a * 255.0 + 0.5);
+  if (g > 254.0) { outColor = vec4(0.0); return; }
+  vec2 q = p - c * cell;
+  float cov = texelFetch(atlas, ivec2(int(g * cell.x + q.x), int(q.y)), 0).a;
+  outColor = usePaper ? vec4(k.rgb * cov + paper * (1.0 - cov), 1.0) : vec4(k.rgb * cov, cov);
+}`
 
 const BLEND_FRAG = `${HEADER}
 in vec2 uv;
@@ -526,6 +572,8 @@ export class GpuPainter {
         'adj-lut': [QUAD_VERT, AS.LUT],
         'outline-h': [QUAD_VERT, OUTLINE_H_FRAG],
         'outline-v': [QUAD_VERT, OUTLINE_V_FRAG],
+        'ascii-cells': [QUAD_VERT, ASCII_CELLS_FRAG],
+        'ascii-draw': [QUAD_VERT, ASCII_DRAW_FRAG],
       }[name]!
       p = { prog: compile(this.gl, v, f), loc: new Map() }
       this.progs.set(name, p)
@@ -622,6 +670,7 @@ export class GpuPainter {
     this.groupTex.clear()
     for (const c of this.outlines.values()) this.free(c.t)
     this.outlines.clear()
+    for (const k of [...this.asciis.keys()]) this.dropAscii(k)
     this.free(this.picture)
     this.width = g.width
     this.height = g.height
@@ -1040,9 +1089,12 @@ export class GpuPainter {
     const byKey = new Map<string, GpuLayer>()
     const index = (ls: GpuLayer[]) => ls.forEach((l) => (byKey.set(l.key, l), l.children && index(l.children)))
     index(layers)
-    // An outline reaches past a change, so a changed spot is blended again that much bigger.
-    const reach = Math.max(0, ...[...byKey.values()].map((l) => (l.outline ? outlineReach(l.outline.o) : 0)))
-    if (r && reach) r = clip({ x: r.x - reach, y: r.y - reach, w: r.w + 2 * reach, h: r.h + 2 * reach }, this.width, this.height)
+    // An outline reaches past a change, and so do ASCII letters, so a changed spot is blended again that much bigger.
+    // ASCII adjustment layers read the whole picture below them: blend everything again.
+    const all = [...byKey.values()]
+    const reach = Math.max(0, ...all.map((l) => (l.ascii ? asciiReach(l.ascii.a) : l.outline ? outlineReach(l.outline.o) : 0)))
+    if (reach === Infinity || all.some((l) => l.adjust?.id === 'ascii')) r = null
+    else if (r && reach) r = clip({ x: r.x - reach, y: r.y - reach, w: r.w + 2 * reach, h: r.h + 2 * reach }, this.width, this.height)
     const result = this.composeLevel(layers, 0, background, byKey, r, frame)
     this.copy(result, this.picture, r)
   }
@@ -1064,7 +1116,7 @@ export class GpuPainter {
       this.into(targets[cur], r)
     }
     for (const layer of layers) {
-      const src = layer.children ? this.composeLevel(layer.children, depth + 1, null, byKey, r) : layer.adjust ? this.adjusted(targets[cur], layer.adjust, r) : layer.outline ? this.outlined(layer, r) : layer.tex
+      const src = layer.children ? this.composeLevel(layer.children, depth + 1, null, byKey, r) : layer.adjust?.id === 'ascii' ? this.asciied(layer.key, targets[cur], layer.adjust.values, -1, null) : layer.adjust ? this.adjusted(targets[cur], layer.adjust, r) : layer.ascii ? this.asciied(layer.key, layer.tex, layer.ascii.a, layer.ascii.version, r) : layer.outline ? this.outlined(layer, r) : layer.tex
       if (layer.children && layer.clipBase) this.keepGroup(layer.key, src, r)
       const next = 1 - cur
       this.into(targets[next], r)
@@ -1113,6 +1165,78 @@ export class GpuPainter {
     this.bind(1, rows.tex, pr, 'rows')
     this.set(pr, { S: p.s, sOut: p.sOut, sIn: p.sIn, soft: p.soft, round: p.round, c1: p.c1.map((v) => v / 255), c2: p.c2.map((v) => v / 255) })
     this.drawQuad()
+    return c.t
+  }
+
+  private asciis = new Map<string, { t: Tex; grid: AsciiGrid; version: number; cells: Tex | null; pick: WebGLTexture | null; atlas: Atlas | null; atlasTex: WebGLTexture | null }>()
+
+  private dropAscii(key: string) {
+    const c = this.asciis.get(key)
+    if (!c) return
+    this.free(c.t)
+    this.free(c.cells)
+    if (c.pick) this.gl.deleteTexture(c.pick)
+    if (c.atlasTex) this.gl.deleteTexture(c.atlasTex)
+    this.asciis.delete(key)
+  }
+
+  /**
+   * ASCII layers (and ASCII adjustment layers, on the picture below): the cell averages are worked out here, read
+   * back (one pixel per cell, small), the letters picked on the CPU with the same code as Canvas 2D, and drawn here
+   * from the glyph atlas. Only the cells under `r` are averaged again and only changed cells drawn again.
+   */
+  private asciied(key: string, src: Tex, a: AdjustValues, version: number, r: Rect | null): Tex {
+    const gl = this.gl
+    let c = this.asciis.get(key)
+    if (!c) this.asciis.set(key, (c = { t: this.target(), grid: new AsciiGrid(), version: -2, cells: null, pick: null, atlas: null, atlasTex: null }))
+    const g = c.grid
+    const fresh = prepareGrid(g, this.width, this.height, a)
+    if (!fresh && version >= 0 && c.version === version) return c.t
+    const area = !fresh && c.version !== -2 ? r : null
+    c.version = version
+    if (fresh) {
+      this.free(c.cells)
+      if (c.pick) gl.deleteTexture(c.pick)
+      c.cells = this.target(g.cols, g.rows)
+      c.pick = this.rawTexture(g.cols, g.rows)
+      this.clear(c.t, null)
+    }
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)
+    if (c.atlas !== g.atlas) {
+      const at = (c.atlas = g.atlas)
+      const px = new Uint8Array(at.ink.length * 4)
+      const W = at.cw * at.chars.length
+      // The atlas is stored glyph after glyph; the texture has them side by side.
+      for (let i = 0; i < at.chars.length; i++) for (let y = 0; y < at.ch; y++) for (let x = 0; x < at.cw; x++) px[(y * W + i * at.cw + x) * 4 + 3] = at.ink[(i * at.ch + y) * at.cw + x]
+      if (c.atlasTex) gl.deleteTexture(c.atlasTex)
+      c.atlasTex = this.rawTexture(W, at.ch)
+      gl.bindTexture(gl.TEXTURE_2D, c.atlasTex)
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, at.ch, gl.RGBA, gl.UNSIGNED_BYTE, px)
+    }
+    const cr = g.cellsOf(area ?? { x: 0, y: 0, w: this.width, h: this.height })
+    if (cr.w > 0 && cr.h > 0) {
+      this.into(c.cells!, cr)
+      gl.disable(gl.BLEND)
+      const p = this.prog('ascii-cells')
+      this.bind(0, src.tex, p, 'src')
+      this.set(p, { cell: [g.cw, g.ch], size: [this.width, this.height] })
+      this.drawQuad()
+      g.readCells(this.read(c.cells!, cr).data, cr)
+    }
+    const changed = g.pickAll()
+    if (changed) {
+      gl.bindTexture(gl.TEXTURE_2D, c.pick)
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, g.cols, g.rows, gl.RGBA, gl.UNSIGNED_BYTE, g.pick)
+      this.into(c.t, g.pixelsOf(changed))
+      gl.disable(gl.BLEND)
+      const p = this.prog('ascii-draw')
+      this.bind(0, c.pick, p, 'pick')
+      this.bind(1, c.atlasTex, p, 'atlas')
+      const paper = g.s.paper
+      this.set(p, { cell: [g.cw, g.ch], usePaper: !!paper, paper: paper ? paper.map((v) => v / 255) : [0, 0, 0] })
+      this.drawQuad()
+    }
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true)
     return c.t
   }
 
@@ -1173,6 +1297,7 @@ export class GpuPainter {
 
   /** Forget kept group results (and outlines) of groups and layers that are gone. */
   pruneGroups(keep: Set<string>) {
+    for (const k of [...this.asciis.keys()]) if (!keep.has(k)) this.dropAscii(k)
     for (const [k, c] of this.outlines)
       if (!keep.has(k)) {
         this.free(c.t)

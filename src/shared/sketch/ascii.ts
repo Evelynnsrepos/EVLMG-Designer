@@ -466,3 +466,28 @@ export function asciiAnsi(grid: AsciiGrid): string {
       .join('\n') + '\n'
   )
 }
+
+/** How far past a change the letters can change (neighbour cells: edges, pattern); Infinity with spread dithering. */
+export function asciiReach(a: Pick<AdjustValues, 'v'>): number {
+  return Math.round(a.v.dither ?? 0) === 2 ? Infinity : asciiCell(a.v) * 4
+}
+
+/** The grid for these settings, set up for a w×h picture; `fresh` = everything is worked out again. */
+export function prepareGrid(grid: AsciiGrid, w: number, h: number, a: Pick<AdjustValues, 'v' | 'ascii'>): boolean {
+  const s = asciiSettings(a)
+  return grid.prepare(w, h, s, glyphAtlas(s.chars, s.cell, Math.round(a.v.set ?? 0) === 3))
+}
+
+/** Canvas 2D: read the cells under `r` from `src`, and draw the cells whose letter changed into `out`. */
+export function asciiInto(grid: AsciiGrid, src: HTMLCanvasElement, out: CanvasRenderingContext2D, r: Rect, fresh: boolean) {
+  if (fresh) out.clearRect(0, 0, out.canvas.width, out.canvas.height)
+  const c = grid.cellsOf(r)
+  const at = grid.pixelsOf(c)
+  if (at.w > 0 && at.h > 0) grid.readPixels(src.getContext('2d')!.getImageData(at.x, at.y, at.w, at.h).data, at, c)
+  const changed = grid.pickAll()
+  if (!changed) return
+  const p = grid.pixelsOf(changed)
+  const img = out.createImageData(p.w, p.h)
+  grid.paint(img.data, p)
+  out.putImageData(img, p.x, p.y)
+}
