@@ -12,6 +12,7 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     wordFormat: {
       setTextAlign: (align: 'left' | 'center' | 'right' | 'justify') => ReturnType
+      setLineHeight: (height: number | null) => ReturnType
       changeIndent: (step: 1 | -1) => ReturnType
       setPageBreak: () => ReturnType
       setTableOfContents: () => ReturnType
@@ -60,6 +61,11 @@ export const BlockFormat = Extension.create({
           parseHTML: (el) => (ALIGNS as readonly string[]).includes(el.style.textAlign) ? el.style.textAlign : null,
           renderHTML: (a) => (a.textAlign ? { style: `text-align:${a.textAlign}` } : {}),
         },
+        lineHeight: {
+          default: null,
+          parseHTML: (el) => Number(el.style.lineHeight) || null,
+          renderHTML: (a) => (a.lineHeight ? { style: `line-height:${a.lineHeight}` } : {}),
+        },
         indent: {
           default: 0,
           parseHTML: (el) => (el.style.marginLeft.endsWith('em') ? Math.min(MAX_INDENT, Math.round(parseFloat(el.style.marginLeft) / 2) || 0) : 0),
@@ -74,6 +80,11 @@ export const BlockFormat = Extension.create({
       (align) =>
       ({ commands }) =>
         BLOCKS.map((t) => commands.updateAttributes(t, { textAlign: align === 'left' ? null : align })).some(Boolean),
+    // null = the document's line spacing from the View tab.
+    setLineHeight:
+      (height) =>
+      ({ commands }) =>
+        BLOCKS.map((t) => commands.updateAttributes(t, { lineHeight: height })).some(Boolean),
     changeIndent:
       (step) =>
       ({ editor, state, tr, dispatch }) => {
