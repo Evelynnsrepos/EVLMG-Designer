@@ -14,6 +14,7 @@ import { HotwheelSection } from '../hotwheel/HotwheelSettings'
 import { GitSettingsSection } from './GitSettingsSection'
 import { PresetsSection } from './PresetsSection'
 import { DrawingSection } from './DrawingSection'
+import { setSteady, useSteady, type Steady } from '../steadyPen'
 import { UpdatesSection } from '../updates/UpdatesSection'
 import { setContrast, setGlass, setUiScale, UI_SCALES, useContrast, useGlass, useUiScale, type Glass } from '../theme'
 
@@ -53,6 +54,13 @@ const UI_EN = {
   reset: 'Reset',
   contrast: 'Strong contrast',
   contrastOn: 'Plain, solid colours with darker text, clear lines and thick focus rings (turns the glass look off)',
+  steady: 'Shaky hand help',
+  steadyLevels: {
+    off: 'Off',
+    normal: 'Normal: a click that wobbles a little stays a click, rows only start dragging after a clear move',
+    strong: 'Strong: for very wobbly pens or old tablets, plus bigger buttons in the Draw panels',
+  } as Record<Steady, string>,
+  steadyHint: 'Helps when your pen or hand is not steady: clicking layers, brushes and menus works even when the tip slides a bit. Drawing on the canvas is not changed.',
   language: 'Interface language',
   languageHint: 'German is still being translated: so far the Settings are in German, the rest follows in parts. Some texts switch when you open them again.',
   glassHint: 'The app gets a glass look: rounded see-through menus, dialogs, toolbars and panels over a soft background in your project colours. Full glass also blurs what is behind the sidebar, dialogs and menus. Canvases always stay solid. Choose Light or Off if the app feels slower.',
@@ -114,6 +122,13 @@ const UI_DE: Partial<typeof UI_EN> = {
   reset: 'Zurücksetzen',
   contrast: 'Starker Kontrast',
   contrastOn: 'Einfache, einfarbige Farben mit dunklerem Text, klaren Linien und dicken Fokusrahmen (schaltet den Glas-Look aus)',
+  steady: 'Hilfe für zittrige Hände',
+  steadyLevels: {
+    off: 'Aus',
+    normal: 'Normal: Ein Klick, der ein bisschen wackelt, bleibt ein Klick. Zeilen werden erst nach einer deutlichen Bewegung gezogen',
+    strong: 'Stark: für sehr wackelige Stifte oder alte Tabletts, dazu größere Knöpfe in den Zeichen-Bereichen',
+  },
+  steadyHint: 'Hilft, wenn dein Stift oder deine Hand nicht ruhig ist: Ebenen, Pinsel und Menüs lassen sich anklicken, auch wenn die Spitze etwas rutscht. Das Zeichnen auf der Leinwand ändert sich nicht.',
   language: 'Sprache der Oberfläche',
   languageHint: 'Deutsch ist noch in Arbeit: Bisher sind die Einstellungen übersetzt, der Rest folgt Stück für Stück. Manche Texte wechseln erst, wenn du sie neu öffnest.',
 }
@@ -390,6 +405,7 @@ function GlassSection() {
   const glass = useGlass()
   const contrast = useContrast()
   const scale = useUiScale()
+  const steady = useSteady()
   return (
     <>
     <LanguageSection />
@@ -412,6 +428,16 @@ function GlassSection() {
         <input type="checkbox" checked={contrast} onChange={(e) => setContrast(e.target.checked)} />
         {UI.contrastOn}
       </label>
+    </section>
+    <section data-section="steady">
+      <h3>{UI.steady}</h3>
+      {(Object.keys(UI.steadyLevels) as Steady[]).map((v) => (
+        <label key={v} className="settings-check">
+          <input type="radio" name="steady" checked={steady === v} onChange={() => setSteady(v)} />
+          {UI.steadyLevels[v]}
+        </label>
+      ))}
+      <p className="muted settings-hint">{UI.steadyHint}</p>
     </section>
     <section data-section="glass">
       <h3>{UI.glass}</h3>
