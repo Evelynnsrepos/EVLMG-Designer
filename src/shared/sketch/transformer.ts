@@ -62,7 +62,7 @@ export class Transformer {
   turn: Turn = { ...FLAT }
   private turnBase: XfState | null = null
   /** Rotate object as a 3D model: thickness, roundness, light. Thickness 0 is a flat card. */
-  shape: Shape3d = { thick: 0.25, round: 1, light: 0.5 }
+  shape: Shape3d = { thick: 0.6, round: 1, light: 0.5 }
   private field3d: DepthField | null = null
   private gl3d: ModelRenderer | null | undefined
   private uploaded3d = false

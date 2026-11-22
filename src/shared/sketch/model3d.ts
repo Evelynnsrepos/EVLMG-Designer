@@ -9,7 +9,7 @@ import { mapPoint, type Box, type Pt, type Turn, type XfState } from './transfor
  */
 
 export interface Shape3d {
-  /** Thickness, 0 (flat card) .. 1 (as thick as half the picture). */
+  /** Thickness, 0 (flat card) .. 1 (the widest part becomes round like a tube; thin parts stay thin). */
   thick: number
   /** 0 straight sides (extruded), 1 fully round (inflated like a pillow). */
   round: number
@@ -88,14 +88,21 @@ export function rotation(t: Turn): number[] {
   return [...rot(1, 0, 0), ...rot(0, 1, 0), ...rot(0, 0, 1)]
 }
 
-/** The model: per vertex x, y, z (canvas px around the centre), u, v (0..1 of the source), normal x, y, z. */
+/**
+ * The model: per vertex x, y, z (canvas px around the centre), u, v (0..1 of the source), normal x, y, z,
+ * and a u, v a little further inside the drawing (the steep sides take their colour from there, not from the see-through edge).
+ */
 export function buildModel(base: XfState, field: DepthField, shape: Shape3d): { verts: Float32Array; centre: Pt; size: number } {
   const { gw, gh, dist, paint, max } = field
   const centre = mapPoint(base, 0.5, 0.5)
   const a = mapPoint(base, 0, 0)
   const b = mapPoint(base, 1, 1)
   const size = Math.max(Math.hypot(b.x - a.x, b.y - a.y) / Math.SQRT2, 1)
-  const thick = shape.thick * size * 0.5
+  const P: Pt[] = []
+  for (let j = 0; j <= gh; j++) for (let i = 0; i <= gw; i++) P.push(mapPoint(base, i / gw, j / gh))
+  // Thickness follows the drawing's own width (1 = the widest part as round as a tube), so a sword stays a blade and a face a ball.
+  const cellPx = Math.max(Math.hypot(P[gw].x - P[0].x, P[gw].y - P[0].y) / gw, Math.hypot(P[gh * (gw + 1)].x - P[0].x, P[gh * (gw + 1)].y - P[0].y) / gh)
+  const thick = shape.thick * max * cellPx
   // Height at each grid corner: the mean of the cells around it.
   const H = new Float32Array((gw + 1) * (gh + 1))
   for (let j = 0; j <= gh; j++)
@@ -108,12 +115,10 @@ export function buildModel(base: XfState, field: DepthField, shape: Shape3d): { 
       }
       H[j * (gw + 1) + i] = (s / 4 / max) > 0 ? profile(s / 4 / max, shape.round) * thick : 0
     }
-  const P: Pt[] = []
-  for (let j = 0; j <= gh; j++) for (let i = 0; i <= gw; i++) P.push(mapPoint(base, i / gw, j / gh))
   const h = (i: number, j: number) => H[Math.min(gh, Math.max(0, j)) * (gw + 1) + Math.min(gw, Math.max(0, i))]
   const cells: number[] = []
   for (let k = 0; k < gw * gh; k++) if (paint[k]) cells.push(k)
-  const verts = new Float32Array(cells.length * 2 * 6 * 8)
+  const verts = new Float32Array(cells.length * 2 * 6 * STRIDE)
   let o = 0
   const put = (i: number, j: number, side: 1 | -1) => {
     const p = P[j * (gw + 1) + i]
@@ -124,8 +129,12 @@ export function buildModel(base: XfState, field: DepthField, shape: Shape3d): { 
     const gx = (h(i + 1, j) - h(i - 1, j)) / dx
     const gy = (h(i, j + 1) - h(i, j - 1)) / dy
     const l = Math.hypot(gx, gy, 1)
-    verts.set([p.x - centre.x, p.y - centre.y, z * side, i / gw, j / gh, (-gx / l) * side, (-gy / l) * side, side / l], o)
-    o += 8
+    // Uphill in the grid (towards the inside), four cells: past a drawn outline, so the sides take the fill colour.
+    const ux = h(i + 1, j) - h(i - 1, j)
+    const uy = h(i, j + 1) - h(i, j - 1)
+    const ul = Math.hypot(ux, uy) || 1
+    verts.set([p.x - centre.x, p.y - centre.y, z * side, i / gw, j / gh, (-gx / l) * side, (-gy / l) * side, side / l, (i + (4 * ux) / ul) / gw, (j + (4 * uy) / ul) / gh], o)
+    o += STRIDE
   }
   for (const side of [1, -1] as const)
     for (const k of cells) {
@@ -136,16 +145,23 @@ export function buildModel(base: XfState, field: DepthField, shape: Shape3d): { 
   return { verts, centre, size }
 }
 
+const STRIDE = 10
+
 const VERT = `#version 300 es
 in vec3 pos;
 in vec2 uv;
 in vec3 nrm;
+in vec2 uvIn;
 uniform mat3 rot;
 uniform vec2 centre, canvas;
 uniform float focal, size;
 out vec2 vuv;
+out vec2 vuvIn;
 out vec3 vn;
+out float wall;
 void main() {
+  vuvIn = uvIn;
+  wall = 1.0 - abs(nrm.z);
   vec3 p = rot * pos;
   float k = focal / max(focal * 0.1, focal - p.z);
   vec2 s = centre + p.xy * k;
@@ -157,7 +173,9 @@ void main() {
 const FRAG = `#version 300 es
 precision highp float;
 in vec2 vuv;
+in vec2 vuvIn;
 in vec3 vn;
+in float wall;
 uniform sampler2D src;
 uniform vec4 box;
 uniform vec2 texSize;
@@ -165,6 +183,11 @@ uniform float light;
 out vec4 o;
 void main() {
   vec4 c = texture(src, (box.xy + vuv * box.zw) / texSize);
+  // The sides: colour from just inside the outline, so they are solid, not see-through.
+  if (wall > 0.4) {
+    vec4 d = texture(src, (box.xy + vuvIn * box.zw) / texSize);
+    if (d.a > 0.5 || d.a > c.a) c = d;
+  }
   if (c.a < 0.03) discard;
   vec3 n = normalize(vn);
   // Light from the top left, a little in front.
@@ -209,6 +232,7 @@ export class ModelRenderer {
     gl.bindAttribLocation(p, 0, 'pos')
     gl.bindAttribLocation(p, 1, 'uv')
     gl.bindAttribLocation(p, 2, 'nrm')
+    gl.bindAttribLocation(p, 3, 'uvIn')
     gl.linkProgram(p)
     this.prog = p
     this.buf = gl.createBuffer()!
@@ -240,13 +264,15 @@ export class ModelRenderer {
     gl.useProgram(this.prog)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buf)
     gl.bufferData(gl.ARRAY_BUFFER, model.verts, gl.DYNAMIC_DRAW)
-    const stride = 8 * 4
+    const stride = STRIDE * 4
     gl.enableVertexAttribArray(0)
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, stride, 0)
     gl.enableVertexAttribArray(1)
     gl.vertexAttribPointer(1, 2, gl.FLOAT, false, stride, 12)
     gl.enableVertexAttribArray(2)
     gl.vertexAttribPointer(2, 3, gl.FLOAT, false, stride, 20)
+    gl.enableVertexAttribArray(3)
+    gl.vertexAttribPointer(3, 2, gl.FLOAT, false, stride, 32)
     const u = (n: string) => gl.getUniformLocation(this.prog, n)
     gl.uniformMatrix3fv(u('rot'), false, rotation(t))
     gl.uniform2f(u('centre'), model.centre.x, model.centre.y)
@@ -259,7 +285,7 @@ export class ModelRenderer {
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, this.tex)
     gl.uniform1i(u('src'), 0)
-    gl.drawArrays(gl.TRIANGLES, 0, model.verts.length / 8)
+    gl.drawArrays(gl.TRIANGLES, 0, model.verts.length / STRIDE)
   }
 
   dispose() {

@@ -21,7 +21,7 @@ describe('Rotate object 3D model', () => {
     const m = buildModel(initialState(src), depthField(alpha, src, 40), { thick: 0.5, round: 1, light: 0.5 })
     let front = 0
     let back = 0
-    for (let k = 0; k < m.verts.length; k += 8) {
+    for (let k = 0; k < m.verts.length; k += 10) {
       if (m.verts[k + 2] > 1) front++
       if (m.verts[k + 2] < -1) back++
     }
