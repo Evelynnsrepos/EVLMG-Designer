@@ -85,7 +85,7 @@ export class SketchEngine {
   /** The GPU worked once here: after a reset it is tried again (a few times, at most once a second). */
   private gpuRetry: { at: number; left: number } | null = null
   /** What the GPU picture shows, so only changes are blended again. */
-  private onPicture: { layers: SketchLayer[]; background: string | null | undefined; withBackground: boolean; edits: number } | null = null
+  private onPicture: { layers: SketchLayer[]; background: string | null | undefined; withBackground: boolean; edits: number; frame: number } | null = null
   /** Part of the picture the GPU stroke changed since it was last blended. */
   private gpuDirty: Rect | null = null
   /** Counts lifts with the Move tool, so the GPU uploads each lifted piece once. */
@@ -327,6 +327,7 @@ export class SketchEngine {
   }
 
   dropLayer(id: Id) {
+    if (this.frameCounts.has(id)) this.setFrames(id, 0)
     for (const k of [id, `${id}:live`, `${id}:piece`]) {
       this.gpu?.free(this.texs.get(k)?.t)
       this.texs.delete(k)
@@ -728,6 +729,111 @@ export class SketchEngine {
     return !!this.stroke || !!this.g
   }
 
+  // ---- Animated layers (0.35) -------------------------------------------------
+
+  /** Animated layers and their frame count. Frame 0 is the layer itself; frame k is the canvas `${id}~${k}`. */
+  private frameCounts = new Map<Id, number>()
+  /** The frame the view shows of each animated layer (missing = frame 0). */
+  private playing = new Map<Id, number>()
+  /** Bumped when the view's frames change, so the GPU picture is blended again. */
+  private playStep = 0
+  /** True while the view is drawn; exports, merges and thumbnails always get frame 0 (the still picture). */
+  private liveView = false
+  /** Reused stroke mask for painting frames again. */
+  private replayMask: Canvas2D | null = null
+  /**
+   * Asked before a pixel edit (fill, filters, move...) of a layer; true = refuse it. The editor refuses them on
+   * Animated layers, which only take brush strokes, and offers to rasterize.
+   */
+  refuseEdit: ((layerId: Id) => boolean) | null = null
+
+  private frameKey(id: Id): Id {
+    const n = this.frameCounts.get(id)
+    const f = n && this.liveView ? (this.playing.get(id) ?? 0) % n : 0
+    return f ? `${id}~${f}` : id
+  }
+
+  /** Make a layer animated with `n` frames (0 = a normal layer again; its extra frames are dropped). */
+  setFrames(id: Id, n: number) {
+    const old = this.frameCounts.get(id) ?? 1
+    for (let k = n; k < old; k++) this.dropLayer(`${id}~${k}`)
+    if (n > 1) this.frameCounts.set(id, n)
+    else this.frameCounts.delete(id)
+    this.edits++
+    this.version++
+  }
+
+  frameCount(id: Id): number {
+    return this.frameCounts.get(id) ?? 1
+  }
+
+  get animated(): boolean {
+    return this.frameCounts.size > 0
+  }
+
+  /** Show frame `k` of an animated layer in the view. */
+  play(id: Id, k: number) {
+    if ((this.playing.get(id) ?? 0) === k) return
+    this.playing.set(id, k)
+    this.playStep++
+    this.version++
+  }
+
+  /** The picture with every animated layer on frame k (animated exports). The canvas is reused: copy it. */
+  renderFrame(doc: LayerStack, withBackground: boolean, k: number): HTMLCanvasElement {
+    const keep = this.playing
+    this.playing = new Map([...this.frameCounts.keys()].map((id) => [id, k]))
+    this.playStep++
+    try {
+      return this.render(doc, withBackground, true)
+    } finally {
+      this.playing = keep
+      this.playStep++
+    }
+  }
+
+  /** Empty frame k (1..n-1) of an animated layer before painting it again. */
+  clearFrame(id: Id, k: number) {
+    this.ensure(`${id}~${k}`).ctx.clearRect(0, 0, this.width, this.height)
+    this.touched(`${id}~${k}`)
+  }
+
+  /** The canvas of frame k of a layer (frame 0 = the layer). */
+  frameCanvas(id: Id, k: number): HTMLCanvasElement {
+    return this.ensure(k ? `${id}~${k}` : id).canvas
+  }
+
+  /**
+   * Paint a stroke onto frame k (1..n-1) of an animated layer, in Canvas 2D, without undo (the frames are made
+   * again from the layer's strokes). Only between strokes.
+   */
+  paintFrame(id: Id, k: number, opts: StrokeOptions, points: InputPoint[], seed: number) {
+    if (this.stroking || !points.length) return
+    const key = `${id}~${k}`
+    const o = { ...opts, layer: { ...opts.layer, id: key } }
+    this.ensure(key)
+    const mask = (this.replayMask ??= this.canvas())
+    this.stroke = mask
+    this.strokeOpts = o
+    this.strokeBounds = null
+    this.predicted = null
+    try {
+      this.stamper = this.newStamper(o, seed)
+      for (const p of points) this.stamper.add(p)
+      this.stamper.finish()
+      this.applyStroke(this.ensure(key).ctx, o)
+    } finally {
+      const a = this.strokeArea(o)
+      if (a) mask.ctx.clearRect(a.x, a.y, a.w, a.h)
+      this.stroke = null
+      this.stamper = null
+      this.strokeOpts = null
+      this.strokeBounds = null
+      this.livePreview = null
+    }
+    this.touched(key)
+  }
+
   // ---- Pixel edits ----------------------------------------------------------
 
   private snapshot(layerId: Id, rects: Rect[]) {
@@ -793,6 +899,7 @@ export class SketchEngine {
 
   /** Run a pixel edit on a layer with undo, e.g. clear or fill. */
   edit(layerId: Id, fn: (ctx: CanvasRenderingContext2D) => void): Id {
+    if (this.refuseEdit?.(layerId)) return layerId
     const layer = this.ensure(layerId)
     this.withUndo(layerId, null, () => {
       layer.ctx.save()
@@ -1094,7 +1201,7 @@ export class SketchEngine {
     const src = this.ensure(layer.id).canvas
     const stroking = this.stroke && this.strokeOpts?.layer.id === layer.id
     const moving = this.floating?.layerId === layer.id
-    if (!stroking && !moving) return { canvas: src, live: false }
+    if (!stroking && !moving) return { canvas: this.ensure(this.frameKey(layer.id)).canvas, live: false }
     const s = this.scratch.ctx
     s.globalCompositeOperation = 'source-over'
     s.globalAlpha = 1
@@ -1123,27 +1230,38 @@ export class SketchEngine {
   }
 
   /** The last render, reused while nothing changed (the editor redraws its view on every pointer move). */
-  private lastRender: { layers: SketchLayer[]; background: string | null | undefined; withBackground: boolean; version: number; canvas: HTMLCanvasElement } | null = null
+  private lastRender: { layers: SketchLayer[]; background: string | null | undefined; withBackground: boolean; version: number; frame: number; canvas: HTMLCanvasElement } | null = null
 
   /** Flatten the visible layers (with the live stroke) into one canvas at document size. */
-  render(doc: LayerStack, withBackground = true): HTMLCanvasElement {
+  render(doc: LayerStack, withBackground = true, live = false): HTMLCanvasElement {
+    // 0.35: the view (`live`) shows the playing frame of animated layers; everything else gets frame 0.
+    this.liveView = live
+    try {
+      return this.renderNow(doc, withBackground)
+    } finally {
+      this.liveView = false
+    }
+  }
+
+  private renderNow(doc: LayerStack, withBackground: boolean): HTMLCanvasElement {
+    const frame = this.liveView ? this.playStep : 0
     const last = this.lastRender
-    if (last && last.layers === doc.layers && last.background === doc.backgroundColor && last.withBackground === withBackground && last.version === this.version) return last.canvas
+    if (last && last.layers === doc.layers && last.background === doc.backgroundColor && last.withBackground === withBackground && last.version === this.version && last.frame === frame) return last.canvas
     if (this.gpuFor(doc)) {
       // ponytail: the whole picture comes back from the GPU; only exports, merges and onion skins ask for it.
       try {
         this.toPicture(doc, withBackground)
         this.composite.ctx.putImageData(this.gpu!.read(this.gpu!.picture, { x: 0, y: 0, w: this.width, h: this.height }, this.colorSpace), 0, 0)
-        this.lastRender = { layers: doc.layers, background: doc.backgroundColor, withBackground, version: this.version, canvas: this.composite.canvas }
+        this.lastRender = { layers: doc.layers, background: doc.backgroundColor, withBackground, version: this.version, frame, canvas: this.composite.canvas }
         return this.composite.canvas
       } catch {
         this.gpuFailed()
       }
     }
     // While a stroke is drawn and nothing else changed, only the stroke's area of the picture is redone.
-    const area = last && last.canvas === this.composite.canvas && last.layers === doc.layers && last.background === doc.backgroundColor && last.withBackground === withBackground ? this.strokeOnlyArea(doc) : null
+    const area = last && last.canvas === this.composite.canvas && last.layers === doc.layers && last.background === doc.backgroundColor && last.withBackground === withBackground && last.frame === frame ? this.strokeOnlyArea(doc) : null
     const canvas = this.renderCanvas2d(doc, withBackground, area ?? undefined)
-    this.lastRender = { layers: doc.layers, background: doc.backgroundColor, withBackground, version: this.version, canvas }
+    this.lastRender = { layers: doc.layers, background: doc.backgroundColor, withBackground, version: this.version, frame, canvas }
     return canvas
   }
 
@@ -1175,6 +1293,7 @@ export class SketchEngine {
     paper?: { image: TexImageSource; version: number; frame: Rect } | null,
   ): boolean {
     if (!this.gpuFor(doc)) return false
+    this.liveView = true
     try {
       this.toPicture(doc, true)
       this.gpu!.present(m, w, h, dpr, smooth, tint && this.layers.has(tint.id) ? { tex: this.tex(tint.id), color: rgb(tint.color) } : null, paper ?? null)
@@ -1182,6 +1301,8 @@ export class SketchEngine {
     } catch {
       this.gpuFailed()
       return false
+    } finally {
+      this.liveView = false
     }
   }
 
@@ -1192,7 +1313,8 @@ export class SketchEngine {
     const s = this.onPicture
     // Canvas 2D strokes (wet paint, smudge) and moved pixels come from the CPU each frame.
     const live = !!this.stroke || (!!this.floating && !this.floating.mesh)
-    const full = live || !s || s.layers !== doc.layers || s.background !== doc.backgroundColor || s.withBackground !== withBackground || s.edits !== this.edits
+    const frame = this.liveView ? this.playStep : 0
+    const full = live || !s || s.layers !== doc.layers || s.background !== doc.backgroundColor || s.withBackground !== withBackground || s.edits !== this.edits || (this.frameCounts.size > 0 && s.frame !== frame)
     const r = full ? null : this.gpuDirty && clip(this.gpuDirty, this.width, this.height)
     this.composeRect = r
     if (full || r) {
@@ -1202,14 +1324,14 @@ export class SketchEngine {
       gpu.compose(stack, withBackground && doc.backgroundColor ? parseHex(doc.backgroundColor) : null, r, (doc as { frame?: Rect }).frame ?? null)
     }
     this.gpuDirty = null
-    this.onPicture = { layers: doc.layers, background: doc.backgroundColor, withBackground, edits: this.edits }
+    this.onPicture = { layers: doc.layers, background: doc.backgroundColor, withBackground, edits: this.edits, frame }
   }
 
   /** A layer's pixels on the GPU as they look right now (with the stroke being painted, or lifted pixels). */
   private gpuSource(layer: SketchLayer): Tex {
     if (this.g?.layerId === layer.id) return this.g.preview
     const stroking = this.stroke && this.strokeOpts?.layer.id === layer.id
-    if (!stroking && this.floating?.layerId !== layer.id) return this.tex(layer.id)
+    if (!stroking && this.floating?.layerId !== layer.id) return this.tex(this.frameKey(layer.id))
     const gpu = this.gpu!
     const live = (k: string) => {
       let e = this.texs.get(`${layer.id}:${k}`)

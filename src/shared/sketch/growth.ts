@@ -1,3 +1,5 @@
+import { mapWiggle } from './animatedLayers'
+import type { LayerWiggle } from './model'
 import type { Rect } from './tiles'
 
 /**
@@ -60,6 +62,8 @@ export function shiftDocData<T>(v: T, g: Growth, depth = 0): T {
     out.guide = { ...gd, ...(gd.center ? { center: movePt(gd.center, g) } : {}), ...(gd.vanishing ? { vanishing: gd.vanishing.map((p) => movePt(p, g)) } : {}) }
   }
   if (o.frame && typeof o.frame === 'object') out.frame = shiftRect(o.frame as Rect, g)
+  // 0.35: an Animated layer's strokes move along, so its other frames are painted in the same place.
+  if (o.wiggle && typeof o.wiggle === 'object' && Array.isArray((o.wiggle as LayerWiggle).strokes)) out.wiggle = mapWiggle(o.wiggle as LayerWiggle, (p) => movePt(p, g))
   for (const k of ['before', 'after', 'doc', 'layers', 'meta']) if (k in o) out[k] = shiftDocData(o[k], g, depth + 1)
   return out as T
 }

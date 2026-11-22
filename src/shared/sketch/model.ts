@@ -12,6 +12,7 @@ import type { AnimationSettings, PageSettings } from './assist'
 import type { AdjustValues } from './adjust/filters'
 import type { SketchText } from './text'
 import type { OutlineSettings } from './outline'
+import type { BrushSettings } from './brushes'
 
 export { BLEND_MODES, type BlendMode } from './blend'
 
@@ -47,6 +48,34 @@ export interface SketchLayer {
   adjust?: LayerAdjust
   /** Outline layer (0.35): everything on it gets a live outline with these settings; the pixels stay as painted. */
   outline?: OutlineSettings
+  /**
+   * 0.35: Animated layer. Its pixels (`image`) are frame 1, a normal still picture, so older versions and the mobile
+   * app show it as one. The other frames are painted again from these strokes, each with its own wiggle.
+   */
+  wiggle?: LayerWiggle
+}
+
+/** One brush stroke on an Animated layer, kept so every frame can paint it again with a different wiggle. */
+export interface WiggleStroke {
+  id: Id
+  /** Key into `LayerWiggle.brushes`. */
+  brushKey: string
+  color: string
+  erase?: boolean
+  smudge?: boolean
+  seed: number
+  /** x, y, pressure of every point, one after the other (canvas pixels). */
+  points: number[]
+}
+
+export interface LayerWiggle {
+  /** Frames in the loop (2..12); frame 1 is the layer itself. */
+  frames: number
+  /** Frames per second. */
+  fps: number
+  /** The brushes the strokes were painted with, each stored once. */
+  brushes: Record<string, BrushSettings>
+  strokes: WiggleStroke[]
 }
 
 /** The colour adjustments a layer can be: hue/saturation/brightness, colour balance, curves or a gradient map. */
