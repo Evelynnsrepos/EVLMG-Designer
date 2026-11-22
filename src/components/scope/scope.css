@@ -41,3 +41,80 @@
   width: auto;
   flex: 0 1 260px;
 }
+.sc-vbar,
+.sc-sum {
+  padding-top: 0;
+  border-top: none;
+}
+.sc .sc-state {
+  width: auto;
+}
+.sc .sc-date {
+  width: 150px;
+}
+.sc-locked {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.sc-shipped {
+  color: #2f9e44;
+  font-weight: 600;
+}
+.sc-reason {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+.sc-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.sc-pick-head {
+  border-left: 3px solid var(--border);
+  padding-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.sc-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sc-pick-row:hover {
+  background: var(--bg-hover);
+}
+.sc-pick-row span:first-of-type {
+  flex: 1;
+}
+.sc-log {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+}
+.sc-chip-btn {
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.sc-chip-btn:hover {
+  border-color: var(--accent);
+}
+.sc-chip-add {
+  color: var(--text-muted);
+  background: none;
+}
