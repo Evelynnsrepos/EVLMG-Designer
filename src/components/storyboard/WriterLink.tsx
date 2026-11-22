@@ -1,11 +1,16 @@
 import { BookOpen, ExternalLink, Link2, Unlink } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCollab } from '@/core/collab'
 import type { Id } from '@/core/model'
 import { loadDocumentNow, useDocument, useProjectStore } from '@/core/state'
+import { combineRefProviders, findRefByLabel, markdownToRichText, useEntityRefProvider, type FindRef } from '@/shared/richtext'
+import { richTextToMarkdown } from '@/shared/richtext/doc'
 import type { RichTextDoc } from '@/shared/richtext/types'
+import { ProofTextarea } from '@/shared/spell'
+import { useArticleRefProvider } from '@/shared/wiki'
 import { Modal } from '@/shared/ui'
 import { openComponent } from '@/shell/editor/actions'
-import { framesFromWriter, linkedText, writerSections, type Frame, type WriterLink, type WriterSection } from './model'
+import { framesFromWriter, linkedText, replaceSection, sameContent, sectionDoc, writerSections, type Frame, type WriterLink, type WriterSection } from './model'
 
 const UI = {
   link: 'Link to the Writer…',
@@ -20,6 +25,11 @@ const UI = {
   gone: 'The linked Writer document was deleted.',
   headingGone: (h: string) => `The heading “${h}” is not in the document any more. Link the panel again, or rename the heading back.`,
   empty: 'This part of the document is empty.',
+  editHint: 'Type here or in the Writer: both change the same text. Markdown works: **bold**, *italic*, - lists, > quotes.',
+  placeholder: 'Write this part of the script here (it goes into the Writer)…',
+  readOnly: 'This part has pictures, fonts or other formatting only the Writer can show, so change it there.',
+  readOnlyShared: 'In a shared project, change this text in the Writer.',
+  noHeadings: 'Headings split the script into parts, so add them in the Writer. This line is not saved yet.',
   cancel: 'Cancel',
   back: 'Back',
   fromTitle: 'Make panels from a Writer script',
@@ -36,13 +46,66 @@ function useWriterDocs() {
   return (docs ?? []).filter((d) => d.type === 'writer')
 }
 
-/** The live text of a linked part, read from the Writer document. */
+/** The live text of a linked part, read from the Writer document; editable as Markdown (2026-11-22). */
 function LiveText({ link }: { link: WriterLink }) {
   const doc = useDocument<{ body?: RichTextDoc }>('writer', link.documentId, emptyWriter)
+  const articleRefs = useArticleRefProvider()
+  const entityRefs = useEntityRefProvider()
+  const refs = useMemo(() => combineRefProviders(articleRefs, entityRefs), [articleRefs, entityRefs])
+  const shared = useCollab((s) => s.shared)
+  /** What is being typed; null when the box shows the Writer's text. */
+  const [draft, setDraft] = useState<string | null>(null)
+  const [headingWarn, setHeadingWarn] = useState(false)
+  const typing = useRef(false)
   if (!doc.data) return null
-  const text = linkedText(doc.data.body, link.section)
-  if (text === null) return <p className="sb-warn">{UI.headingGone(link.section ?? '')}</p>
-  return <div className="sb-script">{text || <span className="muted">{UI.empty}</span>}</div>
+  const part = sectionDoc(doc.data.body, link.section)
+  if (part === null) return <p className="sb-warn">{UI.headingGone(link.section ?? '')}</p>
+  const findRef: FindRef = (label) => {
+    const r = findRefByLabel(refs, label)
+    return r && { kind: r.kind, id: r.id }
+  }
+  const md = richTextToMarkdown(part, (t) => refs.resolve(t)?.label).trim()
+  // Only offer typing here when Markdown can hold everything in this part, so nothing is lost on the way back.
+  // shortcut: shared projects keep the Writer's live text as the truth, so typing here is off there; lift when live text takes outside edits.
+  // While typing, the box stays open even when a half-typed line (a trailing space) would not round-trip.
+  const editable = !shared && (draft !== null || sameContent(markdownToRichText(md, findRef).content ?? [], part.content ?? []))
+  if (!editable) {
+    const text = linkedText(doc.data.body, link.section)
+    return (
+      <>
+        <div className="sb-script">{text || <span className="muted">{UI.empty}</span>}</div>
+        <p className="muted sb-script-note">{shared ? UI.readOnlyShared : UI.readOnly}</p>
+      </>
+    )
+  }
+  const value = draft ?? md
+  return (
+    <>
+      <ProofTextarea
+        className="input sb-script sb-script-edit"
+        rows={Math.min(12, Math.max(3, value.split('\n').length + 1))}
+        value={value}
+        placeholder={UI.placeholder}
+        title={UI.editHint}
+        onChange={(e) => {
+          const text = e.target.value
+          setDraft(text)
+          const next = markdownToRichText(text, findRef)
+          const splits = link.section !== null && (next.content ?? []).some((n) => n.type === 'heading')
+          setHeadingWarn(splits)
+          if (splits) return
+          doc.update((d) => ({ ...d, body: replaceSection(d.body, link.section, next) }), { undoable: !typing.current })
+          typing.current = true
+        }}
+        onBlur={() => {
+          typing.current = false
+          setDraft(null)
+          setHeadingWarn(false)
+        }}
+      />
+      {headingWarn && <p className="sb-warn">{UI.noHeadings}</p>}
+    </>
+  )
 }
 
 /** A panel's Writer link: the linked text, open, change and remove. */

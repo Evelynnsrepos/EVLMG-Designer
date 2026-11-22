@@ -230,3 +230,47 @@ export function framesFromWriter(documentId: Id, body: RichTextDoc | undefined |
   }
   return out
 }
+
+// ---- editing the linked text (2026-11-22) ------------------------------------------
+
+/** Where a link's text sits in the Writer body: [from, to) of the top-level blocks, without the heading. Null when the heading is gone. */
+export function sectionRange(body: RichTextDoc | undefined | null, section: string | null): [number, number] | null {
+  const nodes = body?.content ?? []
+  if (section === null) return [0, nodes.length]
+  const title = (n: RichTextDoc) => richTextToPlainText({ type: 'doc', content: [n] }).trim() || 'Untitled heading'
+  const at = nodes.findIndex((n) => n.type === 'heading' && title(n) === section)
+  if (at < 0) return null
+  const end = nodes.findIndex((n, i) => i > at && n.type === 'heading')
+  return [at + 1, end < 0 ? nodes.length : end]
+}
+
+/** The linked part as its own small document. */
+export function sectionDoc(body: RichTextDoc | undefined | null, section: string | null): RichTextDoc | null {
+  const r = sectionRange(body, section)
+  return r ? { type: 'doc', content: (body?.content ?? []).slice(r[0], r[1]) } : null
+}
+
+/** The Writer body with the linked part replaced by `part`'s blocks (the heading stays). */
+export function replaceSection(body: RichTextDoc | undefined | null, section: string | null, part: RichTextDoc): RichTextDoc {
+  const nodes = body?.content ?? []
+  const r = sectionRange(body, section) ?? [nodes.length, nodes.length]
+  return { ...(body ?? { type: 'doc' }), type: 'doc', content: [...nodes.slice(0, r[0]), ...(part.content ?? []), ...nodes.slice(r[1])] }
+}
+
+/** A block tree without empty attributes, edge spaces and key order, to compare two documents by content. */
+export function sameContent(a: unknown, b: unknown): boolean {
+  const canon = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(canon)
+    // Spaces at the ends of a text run are not formatting; Markdown just can't keep them.
+    if (typeof v === 'string') return v.trim()
+    if (!v || typeof v !== 'object') return v
+    const out: Record<string, unknown> = {}
+    for (const k of Object.keys(v).sort()) {
+      const x = canon((v as Record<string, unknown>)[k])
+      if (x === null || x === undefined || (typeof x === 'object' && !Array.isArray(x) && !Object.keys(x as object).length)) continue
+      out[k] = x
+    }
+    return out
+  }
+  return JSON.stringify(canon(a)) === JSON.stringify(canon(b))
+}

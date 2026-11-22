@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cutLabel, formatTime, formatTimecode, framesFromWriter, linkedText, newFrame, numberFrames, panelLetter, parseTime, writerSections } from './model'
+import { cutLabel, formatTime, formatTimecode, framesFromWriter, linkedText, newFrame, numberFrames, panelLetter, parseTime, replaceSection, sameContent, sectionDoc, sectionRange, writerSections } from './model'
 
 const p = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] })
 const h = (text: string) => ({ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text }] })
@@ -74,5 +74,24 @@ describe('animatic subtitles', () => {
     expect(subtitlesSrt([item(0, 2.5, 'Hello'), item(2.5, 1, ''), item(3.5, 61.25, 'Bye\n')])).toBe(
       '1\n00:00:00,000 --> 00:00:02,500\nHello\n\n2\n00:00:03,500 --> 00:01:04,750\nBye\n',
     )
+  })
+})
+
+describe('editing linked Writer text', () => {
+  const p = (text: string) => ({ type: 'paragraph', attrs: { textAlign: null }, content: [{ type: 'text', text }] })
+  const h = (text: string) => ({ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text }] })
+  const body = { type: 'doc', content: [p('intro'), h('Scene 1'), p('a'), p('b'), h('Scene 2'), p('c')] }
+
+  it('replaces only the linked part and keeps the heading', () => {
+    expect(sectionDoc(body, 'Scene 1')?.content).toEqual([p('a'), p('b')])
+    const next = replaceSection(body, 'Scene 1', { type: 'doc', content: [p('new')] })
+    expect(next.content).toEqual([p('intro'), h('Scene 1'), p('new'), h('Scene 2'), p('c')])
+    expect(replaceSection(body, null, { type: 'doc', content: [p('all')] }).content).toEqual([p('all')])
+    expect(sectionRange(body, 'Gone')).toBeNull()
+  })
+
+  it('compares content without empty attributes', () => {
+    expect(sameContent(p('a'), { content: [{ text: 'a', type: 'text' }], type: 'paragraph' })).toBe(true)
+    expect(sameContent(p('a'), p('b'))).toBe(false)
   })
 })

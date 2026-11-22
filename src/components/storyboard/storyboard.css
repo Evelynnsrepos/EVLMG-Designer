@@ -496,3 +496,16 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.sb-script-edit {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  resize: vertical;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+}
+.sb-script-note {
+  margin: 2px 0 0;
+  font-size: 11px;
+}
