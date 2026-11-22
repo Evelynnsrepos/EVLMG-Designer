@@ -63,7 +63,7 @@ Ids are random strings (`newId()` in [`core/model/ids.ts`](../src/core/model/ids
 | Combat Simulator | `combat` | many | [`components/combat/model.ts`](../src/components/combat/model.ts) |
 | Balance Dashboard | `balance` | one | [`components/balance/model.ts`](../src/components/balance/model.ts) |
 | Vision & Pillars | `vision` | one | [`components/vision/View.tsx`](../src/components/vision/View.tsx) |
-| Scope Planner | `scope` | one | [`components/scope/View.tsx`](../src/components/scope/View.tsx) |
+| Scope Planner | `scope` | one | [`components/scope/model.ts`](../src/components/scope/model.ts) |
 | Task Board | `tasks` | one | [`components/tasks/View.tsx`](../src/components/tasks/View.tsx) |
 | History | `history` | one | [`components/history/View.tsx`](../src/components/history/View.tsx) |
 | Playtests | `playtests` | one | [`components/playtests/model.ts`](../src/components/playtests/model.ts) |
@@ -100,6 +100,8 @@ Plugin tools use the type `plugin.<plugin id>` and store their documents the sam
 **Animated layers (v0.35):** a `sketch` layer may have an optional `wiggle` (`{ frames, fps, brushes, strokes }`, see `LayerWiggle` in [`shared/sketch/model.ts`](../src/shared/sketch/model.ts)). The layer's PNG is frame 1, a normal still picture; the other frames are painted again from `strokes` (each `{ id, brushKey, color, erase?, smudge?, seed, points }`, `points` as flat x, y, pressure numbers) with the brushes in `brushes` (`BrushSettings` by key, each stored once). Older versions and the mobile app before its submodule bump show the layer as the still picture; paint added there lands on frame 1 only. Removing `wiggle` makes it a normal layer. `BrushSettings` got the optional `wiggle` (0..1) and `wiggleStyle` (`'boil'`, `'wave'`).
 
 **Undo history between sessions (v0.31)** lives in `.history/` (Pixel Art: `.history/pixel-art/<id>.json`; Draw: `.history/sketch/<id>/index.json` plus one compressed file of changed tiles per step). It stays on this computer: git sync, project zips and rolling backups leave it out, and the document files are unchanged. A history that no longer matches its document is ignored.
+
+**Scope versions (0.35):** the `scope` document may have an optional `versions` list (`{ id, name, capacity, notes, items }`). Each item is `{ id, mark: 'planned' | 'added' | 'cut', ref? }` linking a full-plan feature by id, or `{ id, mark, feature }` holding a feature only that version has. Full-plan features may have an optional `addedIn` (the version id that fed them back). Older versions and the mobile app before its submodule bump keep these fields when they save and ignore them; a link to a feature deleted there is skipped.
 
 **Brushes** are not in the project: they live in the app's brush library and in `.egdbrush` files, as `BrushSettings` ([`shared/sketch/brushes.ts`](../src/shared/sketch/brushes.ts)). v0.31 added the optional `ribbon` (`'off'`, `'stretch'`, `'tile'`), `shaded` and `capStart`/`capEnd` (image data URLs); missing means off. A see-through shape image is now stored with its greys (alpha = shape, grey = light and dark) instead of as a grey mask. The mobile app shows these only after its EVLMG Designer submodule is bumped to v0.31; older versions ignore the fields and stamp the image as before.
 

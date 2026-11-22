@@ -28,3 +28,16 @@
   border-left: 1px solid var(--border);
   overflow-y: auto;
 }
+.sc-vname {
+  width: 110px;
+}
+.sc-ver {
+  color: var(--accent);
+}
+.sc-added {
+  color: #2f9e44;
+}
+.sc .sc-add {
+  width: auto;
+  flex: 0 1 260px;
+}
