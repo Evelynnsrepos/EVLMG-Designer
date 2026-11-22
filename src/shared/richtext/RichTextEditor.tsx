@@ -8,19 +8,13 @@ import {
   Heading1,
   Heading2,
   Heading3,
-  Highlighter,
   ImagePlus,
-  Info,
   Italic,
   Link2,
   List,
-  ListChecks,
   ListOrdered,
   Pilcrow,
-  Plus,
-  RemoveFormatting,
   Search,
-  Strikethrough,
   SpellCheck2,
   Redo2,
   TextQuote,
@@ -38,9 +32,9 @@ import { normalizeRichText } from './doc'
 import { ImageFiles, RichImage, type ImageImporter } from './imageExtension'
 import { FindBar, FindText } from './find'
 import { FontMark } from './fontExtension'
-import { InsertList, SlashMenu } from './inserts'
-import { FONT_SIZES } from './styles'
-import { allLocalFonts, GENERIC_FONTS, systemFonts } from '../fontList'
+import { SlashMenu } from './inserts'
+import { FontControls, Ribbon, type RibbonTab } from './ribbon'
+import { wordExtensions } from './wordExtensions'
 import { RefCard, RefExtension } from './refExtension'
 import { syntaxExtensions } from './syntaxExtensions'
 import { useEntityRefProvider } from './refs'
@@ -78,6 +72,8 @@ export interface RichTextEditorProps {
   extraFormats?: boolean
   /** Writer's "Markdown Syntax" switch (0.19): more typing shortcuts and Markdown paste. */
   markdownSyntax?: boolean
+  /** Writer (0.35): with `extraFormats`, the tool's own ribbon tabs after Home, Insert and Review. */
+  ribbonTabs?: RibbonTab[]
 }
 
 const UI = {
@@ -94,13 +90,7 @@ const UI = {
   bullet: 'Bulleted list',
   ordered: 'Numbered list',
   quote: 'Quote',
-  highlight: 'Highlight (Ctrl+Shift+H)',
-  strike: 'Crossed out (Ctrl+Shift+S)',
-  clear: 'Remove formatting',
-  insert: 'Insert… (or type / on a new line)',
   find: 'Find and replace (Ctrl+F)',
-  checklist: 'Checklist',
-  callout: 'Callout box',
   image: 'Insert image',
   link: 'Link an article, entry, tool or document ([[): a jump point in your text',
   undo: 'Undo (Ctrl+Z)',
@@ -152,6 +142,7 @@ function buildExtensions(live: RefObject<LiveProps>, onMisspelling: (hit: ProofH
       () => live.current.syntax,
       () => live.current.provider,
     ),
+    ...wordExtensions(),
     SpellCheck.configure({ onMisspelling }),
     SlashMenu.configure({ enabled: () => live.current.inserts }),
     FindText.configure({ onOpen: () => !!live.current.onFind && (live.current.onFind(), true) }),
@@ -180,6 +171,7 @@ export function RichTextEditor({
   liveTextName,
   extraFormats = false,
   markdownSyntax = false,
+  ribbonTabs,
 }: RichTextEditorProps) {
   const entityRefs = useEntityRefProvider()
   const provider = refs ?? entityRefs
@@ -280,7 +272,11 @@ export function RichTextEditor({
 
   return (
     <div className={['richtext', className].filter(Boolean).join(' ')}>
-      {toolbar && editable && <Toolbar editor={editor} onImage={insertImage} extraFormats={extraFormats} syntax={markdownSyntax} onFind={() => setFinding((f) => !f)} onCheck={() => setMisspelling(nextHit(editor.view, editor.state.selection.head - 1))} />}
+      {toolbar && editable && (extraFormats ? (
+        <Ribbon editor={editor} onImage={insertImage} syntax={markdownSyntax} tabs={ribbonTabs} onFind={() => setFinding((f) => !f)} onCheck={() => setMisspelling(nextHit(editor.view, editor.state.selection.head - 1))} />
+      ) : (
+        <Toolbar editor={editor} onImage={insertImage} onFind={() => setFinding((f) => !f)} onCheck={() => setMisspelling(nextHit(editor.view, editor.state.selection.head - 1))} />
+      ))}
       {finding && editor && editable && <FindBar editor={editor} onClose={() => setFinding(false)} />}
       <EditorContent editor={editor} className="richtext-content" />
       {misspelling && editor && editable && (
@@ -306,36 +302,14 @@ export function RichTextEditor({
   )
 }
 
-function Toolbar({
-  editor,
-  onImage,
-  extraFormats,
-  syntax,
-  onFind,
-  onCheck,
-}: {
-  editor: Editor
-  onImage: () => void
-  extraFormats: boolean
-  syntax: boolean
-  onFind: () => void
-  onCheck: () => void
-}) {
-  const [inserting, setInserting] = useState(false)
-  const insertRoot = useRef<HTMLSpanElement>(null)
-  useEffect(() => {
-    if (!inserting) return
-    const close = (e: MouseEvent) => !insertRoot.current?.contains(e.target as Node) && setInserting(false)
-    window.addEventListener('mousedown', close)
-    return () => window.removeEventListener('mousedown', close)
-  }, [inserting])
+/** The plain toolbar for the Wiki and small fields; the Writer has the ribbon instead. */
+function Toolbar({ editor, onImage, onFind, onCheck }: { editor: Editor; onImage: () => void; onFind: () => void; onCheck: () => void }) {
   const state = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
       bold: e.isActive('bold'),
       italic: e.isActive('italic'),
       underline: e.isActive('underline'),
-      strike: e.isActive('strike'),
       paragraph: e.isActive('paragraph'),
       h1: e.isActive('heading', { level: 1 }),
       h2: e.isActive('heading', { level: 2 }),
@@ -343,9 +317,6 @@ function Toolbar({
       bullet: e.isActive('bulletList'),
       ordered: e.isActive('orderedList'),
       quote: e.isActive('blockquote'),
-      highlight: e.isActive('highlight'),
-      checklist: e.isActive('taskList'),
-      callout: e.isActive('callout'),
       family: (e.getAttributes('font').family as string | null) ?? '',
       size: (e.getAttributes('font').size as number | null) ?? 0,
       canUndo: e.can().undo(),
@@ -382,72 +353,18 @@ function Toolbar({
       {button(Bold, UI.bold, () => chain().toggleBold().run(), state.bold)}
       {button(Italic, UI.italic, () => chain().toggleItalic().run(), state.italic)}
       {button(Underline, UI.underline, () => chain().toggleUnderline().run(), state.underline)}
-      {extraFormats && button(Strikethrough, UI.strike, () => chain().toggleStrike().run(), state.strike)}
-      {extraFormats && button(Highlighter, UI.highlight, () => chain().toggleMark('highlight').run(), state.highlight)}
-      {extraFormats && button(RemoveFormatting, UI.clear, () => chain().unsetAllMarks().clearNodes().run())}
       <span className="richtext-toolbar-sep" />
       {button(List, UI.bullet, () => chain().toggleBulletList().run(), state.bullet)}
       {button(ListOrdered, UI.ordered, () => chain().toggleOrderedList().run(), state.ordered)}
-      {extraFormats && button(ListChecks, UI.checklist, () => chain().toggleTaskList().run(), state.checklist)}
       {button(TextQuote, UI.quote, () => chain().toggleBlockquote().run(), state.quote)}
-      {extraFormats && button(Info, UI.callout, () => (state.callout ? chain().lift('callout') : chain().wrapIn('callout')).run(), state.callout)}
       <span className="richtext-toolbar-sep" />
       {button(ImagePlus, UI.image, onImage)}
       {button(Link2, UI.link, () => chain().insertContent('[[').run())}
-      {extraFormats && (
-        <span className="richtext-insert" ref={insertRoot}>
-          {button(Plus, UI.insert, () => setInserting((o) => !o), inserting)}
-          {inserting && (
-            <div className="richtext-insert-menu">
-              <InsertList editor={editor} syntax={syntax} onDone={() => setInserting(false)} />
-            </div>
-          )}
-        </span>
-      )}
       <span className="richtext-toolbar-spacer" />
       {button(Search, UI.find, onFind)}
       {button(SpellCheck2, UI.check, onCheck)}
       {button(Undo2, UI.undo, () => chain().undo().run(), false, !state.canUndo)}
       {button(Redo2, UI.redo, () => chain().redo().run(), false, !state.canRedo)}
     </div>
-  )
-}
-
-/** Font and size for the selected text, or for what you type next. */
-function FontControls({ editor, family, size }: { editor: Editor; family: string; size: number }) {
-  const [local, setLocal] = useState<string[]>([])
-  const families = [...new Set([...GENERIC_FONTS, ...systemFonts(), ...local, ...(family ? [family] : [])])]
-  const apply = (patch: { family?: string | null; size?: number | null }) => {
-    const next = { family: family || null, size: size || null, ...patch }
-    const chain = editor.chain().focus()
-    if (!next.family && !next.size) chain.unsetMark('font').run()
-    else chain.setMark('font', next).run()
-  }
-  return (
-    <>
-      <select
-        className="input richtext-font"
-        title={UI.font}
-        aria-label={UI.font}
-        value={family}
-        onChange={(e) => (e.target.value === ' more' ? void allLocalFonts().then(setLocal) : apply({ family: e.target.value || null }))}
-      >
-        <option value="">{UI.defaultFont}</option>
-        {families.map((f) => (
-          <option key={f} value={f} style={{ fontFamily: f }}>
-            {f}
-          </option>
-        ))}
-        {!local.length && <option value={' more'}>{UI.moreFonts}</option>}
-      </select>
-      <select className="input richtext-size" title={UI.size} aria-label={UI.size} value={size || ''} onChange={(e) => apply({ size: Number(e.target.value) || null })}>
-        <option value="">{UI.defaultSize}</option>
-        {FONT_SIZES.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
-    </>
   )
 }

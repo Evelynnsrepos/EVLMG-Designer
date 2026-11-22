@@ -1,5 +1,5 @@
 import type { Editor } from '@tiptap/core'
-import { CircleHelp, Download, Eye, Highlighter, Info, ListTree, Upload } from 'lucide-react'
+import { CircleHelp, Copy, Download, FileCode2, FileText, Highlighter, Info, ListTree, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { saveTextFile } from '@/core/export'
 import { printHtml } from '@/shared/print'
@@ -11,6 +11,7 @@ import {
   findRefByLabel,
   countRichTextWords,
   InsertList,
+  markdownToRichText,
   richTextToPlainText,
   RichTextEditor,
   useEntityRefProvider,
@@ -19,6 +20,8 @@ import {
   type RefProvider,
   type RichTextDoc,
 } from '@/shared/richtext'
+import { ToolButton, type RibbonTab } from '@/shared/richtext/ribbon'
+import { ProofTextarea } from '@/shared/spell'
 import { useArticleRefProvider } from '@/shared/wiki'
 import { importTextFiles } from './importFiles'
 import { createWriterDoc, EXPORT_FORMATS, SPEC_TEMPLATES, exportDocument, printPage, type ExportFormat, type WriterDoc } from './document'
@@ -38,7 +41,12 @@ const UI = {
   helpOn: 'Click a row to insert it, or type what is shown on the right.',
   helpOff: 'Click a row to insert it. The greyed-out ones can only be typed with the Markdown Syntax switch on.',
   view: 'View',
-  viewTitle: 'Text size, line spacing and page width',
+  markdown: 'Markdown',
+  paper: 'Page look: the text on a sheet of paper',
+  source: 'Edit as Markdown: the whole text as plain Markdown. Fonts, colours and alignment are not kept when you change it there.',
+  sourceDone: 'Back to normal view',
+  sourceNote: 'Editing the Markdown. Fonts, colours and alignment come back plain if you change text here.',
+  html: 'Web page (.html): opens in other word processors and browsers',
   size: 'Text size',
   spacing: 'Line spacing',
   width: 'Page width',
@@ -46,6 +54,7 @@ const UI = {
   copied: 'Copied',
   export: 'Export',
   pdf: 'PDF (print dialog)…',
+  htmlLabel: 'Web page (.html)',
   exportTitle: (f: string) => `Export as ${f}`,
   syntax: 'Markdown Syntax',
   syntaxTitle: 'Format by typing symbols (==highlight==, > [!note], - [ ], #tag, ^[footnote]…) and turn pasted Markdown into formatting. Only for this document.',
@@ -74,6 +83,8 @@ export default function View({ documentId }: PanelProps) {
   const setView = (patch: Partial<typeof view>) => useSettings.getState().update({ writerView: { ...view, ...patch } })
   const side = (which: 'outline' | 'help') => setView({ side: view.side === which ? '' : which })
   const toggleSyntax = () => doc.update((d) => ({ ...d, markdownSyntax: !d.markdownSyntax }))
+  /** The Markdown being edited in "Edit as Markdown", or null in the normal view. */
+  const [source, setSource] = useState<{ start: string; text: string } | null>(null)
 
   useHotwheel(() => [
     { id: 'writer-callout', label: UI.callout, icon: Info, run: () => editor?.chain().focus().wrapIn('callout').run() },
@@ -86,6 +97,43 @@ export default function View({ documentId }: PanelProps) {
 
   const body = doc.data.body
   const setBody = (next: RichTextDoc) => doc.update((d) => ({ ...d, body: next }), { undoable: false })
+
+  const markdown = () => exportDocument('', body, 'markdown', resolve).text
+  const closeSource = () => {
+    // Untouched Markdown leaves the text as it was, formatting and all.
+    if (source && editor && source.text !== source.start) editor.commands.setContent(markdownToRichText(source.text, (label) => findRefByLabel(refs, label)), { emitUpdate: true })
+    setSource(null)
+  }
+  const ribbonTabs: RibbonTab[] = [
+    {
+      id: 'view',
+      label: UI.view,
+      content: (
+        <>
+          <ToolButton icon={ListTree} label={UI.outlineTitle} run={() => side('outline')} active={view.side === 'outline'} text={UI.outline} />
+          <ToolButton icon={FileText} label={UI.paper} run={() => setView({ paper: !view.paper })} active={!!view.paper} text="Page" />
+          <span className="richtext-toolbar-sep" />
+          <ViewRows view={view} setView={setView} />
+        </>
+      ),
+    },
+    {
+      id: 'markdown',
+      label: UI.markdown,
+      content: (
+        <>
+          <label className="writer-syntax" title={UI.syntaxTitle}>
+            <input type="checkbox" checked={syntaxOn} onChange={toggleSyntax} />
+            {UI.syntax}
+          </label>
+          <span className="richtext-toolbar-sep" />
+          <ToolButton icon={CircleHelp} label={UI.helpTitle} run={() => side('help')} active={view.side === 'help'} text={UI.help} />
+          <ToolButton icon={FileCode2} label={UI.source} run={() => (source ? closeSource() : setSource({ start: markdown(), text: markdown() }))} active={!!source} text="Edit as Markdown" />
+          <ToolButton icon={Copy} label={UI.copy} run={() => void navigator.clipboard.writeText(exportDocument(ref.title, body, 'markdown', resolve).text)} text="Copy" />
+        </>
+      ),
+    },
+  ]
 
   const runExport = async (format: ExportFormat) => {
     const out = exportDocument(ref.title, body, format, resolve)
@@ -106,10 +154,6 @@ export default function View({ documentId }: PanelProps) {
           onCommit={(title) => useProjectStore.getState().renameDocument(documentId, title.trim() || UI.titlePlaceholder)}
         />
         <WordCount body={body} resolve={resolve} />
-        <label className="writer-syntax" title={UI.syntaxTitle}>
-          <input type="checkbox" checked={syntaxOn} onChange={toggleSyntax} />
-          {UI.syntax}
-        </label>
         {editor && editor.isEmpty && (
           <select className="input" style={{ width: 'auto' }} value="" aria-label="Start from a template" onChange={(e) => e.target.value && editor.commands.setContent(SPEC_TEMPLATES.find((t) => t.id === e.target.value)!.html, { emitUpdate: true })}>
             <option value="">Start from a template…</option>
@@ -120,19 +164,32 @@ export default function View({ documentId }: PanelProps) {
             ))}
           </select>
         )}
-        <button className={view.side === 'outline' ? 'icon-btn is-active' : 'icon-btn'} title={UI.outlineTitle} aria-label={UI.outlineTitle} aria-pressed={view.side === 'outline'} onClick={() => side('outline')}>
-          <ListTree size={16} />
-        </button>
-        <button className={view.side === 'help' ? 'icon-btn is-active' : 'icon-btn'} title={UI.helpTitle} aria-label={UI.helpTitle} aria-pressed={view.side === 'help'} onClick={() => side('help')}>
-          <CircleHelp size={16} />
-        </button>
-        <ViewMenu view={view} setView={setView} />
         <ImportButton refs={refs} />
-        <ExportMenu onExport={runExport} onPdf={() => editor && printHtml(printPage(ref.title, editor.view.dom.innerHTML))} onCopy={() => navigator.clipboard.writeText(exportDocument(ref.title, body, 'markdown', resolve).text)} />
+        <ExportMenu
+          onExport={runExport}
+          onPdf={() => editor && printHtml(printPage(ref.title, editor.view.dom.innerHTML))}
+          onHtml={() =>
+            editor &&
+            void saveTextFile({ title: UI.html, defaultName: exportDocument(ref.title, body, 'text', resolve).name.replace(/\.txt$/, '.html'), text: printPage(ref.title, editor.view.dom.innerHTML), filter: { name: 'Web page', extensions: ['html'] } })
+          }
+          onCopy={() => navigator.clipboard.writeText(exportDocument(ref.title, body, 'markdown', resolve).text)} />
       </header>
       <div className="writer-body">
-      <div className="writer-page" style={{ '--writer-size': `${view.size}px`, '--writer-spacing': view.spacing, '--writer-width': view.width ? `${view.width}px` : 'none' } as CSSProperties}>
+      <div className={view.paper ? 'writer-page is-paper' : 'writer-page'} style={{ '--writer-size': `${view.size}px`, '--writer-spacing': view.spacing, '--writer-width': view.width ? `${view.width}px` : 'none' } as CSSProperties}>
+        {source && (
+          <div className="writer-source">
+            <p className="muted">
+              {UI.sourceNote}{' '}
+              <button className="btn" onClick={closeSource}>
+                {UI.sourceDone}
+              </button>
+            </p>
+            <ProofTextarea className="input writer-source-text" value={source.text} spellCheck={false} onChange={(e) => setSource({ ...source, text: e.target.value })} aria-label={UI.markdown} />
+          </div>
+        )}
         <RichTextEditor
+          className={source ? 'is-hidden' : undefined}
+          ribbonTabs={ribbonTabs}
           key={documentId}
           value={body}
           onChange={setBody}
@@ -264,53 +321,27 @@ const WIDTHS: [string, number][] = [['Narrow', 600], ['Normal', 760], ['Wide', 1
 type WriterView = ReturnType<typeof useSettings.getState>['writerView']
 
 /** Reading comfort for every Writer document on this computer: text size, line spacing, page width. */
-function ViewMenu({ view, setView }: { view: WriterView; setView: (patch: Partial<WriterView>) => void }) {
-  const [open, setOpen] = useState(false)
-  const root = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const close = (e: MouseEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false)
-    }
-    window.addEventListener('mousedown', close)
-    return () => window.removeEventListener('mousedown', close)
-  }, [open])
+function ViewRows({ view, setView }: { view: WriterView; setView: (patch: Partial<WriterView>) => void }) {
   const row = (label: string, field: 'size' | 'spacing' | 'width', options: [string, number][]) => (
-    <div className="writer-view-row" role="group" aria-label={label}>
-      <span>{label}</span>
+    <span className="richtext-ribbon-row" role="group" aria-label={label}>
+      {label}
       {options.map(([name, value]) => (
-        <button key={name} className={view[field] === value ? 'btn is-active' : 'btn'} aria-pressed={view[field] === value} onClick={() => setView({ [field]: value })}>
+        <button key={name} className={view[field] === value ? 'btn is-active' : 'btn'} aria-pressed={view[field] === value} onMouseDown={(e) => e.preventDefault()} onClick={() => setView({ [field]: value })}>
           {name}
         </button>
       ))}
-    </div>
+    </span>
   )
   return (
-    <div
-      className="writer-export"
-      ref={root}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape' && open) {
-          e.preventDefault()
-          setOpen(false)
-        }
-      }}
-    >
-      <button className="btn btn-ghost writer-export-btn" title={UI.viewTitle} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <Eye size={14} /> {UI.view}
-      </button>
-      {open && (
-        <div className="writer-menu writer-view">
-          {row(UI.size, 'size', SIZES)}
-          {row(UI.spacing, 'spacing', SPACINGS)}
-          {row(UI.width, 'width', WIDTHS)}
-        </div>
-      )}
-    </div>
+    <>
+      {row(UI.size, 'size', SIZES)}
+      {row(UI.spacing, 'spacing', SPACINGS)}
+      {row(UI.width, 'width', WIDTHS)}
+    </>
   )
 }
 
-function ExportMenu({ onExport, onPdf, onCopy }: { onExport: (format: ExportFormat) => Promise<void>; onPdf: () => void; onCopy: () => Promise<void> }) {
+function ExportMenu({ onExport, onPdf, onHtml, onCopy }: { onExport: (format: ExportFormat) => Promise<void>; onPdf: () => void; onHtml: () => void; onCopy: () => Promise<void> }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const root = useRef<HTMLDivElement>(null)
@@ -360,6 +391,17 @@ function ExportMenu({ onExport, onPdf, onCopy }: { onExport: (format: ExportForm
             }}
           >
             {UI.pdf}
+          </button>
+          <button
+            role="menuitem"
+            className="writer-menu-item"
+            title={UI.html}
+            onClick={() => {
+              setOpen(false)
+              onHtml()
+            }}
+          >
+            {UI.htmlLabel}
           </button>
           <button role="menuitem" className="writer-menu-item" onClick={() => void onCopy().then(() => setCopied(true))}>
             {copied ? UI.copied : UI.copy}

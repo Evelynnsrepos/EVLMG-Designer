@@ -173,3 +173,48 @@
     box-shadow: var(--shadow);
   }
 }
+
+/* 0.35 page look: the text on an A4-wide sheet */
+.writer-page.is-paper .richtext-content {
+  background: var(--bg-sunken);
+}
+.writer-page.is-paper .richtext-content .ProseMirror {
+  max-width: 794px;
+  min-height: 1123px;
+  margin: 24px auto;
+  padding: 72px 76px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.writer-page.is-paper .richtext-page-break {
+  margin: 48px -76px;
+  border-top: 24px solid var(--bg-sunken);
+}
+.writer-page.is-paper .richtext-page-break::after {
+  content: none;
+}
+.writer-page .richtext.is-hidden {
+  display: none;
+}
+
+/* 0.35 Edit as Markdown */
+.writer-source {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 10px 16px;
+  gap: 6px;
+}
+.writer-source p {
+  margin: 0;
+  font-size: 13px;
+}
+.writer-source-text {
+  flex: 1;
+  min-height: 200px;
+  font-family: ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: none;
+}

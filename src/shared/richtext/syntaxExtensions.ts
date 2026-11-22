@@ -43,6 +43,10 @@ export const SyntaxHeading = Heading.extend<SyntaxOptions & { levels: (1 | 2 | 3
 export const Highlight = Mark.create<SyntaxOptions>({
   name: 'highlight',
   addOptions: () => ({ enabled: off }),
+  // 0.35: an optional colour; none = the normal yellow, as before.
+  addAttributes: () => ({
+    color: { default: null, parseHTML: (el) => el.style.backgroundColor || null, renderHTML: (a) => (a.color ? { style: `background-color:${a.color};color:#1a1a1a` } : {}) },
+  }),
   parseHTML: () => [{ tag: 'mark' }],
   renderHTML: ({ HTMLAttributes }) => ['mark', mergeAttributes({ class: 'richtext-highlight' }, HTMLAttributes), 0],
   addInputRules() {
