@@ -3,6 +3,7 @@ import type { Id } from '@/core/model'
 import type { SketchEngine } from './engine'
 import type { Growth } from './growth'
 import { renderMesh, type Interpolation } from './meshRender'
+import { buildModel, depthField, ModelRenderer, type DepthField, type Shape3d } from './model3d'
 import { alphaBounds } from './selection'
 import type { Selector } from './selector'
 import {
@@ -57,6 +58,13 @@ export class Transformer {
   /** 3D turn (mode 'turn'): angles, applied to `turnBase`, the shape when the mode was picked. */
   turn: Turn = { ...FLAT }
   private turnBase: XfState | null = null
+  /** Rotate object as a 3D model: thickness, roundness, light. Thickness 0 is a flat card. */
+  shape: Shape3d = { thick: 0.25, round: 1, light: 0.5 }
+  private field3d: DepthField | null = null
+  private gl3d: ModelRenderer | null | undefined
+  private uploaded3d = false
+  private model3d: { base: XfState; shape: Shape3d; model: ReturnType<typeof buildModel> } | null = null
+  private shown3d = false
   /** Mold: cells per side, how far (canvas px) and how strongly (0..1) other points follow a drag. */
   moldGrid = 8
   moldReach = 100
@@ -105,6 +113,9 @@ export class Transformer {
     }
     this.layerId = layerId
     this.state = this.first = initialState(b)
+    this.field3d = null
+    this.model3d = null
+    this.uploaded3d = false
     this.turn = { ...FLAT }
     this.turnBase = null
     if (this.mode === 'turn') this.turnBase = this.state
@@ -118,9 +129,42 @@ export class Transformer {
   private show() {
     const piece = this.engine.floatingPiece
     if (!piece || !this.state || !this.out) return
+    this.shown3d = this.mode === 'turn' && this.shape.thick > 0 && this.draw3d(piece, this.out.ctx)
+    if (this.shown3d) {
+      this.engine.setFloatingView(this.out.canvas)
+      return this.changed()
+    }
     // With a GPU the engine draws the mesh itself; the picture is only made when the pixels are dropped.
     if (!this.engine.setFloatingMesh(this.state, this.interp)) this.bake()
     this.changed()
+  }
+
+  /** Draw the 3D model of `src` (the lifted pixels or the selection mask) into `out`. False without WebGL2. */
+  private draw3d(src: HTMLCanvasElement, out: CanvasRenderingContext2D, upload = false): boolean {
+    const base = this.turnBase
+    if (!base) return false
+    if (this.gl3d === undefined) this.gl3d = ModelRenderer.create()
+    const gl = this.gl3d
+    if (!gl) return false
+    if (!this.field3d) {
+      const data = src.getContext('2d')!.getImageData(0, 0, src.width, src.height).data
+      this.field3d = depthField((x, y) => data[(y * src.width + x) * 4 + 3], base.src)
+    }
+    if (upload || !this.uploaded3d) gl.upload(src)
+    this.uploaded3d = !upload
+    const m = this.model3d
+    if (!m || m.base !== base || m.shape !== this.shape) this.model3d = { base, shape: this.shape, model: buildModel(base, this.field3d, this.shape) }
+    gl.draw(this.model3d!.model, base.src, this.turn, this.shape.light, this.engine.width, this.engine.height)
+    out.clearRect(0, 0, this.engine.width, this.engine.height)
+    out.drawImage(gl.canvas, 0, 0)
+    return true
+  }
+
+  /** Change the 3D model's thickness, roundness or light. */
+  setShape(p: Partial<Shape3d>) {
+    this.shape = { ...this.shape, ...p }
+    if (this.state) this.show()
+    else this.changed()
   }
 
   /** Render the transformed pixels into a picture the engine can drop onto the layer. */
@@ -207,6 +251,8 @@ export class Transformer {
     this.state = move(this.state)
     this.first = move(this.first)
     if (this.turnBase) this.turnBase = move(this.turnBase)
+    this.field3d = null
+    this.uploaded3d = false
     this.past = this.future = []
     this.out = this.engine.canvas()
     this.uploaded = false
@@ -222,10 +268,11 @@ export class Transformer {
     const id = this.engine.endMove()
     if (sel && id) {
       const first = this.first!
+      const as3d = this.shown3d
       sel.transformed((mask) => {
         const out = this.engine.canvas()
         // The selection follows the pixels through the same mapping.
-        renderMesh(mask, { ...s, src: first.src }, out.ctx, 'bilinear')
+        if (!(as3d && this.draw3d(mask, out.ctx, true))) renderMesh(mask, { ...s, src: first.src }, out.ctx, 'bilinear')
         return out.canvas
       })
     }
@@ -245,6 +292,9 @@ export class Transformer {
     this.turnBase = null
     this.past = []
     this.future = []
+    this.field3d = null
+    this.model3d = null
+    this.uploaded3d = this.shown3d = false
     this.out = null
     this.guides = { gx: [], gy: [] }
     this.changed()
