@@ -155,6 +155,19 @@ const cmyk = ([r, g, b]: RGB) => {
   return [(1 - r - k) / n, (1 - g - k) / n, (1 - b - k) / n, k]
 }
 
+/**
+ * Values to opacity (like Krita's colour to alpha against white or black): bright (mode 0) or dark (mode 1)
+ * parts turn see-through, and colours are unblended so the result over white (or black) looks the same.
+ */
+export function valueAlpha(c: RGB, a: number, mode: number, amount: number): [RGB, number] {
+  const k = mode ? c : (c.map((x) => 1 - x) as RGB)
+  const na = Math.max(k[0], k[1], k[2])
+  const nk = na > 0 ? k.map((x) => x / na) : [0, 0, 0]
+  const un = (mode ? nk : nk.map((x) => 1 - x)) as RGB
+  const mix = (x: number, y: number) => x + (y - x) * amount
+  return [[mix(c[0], un[0]), mix(c[1], un[1]), mix(c[2], un[2])], a * mix(1, na)]
+}
+
 /** An adjustment of `img` on the CPU. */
 export function runCpu(id: FilterId, a: AdjustValues, img: ImageData): ImageData {
   const { width: w, height: h } = img
@@ -178,6 +191,9 @@ export function runCpu(id: FilterId, a: AdjustValues, img: ImageData): ImageData
       break
     case 'gradient':
       lutPass(p, out, gradientLut(a.gradient), true, false, v.amount)
+      break
+    case 'valueAlpha':
+      for (let i = 0; i < p.length; i += 4) if (p[i + 3]) put(out, i, ...valueAlpha(straight(p, i), p[i + 3], v.mode, v.amount))
       break
     case 'gaussian':
       out = gauss(p, w, h, v.radius / 2)

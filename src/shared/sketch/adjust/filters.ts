@@ -7,6 +7,7 @@ export type FilterId =
   | 'balance'
   | 'curves'
   | 'gradient'
+  | 'valueAlpha'
   | 'gaussian'
   | 'motion'
   | 'perspective'
@@ -65,6 +66,13 @@ export const FILTERS: FilterDef[] = [
   { id: 'balance', label: 'Colour balance', group: 'Colour', main: 'midtones0', params: [...balance('shadows'), ...balance('midtones'), ...balance('highlights'), { key: 'keep', label: 'Keep brightness', min: 0, max: 1, toggle: true }] },
   { id: 'curves', label: 'Curves', group: 'Colour', params: [] },
   { id: 'gradient', label: 'Gradient map', group: 'Colour', main: 'amount', params: [pct('amount', 'Strength')] },
+  {
+    id: 'valueAlpha',
+    label: 'Values to opacity',
+    group: 'Colour',
+    main: 'amount',
+    params: [{ key: 'mode', label: 'Make see-through', min: 0, max: 1, options: ['Bright parts', 'Dark parts'] }, pct('amount', 'Strength')],
+  },
   { id: 'gaussian', label: 'Gaussian blur', group: 'Blur', main: 'radius', params: [{ key: 'radius', label: 'Amount', min: 0, max: 100, step: 0.5, unit: 'px' }] },
   { id: 'motion', label: 'Motion blur', group: 'Blur', main: 'length', params: [{ key: 'length', label: 'Amount', min: 0, max: 300, unit: 'px' }, { key: 'angle', label: 'Direction', min: 0, max: 360, unit: '°' }] },
   { id: 'perspective', label: 'Perspective blur', group: 'Blur', main: 'amount', center: true, params: [pct('amount', 'Amount')] },
@@ -117,7 +125,7 @@ const DEFAULTS: Record<string, number> = {
 export function defaultValues(id: FilterId, width: number, height: number): AdjustValues {
   const v: Record<string, number> = {}
   for (const p of filterDef(id).params) v[p.key] = p.options || p.range || ['hue', 'sat', 'bright'].includes(p.key) ? 0 : (DEFAULTS[p.key] ?? 0)
-  if (id === 'gradient') v.amount = 1
+  if (id === 'gradient' || id === 'valueAlpha') v.amount = 1
   if (id === 'sharpen') v.amount = 1
   if (id === 'bloom') v.amount = 1
   if (id === 'halftone') v.size = 8

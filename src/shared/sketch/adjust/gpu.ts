@@ -171,6 +171,9 @@ export class AdjustGl {
         this.setLut(gradientLut(a.gradient))
         this.pass(S.LUT, src, 0, { byLuma: 1, keepLum: 0, amount: v.amount }, { lut: this.lut })
         break
+      case 'valueAlpha':
+        this.pass(S.VALUE_ALPHA, src, 0, { mode: v.mode, amount: v.amount })
+        break
       case 'gaussian':
         this.blur(src, 0, v.radius / 2)
         break
