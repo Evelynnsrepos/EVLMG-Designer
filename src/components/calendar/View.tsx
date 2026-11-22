@@ -61,7 +61,7 @@ export default function View({ active }: PanelProps) {
     set({ linkedTimelines: [...linked, t.id] })
     openComponent('timeline', t.id)
   }
-  const useRealCalendar = async () => {
+  const applyRealCalendar = async () => {
     if (c.months.length && !(await confirmDialog({ title: 'Use real months and weekdays?', message: 'Your months and weekdays are replaced with January to December and Monday to Sunday. Entries keep their month number. You can undo with Ctrl+Z.', confirmLabel: 'Replace' }))) return
     set({ months: realMonths(), weekdays: REAL_WEEKDAYS })
   }
@@ -197,7 +197,7 @@ export default function View({ active }: PanelProps) {
       <section className="cal-col">
         <h3>Calendar game</h3>
         <p className="muted">For games that run day by day, like a school year: when the game starts and ends, the parts of each day, and a moon cycle.</p>
-        <button className="btn btn-ghost cal-add" onClick={() => void useRealCalendar()}>
+        <button className="btn btn-ghost cal-add" onClick={() => void applyRealCalendar()}>
           <CalendarRange size={14} /> Use real months and weekdays
         </button>
         <DateField label="Game starts" c={c} value={c.gameStart ?? null} onChange={(gameStart) => set({ gameStart })} />
