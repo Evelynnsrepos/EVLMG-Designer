@@ -242,3 +242,7 @@
   min-width: 34px;
   font-variant-numeric: tabular-nums;
 }
+.sketch-xf-title {
+  font-weight: 600;
+  margin: 0 6px;
+}

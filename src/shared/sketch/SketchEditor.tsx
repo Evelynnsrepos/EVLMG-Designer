@@ -10,6 +10,8 @@ import {
   ImagePlus,
   Lasso,
   Move,
+  Rotate3d,
+  Spline,
   PaintBucket,
   Pipette,
   Layers2,
@@ -141,6 +143,8 @@ const UI = {
   lasso: 'Lasso selection (L)',
   rectSelect: 'Rectangle selection (M)',
   move: 'Move (V): drags the selection, or the whole layer',
+  rotate3d: 'Rotate object (R): turn the selection (or layer) in 3D like a flat card; drag outside it to orbit',
+  mold: 'Mold object (W): a triangle mesh over the selection (or layer); drag its points, nearby points follow',
   eyedropper: 'Eyedropper (I, or hold Alt)',
   layerPick: 'Layer picker (K, or hold Ctrl): point at paint to see its layer, click to make it active',
   hand: 'Pan (H, or hold Space)',
@@ -179,7 +183,7 @@ const UI = {
   saving: 'Saving…',
 }
 
-type Tool = 'brush' | 'eraser' | 'smudge' | 'lasso' | 'rect' | 'move' | 'eyedropper' | 'layerpick' | 'hand' | 'text'
+type Tool = 'brush' | 'eraser' | 'smudge' | 'lasso' | 'rect' | 'move' | 'rotate3d' | 'mold' | 'eyedropper' | 'layerpick' | 'hand' | 'text'
 
 /** The app's background colour as #rrggbb (the theme's --bg), for the cursor's contrast over see-through areas. */
 function appBackground(): string {
@@ -241,6 +245,8 @@ const TOOLS: { id: Tool; icon: LucideIcon; label: string; key: string }[] = [
   { id: 'lasso', icon: Lasso, label: UI.lasso, key: 'l' },
   { id: 'rect', icon: SquareDashed, label: UI.rectSelect, key: 'm' },
   { id: 'move', icon: Move, label: UI.move, key: 'v' },
+  { id: 'rotate3d', icon: Rotate3d, label: UI.rotate3d, key: 'r' },
+  { id: 'mold', icon: Spline, label: UI.mold, key: 'w' },
   { id: 'eyedropper', icon: Pipette, label: UI.eyedropper, key: 'i' },
   { id: 'layerpick', icon: Layers2, label: UI.layerPick, key: 'k' },
   { id: 'hand', icon: Hand, label: UI.hand, key: 'h' },
@@ -877,9 +883,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       // The wand only looks at the active layer (or the reference layer, when one is set), never at the others.
       const ref = doc.layers.find((l) => l.reference && !isGroup(l)) ?? (activeLayer && hasPixels(activeLayer) ? activeLayer : null)
       sel.down(p, e, () => engine.pixels(doc, ref?.id ?? null))
-    } else if (t === 'move') {
+    } else if (t === 'move' || t === 'rotate3d' || t === 'mold') {
       if (!activeLayer.visible || !hasPixels(activeLayer) || lockedInTree(doc.layers, activeLayer.id)) return
-      if (activeLayer.text) return textTool.down(p, true)
+      if (activeLayer.text) return t === 'move' ? textTool.down(p, true) : undefined
       // Transform: the first press lifts the pixels; later presses move, scale, turn or bend them.
       if (!xf.active && !xf.begin(activeLayer.id)) return
       xf.down(p, view.scale)
@@ -1228,6 +1234,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     'tool.lasso': () => setTool('lasso'),
     'tool.rect': () => setTool('rect'),
     'tool.move': () => setTool('move'),
+    'tool.rotate3d': () => setTool('rotate3d'),
+    'tool.mold': () => setTool('mold'),
     'tool.eyedropper': () => setTool('eyedropper'),
     'tool.layerpick': () => setTool('layerpick'),
     'tool.hand': () => setTool('hand'),

@@ -422,6 +422,8 @@ export class Transformer {
   }
 }
 
+const XF_TOOLS = new Set(['move', 'rotate3d', 'mold'])
+
 /**
  * One Transformer per engine. It lifts pixels when the Move tool is used and drops them
  * (one undo step) when another tool or layer is picked, on Enter, or Done; Escape puts them back.
@@ -437,7 +439,10 @@ export function useTransformer(engine: SketchEngine, sel: Selector, opts: { acti
     xf.listen(() => setVersion(xf.version))
   }, [xf])
   useEffect(() => {
-    if (xf.layerId && (opts.tool !== 'move' || opts.layerId !== xf.layerId)) done.current(xf.commit(sel))
+    // Move, Rotate object and Mold object share one lifted picture: switching between them keeps working on it.
+    if (xf.layerId && (!XF_TOOLS.has(opts.tool) || opts.layerId !== xf.layerId)) done.current(xf.commit(sel))
+    const mode = opts.tool === 'rotate3d' ? 'turn' : opts.tool === 'mold' ? 'mold' : xf.mode === 'turn' || xf.mode === 'mold' ? 'free' : null
+    if (XF_TOOLS.has(opts.tool) && mode && mode !== xf.mode) xf.patch({ mode })
   }, [xf, sel, opts.tool, opts.layerId])
   useEffect(() => {
     if (!opts.active) return

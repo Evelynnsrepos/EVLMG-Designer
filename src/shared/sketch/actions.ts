@@ -15,6 +15,8 @@ export const ACTIONS = [
   { id: 'tool.lasso', label: 'Lasso selection', keys: ['l'] },
   { id: 'tool.rect', label: 'Rectangle selection', keys: ['m'] },
   { id: 'tool.move', label: 'Move', keys: ['v'] },
+  { id: 'tool.rotate3d', label: 'Rotate object (3D)', keys: ['r'] },
+  { id: 'tool.mold', label: 'Mold object', keys: ['w'] },
   { id: 'tool.eyedropper', label: 'Eyedropper', keys: ['i'] },
   { id: 'tool.layerpick', label: 'Layer picker (or hold Ctrl)', keys: ['k'] },
   { id: 'tool.hand', label: 'Pan', keys: ['h'] },
