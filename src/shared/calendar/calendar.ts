@@ -161,7 +161,7 @@ export const isFullMoon = (c: CalendarDoc, n: number) => !!c.moonCycle && c.moon
 /** "7 April" or "7 April, year 3" when the calendar spans more than one year. */
 export function formatDate(c: CalendarDoc, d: CalendarDate, withYear = true): string {
   const base = `${d.day} ${c.months[d.month]?.name ?? '?'}`
-  return withYear ? `${base}, ${formatYear(c, d.year)}` : base
+  return withYear ? `${base}, ${c.eras.length ? formatYear(c, d.year) : `year ${d.year}`}` : base
 }
 
 export const newEra = (start: number): Era => ({ id: newId(), name: 'New era', abbr: 'NE', start, color: '#9c36b5' })
