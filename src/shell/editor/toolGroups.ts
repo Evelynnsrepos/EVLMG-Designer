@@ -82,7 +82,6 @@ export const TOOL_INFO: Partial<Record<ComponentType, { group: ToolGroupId; useW
  * the menu points to the tool to use instead when someone searches for them.
  */
 export const MOVED_TOOLS: Partial<Record<ComponentType, string>> = {
-  'story-writer': 'Dialogue Editor and Quests',
   'design-language': 'Moodboard',
   'resource-calculator': 'Economy Simulator',
 }
