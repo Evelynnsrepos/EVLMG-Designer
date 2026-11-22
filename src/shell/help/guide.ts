@@ -630,6 +630,10 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Build skill and talent trees. Each skill has a type (active or passive), an effect, a max rank, a cost in points per rank, and can need other skills first or a number of points spent in the tree.',
       'The tree is drawn as a graph from your "Needs first" links. Click a skill to edit it; the app stops you from making a loop.',
       'Plan a build tests the tree like a player: set the points at the start, per level and the level, then click skills and add or take back ranks. The planner explains why a rank is not possible yet.',
+      'Tree or Board: Board puts skills on cells, like a sphere grid or a license board. Tick Start cell on the cells players begin on; a cell can only be learned next to a learned one. Click an empty cell to add a skill there, or to move the picked skill. Stat boost and Lock are extra skill types for such boards.',
+      'With more than one skill under Needs first, tick Any one of these is enough for skills that open from several sides.',
+      'Archetypes are jobs or classes that learn skills by rank, like Warrior learning Cleave at rank 3. An archetype can need another at a rank first (Warrior rank 20 before Gladiator), cost something to unlock, and have inherit slots. On a skill, Belongs to picks its archetype and the rank it is learned at; tick Other archetypes can inherit it.',
+      'In Plan a build, rank up archetypes, pick the one worn and tick the skills it inherits. Name of points renames points to AP, LP or Spheres.',
     ],
   },
   behaviour: {
@@ -676,6 +680,10 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Give an ability its number with a formula from the library or one of your Damage Calculator presets, and change any input just for this ability. The page shows the value, the value per second (by cooldown or cast time) and per point of cost.',
       'Compare all in a table lists every ability side by side; click a column to sort, for example by damage per second, to spot the ones that are too strong.',
       'Sprite picks an animated icon from a Pixel Art file (and the tag that plays); it shows instead of the picture',
+      'Made for: tick Steam, Xbox, PlayStation or Minecraft. The tool then lists what is still missing for them: API names (only letters, numbers and _, never twice), descriptions, a stat for progress bars on Steam, the 1000 gamerscore on Xbox, trophy grades and one platinum on PlayStation, parents and icon items in Minecraft.',
+      'Unlocks says when it is earned: when something happens, when a counter (a stat like slimes_defeated) reaches the goal, or when all or any of the achievements under Needs first are done. Shown while locked is the text players see before, for hidden ones too.',
+      'Needs first links achievements; Unlock tree draws them. For Minecraft the first one is the parent, and each achievement without a parent becomes its own tab.',
+      'CSV saves a sheet for Steam, Xbox and PlayStation. Minecraft datapack saves a zip with one advancement per achievement, made for Minecraft 1.21: put it into the datapacks folder of your world.',
     ],
   },
   crafting: {
@@ -855,6 +863,9 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Give your world its own calendar: months with any number of days, your own weekday names and which weekday year 1 starts on. It starts with a ten-month example to change.',
       'Eras are named ages like the First Age or the Age of Ash. Each era counts its own years from 1 and starts at a year on your timelines. With Show era years on timelines on, the Timeline labels years as 305 FA instead of 305.',
       'The month view shows any month of any year with its weekdays, and the date calculator tells you which date and weekday it is a number of days later.',
+      'Calendar games, like a school year day by day: click a day in the month view and Add to this day. An entry has a type (story, deadline, event, free time, exam, holiday, no free time), a part of the day, and can repeat every week or every year. Coloured dots show what is on each day.',
+      'Calendar game sets when the game starts and ends (days outside are faded, and each day says Day 12 of 300), the parts of a day like Morning, After school, Evening, and a full moon cycle. The picked day shows how many days are left until the next deadline. Use real months and weekdays sets January to December and Monday to Sunday.',
+      'Make a linked timeline makes a Timeline that shows the entries as events, spread from the game start to its end, and follows every change you make here. Untick Show on linked timelines to keep an entry off it.',
     ],
   },
   economy: {

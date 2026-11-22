@@ -1,4 +1,5 @@
 import { newId, type Id } from '@/core/model'
+import { dateNumber, formatDate, type CalendarDoc } from '@/shared/calendar'
 import { addNodes, createScene, getNode, type NodeBase, type Rect, type Scene } from '@/shared/canvas'
 
 /**
@@ -39,6 +40,8 @@ export interface TimelineEvent extends NodeBase {
   /** Optional image, a project asset path (TL-3). */
   src?: string | null
   links: TimelineLink[]
+  /** v0.35: the Calendar entry this event follows (linked timelines). */
+  calendarEntryId?: Id
 }
 
 export type TimelineItem = TimelineLine | TimelineEvent
@@ -332,4 +335,48 @@ export function layoutCards(scene: Scene<TimelineItem>, measure: MeasureText, sh
 /** World rectangle of an event's card, given its line's lane. */
 export function cardRect(ev: TimelineEvent, lineY: number, card: { lift: number; height: number }): Rect {
   return { x: ev.x - CARD_WIDTH / 2, y: lineY - card.lift - card.height, width: CARD_WIDTH, height: card.height }
+}
+
+// ---- linked calendar (v0.35) ----
+
+/**
+ * Make the main line show the calendar's entries: one event per entry (not
+ * repeats), placed by day between the game's start and end (or the first and
+ * last entry). Events no longer in the calendar are removed. Returns the same
+ * scene when nothing changed, so it is safe to run on every render.
+ */
+export function syncCalendar(scene: Scene<TimelineItem>, c: CalendarDoc): Scene<TimelineItem> {
+  const main = mainLine(scene)
+  if (!main) return scene
+  const list = (c.entries ?? []).filter((e) => e.onTimeline !== false && (e.repeat ?? 'none') === 'none').map((e) => ({ e, n: dateNumber(c, e) }))
+  const ns = list.map((x) => x.n)
+  const lo = c.gameStart ? dateNumber(c, c.gameStart) : Math.min(...ns)
+  const hi = c.gameEnd ? dateNumber(c, c.gameEnd) : Math.max(...ns)
+  const years = new Set(list.map((x) => x.e.year))
+  const xOf = (n: number) => (hi > lo ? clamp((n - lo) / (hi - lo), 0, 1) * main.length : main.length / 2)
+  const byEntry = new Map(events(scene).filter((ev) => ev.calendarEntryId).map((ev) => [ev.calendarEntryId!, ev]))
+  const wanted = new Set(list.map((x) => x.e.id))
+  let changed = false
+  const nodes: TimelineItem[] = []
+  for (const n of scene.nodes) {
+    if (isEvent(n) && n.calendarEntryId && !wanted.has(n.calendarEntryId)) {
+      changed = true
+      continue
+    }
+    nodes.push(n)
+  }
+  for (const { e, n } of list) {
+    const text = `${formatDate(c, e, years.size > 1)} · ${e.title}`
+    const x = xOf(n)
+    const old = byEntry.get(e.id)
+    if (!old) {
+      nodes.push({ id: newId(), kind: 'tl-event', layerId: main.layerId, lineId: main.id, x, y: 0, text, links: [], calendarEntryId: e.id })
+      changed = true
+    } else if (old.text !== text || Math.abs(old.x - x) > 0.01 || old.lineId !== main.id) {
+      const i = nodes.indexOf(old)
+      nodes[i] = { ...old, text, x, lineId: main.id }
+      changed = true
+    }
+  }
+  return changed ? { ...scene, nodes } : scene
 }

@@ -139,3 +139,21 @@ describe('layoutCards', () => {
     expect(cards.get(ids[2])!.lift).toBe(cards.get(ids[0])!.lift)
   })
 })
+
+describe('linked calendar', () => {
+  it('adds, moves and removes events from calendar entries', async () => {
+    const { createCalendarDoc, newDayEntry } = await import('@/shared/calendar')
+    const { createDefaultTimeline, syncCalendar, events } = await import('./model')
+    const a = { ...newDayEntry({ year: 1, month: 0, day: 1 }), title: 'Start' }
+    const b = { ...newDayEntry({ year: 1, month: 9, day: 30 }), title: 'End' }
+    const weekly = { ...newDayEntry({ year: 1, month: 0, day: 2 }), repeat: 'weekly' as const }
+    const cal = { ...createCalendarDoc(), entries: [a, b, weekly] }
+    const s1 = syncCalendar(createDefaultTimeline().scene, cal)
+    const evs = events(s1).sort((x, y) => x.x - y.x)
+    expect(evs.map((e) => e.text)).toEqual(['1 Frostmoon · Start', '30 Darkmoon · End'])
+    expect(evs[0].x).toBe(0)
+    expect(syncCalendar(s1, cal)).toBe(s1)
+    const s2 = syncCalendar(s1, { ...cal, entries: [{ ...a, title: 'Begin' }] })
+    expect(events(s2).map((e) => e.text)).toEqual(['1 Frostmoon · Begin'])
+  })
+})

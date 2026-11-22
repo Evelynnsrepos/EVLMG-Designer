@@ -1,0 +1,49 @@
+.ach-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.ach-ns {
+  width: 110px;
+}
+.ach-checks {
+  margin: 8px 12px;
+  padding: 8px 12px 8px 28px;
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  font-size: 13px;
+}
+.ach-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+}
+.ach-link {
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+}
+.ach-treeview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  padding: 8px 12px;
+}
+.ach-graph {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}

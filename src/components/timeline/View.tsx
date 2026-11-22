@@ -1,5 +1,5 @@
 import { MoveHorizontal, PanelRight, Shrink } from 'lucide-react'
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { pickAndImportAssets, useAssetUrls } from '@/core/assets'
 import type { Id } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
@@ -20,7 +20,7 @@ import { combineRefProviders, useEntityRefProvider } from '@/shared/richtext'
 import { useArticleRefProvider } from '@/shared/wiki'
 import { Details } from './Details'
 import { formatYear, useCalendar } from '@/shared/calendar'
-import { setLineLength, stretchTimeline, createDefaultTimeline, events, layoutCards, mainLine, normalizeTimeline, yearAxis, type TimelineItem } from './model'
+import { syncCalendar, setLineLength, stretchTimeline, createDefaultTimeline, events, layoutCards, mainLine, normalizeTimeline, yearAxis, type TimelineItem } from './model'
 import { makeTimelineTypes } from './timelineTypes'
 import { branchTool, eventTool, timelineSelectTool, type TimelineToolHost } from './tools'
 import './timeline.css'
@@ -85,6 +85,14 @@ export default function View({ documentId, active }: PanelProps) {
     [scene, font, axis],
   )
   const calendar = useCalendar().data
+  const updateDoc = doc.update
+  const followsCalendar = !!calendar?.linkedTimelines?.includes(documentId!)
+  // A linked timeline follows the calendar live: entries become events on the main line.
+  useEffect(() => {
+    if (!followsCalendar || !calendar || !scene) return
+    const next = syncCalendar(scene, calendar)
+    if (next !== scene) updateDoc((d) => ({ ...d, scene: normalizeTimeline(syncCalendar(d.scene, calendar)) }), { undoable: false })
+  }, [followsCalendar, calendar, scene, updateDoc])
   const formatYearFn = useMemo(() => (calendar?.useOnTimeline && calendar.eras.length ? (y: number) => formatYear(calendar, y) : undefined), [calendar])
   const nodeTypes = useMemo(
     () => makeTimelineTypes({ years, mainId: main?.id, cards, formatYear: formatYearFn }),
