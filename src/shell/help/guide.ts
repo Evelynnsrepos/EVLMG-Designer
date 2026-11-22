@@ -951,6 +951,9 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Log every playtest: date, tester, build, minutes played, scores from 1 to 10 for fun, difficulty (5 means just right) and clarity, notes and quotes.',
       'Add findings to a session with a severity (blocker, major, minor, idea) and where in the game it happened; tick them off when fixed. The list button next to a finding puts it on the Task Board as a task (priority from the severity) and opens the board; afterwards it opens that board again.',
       'The overview shows the scores per build, so you see if changes helped, and every open finding with the worst first and the areas with the most problems.',
+      'Sections: pick a Pacing Graph journey under "Sections from" and its beats become the parts of the game you rate, or type your own. Rate each part from 1 to 5 for fun, boring, pace, length and difficulty (for pace, length and difficulty 3 is just right). Click a number again to clear it; empty means the tester did not say.',
+      'Watch: press Watch while someone plays. A timer runs, you pick the part they are in (Next section adds the time they spent there) and click what you see: Bored, Confused, Stuck, Laughed and more, or type a note and press Enter. Bug makes a bug finding right away.',
+      'Findings are Feedback or Bug; bugs have steps to make them happen again. The overview lists open bugs on their own and shows the averages per section, with warnings like boring or too long. The Pacing Graph shows the same averages on its beats.',
     ],
   },
   pacing: {
@@ -959,6 +962,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Plan the player journey as beats: moments like the opening, an ambush or the first boss, each with a kind, a time, how the player should feel and notes.',
       'Every beat has a value from 0 to 10 on each curve: intensity and story stakes to start with, and add your own like difficulty. Drag the points up and down on the graph, or use the sliders.',
       'The graph warns about long flat stretches, where players may get bored, and about high peaks right after each other with no breather between.',
+      'Playtests: when playtest sessions rated this journey (Playtests, "Sections from"), a dashed line shows how much fun testers had, beats where they had a problem get an orange band, each beat card says what testers felt, and the side panel shows the averages and planned against played minutes (click Playtests there to fold them open). Untick Show playtests in the toolbar to hide it; it stays hidden for that journey.',
     ],
   },
   pitch: {
