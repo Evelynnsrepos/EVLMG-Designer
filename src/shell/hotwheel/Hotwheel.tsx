@@ -5,7 +5,7 @@ import type { ComponentType, Panel } from '@/core/model'
 import { getManifest } from '@/core/registry'
 import { formatCombo, isShortcut, keysOf, SHORTCUT_GROUPS } from '@/core/shortcuts'
 import { isTextField, useAppStore, useProjectStore, useSettings } from '@/core/state'
-import { extraHotActions, hotwheelSources, setHotwheelOpener, type HotAction, type HotSlider } from '@/shared/hotwheel'
+import { extraHotActions, hotwheelChanged, hotwheelSources, setHotwheelOpener, type HotAction, type HotSlider } from '@/shared/hotwheel'
 import { addJumpHere } from '@/shared/jumps/Jumps'
 import { closePanel } from '../editor/actions'
 import { useHelp } from '../help/help'
@@ -133,7 +133,11 @@ const useWheel = create<{ open: Open | null }>()(() => ({ open: null }))
 /** Play the closing animation, then take the wheel away (unless it was opened again meanwhile). */
 function closeWheel(open: Open) {
   useWheel.setState({ open: { ...open, closing: true } })
-  setTimeout(() => useWheel.getState().open?.at === open.at && useWheel.setState({ open: null }), 130)
+  setTimeout(() => {
+    if (useWheel.getState().open?.at !== open.at) return
+    useWheel.setState({ open: null })
+    hotwheelChanged.forEach((f) => f())
+  }, 130)
 }
 const isOpen = () => !!useWheel.getState().open && !useWheel.getState().open!.closing
 
@@ -572,6 +576,7 @@ function openAt(at?: { x: number; y: number }, hold?: Open['hold']) {
   if (document.documentElement.dataset.glass) inner = inner.filter(Boolean)
   const p = at ?? pointer
   useWheel.setState({ open: { x: p.x, y: p.y, panel, inner, outer, sliders, hold, at: performance.now() } })
+  hotwheelChanged.forEach((f) => f())
 }
 
 /** Mount once in the editor: the wheel, and Q / pen button / right-hold / middle button to open it. */

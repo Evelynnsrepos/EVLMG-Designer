@@ -77,6 +77,12 @@ export function useHotwheel(actions: () => HotAction[], ownOrder = false, size?:
   }, [panel, ownOrder])
 }
 
+/**
+ * Called when the wheel opens and once it is gone again. Draw shows its picture again then: WebKitGTK (Linux) could
+ * squash the GPU canvas flat while the glass wheel was over it, until something else redrew it.
+ */
+export const hotwheelChanged = new Set<() => void>()
+
 /** Program-wide actions from plugins: they can be put on the inner ring (Settings, QuickSelect). Returns a remover. */
 export const extraHotActions: HotAction[] = []
 export function addHotwheelAction(action: HotAction) {
