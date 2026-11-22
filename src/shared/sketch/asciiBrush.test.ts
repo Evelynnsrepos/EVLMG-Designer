@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { lineSign, signsTo, type SignStroke } from './asciiBrush'
+import { lineSign, signAt, signsTo, type SignStroke } from './asciiBrush'
+import { asciiSettings } from './ascii'
+import type { AdjustValues } from './adjust/filters'
 
 const stroke = (mode: SignStroke['mode'], size = 0): SignStroke => ({ mode, sign: '#', size, color: '#ff0000', cw: 4, ch: 8, cols: 10, rows: 5, marks: {}, done: new Set(), anchor: null, dir: null })
 
@@ -35,5 +37,15 @@ describe('sign brushes', () => {
     signsTo(st, { x: 13, y: 1 }, { x: 1, y: 1 })
     expect(Object.keys(st.marks).sort()).toEqual(['0,0', '12,0', '4,0', '8,0'])
     expect(st.marks['8,0'].s).toBe('#')
+  })
+
+  it('finds a painted sign under the pen (layer picker)', () => {
+    const base = { v: {}, seed: 1 } as unknown as AdjustValues
+    const cw = asciiSettings(base).cell
+    const a = { ...base, ascii: { marks: { [`${cw},${cw * 2}`]: { s: '#' }, '0,0': { s: ' ' } } } } as AdjustValues
+    expect(signAt(a, cw + 1, cw * 2 + 1)).toBe(true)
+    expect(signAt(a, 1, 1)).toBe(false)
+    expect(signAt(a, cw * 3, cw * 4)).toBe(false)
+    expect(signAt(base, 1, 1)).toBe(false)
   })
 })

@@ -86,3 +86,12 @@ export function toFrame(src: CanvasImageSource, d: { width: number; height: numb
   c.getContext('2d')!.drawImage(src, -f.x, -f.y)
   return c
 }
+
+/** Remove everything outside the frame from a layer of a w×h working area (turning Draw beyond the canvas off). */
+export function clearOutside(ctx: CanvasRenderingContext2D, f: Rect, w: number, h: number) {
+  ctx.beginPath()
+  ctx.rect(0, 0, w, h)
+  ctx.rect(f.x, f.y, f.w, f.h)
+  ctx.clip('evenodd')
+  ctx.clearRect(0, 0, w, h)
+}

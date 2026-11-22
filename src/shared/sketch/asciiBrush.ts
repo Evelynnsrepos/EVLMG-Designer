@@ -118,3 +118,12 @@ function mark(st: SignStroke, key: string, sign: string): boolean {
   else st.marks[key] = m
   return true
 }
+
+/** True when a sign brush left a letter or shading on the cell at (x, y) (the layer picker finds those too). */
+export function signAt(a: AdjustValues, x: number, y: number): boolean {
+  const marks = a.ascii?.marks
+  if (!marks) return false
+  const cw = asciiSettings(a).cell
+  const m = marks[`${Math.floor(x / cw) * cw},${Math.floor(y / (cw * 2)) * cw * 2}`]
+  return !!m && ((m.s !== undefined && m.s.trim() !== '') || !!m.d)
+}
