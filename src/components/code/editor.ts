@@ -118,6 +118,8 @@ export function createState(text: string, o: EditorOptions): EditorState {
       basicSetup,
       keymap.of([indentWithTab]),
       theme,
+      // Long lines wrap instead of scrolling sideways: on Linux (WebKitGTK) a line past the edge opened an empty white area.
+      EditorView.lineWrapping,
       syntaxHighlighting(highlight),
       // Godot writes tabs.
       gd ? [gdscript, indentUnit.of('\t'), EditorState.tabSize.of(4), designLinks(o.data, o.jump)] : [],
