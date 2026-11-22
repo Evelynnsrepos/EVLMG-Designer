@@ -136,3 +136,38 @@
 .bal-bar-fill.is-full {
   background: var(--accent);
 }
+.bal-intro {
+  margin: 0;
+  max-width: 760px;
+}
+.bal-sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.bal-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.bal-source:hover {
+  border-color: var(--accent);
+}
+.bal-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}

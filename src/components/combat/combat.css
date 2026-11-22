@@ -94,3 +94,90 @@
   width: 44px;
   padding: 2px;
 }
+.cb-namecell {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.cb-muted {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.cb-examples {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cb-summary {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+.cb-formula .input {
+  width: 100%;
+  font-family: var(--font-mono, monospace);
+}
+.cb-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+.cb-drow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.cb-drow label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cb-sub {
+  padding-left: 14px;
+}
+.cb-details .calc-number {
+  width: 60px;
+}
+.cb-details .cb-short {
+  width: 120px;
+}
+.cb-details .cb-tiny {
+  width: 64px;
+}
+.cb-resist {
+  width: 200px;
+}
+.cb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 4px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+}
+.cb-share {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.cb-share-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 80px 40px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.cb-share-bar {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--bg-hover);
+  overflow: hidden;
+}
+.cb-share-bar div {
+  height: 100%;
+}
