@@ -35,6 +35,11 @@ const UI = {
   channels: { all: 'All', r: 'Red', g: 'Green', b: 'Blue' } as Record<CurveChannel, string>,
   ranges: { shadows: 'Shadows', midtones: 'Midtones', highlights: 'Highlights' } as Record<ToneRange, string>,
   curvesAxes: '↑ New · → Old',
+  more: 'More',
+  ownLetters: 'Your letters',
+  ownHint: 'Type the letters to use; they are sorted light to dark by themselves.',
+  ink: 'Letter colour',
+  paper: 'Background',
   size: 'Size',
   pressure: 'Pressure',
   distortion: 'Distortion',
@@ -390,6 +395,20 @@ export function FilterControls({ id, values, onChange, histogram: hist0 }: { id:
   const setValues = (fn: (x: AdjustValues) => AdjustValues) => onChange(fn(values))
   const set = (key: string, v: number) => setValues((x) => ({ ...x, v: { ...x.v, [key]: v } }))
   const params = def.params.filter((q) => (!q.range || q.range === range) && (!q.when || values.v[q.when[0]] === q.when[1]))
+  const control = (q: ParamDef) =>
+    q.options ? (
+      <div key={q.key} className="sketch-row">
+        <span className="adjust-label">{q.label}</span>
+        <Seg value={values.v[q.key]} options={q.options.map((label, i) => ({ id: i, label }))} onChange={(v) => set(q.key, v)} />
+      </div>
+    ) : q.toggle ? (
+      <label key={q.key} className="sketch-check">
+        <input type="checkbox" checked={!!values.v[q.key]} onChange={(e) => set(q.key, e.target.checked ? 1 : 0)} />
+        {q.label}
+      </label>
+    ) : (
+      <Range key={q.key} def={q} value={values.v[q.key]} onChange={(v) => set(q.key, v)} />
+    )
   return (
     <>
         {id === 'balance' && <Seg<ToneRange> value={range} options={TONE_RANGES.map((r) => ({ id: r, label: UI.ranges[r] }))} onChange={setRange} />}
@@ -408,20 +427,13 @@ export function FilterControls({ id, values, onChange, histogram: hist0 }: { id:
         )}
         {id === 'gradient' && <GradientEditor stops={values.gradient} onChange={(gradient) => setValues((x) => ({ ...x, gradient }))} />}
         <div className="adjust-params">
-          {params.map((q) =>
-            q.options ? (
-              <div key={q.key} className="sketch-row">
-                <span className="adjust-label">{q.label}</span>
-                <Seg value={values.v[q.key]} options={q.options.map((label, i) => ({ id: i, label }))} onChange={(v) => set(q.key, v)} />
-              </div>
-            ) : q.toggle ? (
-              <label key={q.key} className="sketch-check">
-                <input type="checkbox" checked={!!values.v[q.key]} onChange={(e) => set(q.key, e.target.checked ? 1 : 0)} />
-                {q.label}
-              </label>
-            ) : (
-              <Range key={q.key} def={q} value={values.v[q.key]} onChange={(v) => set(q.key, v)} />
-            ),
+          {params.filter((q) => !q.more).map(control)}
+          {id === 'ascii' && <AsciiExtras values={values} onChange={onChange} />}
+          {params.some((q) => q.more) && (
+            <details className="adjust-more">
+              <summary>{UI.more}</summary>
+              {params.filter((q) => q.more).map(control)}
+            </details>
           )}
           {def.seeded && (
             <button className="btn btn-ghost sketch-small" onClick={() => setValues((x) => ({ ...x, seed: Math.floor(Math.random() * 1000) + 1 }))}>
@@ -429,6 +441,34 @@ export function FilterControls({ id, values, onChange, histogram: hist0 }: { id:
             </button>
           )}
         </div>
+    </>
+  )
+}
+
+/** ASCII art: your own letters and the two colours, shown when they are used. */
+function AsciiExtras({ values, onChange }: { values: AdjustValues; onChange(next: AdjustValues): void }) {
+  const a = values.ascii ?? {}
+  const set = (patch: Partial<NonNullable<AdjustValues['ascii']>>) => onChange({ ...values, ascii: { ...a, ...patch } })
+  return (
+    <>
+      {values.v.set === 3 && (
+        <label className="sketch-row adjust-ascii-own" title={UI.ownHint}>
+          <span className="adjust-label">{UI.ownLetters}</span>
+          <input className="input" value={a.chars ?? ''} placeholder=" .oO@" spellCheck={false} onChange={(e) => set({ chars: e.target.value })} aria-label={UI.ownLetters} />
+        </label>
+      )}
+      {values.v.colour === 1 && (
+        <label className="sketch-row">
+          <span className="adjust-label">{UI.ink}</span>
+          <input type="color" value={a.ink ?? '#000000'} onChange={(e) => set({ ink: e.target.value })} aria-label={UI.ink} />
+        </label>
+      )}
+      {!!values.v.paper && (
+        <label className="sketch-row">
+          <span className="adjust-label">{UI.paper}</span>
+          <input type="color" value={a.paper ?? '#ffffff'} onChange={(e) => set({ paper: e.target.value })} aria-label={UI.paper} />
+        </label>
+      )}
     </>
   )
 }

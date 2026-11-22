@@ -1,3 +1,4 @@
+import type { AsciiText } from '../ascii'
 import { defaultCurves, GRADIENT_PRESETS, type Curves, type GradientStop, type ToneRange } from './color'
 
 /** The Adjustments menu (Sketch Pro): what each adjustment is called and which settings it has. */
@@ -17,6 +18,7 @@ export type FilterId =
   | 'glitch'
   | 'halftone'
   | 'chromatic'
+  | 'ascii'
 
 export interface ParamDef {
   key: string
@@ -36,6 +38,8 @@ export interface ParamDef {
   when?: [string, number]
   /** Labels at the slider's two ends (colour balance). */
   ends?: [string, string]
+  /** Folded away under "More" (settings for pros). */
+  more?: boolean
 }
 
 export interface FilterDef {
@@ -96,6 +100,22 @@ export const FILTERS: FilterDef[] = [
     center: true,
     params: [{ key: 'mode', label: 'Type', min: 0, max: 1, options: ['From a point', 'Shift'] }, { key: 'amount', label: 'Amount', min: 0, max: 60, step: 0.5, unit: 'px' }, { key: 'angle', label: 'Direction', min: 0, max: 360, unit: '°', when: ['mode', 1] }],
   },
+  {
+    id: 'ascii',
+    label: 'ASCII art',
+    group: 'Effects',
+    main: 'cell',
+    params: [
+      { key: 'set', label: 'Letters', min: 0, max: 3, options: ['Classic', 'Fine', 'Blocks', 'Your own'] },
+      { key: 'cell', label: 'Letter size', min: 3, max: 48, unit: 'px' },
+      { key: 'colour', label: 'Colour', min: 0, max: 1, options: ['Picture colours', 'One colour'] },
+      { key: 'look', label: 'Letters go on', min: 0, max: 2, options: ['Dark parts', 'Bright parts', 'Painted parts'], more: true },
+      { ...pct('contrast', 'Contrast', -1, 1), more: true },
+      { ...pct('edges', 'Edge lines'), more: true },
+      { key: 'dither', label: 'Dithering', min: 0, max: 2, options: ['Off', 'Pattern', 'Spread'], more: true },
+      { key: 'paper', label: 'Background colour', min: 0, max: 1, toggle: true, more: true },
+    ],
+  },
 ]
 
 export const filterDef = (id: FilterId) => FILTERS.find((f) => f.id === id)!
@@ -108,6 +128,8 @@ export interface AdjustValues {
   /** Centre point in canvas pixels (perspective blur, chromatic aberration). */
   center: { x: number; y: number }
   seed: number
+  /** 0.35: ASCII art: your own letters and the colours (missing = defaults). */
+  ascii?: AsciiText
 }
 
 const DEFAULTS: Record<string, number> = {
@@ -130,6 +152,7 @@ export function defaultValues(id: FilterId, width: number, height: number): Adju
   if (id === 'bloom') v.amount = 1
   if (id === 'halftone') v.size = 8
   if (id === 'chromatic') v.amount = 8
+  if (id === 'ascii') v.cell = 8
   return { v, curves: defaultCurves(), gradient: GRADIENT_PRESETS[2].stops, center: { x: width / 2, y: height / 2 }, seed: 1 }
 }
 

@@ -459,7 +459,7 @@ The app font, [Lexend Deca](https://github.com/googlefonts/lexend), is under the
 
 The game font pack bundled for cards and every font menu is free to use: Almendra, Atkinson Hyperlegible Next, Bangers, Bebas Neue,
 Cinzel, Cinzel Decorative, Crimson Pro, EB Garamond, Fredoka, Grenze Gotisch, IM Fell English, MedievalSharp, OpenDyslexic, Oswald,
-Pirata One, Press Start 2P and Uncial Antiqua are under the SIL Open Font License 1.1, and Luckiest Guy is under the Apache License 2.0.
+Pirata One, Press Start 2P, Uncial Antiqua and JetBrains Mono (used for ASCII art) are under the SIL Open Font License 1.1, and Luckiest Guy is under the Apache License 2.0.
 Each font's licence and authors are in [`public/fonts/game/licenses/`](public/fonts/game/licenses/). Thank you to all the font makers!
 
 Material Lab (experimental) gets its node library and its ready materials from [Material Maker](https://github.com/RodZill4/material-maker) by Rodolphe Suescun and

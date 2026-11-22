@@ -110,7 +110,8 @@ export class AdjustSession extends LayerSession {
   }
 
   renderFilter(id: FilterId, values: AdjustValues) {
-    this.result = this.gpu ? this.gpu.run(id, values) : this.cpuCanvas(runCpu(id, values, this.pixels()))
+    // ASCII art has no Adjustments shader; its CPU path is quick enough for a preview.
+    this.result = this.gpu && id !== 'ascii' ? this.gpu.run(id, values) : this.cpuCanvas(runCpu(id, values, this.pixels()))
     this.compose()
   }
 

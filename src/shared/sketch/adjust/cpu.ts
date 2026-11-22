@@ -1,6 +1,7 @@
 import { balanceLut, curvesLut, gradientLut, hsbAdjust, luma, type Balance, type RGB } from './color'
 import type { AdjustValues, FilterId } from './filters'
 import { fieldAt } from './liquify'
+import { renderAscii } from '../ascii'
 
 /**
  * CPU versions of the Adjustments and Liquify (Sketch Pro), for machines
@@ -170,6 +171,7 @@ export function valueAlpha(c: RGB, a: number, mode: number, amount: number): [RG
 
 /** An adjustment of `img` on the CPU. */
 export function runCpu(id: FilterId, a: AdjustValues, img: ImageData): ImageData {
+  if (id === 'ascii') return renderAscii(img, a)
   const { width: w, height: h } = img
   const v = a.v
   const p = toPx(img)

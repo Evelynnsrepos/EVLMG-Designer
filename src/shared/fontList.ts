@@ -8,7 +8,7 @@
 export const BUNDLED_FONTS = [
   'Lexend Deca', 'Almendra', 'Atkinson Hyperlegible Next', 'Bangers', 'Bebas Neue', 'Cinzel', 'Cinzel Decorative', 'Crimson Pro',
   'EB Garamond', 'Fredoka', 'Grenze Gotisch', 'IM Fell English', 'Luckiest Guy', 'MedievalSharp', 'OpenDyslexic', 'Oswald',
-  'Pirata One', 'Press Start 2P', 'Uncial Antiqua',
+  'Pirata One', 'Press Start 2P', 'Uncial Antiqua', 'JetBrains Mono',
 ]
 
 export const GENERIC_FONTS = ['sans-serif', 'serif', 'monospace', 'cursive']

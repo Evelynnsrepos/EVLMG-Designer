@@ -188,3 +188,21 @@
 .adjust-stop.is-active {
   box-shadow: 0 0 0 2px var(--accent);
 }
+
+/* 0.35: settings for pros folded away (ASCII art) */
+.adjust-more > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  margin: 4px 0;
+}
+.adjust-more {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.adjust-ascii-own input {
+  flex: 1;
+  min-width: 0;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
