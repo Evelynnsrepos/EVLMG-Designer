@@ -21,6 +21,7 @@ export const ACTIONS = [
   { id: 'tool.layerpick', label: 'Layer picker (or hold Ctrl)', keys: ['k'] },
   { id: 'tool.hand', label: 'Pan', keys: ['h'] },
   { id: 'tool.text', label: 'Text', keys: ['t'] },
+  { id: 'tool.signs', label: 'Sign brushes (ASCII layers)', keys: ['a'] },
   { id: 'swapEraser', label: 'Switch brush / eraser', keys: ['x'] },
   { id: 'undo', label: 'Undo', keys: ['ctrl+z'] },
   { id: 'redo', label: 'Redo', keys: ['ctrl+y', 'ctrl+shift+z'] },

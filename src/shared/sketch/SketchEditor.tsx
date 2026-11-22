@@ -7,6 +7,7 @@ import {
   Fingerprint,
   FlipHorizontal,
   Hand,
+  Hash,
   Image as ImageIcon,
   ImagePlus,
   Lasso,
@@ -57,6 +58,9 @@ import { ReferencePicker } from './ReferencePicker'
 import { ReferenceWindow } from './ReferenceWindow'
 import { ShortcutSheet } from './ShortcutSheet'
 import { FloatingPanel, useSpot } from './FloatingPanel'
+import { AsciiBrushPanel, type SignTool } from './AsciiBrushPanel'
+import { beginSigns, signsTo, type SignStroke } from './asciiBrush'
+import type { AsciiMark } from './ascii'
 import { growDoc, growFor, shiftDocData } from './growth'
 import { SketchHistoryFile } from './historyFile'
 import { boundsOf, maxLayers, type Rect } from './tiles'
@@ -201,7 +205,7 @@ const UI = {
   saving: 'Saving…',
 }
 
-type Tool = 'brush' | 'eraser' | 'smudge' | 'lasso' | 'rect' | 'move' | 'rotate3d' | 'mold' | 'eyedropper' | 'layerpick' | 'hand' | 'text'
+type Tool = 'brush' | 'eraser' | 'smudge' | 'lasso' | 'rect' | 'move' | 'rotate3d' | 'mold' | 'eyedropper' | 'layerpick' | 'hand' | 'text' | 'signs'
 
 /** The app's background colour as #rrggbb (the theme's --bg), for the cursor's contrast over see-through areas. */
 function appBackground(): string {
@@ -253,6 +257,11 @@ function paperPicture(c: HTMLCanvasElement, w: number, h: number, dpr: number, a
   return key
 }
 
+const UI_SIGNS = {
+  title: 'Sign brushes',
+  noLayer: 'Pick an ASCII layer to paint signs on (Layers: the letter button makes one).',
+}
+
 /** Tools that paint: switching between them doesn't save (switching to any other tool does). */
 const PAINT_TOOLS = new Set<Tool>(['brush', 'eraser', 'smudge'])
 
@@ -269,6 +278,7 @@ const TOOLS: { id: Tool; icon: LucideIcon; label: string; key: string }[] = [
   { id: 'layerpick', icon: Layers2, label: UI.layerPick, key: 'k' },
   { id: 'hand', icon: Hand, label: UI.hand, key: 'h' },
   { id: 'text', icon: Type, label: 'Text (T): click to add text, drag a text box to move it', key: 't' },
+  { id: 'signs', icon: Hash, label: 'Sign brushes (A): paint signs on an ASCII layer', key: 'a' },
 ]
 
 /** Icons for the QuickSelect bubbles (the glass look shows these instead of words). Actions without one keep their name. */
@@ -382,6 +392,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       if (next.layers !== d.layers || doc) engine.layersChanged(d.layers, next.layers, doc)
       return next
     })
+  /** Sign brushes: the ASCII layer's painted cells (merged into one undo step per stroke by the engine). */
+  const setMarks = (id: Id, marks: Record<string, AsciiMark> | null) =>
+    marks && update((d) => ({ ...d, layers: d.layers.map((l) => (l.id === id && l.ascii ? { ...l, ascii: { ...l.ascii, ascii: { ...l.ascii.ascii, marks } } } : l)) }))
   const docRef = useRef(doc)
   const flushDocRef = useRef(flushDoc)
   useEffect(() => {
@@ -399,6 +412,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     viewRef.current = view
   })
   const [tool, setTool] = useState<Tool>('brush')
+  const [signTool, setSignTool] = useState<SignTool>({ mode: 'line', sign: '#', size: 0 })
   const sel = useSelector(engine, active, tool)
   const [libraryOpen, setLibraryOpen] = useState<'brush' | 'eraser' | null>(null)
   const [libraryAt, setLibraryAt] = useState({ x: 0, y: 0 })
@@ -837,6 +851,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     | { kind: 'pan'; sx: number; sy: number; vx: number; vy: number }
     | { kind: 'select'; pts: { x: number; y: number }[]; rect: boolean }
     | { kind: 'move'; from: { x: number; y: number }; to: { x: number; y: number } }
+    | { kind: 'signs'; st: SignStroke; layerId: Id; last: { x: number; y: number } }
     | null
   >(null)
 
@@ -912,6 +927,14 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       gesture.current = { kind: 'paint', pipeline, last: pt, rect: e.currentTarget.getBoundingClientRect(), opts, pts: [pt], rest: pt, animated: !!target.wiggle }
       armHold()
       setVersion(engine.version)
+    } else if (t === 'signs') {
+      const a = activeLayer.ascii
+      if (!a || !activeLayer.visible || lockedInTree(doc.layers, activeLayer.id)) return
+      // Every sign stroke is an undo step of its own.
+      engine.endLayerTweak()
+      const st = beginSigns(a, doc.width, doc.height, signTool.mode, signTool.sign, signTool.size, color)
+      gesture.current = { kind: 'signs', st, layerId: activeLayer.id, last: p }
+      setMarks(activeLayer.id, signsTo(st, p, null))
     } else if (t === 'lasso' || t === 'rect') {
       gesture.current = { kind: 'select', pts: [p], rect: t === 'rect' }
       // The wand only looks at the active layer (or the reference layer, when one is set), never at the others.
@@ -1011,6 +1034,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         armHold()
       }
       setVersion(engine.version)
+    } else if (g.kind === 'signs') {
+      setMarks(g.layerId, signsTo(g.st, p, g.last))
+      g.last = p
     } else if (g.kind === 'select') {
       sel.move(p, e)
     } else if (g.kind === 'move') {
@@ -1044,6 +1070,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         setShapeOffer({ shape: g.snapped.drawn, opts: g.opts, pressure: g.snapped.pressure, start: g.pts[0], at: lastPointer.current, editing: false })
       }
     }
+    else if (g.kind === 'signs') engine.endLayerTweak()
     else if (g.kind === 'select') {
       sel.up(viewRef.current?.scale ?? 1)
     } else if (g.kind === 'move') {
@@ -1343,6 +1370,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     'tool.layerpick': () => setTool('layerpick'),
     'tool.hand': () => setTool('hand'),
     'tool.text': () => setTool('text'),
+    'tool.signs': () => setTool('signs'),
     swapEraser: () => setTool(tool === 'eraser' ? 'brush' : 'eraser'),
     undo: () => undo(),
     redo: () => redo(),
@@ -1547,7 +1575,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   return (
     <div className="sketch">
       <div className="sketch-topbar" onPointerDown={(e) => e.stopPropagation()}>
-        {TOOLS.map((t) => (
+        {TOOLS.filter((t) => t.id !== 'signs' || activeLayer?.ascii || tool === 'signs').map((t) => (
           <ToolButton key={t.id} icon={t.icon} label={t.label} active={tool === t.id} onClick={() => setTool(t.id)} hint={`tool.${t.id}`} />
         ))}
         <span className="sketch-sep" />
@@ -1838,6 +1866,11 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
             {UI_PRO.dismiss}
           </button>
         </div>
+      )}
+      {tool === 'signs' && (
+        <FloatingPanel title={UI_SIGNS.title} at={textSpot} onMove={setTextSpot} onClose={() => setTool('brush')} width={290}>
+          {activeLayer?.ascii ? <AsciiBrushPanel value={signTool} onChange={setSignTool} /> : <p className="ascii-brush-hint">{UI_SIGNS.noLayer}</p>}
+        </FloatingPanel>
       )}
       {activeLayer?.text && tool === 'text' && (
         <FloatingPanel title={UI_PRO.textOptions} at={textSpot} onMove={setTextSpot} onClose={() => setTool('move')} width={290}>

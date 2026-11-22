@@ -80,6 +80,7 @@ import { TilePlayer } from './TilePlayer'
 import { PopOut } from './PopOut'
 import { PaletteSwitch } from './PaletteSwitch'
 import { adjustImg, despeckle, dropShadow, NO_ADJUST, type Adjust } from './adjust'
+import { AsciiQuick } from '@/shared/sketch/AsciiQuick'
 import './pixel-art.css'
 
 type Tool = 'pencil' | 'eraser' | 'shape' | 'ellipseSelect' | 'polySelect' | 'hand' | 'line' | 'curve' | 'rect' | 'ellipse' | 'fill' | 'lassofill' | 'gradient' | 'spray' | 'text' | 'picker' | 'shade' | 'select' | 'lasso' | 'wand' | 'move' | 'tile' | 'tileErase' | 'tileFill' | 'tileRandom' | 'auto'
@@ -2392,6 +2393,13 @@ function Editor({ doc, title, active, documentId }: { doc: UseDocumentResult<Pix
                     Remove stray pixels
                   </button>
                 </details>
+                <AsciiQuick
+                  name={title}
+                  picture={() => {
+                    const f = frameImg(fi)
+                    return new ImageData(new Uint8ClampedArray(f.data), f.width, f.height)
+                  }}
+                />
                 <div className="px-row px-wrap" title="Change the selection itself">
                   <button className="btn btn-ghost" onClick={() => setMask(all())}>
                     All

@@ -689,3 +689,44 @@
 .sketch-anim-note .btn {
   white-space: nowrap;
 }
+
+/* 0.35: sign brushes on ASCII layers */
+.ascii-brush {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ascii-brush-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ascii-brush-palette {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(26px, 1fr));
+  gap: 3px;
+}
+.ascii-brush-sign {
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  cursor: pointer;
+}
+.ascii-brush-sign.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+.ascii-brush-other {
+  grid-column: span 2;
+  min-width: 0;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.ascii-brush-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}

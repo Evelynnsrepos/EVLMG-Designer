@@ -477,3 +477,11 @@
   font-display: swap;
   src: url('/fonts/game/OpenDyslexic-700.woff2') format('woff2');
 }
+/* 0.35: monospace font for ASCII art (SIL OFL 1.1). Latin only; other characters fall back to a system monospace font. */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/game/JetBrainsMono-400-latin.woff2') format('woff2');
+}

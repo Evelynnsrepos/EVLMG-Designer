@@ -9,6 +9,8 @@ import { parseHex } from './gl'
 import { clip, GpuPainter, GpuSurface, rgb, type GpuLayer, type StrokeLook, type Tex } from './gpuPaint'
 import { layerTree, lockedInTree, shownInTree, type LayerNode } from './layers'
 import { outlineInto, outlineReach, type OutlineSettings } from './outline'
+import { asciiInto, asciiReach, AsciiGrid, prepareGrid } from './ascii'
+import type { AdjustValues } from './adjust/filters'
 import { mirrored, type InputPoint, type SketchDoc, type SketchLayer, type SymmetryMode } from './model'
 import { applyRelief } from './relief'
 import { runCpu } from './adjust/cpu'
@@ -334,6 +336,7 @@ export class SketchEngine {
     }
     this.edits++
     this.outlineCache.delete(id)
+    this.asciiCache.delete(id)
     this.layers.delete(id)
     this.layerVersions.delete(id)
     this.history.dropLayer(id)
@@ -886,6 +889,11 @@ export class SketchEngine {
     this.lastLayerStep = { meta, at: now, tweak: sameIds }
   }
 
+  /** Close the layer step being tweaked, so the next layer change is an undo step of its own (sign brush strokes). */
+  endLayerTweak() {
+    this.lastLayerStep = null
+  }
+
   /**
    * The Selector changed the selection: a step of its own, or (`withLast`) part of the step just made,
    * e.g. the selection following pixels a transform moved.
@@ -1273,8 +1281,9 @@ export class SketchEngine {
     if (!this.stroke || !this.strokeOpts || this.stamper instanceof WetStamper || this.livePreview?.stroke !== this.stroke) return null
     if (doc.layers.some((l) => l.kind === 'adjust' || (l.visible && !CANVAS_BLENDS.has(l.blend)))) return null
     const area = this.strokeArea(this.strokeOpts)
-    // An outline reaches past the stroke.
-    const m = Math.max(0, ...doc.layers.map((l) => (l.outline && l.visible ? outlineReach(l.outline) : 0)))
+    // An outline reaches past the stroke, and so do ASCII letters (their neighbour cells).
+    const m = Math.max(0, ...doc.layers.map((l) => (!l.visible ? 0 : l.ascii ? asciiReach(l.ascii) : l.outline ? outlineReach(l.outline) : 0)))
+    if (m === Infinity) return null
     return area && clipRect(m ? { x: area.x - m, y: area.y - m, w: area.w + 2 * m, h: area.h + 2 * m } : area, this.width, this.height)
   }
 
@@ -1387,11 +1396,15 @@ export class SketchEngine {
       }
       if (layer.kind === 'adjust') {
         // An adjustment layer is the picture below, recoloured; it is never a clipping base.
+        if (layer.adjust?.id === 'ascii') keys.add(layer.id)
         if (layer.visible && layer.adjust) out.push({ tex: this.gpu!.picture, key: layer.id, opacity: layer.opacity, blend: layer.blend, mask: m, ...clipTo, adjust: layer.adjust })
         continue
       }
       const entry: GpuLayer = { tex: this.gpuSource(layer), key: layer.id, opacity: layer.opacity, blend: layer.blend, mask: m, ...clipTo }
-      if (layer.outline) {
+      if (layer.ascii) {
+        keys.add(layer.id)
+        entry.ascii = { a: layer.ascii, version: this.isLive(layer) ? -1 : this.layerVersion(layer.id) }
+      } else if (layer.outline) {
         keys.add(layer.id)
         entry.outline = { o: layer.outline, version: this.isLive(layer) ? -1 : this.layerVersion(layer.id) }
       }
@@ -1502,6 +1515,30 @@ export class SketchEngine {
     return hit.c.canvas
   }
 
+  /** ASCII layers on Canvas 2D: the letters, kept per layer; while painting only the cells under the stroke are read again. */
+  private asciiCache = new Map<Id, { grid: AsciiGrid; version: number; c: Canvas2D; changed: Rect | null }>()
+  private ascii2d(layer: SketchLayer, a: AdjustValues, px: { canvas: HTMLCanvasElement; live: boolean; dirty?: Rect | null }): HTMLCanvasElement {
+    const version = this.layerVersions.get(layer.id) ?? 0
+    let hit = this.asciiCache.get(layer.id)
+    if (!hit || hit.c.canvas.width !== this.width || hit.c.canvas.height !== this.height) this.asciiCache.set(layer.id, (hit = { grid: new AsciiGrid(), version: -1, c: this.canvas(), changed: null }))
+    const all = { x: 0, y: 0, w: this.width, h: this.height }
+    const fresh = prepareGrid(hit.grid, this.width, this.height, a)
+    let r: Rect
+    if (fresh) r = all
+    else if (px.live) r = px.dirty ?? all
+    else if (hit.version === version) {
+      // Only the sign brushes' cells changed: pick the letters again, nothing to read.
+      if (!hit.grid.marksChanged) return hit.c.canvas
+      r = { x: 0, y: 0, w: 0, h: 0 }
+    }
+    // The stroke just ended: read its cells again from the layer itself, to be sure.
+    else r = hit.changed ?? all
+    asciiInto(hit.grid, px.canvas, hit.c.ctx, r, fresh)
+    hit.changed = px.live ? union(hit.changed, r) : null
+    hit.version = px.live ? -1 : version
+    return hit.c.canvas
+  }
+
   private compose2d(ctx: CanvasRenderingContext2D, nodes: LayerNode[], depth: number) {
     let base: { canvas: HTMLCanvasElement; mask: HTMLCanvasElement | null; opacity: number } | null = null
     for (const { layer, children, mask } of nodes) {
@@ -1527,7 +1564,7 @@ export class SketchEngine {
         src = this.adjusted(layer, ctx)
       } else {
         const px = this.livePixels(layer)
-        src = layer.outline ? this.outlined2d(layer, layer.outline, px) : px.canvas
+        src = layer.ascii ? this.ascii2d(layer, layer.ascii, px) : layer.outline ? this.outlined2d(layer, layer.outline, px) : px.canvas
         if (!layer.clip) base = { canvas: this.ensure(layer.id).canvas, mask: m, opacity }
         if (!layer.visible) continue
       }

@@ -49,6 +49,11 @@ export interface SketchLayer {
   /** Outline layer (0.35): everything on it gets a live outline with these settings; the pixels stay as painted. */
   outline?: OutlineSettings
   /**
+   * ASCII layer (0.35): what is painted on it is shown as letters with these settings (the ASCII art adjustment's
+   * values); the pixels stay as painted, so older versions and the mobile app show the paint without letters.
+   */
+  ascii?: AdjustValues
+  /**
    * 0.35: Animated layer. Its pixels (`image`) are frame 1, a normal still picture, so older versions and the mobile
    * app show it as one. The other frames are painted again from these strokes, each with its own wiggle.
    */
@@ -80,7 +85,7 @@ export interface LayerWiggle {
 
 /** The colour adjustments a layer can be: hue/saturation/brightness, colour balance, curves or a gradient map. */
 export interface LayerAdjust {
-  id: 'hsb' | 'balance' | 'curves' | 'gradient'
+  id: 'hsb' | 'balance' | 'curves' | 'gradient' | 'ascii'
   values: AdjustValues
 }
 
