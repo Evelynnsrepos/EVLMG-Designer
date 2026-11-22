@@ -32,9 +32,9 @@ const UI = {
   details: 'Side panel: story overview, or the selected node’s details',
   emptyTitle: 'Write a branching story',
   emptySteps: [
-    'Click anywhere to place the first scene and type it.',
-    'Click again: the next scene is connected to the last one.',
-    'Click an older scene, then empty space, to branch into a choice.',
+    'Click anywhere to place the first scene. The side panel opens so you can type it.',
+    'Use + Add next under a scene for the next one. A second one makes it a choice.',
+    'Press C and click empty space to place another scene after the last one.',
   ],
   pickColor: 'Color for this branch',
   addNext: 'Add next',
@@ -62,6 +62,8 @@ export default function View({ documentId, active }: PanelProps) {
   const [showDetails, setShowDetails] = useState(true)
   /** 0.21: node open for typing (double-click, or right after Create). */
   const [editingId, setEditingId] = useState<Id | null>(null)
+  /** A node just created: its side panel opens with the title field focused. */
+  const [focusId, setFocusId] = useState<Id | null>(null)
   /** v0.33 play mode: undefined = off, null = from the start, an id = from that node. */
   const [playFrom, setPlayFrom] = useState<Id | null | undefined>(undefined)
   const docTitle = useProjectStore((s) => s.meta?.documents.find((d) => d.id === documentId)?.title ?? '')
@@ -97,7 +99,12 @@ export default function View({ documentId, active }: PanelProps) {
         setColorOfferId(null)
         return open
       },
-      editNode: setEditingId,
+      // Her ask (2026-11-22): after placing one scene, go back to Select and type it in the side panel.
+      editNode: (id) => {
+        apiRef.current?.setTool('select')
+        setShowDetails(true)
+        setFocusId(id)
+      },
     }
     return [selectTool, createTool(host), severTool(host), connectTool(host), handTool]
   }, [])
@@ -170,7 +177,9 @@ export default function View({ documentId, active }: PanelProps) {
     setLastId(r.node.id)
     apiRef.current?.select([r.node.id])
     if (r.isBranch) setColorOfferId(r.node.id)
-    setEditingId(r.node.id)
+    apiRef.current?.setTool('select')
+    setShowDetails(true)
+    setFocusId(r.node.id)
   }
   // Declared as functions so the QuickSelect (set up above the loading check) can call them.
   function tidy() {
@@ -352,6 +361,8 @@ export default function View({ documentId, active }: PanelProps) {
           onEscape={() => wrapRef.current?.querySelector<HTMLElement>('.canvas-root')?.focus()}
           choices={choicesOf(scene, selectedNode.id)}
           onChoiceText={(arrowId, text, o) => binding.onChange((s) => setChoiceText(s, arrowId, text), o)}
+          focusOnOpen={focusId === selectedNode.id}
+          onFocused={() => setFocusId(null)}
         />
       )}
       {!selectedNode && showDetails && nodes.length > 0 && (

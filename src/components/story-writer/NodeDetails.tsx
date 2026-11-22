@@ -1,5 +1,5 @@
 import { CornerDownRight, ExternalLink, Flag, ImagePlus, Play, Trash2, X } from 'lucide-react'
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type { Id } from '@/core/model'
 import { AssetImage } from '@/shared/AssetImage'
 import { openExternalUrl, RefPicker } from '@/shared/links'
@@ -62,10 +62,24 @@ export interface NodeDetailsProps {
   onClose(): void
   /** Esc in the panel: hand the keyboard back to the canvas so tool keys work again. */
   onEscape(): void
+  /** The node was just created: put the cursor in its title (or text) right away. */
+  focusOnOpen?: boolean
+  onFocused?(): void
 }
 
 /** Side panel for the selected node: text, color, image and link (SW-1, SW-2). */
-export function NodeDetails({ node, nodes, refs, onPatch, onColor, onPickImage, onGoTo, onDelete, onClose, onEscape, choices, onChoiceText }: NodeDetailsProps) {
+export function NodeDetails({ node, nodes, refs, onPatch, onColor, onPickImage, onGoTo, onDelete, onClose, onEscape, choices, onChoiceText, focusOnOpen, onFocused }: NodeDetailsProps) {
+  const titleRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (!focusOnOpen) return
+    // After the click that created the node has finished moving focus to the canvas.
+    const raf = requestAnimationFrame(() => {
+      titleRef.current?.focus()
+      onFocused?.()
+    })
+    return () => cancelAnimationFrame(raf)
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- only when the panel opens for a new node
+  }, [focusOnOpen])
   // One undo step per field edit: the first keystroke records, the rest replace it.
   const editing = useRef(false)
   const typed = (patch: Partial<StoryNode>) => {
@@ -122,7 +136,7 @@ export function NodeDetails({ node, nodes, refs, onPatch, onColor, onPickImage, 
 
       <label className="story-field">
         <span>{DETAILS_UI.title}</span>
-        <input className="input" value={node.title} placeholder={STORY_NODE_UI.untitled} onChange={(e) => typed({ title: e.target.value })} {...fieldEvents} />
+        <input ref={titleRef} className="input" value={node.title} placeholder={STORY_NODE_UI.untitled} onChange={(e) => typed({ title: e.target.value })} {...fieldEvents} />
       </label>
 
       <label className="story-field">
