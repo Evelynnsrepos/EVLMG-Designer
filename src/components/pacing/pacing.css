@@ -166,3 +166,9 @@
   border-radius: 3px;
   background: var(--accent);
 }
+.pc-feltpanel summary {
+  cursor: pointer;
+}
+.pc-feltpanel[open] summary {
+  margin-bottom: 4px;
+}

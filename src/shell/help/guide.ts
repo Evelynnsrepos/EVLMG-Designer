@@ -939,7 +939,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Plan the player journey as beats: moments like the opening, an ambush or the first boss, each with a kind, a time, how the player should feel and notes.',
       'Every beat has a value from 0 to 10 on each curve: intensity and story stakes to start with, and add your own like difficulty. Drag the points up and down on the graph, or use the sliders.',
       'The graph warns about long flat stretches, where players may get bored, and about high peaks right after each other with no breather between.',
-      'Playtests: when playtest sessions rated this journey (Playtests, "Sections from"), a dashed line shows how much fun testers had, beats where they had a problem get an orange band, each beat card says what testers felt, and the side panel shows the averages and planned against played minutes. Untick Playtests in the toolbar to hide it.',
+      'Playtests: when playtest sessions rated this journey (Playtests, "Sections from"), a dashed line shows how much fun testers had, beats where they had a problem get an orange band, each beat card says what testers felt, and the side panel shows the averages and planned against played minutes (click Playtests there to fold them open). Untick Show playtests in the toolbar to hide it; it stays hidden for that journey.',
     ],
   },
   pitch: {

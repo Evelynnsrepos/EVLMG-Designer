@@ -26,12 +26,11 @@ export default function View({ documentId, active }: PanelProps) {
   } | null>(null)
   const svg = useRef<SVGSVGElement>(null)
   const tests = useDocument<PlaytestsDoc>('playtests', 'playtests', createPlaytestsDoc)
-  const [showTests, setShowTests] = useState(true)
   if (!doc.data) return null
   const d = doc.data
   // 0.35: what playtesters felt in each beat (sections of sessions that picked this journey).
   const felt = new Map<string, SectionAverage>(sectionAverages(tests.data?.items ?? [], new Set(d.beats.map((b) => b.id))).flatMap((a) => (a.beatId && a.testers ? [[a.beatId, a] as const] : [])))
-  const overlay = showTests && felt.size > 0
+  const overlay = !d.hideTests && felt.size > 0
   const set = (fn: (d: PacingDoc) => PacingDoc) => doc.update(fn)
   const editBeat = (id: string, patch: Partial<Beat>) =>
     set((x) => ({
@@ -133,8 +132,8 @@ export default function View({ documentId, active }: PanelProps) {
         </button>
         {felt.size > 0 && (
           <label className="ld-inline" title="Show what playtesters felt in each beat (from the Playtests tool)">
-            <input type="checkbox" checked={showTests} onChange={(e) => setShowTests(e.target.checked)} />
-            Playtests
+            <input type="checkbox" checked={!d.hideTests} onChange={(e) => set((x) => ({ ...x, hideTests: !e.target.checked }))} />
+            Show playtests
           </label>
         )}
         <label className="ld-inline">
@@ -328,10 +327,13 @@ function FeltLine({ a }: { a: SectionAverage }) {
 /** Averages of one beat in the side panel, with planned vs played minutes. */
 function FeltPanel({ a, planned, unit }: { a: SectionAverage; planned: number | null; unit: string }) {
   return (
-    <div className="pc-feltpanel">
-      <strong>
-        Playtests ({a.testers} tester{a.testers > 1 ? 's' : ''})
-      </strong>
+    <details className="pc-feltpanel">
+      <summary>
+        <strong>
+          Playtests ({a.testers} tester{a.testers > 1 ? 's' : ''})
+        </strong>
+        {a.flags.length > 0 && <span className="pc-felt-line bad"> {a.flags.join(', ')}</span>}
+      </summary>
       {RATINGS.map((r) =>
         a[r.key] == null ? null : (
           <div key={r.key} className="pc-felt-row" title={`1 = ${r.low}, 5 = ${r.high}`}>
@@ -349,7 +351,6 @@ function FeltPanel({ a, planned, unit }: { a: SectionAverage; planned: number | 
           {planned != null && unit === 'min' ? ` (planned ${planned} min)` : ''}
         </p>
       )}
-      {a.flags.length > 0 && <p className="pc-felt-line bad">{a.flags.join(', ')}</p>}
       {a.tags.length > 0 && <p className="muted">Seen: {a.tags.map(([t, n]) => `${t} ×${n}`).join(', ')}</p>}
       {a.bugs > 0 && (
         <p className="muted">
@@ -359,6 +360,6 @@ function FeltPanel({ a, planned, unit }: { a: SectionAverage; planned: number | 
       <button className="btn btn-ghost" onClick={() => openDocument('playtests')}>
         Open Playtests
       </button>
-    </div>
+    </details>
   )
 }
