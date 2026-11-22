@@ -293,3 +293,73 @@
   color: var(--accent);
   padding: 2px;
 }
+
+/* Layer buttons: one row, the blend mode as a small icon button that opens its list (2026-11-22). */
+.sketch-layer-actions {
+  flex-wrap: nowrap;
+  gap: 3px;
+}
+.sketch-layer-actions .sketch-small {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 30px;
+  padding: 2px 4px;
+  background: var(--bg-sunken);
+  display: inline-grid;
+  place-items: center;
+}
+.sketch-blend-menu {
+  /* Two columns: every mode fits without scrolling, which is hard with a wobbly pen. */
+  width: 400px;
+  columns: 2;
+  max-height: none;
+  overflow: visible;
+  column-gap: 4px;
+}
+.sketch-blend-group {
+  break-inside: avoid;
+}
+.sketch-blend-menu button {
+  padding: 5px 10px 5px 30px;
+}
+.sketch-blend-group-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Shaky hand help, Strong (Settings): bigger targets in the Draw side panel and the brush library. */
+[data-steady='strong'] .sketch-panel .icon-btn,
+[data-steady='strong'] .brushlib .icon-btn {
+  min-width: 36px;
+  min-height: 36px;
+}
+[data-steady='strong'] .sketch-layer-list .sketch-layer {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+[data-steady='strong'] .sketch-layer-actions .sketch-small {
+  min-height: 38px;
+}
+[data-steady='strong'] .sketch-blend-menu button,
+[data-steady='strong'] .sketch-layer-menu button {
+  padding-top: 11px;
+  padding-bottom: 11px;
+}
+/* The picked brush keeps its buttons, so a pen that can't hover still reaches them. */
+.brushlib-brush.is-active .brushlib-brush-actions {
+  display: flex;
+}
+[data-steady='strong'] .brushlib-brush,
+[data-steady='strong'] .brushlib-set {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+[data-steady='strong'] .sketch-layers-head {
+  flex-wrap: wrap;
+}

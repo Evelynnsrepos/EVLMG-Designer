@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, CircleDashed, Type as LetterIcon, Ellipsis, Eye, EyeOff, Folder, FolderPlus, ListChecks, Lock, Merge, Plus, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react'
+import { CornerDownRight, Grid2x2, ArrowDown, ArrowUp, Circle, Contrast, Diff, Moon, Palette, Sun, ChevronDown, ChevronRight, CircleDashed, Type as LetterIcon, Ellipsis, Eye, EyeOff, Folder, FolderPlus, ListChecks, Lock, Merge, Plus, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react'
 import { dragFromRowOnly } from '@/shared/dragGuard'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Id } from '@/core/model'
@@ -98,6 +98,9 @@ const UI = {
   rasterizeAscii: 'Rasterize letters (normal layer again)',
   isAscii: 'ASCII layer: letters, settings and export',
   exportAscii: 'Export the letters',
+  blend: 'Blend mode',
+  moveUp: 'Move up',
+  moveDown: 'Move down',
 }
 
 /** What the layer list needs from the editor. */
@@ -132,6 +135,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
   // Picks of layers that are gone are dropped.
   const picked = new Set([...pickedRaw].filter((id) => doc.layers.some((l) => l.id === id)))
   const [menu, setMenu] = useState<{ id: Id; x: number; y: number } | null>(null)
+  const [blendMenu, setBlendMenu] = useState<{ id: Id; x: number; y: number } | null>(null)
   const [drop, setDrop] = useState<{ id: Id; where: 'above' | 'below' | 'inside' } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const rows = layerRows(doc.layers)
@@ -414,6 +418,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
   }
 
   const shownMenu = menu && doc.layers.find((l) => l.id === menu.id)
+  const blendLayer = blendMenu && doc.layers.find((l) => l.id === blendMenu.id)
 
   return (
     <section className="sketch-layers">
@@ -617,38 +622,38 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
                     <input type="range" min={0} max={1} step={0.01} value={l.opacity} onChange={(e) => set(l.id, { opacity: Number(e.target.value) })} />
                     <span className="sketch-slider-value">{Math.round(l.opacity * 100)}%</span>
                   </label>
-                  <select className="input" value={l.blend} onChange={(e) => set(l.id, { blend: e.target.value as BlendMode })}>
-                    {[...new Set(BLEND_MODES.map((m) => m.group))].map((g) => (
-                      <optgroup key={g} label={g}>
-                        {BLEND_MODES.filter((m) => m.group === g).map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
                   <div className="sketch-layer-actions">
-                    <button className={`btn btn-ghost sketch-small${l.alphaLock ? ' is-active' : ''}`} disabled={isGroup(l)} title={UI.alphaLock} onClick={() => set(l.id, { alphaLock: !l.alphaLock })}>
-                      Alpha
+                    <button
+                      className={`btn btn-ghost sketch-small sketch-blend-btn${l.blend !== 'source-over' ? ' is-active' : ''}`}
+                      title={`${UI.blend}: ${blendOf(l.blend).label}`}
+                      aria-label={`${UI.blend}: ${blendOf(l.blend).label}`}
+                      onClick={(e) => {
+                        const r = e.currentTarget.getBoundingClientRect()
+                        setBlendMenu(blendMenu ? null : { id: l.id, x: r.left, y: r.bottom + 4 })
+                      }}
+                    >
+                      <BlendIcon mode={l.blend} />
                     </button>
-                    <button className={`btn btn-ghost sketch-small${l.clip ? ' is-active' : ''}`} title={UI.clip} onClick={() => set(l.id, { clip: !l.clip })}>
-                      Clip
+                    <button className={`btn btn-ghost sketch-small${l.alphaLock ? ' is-active' : ''}`} disabled={isGroup(l)} title={UI.alphaLock} aria-label={UI.alphaLock} onClick={() => set(l.id, { alphaLock: !l.alphaLock })}>
+                      <Grid2x2 size={14} />
                     </button>
-                    <button className={`btn btn-ghost sketch-small${l.locked ? ' is-active' : ''}`} title={UI.lock} onClick={() => set(l.id, { locked: !l.locked })}>
-                      Lock
+                    <button className={`btn btn-ghost sketch-small${l.clip ? ' is-active' : ''}`} title={UI.clip} aria-label={UI.clip} onClick={() => set(l.id, { clip: !l.clip })}>
+                      <CornerDownRight size={14} />
                     </button>
-                    <button className="btn btn-ghost sketch-small" title="Move up" onClick={() => update((d) => ({ ...d, layers: moveSibling(d.layers, l.id, 1) }))}>
-                      ↑
+                    <button className={`btn btn-ghost sketch-small${l.locked ? ' is-active' : ''}`} title={UI.lock} aria-label={UI.lock} onClick={() => set(l.id, { locked: !l.locked })}>
+                      <Lock size={14} />
                     </button>
-                    <button className="btn btn-ghost sketch-small" title="Move down" onClick={() => update((d) => ({ ...d, layers: moveSibling(d.layers, l.id, -1) }))}>
-                      ↓
+                    <button className="btn btn-ghost sketch-small" title={UI.moveUp} aria-label={UI.moveUp} onClick={() => update((d) => ({ ...d, layers: moveSibling(d.layers, l.id, 1) }))}>
+                      <ArrowUp size={14} />
+                    </button>
+                    <button className="btn btn-ghost sketch-small" title={UI.moveDown} aria-label={UI.moveDown} onClick={() => update((d) => ({ ...d, layers: moveSibling(d.layers, l.id, -1) }))}>
+                      <ArrowDown size={14} />
                     </button>
                     <button className="btn btn-ghost sketch-small" title={UI.mergeDown} onClick={() => mergeDown(l)}>
-                      <Merge size={12} />
+                      <Merge size={14} />
                     </button>
                     <button className="btn btn-ghost sketch-small" title={UI.remove} onClick={() => void remove([l.id])}>
-                      <Trash2 size={12} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
@@ -690,6 +695,34 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
           onExport={asciiLayer ? (f, a) => asciiExport(asciiLayer, f, a) : undefined}
         />
       )}
+      {blendLayer && (
+        <>
+          <div className="menu-backdrop" onClick={() => setBlendMenu(null)} />
+          <div className="menu sketch-layer-menu sketch-blend-menu" role="menu" style={{ position: 'fixed', left: Math.max(8, Math.min(blendMenu!.x, window.innerWidth - 420)), top: Math.max(8, Math.min(blendMenu!.y, window.innerHeight - 540)) }}>
+            {[...new Set(BLEND_MODES.map((m) => m.group))].map((g) => (
+              <div key={g} className="sketch-blend-group">
+                <div className="sketch-blend-group-name">
+                  <BlendIcon mode={BLEND_MODES.find((m) => m.group === g)!.id} />
+                  {g}
+                </div>
+                {BLEND_MODES.filter((m) => m.group === g).map((m) => (
+                  <button
+                    key={m.id}
+                    role="menuitem"
+                    className={blendLayer.blend === m.id ? 'is-on' : ''}
+                    onClick={() => {
+                      setBlendMenu(null)
+                      set(blendLayer.id, { blend: m.id })
+                    }}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       {shownMenu && (
         <>
           <div className="menu-backdrop" onClick={() => setMenu(null)} />
@@ -712,6 +745,15 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
       )}
     </section>
   )
+}
+
+const blendOf = (m: BlendMode) => BLEND_MODES.find((b) => b.id === m) ?? BLEND_MODES[0]
+const GROUP_ICONS: Record<string, typeof Circle> = { Normal: Circle, Darken: Moon, Lighten: Sun, Contrast: Contrast, Difference: Diff, Color: Palette }
+
+/** The blend mode's family as an icon, so the closed button still says which kind of mode is on (name in its tooltip). */
+function BlendIcon({ mode }: { mode: BlendMode }) {
+  const Icon = GROUP_ICONS[blendOf(mode).group] ?? Circle
+  return <Icon size={14} />
 }
 
 function Thumb({ engine, id, version }: { engine: SketchEngine; id: Id; version: number }) {
