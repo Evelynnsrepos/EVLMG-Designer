@@ -104,7 +104,7 @@ import { useAssist } from './assistView'
 // Sketch Pro: Adjustments, Liquify and Clone.
 import { AdjustMenu, AdjustStudio, type AdjustMode } from './adjust/AdjustStudio'
 import { pointIn, zoomOf } from '@/shared/zoom'
-import { openHotwheel, useHotwheel, type HotAction } from '@/shared/hotwheel'
+import { hotwheelChanged, openHotwheel, useHotwheel, type HotAction } from '@/shared/hotwheel'
 
 // 3D only loads when the light preview opens.
 const LightPreview = lazy(() => import('./light/LightPreview'))
@@ -750,6 +750,13 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
 
   // Redraw the visible canvas (0.35: Animated layers' playback calls it on its own, without a React render).
   const redrawView = useRef(() => {})
+  // WebKitGTK could squash the GPU canvas flat under the opening or closing QuickSelect until the next redraw (seen
+  // with an ASCII layer): draw it again a few times while the wheel's animation and its compositing settle.
+  useEffect(() => {
+    const again = () => [60, 250, 600, 1200].forEach((ms) => setTimeout(() => redrawView.current(), ms))
+    hotwheelChanged.add(again)
+    return () => void hotwheelChanged.delete(again)
+  }, [])
   redrawView.current = () => {
     const canvas = viewCanvas.current
     const box = boxRef.current
