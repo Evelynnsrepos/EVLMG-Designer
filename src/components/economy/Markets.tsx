@@ -85,7 +85,7 @@ export function Markets({ d, set, toMoney }: { d: EconomyDoc; set(fn: (d: Econom
   )
 
   return (
-    <div className="eco-body">
+    <div className="eco-body eco-markets">
       <section>
         <h3>What pays</h3>
         {all.length === 0 ? (
@@ -102,7 +102,7 @@ export function Markets({ d, set, toMoney }: { d: EconomyDoc; set(fn: (d: Econom
                   <th>Buy for (each)</th>
                   <th>Sell for (each)</th>
                   <th title="There full, back empty, after tax and both flights">Profit per round trip</th>
-                  <th>Per hour</th>
+                  <th title="For the first trip, before prices move">Per hour</th>
                 </tr>
               </thead>
               <tbody>

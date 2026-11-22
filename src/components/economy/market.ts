@@ -219,15 +219,15 @@ export function spaceExample(): Market {
   const chips = g('Electronics', 300)
   const s = (good: Good, price: number, stock: number, refill: number, react = 5): Slot => ({ ...newSlot(good.id), price, stock, refill, react })
   const mine: Place = { id: newId(), name: 'Mining outpost', slots: [s(ore, 60, 3000, 400), s(food, 150, 200, 20), s(meds, 140, 50, 5), s(fuel, 90, 800, 80)] }
-  const refinery: Place = { id: newId(), name: 'Refinery station', slots: [s(ore, 110, 1000, 150), s(iron, 85, 600, 60), s(fuel, 80, 1500, 150), s(food, 120, 300, 30)] }
-  const hub: Place = { id: newId(), name: 'Trade hub', slots: [s(iron, 130, 1500, 120, 3), s(chips, 90, 400, 40), s(meds, 100, 300, 30), s(food, 100, 1000, 100), s(fuel, 110, 1000, 100)] }
+  const refinery: Place = { id: newId(), name: 'Refinery station', slots: [s(ore, 110, 1000, 150), s(iron, 85, 2500, 200), s(fuel, 80, 1500, 150), s(food, 120, 300, 30)] }
+  const hub: Place = { id: newId(), name: 'Trade hub', slots: [s(iron, 130, 4000, 220, 2), s(chips, 90, 400, 40), s(meds, 100, 300, 30), s(food, 100, 1000, 100), s(fuel, 110, 1000, 100)] }
   const farm: Place = { id: newId(), name: 'Farm moon', slots: [s(food, 55, 4000, 500), s(meds, 160, 100, 10), s(chips, 140, 100, 8)] }
   const leg = (a: Place, b: Place, minutes: number): Leg => ({ id: newId(), a: a.id, b: b.id, minutes })
   return {
     goods: [ore, iron, fuel, food, meds, chips],
     places: [mine, refinery, hub, farm],
     legs: [leg(mine, refinery, 6), leg(refinery, hub, 8), leg(mine, hub, 12), leg(hub, farm, 10), leg(farm, mine, 15)],
-    recipes: [{ id: newId(), name: 'Refine iron', inputs: [{ goodId: ore.id, amount: 3 }], outputs: [{ goodId: iron.id, amount: 1 }], minutes: 2, placeId: refinery.id }],
+    recipes: [{ id: newId(), name: 'Refine iron', inputs: [{ goodId: ore.id, amount: 2 }], outputs: [{ goodId: iron.id, amount: 1 }], minutes: 2, placeId: refinery.id }],
     cargo: 120,
     tripCost: 150,
     dockMinutes: 3,

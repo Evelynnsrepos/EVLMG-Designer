@@ -92,3 +92,9 @@
   flex-wrap: wrap;
   margin-bottom: 6px;
 }
+.eco-markets .calc-number {
+  width: 84px;
+}
+.eco-markets .ld-inline {
+  flex-wrap: wrap;
+}
