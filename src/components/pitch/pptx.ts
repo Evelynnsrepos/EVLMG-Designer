@@ -1,5 +1,5 @@
 import { strToU8, zipSync } from 'fflate'
-import { H, paragraphsOf, placeImage, xmlEscape as esc, type ExportDeck, type ExportSlide, type Obj } from './model'
+import { H, paragraphsOf, placeImage, xmlEscape as esc, type ExportDeck, type ExportSlide, type Obj, morphKey } from './model'
 
 /**
  * 0.35: the deck as a .pptx (Office Open XML). Opens in PowerPoint, Keynote, Google Slides
@@ -52,12 +52,12 @@ function shapeXml(o: Obj, id: number, fontOf: (o: Obj) => string) {
   const bg = isLine ? '' : fill(o.fill ?? (o.kind === 'shape' ? '#cccccc' : undefined))
   // A line keeps its box; it runs from the top left to the bottom right corner (or flat when h is tiny).
   const hasText = o.kind === 'text' || !!o.text
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${o.kind} ${id}"/><p:cNvSpPr${o.kind === 'text' ? ' txBox="1"' : ''}/><p:nvPr/></p:nvSpPr><p:spPr>${xfrm(o)}<a:prstGeom prst="${PRESET[kind]}"><a:avLst/></a:prstGeom>${bg}${line}</p:spPr>${hasText ? textBody(o, fontOf) : ''}</p:sp>`
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${esc(`!!${morphKey(o)}`)}"/><p:cNvSpPr${o.kind === 'text' ? ' txBox="1"' : ''}/><p:nvPr/></p:nvSpPr><p:spPr>${xfrm(o)}<a:prstGeom prst="${PRESET[kind]}"><a:avLst/></a:prstGeom>${bg}${line}</p:spPr>${hasText ? textBody(o, fontOf) : ''}</p:sp>`
 }
 
 function picXml(o: Obj, id: number, rid: string, iw: number, ih: number) {
   const p = placeImage(o, iw, ih)
-  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Picture ${id}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrm(o, p)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`
+  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="${esc(`!!${morphKey(o)}`)}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrm(o, p)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`
 }
 
 const TRANSITION: Record<string, string> = { fade: '<p:fade/>', push: '<p:push dir="l"/>', zoom: '<p:zoom/>' }
@@ -73,7 +73,13 @@ function slideXml(s: ExportSlide, deck: ExportDeck, imageRid: (path: string) => 
       return img && rid ? picXml(o, id, rid, img.w, img.h) : ''
     })
     .join('')
-  const tr = TRANSITION[s.transition] ? `<p:transition spd="med">${TRANSITION[s.transition]}</p:transition>` : ''
+  // Morph: PowerPoint's own (it matches shapes with the same "!!" name); other apps read the fade fallback.
+  const tr =
+    s.transition === 'morph'
+      ? '<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:p159="http://schemas.microsoft.com/office/powerpoint/2015/09/main" Requires="p159"><p:transition spd="slow"><p159:morph option="byObject"/></p:transition></mc:Choice><mc:Fallback><p:transition spd="slow"><p:fade/></p:transition></mc:Fallback></mc:AlternateContent>'
+      : TRANSITION[s.transition]
+        ? `<p:transition spd="med">${TRANSITION[s.transition]}</p:transition>`
+        : ''
   return `${HEAD}<p:sld ${NS}${s.hidden ? ' show="0"' : ''}><p:cSld><p:bg><p:bgPr>${fill(s.bg)}<a:effectLst/></p:bgPr></p:bg><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${tr}</p:sld>`
 }
 

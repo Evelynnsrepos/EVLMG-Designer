@@ -17,6 +17,8 @@ const TRANSITION: Record<string, string> = {
   fade: 'smil:type="fade" smil:subtype="crossfade"',
   push: 'smil:type="pushWipe" smil:subtype="fromRight"',
   zoom: 'smil:type="zoom" smil:subtype="rotateIn"',
+  // shortcut: no Morph in .odp; it becomes a fade there.
+  morph: 'smil:type="fade" smil:subtype="crossfade"',
 }
 
 /** Position, keeping rotation around the box centre (ODF rotates around the top left, counter-clockwise). */

@@ -55,6 +55,7 @@ const TRANSITIONS: { id: Transition; label: string }[] = [
   { id: 'fade', label: 'Fade' },
   { id: 'push', label: 'Push' },
   { id: 'zoom', label: 'Zoom' },
+  { id: 'morph', label: 'Morph (magic move)' },
 ]
 const BUILDS: { id: Build; label: string }[] = [
   { id: 'none', label: 'Always there' },
@@ -137,8 +138,9 @@ export default function View({ documentId, active }: PanelProps) {
     setObjs((objs) => objs.filter((o) => !objSel.includes(o.id)))
     setObjSel([])
   }
-  const duplicatePicked = (list = picked, offset = 30) => {
-    const copies = list.map((o) => ({ ...o, id: newId(), x: o.x + offset, y: o.y + offset }))
+  /** `paste` keeps the morph link, so a thing pasted onto another slide glides there with Morph. */
+  const duplicatePicked = (list = picked, offset = 30, paste = false) => {
+    const copies = list.map((o) => ({ ...o, id: newId(), x: o.x + offset, y: o.y + offset, ...(paste ? { mid: o.mid ?? o.id } : { mid: undefined }) }))
     setObjs((objs) => [...objs, ...copies])
     setObjSel(copies.map((o) => o.id))
   }
@@ -165,14 +167,15 @@ export default function View({ documentId, active }: PanelProps) {
       else if (mod && (e.key === 'c' || e.key === 'x') && picked.length) {
         clip.current = picked
         if (e.key === 'x') removePicked()
-      } else if (mod && e.key === 'v' && clip.current.length) duplicatePicked(clip.current, 20)
+      } else if (mod && e.key === 'v' && clip.current.length) duplicatePicked(clip.current, own.some((o) => clip.current.some((c) => c.id === o.id)) ? 20 : 0, true)
       else if (mod && e.key === 'a') setObjSel(own.map((o) => o.id))
       else if (e.key === 'Escape' && objSel.length) setObjSel([])
       else return
       e.preventDefault()
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // Capture phase: runs before the shell's Esc (Layout Mode), so Esc first drops the pick.
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   })
 
   if (!data) return null
@@ -203,7 +206,7 @@ export default function View({ documentId, active }: PanelProps) {
   }
   const duplicateSlide = () => {
     if (!s) return
-    const copy: Slide = { ...s, id: newId(), objects: (s.objects ?? []).map((o) => ({ ...o, id: newId() })) }
+    const copy: Slide = { ...s, id: newId(), objects: (s.objects ?? []).map((o) => ({ ...o, id: newId(), mid: o.mid ?? o.id })) }
     set((list) => {
       const next = [...list]
       next.splice(sel + 1, 0, copy)

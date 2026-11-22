@@ -10,7 +10,7 @@ import { newId, type Entity, type EntityType, type Id } from '@/core/model'
 export type Layout = 'title' | 'text' | 'image' | 'pillars' | 'entities' | 'blank'
 export type ShapeKind = 'rect' | 'round' | 'ellipse' | 'triangle' | 'line' | 'arrow'
 export type Build = 'none' | 'appear' | 'fade' | 'fly'
-export type Transition = 'none' | 'fade' | 'push' | 'zoom'
+export type Transition = 'none' | 'fade' | 'push' | 'zoom' | 'morph'
 export type Align = 'left' | 'center' | 'right'
 
 export interface Obj {
@@ -46,6 +46,8 @@ export interface Obj {
   locked?: boolean
   /** Made from the slide's layout: shown and exported, edited through the layout fields. */
   fromLayout?: boolean
+  /** Morph: copies (duplicate slide, paste) share this with the original, so they glide from one slide to the next. */
+  mid?: string
 }
 
 export interface Slide {
@@ -280,3 +282,22 @@ export function textStyle(o: Obj, theme: Theme, middle = false): CSSProperties {
   }
 }
 
+
+/** What Morph matches objects by: layout parts by their role (title, text…), others by their shared morph id. */
+export const morphKey = (o: Obj): string => (o.fromLayout ? `L${o.id.slice(o.id.indexOf(':') + 1)}` : (o.mid ?? o.id))
+
+/**
+ * Morph from `from` to `to`: each object in `to` with its match in `from` (or null = it fades in),
+ * and the objects of `from` that have no match (they fade out). Each key is matched once.
+ */
+export function morphPairs(from: Obj[], to: Obj[]): { pairs: { to: Obj; from: Obj | null }[]; gone: Obj[] } {
+  const left = new Map<string, Obj[]>()
+  for (const o of from) left.set(morphKey(o), [...(left.get(morphKey(o)) ?? []), o])
+  const pairs = to.map((o) => {
+    const list = left.get(morphKey(o))
+    const match = list?.find((f) => f.kind === o.kind) ?? null
+    if (match) list!.splice(list!.indexOf(match), 1)
+    return { to: o, from: match }
+  })
+  return { pairs, gone: [...left.values()].flat() }
+}

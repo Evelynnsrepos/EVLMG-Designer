@@ -1,6 +1,6 @@
 import { strFromU8, unzipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
-import { THEMES, exportSlide, newSlide, newObj, unlockLayout, type ExportDeck } from './model'
+import { THEMES, exportSlide, morphPairs, newSlide, newObj, unlockLayout, type ExportDeck } from './model'
 import { deckToOdp } from './odp'
 import { deckToPptx } from './pptx'
 
@@ -44,6 +44,23 @@ describe('pitch deck export', () => {
     expect(strFromU8(files['ppt/slides/slide2.xml'])).toContain('Feel safe &amp; warm &lt;3')
     expect(strFromU8(files['ppt/slides/slide3.xml'])).toContain('<p:fade/>')
     expect(strFromU8(files['ppt/slides/slide3.xml'])).toContain('cap="small"')
+  })
+
+  it('marks Morph for PowerPoint with a fade fallback, and names matching things alike', () => {
+    const deck = sampleDeck()
+    deck.slides[2] = { ...deck.slides[2], transition: 'morph' }
+    const slide = strFromU8(unzipSync(deckToPptx(deck))['ppt/slides/slide3.xml'])
+    expect(slide).toContain('<p159:morph option="byObject"/>')
+    expect(slide).toContain('<mc:Fallback><p:transition spd="slow"><p:fade/>')
+    expect(slide).toContain(`name="!!${deck.slides[2].objs[0].id}"`)
+  })
+
+  it('pairs things for Morph by layout role and by copy link', () => {
+    const a = [newObj('text', { id: 's1:title' as never, fromLayout: true }), newObj('shape', { id: 'box' as never }), newObj('image', { id: 'pic' as never })]
+    const b = [newObj('text', { id: 's2:title' as never, fromLayout: true }), newObj('shape', { mid: 'box' }), newObj('text', {})]
+    const { pairs, gone } = morphPairs(a, b)
+    expect(pairs.map((p) => p.from?.id ?? null)).toEqual(['s1:title', 'box', null])
+    expect(gone.map((o) => o.id)).toEqual(['pic'])
   })
 
   it('writes an .odp with the mimetype first and stored', () => {

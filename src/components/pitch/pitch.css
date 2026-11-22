@@ -298,7 +298,18 @@
 @keyframes pi-push { from { transform: translateX(100vw); } }
 @keyframes pi-push-back { from { transform: translateX(-100vw); } }
 @keyframes pi-zoom { from { transform: scale(0.6); opacity: 0; } }
+/* Morph (magic move) */
+.pi-morph .pi-canvas {
+  transition: background-color 0.9s ease;
+}
+.pi-morph .pi-obj {
+  transition: left 0.9s ease, top 0.9s ease, width 0.9s ease, height 0.9s ease, transform 0.9s ease, opacity 0.6s ease;
+}
+.pi-morph .pi-text {
+  transition: font-size 0.9s ease, color 0.9s ease, line-height 0.9s ease;
+}
 @media (prefers-reduced-motion: reduce) {
+  .pi-morph .pi-obj, .pi-morph .pi-text, .pi-morph .pi-canvas,
   .pi-tr, .pi-obj[data-build] { animation: none !important; transition: none !important; }
 }
 /* Presenter view */
