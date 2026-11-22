@@ -97,3 +97,72 @@
   border-left: 1px solid var(--border);
   overflow-y: auto;
 }
+.pc-flagband {
+  fill: #f08c00;
+  opacity: 0.14;
+}
+.pc-felt polyline {
+  stroke: var(--text);
+  opacity: 0.75;
+}
+.pc-felt circle {
+  fill: var(--text);
+}
+.pc-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+}
+.pc-legend-dash {
+  width: 24px;
+  border-top: 2px dashed var(--text);
+}
+.pc-legend-band {
+  width: 14px;
+  height: 12px;
+  margin-left: 12px;
+  border-radius: 3px;
+  background: #f08c00;
+  opacity: 0.35;
+}
+.pc-card .pc-felt-line,
+.pc-felt-line {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.pc-card .pc-felt-line.bad,
+.pc-felt-line.bad {
+  color: #f08c00;
+}
+.pc-feltpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.pc-feltpanel p {
+  margin: 0;
+  font-size: 12px;
+}
+.pc-felt-row {
+  display: grid;
+  grid-template-columns: 70px 1fr 28px;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.pc-felt-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+}
+.pc-felt-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+}
