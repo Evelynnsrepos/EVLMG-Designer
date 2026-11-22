@@ -60,6 +60,7 @@ export function printPage(title: string, body: string) {
   const esc = (t: string) => t.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)
   const css = `body{font-family:'Lexend Deca',system-ui,sans-serif;font-size:11pt;line-height:1.5;color:#111;margin:0}
 img{max-width:100%}h1,h2,h3{break-after:avoid}table{border-collapse:collapse}td,th{border:1px solid #999;padding:4px 6px}
-blockquote,.callout{border-left:3px solid #999;margin:8px 0;padding:4px 12px}pre{white-space:pre-wrap}@page{margin:18mm}`
+blockquote,.callout{border-left:3px solid #999;margin:8px 0;padding:4px 12px}pre{white-space:pre-wrap}@page{margin:18mm}
+[data-page-break]{break-after:page}.richtext-toc{margin:8px 0}.richtext-toc-title{font-weight:600}.richtext-toc-item{display:block;border:none;background:none;font:inherit;color:inherit;padding:2px 0;text-align:left}`
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${css}</style></head><body>${body}</body></html>`
 }
