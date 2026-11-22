@@ -877,6 +877,9 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'If players spend less than half of what they earn, the money piles up and loses its meaning; the simulator warns you so you can add sinks or lower income.',
       'The Meters tab is for bars that change over time: hunger, thirst, stamina, mood, or energy that refills while the game is closed. Each meter has a start, a maximum and a change per hour. When it falls below… adds a level like Hungry below 25, which can name a Status Effect and change another meter (Starving takes 10 Health per hour). Add survival example fills in food, water, energy and health.',
       'Actions like Eat +40 every 5 hours refill a meter; give one a cost and it is paid on the Money tab each time. The chart shows every meter over the hours of play and says when and for how long a meter sits below a level.',
+      'A source or sink can use a formula instead of a fixed number: t is the hours played and n how many times it was paid, so 50 * 1.1^n makes every upgrade cost more. A formula with a mistake turns red and the simulation tells you which one.',
+      'The Markets tab plans a trading economy, like space trade between stations. Goods have a base price; each place sells some of them at its own price percent, with a stock that runs low when players buy a lot and refills per hour. Add travel times between places and a ship that carries a load, pays per flight and pays tax on sales.',
+      'What pays lists the best trade routes with the profit per round trip and per hour. Click a route to see what happens when players fly it again and again: prices move, and the chart shows when it stops paying. Add as income on the Money tab puts the route into the money simulation. Recipes (2 ore make 1 iron in 5 minutes at the refinery) show if crafting is worth it. Add space trading example fills in a small working economy.',
     ],
   },
   combat: {
@@ -886,6 +889,9 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Damage uses a formula from the damage library with the attacker ATK and the target DEF, plus a random spread. Fighters attack the weakest enemy left.',
       'Fighters can use Abilities & Spells: add them under Abilities. Whenever one is ready it is used instead of a basic attack, with its own formula (the fighter\'s ATK, the target\'s DEF) and cooldown, and its element meets the target\'s resistances. Fighters taken from the Enemy List bring their resistances and the abilities that list them as users.',
       'Simulate runs hundreds or thousands of fights and shows how often each side wins, how much HP the winners keep, how long fights take, the damage of every fighter and an example fight blow by blow.',
+      'The examples at the top fill in a team of four against elemental enemies with a time limit (like an endgame tower floor) or a turn-based boss with weaknesses and phases. Change them or start from your own.',
+      'How the fight works picks real time or turns, the damage formula (from the damage library, one of your Damage Calculator presets, or your own written formula), a time limit and an extra turn for hitting a weakness. Fighters can have extra stats for your formulas (EM, Level), an attack element, resistances like Fire 0.5, Ice 1.5, and a wave number for enemies that come in later.',
+      'Buffs and debuffs give a stat change to the fighter itself, its team or the enemies, always or every few seconds or turns for a while. DMG is damage dealt and TAKEN damage taken. Phases change a boss once its HP falls below a percent: more attack, other resistances, other abilities.',
     ],
   },
   balance: {
@@ -897,6 +903,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Difficulty curve charts the average, strongest and weakest enemy of each level for an enemy stat and points out levels where it jumps or drops much more than usual. Gaps shows bars for how many entries have numbers and how many enemies drop something.',
       'While a section has no data yet it shows a faded Example chart, so you can see what it will do.',
       'Numbers that stick out also checks Abilities & Spells (damage per second and value per cost, against abilities of the same kind) and every number field of your Custom Lists.',
+      'Reads from at the top shows which tools the numbers come from; click one to open it. Names in Gaps open their entry.',
     ],
   },
   vision: {
