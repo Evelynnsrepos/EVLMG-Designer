@@ -18,7 +18,7 @@
   display: flex;
 }
 .pi-list {
-  flex: 0 0 180px;
+  flex: 0 0 172px;
   overflow-y: auto;
   padding: 6px;
   border-right: 1px solid var(--border);
@@ -69,120 +69,218 @@
   overflow-y: auto;
   font-size: 13px;
 }
-.pi-slide {
-  position: relative;
-  width: 100%;
-  max-width: 960px;
-  aspect-ratio: 16 / 9;
-  overflow: hidden;
-  padding: 6% 7%;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #1c1c26, #2b2240);
-  color: #f4f2fa;
-  box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
-  /* Scales with the stage so text never spills out of a small preview. */
-  font-size: clamp(3px, 1.9cqi, 22px);
+/* v0.13: dragging a slide shows where it can go. */
+.pi-thumb[draggable='true'] {
+  cursor: grab;
 }
-.pi-slide h1 {
-  position: relative;
-  margin: 0;
-  font-size: 3.2em;
+.pi-thumb.drop:hover {
+  outline: 2px dashed var(--accent);
 }
-.pi-slide h2 {
-  margin: 0 0 0.6em;
-  font-size: 2em;
+
+/* 0.35 overhaul: free slides */
+.pi-toolbar {
+  flex-wrap: wrap;
+  gap: 6px;
 }
-.pi-slide p {
-  position: relative;
-  margin: 0.6em 0 0;
-  white-space: pre-wrap;
-  font-size: 1.15em;
-  line-height: 1.5;
-  opacity: 0.9;
+.pi-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
 }
-.pi-l-title {
-  display: flex;
+.pi-menu {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.pi-menu select {
+  width: auto;
+}
+.pi-thumb {
   flex-direction: column;
-  justify-content: center;
 }
-.pi-l-title .pi-img {
+.pi-thumb.off .pi-frame {
+  opacity: 0.4;
+}
+.pi-num {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.pi-frame {
+  position: relative;
+  overflow: hidden;
+  flex: none;
+  box-shadow: 0 4px 18px rgb(0 0 0 / 0.3);
+}
+.pi-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  transform-origin: 0 0;
+}
+.pi-obj {
+  position: absolute;
+  box-sizing: border-box;
+}
+.pi-svg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  opacity: 0.35;
 }
-.pi-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 5%;
+.pi-fill {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+}
+.pi-text {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   height: 100%;
-  align-items: center;
-}
-.pi-split > div {
-  max-height: 100%;
-  overflow: hidden;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
-.pi-split .pi-img {
-  width: 100%;
-  max-height: 100%;
-  border-radius: 8px;
-  object-fit: cover;
+.pi-bullet {
+  padding-left: 1.1em;
+  text-indent: -1.1em;
 }
-.pi-pillars {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
-  gap: 4%;
+.pi-bullet::before {
+  content: '•';
+  display: inline-block;
+  width: 1.1em;
+  text-indent: 0;
 }
-.pi-pillars > div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5em;
-  padding: 1em;
-  border-top: 0.3em solid;
-  border-radius: 8px;
-  background: rgb(255 255 255 / 0.06);
-}
-.pi-pillars span {
-  opacity: 0.8;
-}
-.pi-entities {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 3%;
-}
-.pi-entity {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3em;
-}
-.pi-entity img,
 .pi-noimg {
   width: 100%;
-  aspect-ratio: 16 / 10;
-  border-radius: 6px;
-  object-fit: cover;
-  background: rgb(255 255 255 / 0.08);
+  height: 100%;
+  background: var(--placeholder);
+  opacity: 0.4;
 }
-.pi-entity span {
-  font-size: 0.75em;
-  opacity: 0.75;
+.pi-hidden {
+  opacity: 0;
 }
+.pi-obj[data-build='fade'] {
+  transition: opacity 0.5s ease;
+}
+.pi-obj[data-build='fly'] {
+  transition: opacity 0.4s ease, translate 0.5s ease;
+}
+.pi-obj[data-build='fly'].pi-hidden {
+  translate: 0 300px;
+}
+/* Editing */
+.pi-edit .pi-free,
+.pi-h {
+  cursor: move;
+  touch-action: none;
+}
+.pi-edit .pi-free:hover {
+  outline: calc(2px * var(--k, 2.5)) dashed color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.pi-edit .pi-free.on {
+  outline: 5px solid var(--accent);
+}
+.pi-edit .pi-free.locked {
+  cursor: default;
+}
+.pi-edit .pi-layout {
+  pointer-events: none;
+}
+.pi-handles {
+  position: absolute;
+  pointer-events: none;
+}
+.pi-h {
+  position: absolute;
+  width: calc(12px * var(--k));
+  height: calc(12px * var(--k));
+  margin: calc(-6px * var(--k));
+  border: calc(2px * var(--k)) solid var(--accent);
+  background: #fff;
+  pointer-events: auto;
+}
+.pi-h-nw { left: 0; top: 0; cursor: nwse-resize; }
+.pi-h-ne { right: 0; top: 0; margin-right: calc(-6px * var(--k)); cursor: nesw-resize; }
+.pi-h-sw { left: 0; bottom: 0; margin-bottom: calc(-6px * var(--k)); cursor: nesw-resize; }
+.pi-h-se { right: 0; bottom: 0; margin-right: calc(-6px * var(--k)); margin-bottom: calc(-6px * var(--k)); cursor: nwse-resize; }
+.pi-h-rot {
+  left: 50%;
+  top: calc(-30px * var(--k));
+  border-radius: 50%;
+  cursor: grab;
+}
+.pi-guide {
+  position: absolute;
+  background: #ff3fa4;
+  pointer-events: none;
+}
+.pi-guide.v { top: 0; bottom: 0; width: calc(1px * var(--k)); }
+.pi-guide.h { left: 0; right: 0; height: calc(1px * var(--k)); }
+.pi-inline {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  padding: 0;
+  border: 4px solid var(--accent);
+  background: rgb(255 255 255 / 0.85);
+  resize: none;
+  outline: none;
+}
+.pi-side-title {
+  font-size: 14px;
+}
+.pi-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px;
+}
+.pi-row > select {
+  flex: 1;
+  min-width: 0;
+}
+.pi-styles .icon-btn.on {
+  background: var(--accent);
+  color: #fff;
+}
+.pi-num-field,
+.pi-colour {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.pi-colour {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+.pi-num-field input {
+  width: 64px;
+}
+.pi-xywh .pi-num-field input {
+  width: 52px;
+}
+.pi-tip {
+  font-size: 12px;
+}
+/* Presenting: transitions */
 .pi-present {
   position: fixed;
   inset: 0;
   z-index: 3000;
   display: grid;
   place-items: center;
+  overflow: hidden;
   background: #000;
-  container-type: inline-size;
   cursor: pointer;
 }
-.pi-present .pi-slide {
-  max-width: min(100vw, 177.7vh);
-  border-radius: 0;
+.pi-present .pi-frame {
   box-shadow: none;
 }
 .pi-count {
@@ -192,11 +290,58 @@
   color: rgb(255 255 255 / 0.5);
   font-size: 13px;
 }
-
-/* v0.13: dragging a slide shows where it can go. */
-.pi-thumb[draggable='true'] {
-  cursor: grab;
+.pi-tr-fade { animation: pi-fade 0.6s ease; }
+.pi-tr-push { animation: pi-push 0.6s ease; }
+.pi-tr-push.back { animation-name: pi-push-back; }
+.pi-tr-zoom { animation: pi-zoom 0.6s ease; }
+@keyframes pi-fade { from { opacity: 0; } }
+@keyframes pi-push { from { transform: translateX(100vw); } }
+@keyframes pi-push-back { from { transform: translateX(-100vw); } }
+@keyframes pi-zoom { from { transform: scale(0.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .pi-tr, .pi-obj[data-build] { animation: none !important; transition: none !important; }
 }
-.pi-thumb.drop:hover {
-  outline: 2px dashed var(--accent);
+/* Presenter view */
+.pi-pv {
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+  padding: 24px;
+  cursor: default;
+  color: #eee;
+}
+.pi-pv-main {
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.pi-pv-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-self: stretch;
+  min-height: 0;
+}
+.pi-pv-time {
+  display: flex;
+  flex-direction: column;
+}
+.pi-pv-time strong {
+  font-size: 42px;
+}
+.pi-pv-label {
+  color: #999;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+.pi-pv-notes {
+  flex: 1;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-size: 22px;
+  line-height: 1.4;
+}
+.pi-pv-hint,
+.pi-pv-end {
+  color: #888;
+  font-size: 12px;
 }
