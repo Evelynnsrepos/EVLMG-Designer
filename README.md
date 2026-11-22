@@ -327,7 +327,7 @@ beginner guides.
 | **Live-Service Planner** | The weeks after launch: versions and seasons, events, gacha banners, a battle pass and the store, with rerun warnings and battle pass days per player type. |
 | **Playtests** | Playtest sessions with scores and findings, scores per build and every open problem in one place. |
 | **Reviews** | Everything with a status or comments on one board, with a "needs review" filter. Approvals remember who signed off and show "changed since" when the content changes. |
-| **Pitch Deck** | Slides built from your vision, pillars, characters and items, presented full screen. |
+| **Pitch Deck** | Slides built from your vision, pillars, characters and items, or free slides with text, pictures and shapes; themes, transitions, click-by-click builds, speaker notes and a presenter view. Exports .pptx (PowerPoint, Keynote, Google Slides), .odp (LibreOffice), PDF and slide pictures. |
 
 </details>
 
