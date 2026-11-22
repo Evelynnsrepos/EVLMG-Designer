@@ -317,16 +317,35 @@ export class AsciiGrid {
     let x1 = -1
     let y1 = -1
     const at = (x: number, y: number) => d[Math.min(rows - 1, Math.max(0, y)) * cols + Math.min(cols - 1, Math.max(0, x))]
+    let gxs: Float32Array | null = null
+    let gys: Float32Array | null = null
+    let mag: Float32Array | null = null
+    if (edgeAt < Infinity) {
+      gxs = new Float32Array(cols * rows)
+      gys = new Float32Array(cols * rows)
+      mag = new Float32Array(cols * rows)
+      for (let y = 0; y < rows; y++)
+        for (let x = 0; x < cols; x++) {
+          const i = y * cols + x
+          gxs[i] = at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x - 1, y) - at(x - 1, y + 1)
+          // Cells are twice as tall as wide, so a step down counts half.
+          gys[i] = (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x, y - 1) - at(x + 1, y - 1)) / 2
+          mag[i] = Math.hypot(gxs[i], gys[i])
+        }
+    }
+    const magAt = (x: number, y: number) => (x < 0 || y < 0 || x >= cols || y >= rows ? 0 : mag![y * cols + x])
     for (let y = 0; y < rows; y++)
       for (let x = 0; x < cols; x++) {
         const i = y * cols + x
         const a = this.cells[i * 4 + 3]
         let g = !a && !s.paper ? EMPTY : level[i]
-        if (g !== EMPTY && level[i] > 0 && edgeAt < Infinity) {
-          const gx = at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x - 1, y) - at(x - 1, y + 1)
-          // Cells are twice as tall as wide, so a step down counts half.
-          const gy = (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x, y - 1) - at(x + 1, y - 1)) / 2
-          if (Math.hypot(gx, gy) > edgeAt) {
+        if (g !== EMPTY && level[i] > 0 && mag && mag[i] > edgeAt) {
+          const gx = gxs![i]
+          const gy = gys![i]
+          // Thin lines: only where the edge is strongest across it (compared with the two cells along the slope).
+          const sx = Math.round(gx / mag[i])
+          const sy = Math.round(gy / mag[i])
+          if (mag[i] >= magAt(x + sx, y + sy) && mag[i] >= magAt(x - sx, y - sy)) {
             const t = ((Math.atan2(gy, gx) + Math.PI) % Math.PI) / Math.PI
             g = n + (Math.round(t * 4) % 4)
           }
