@@ -8,6 +8,7 @@ import { GpuWetStamper } from './brushWetGpu'
 import { parseHex } from './gl'
 import { clip, GpuPainter, GpuSurface, rgb, type GpuLayer, type StrokeLook, type Tex } from './gpuPaint'
 import { layerTree, lockedInTree, shownInTree, type LayerNode } from './layers'
+import { outlineInto, outlineReach, type OutlineSettings } from './outline'
 import { mirrored, type InputPoint, type SketchDoc, type SketchLayer, type SymmetryMode } from './model'
 import { applyRelief } from './relief'
 import { runCpu } from './adjust/cpu'
@@ -331,6 +332,7 @@ export class SketchEngine {
       this.texs.delete(k)
     }
     this.edits++
+    this.outlineCache.delete(id)
     this.layers.delete(id)
     this.layerVersions.delete(id)
     this.history.dropLayer(id)
@@ -1153,7 +1155,9 @@ export class SketchEngine {
     if (!this.stroke || !this.strokeOpts || this.stamper instanceof WetStamper || this.livePreview?.stroke !== this.stroke) return null
     if (doc.layers.some((l) => l.kind === 'adjust' || (l.visible && !CANVAS_BLENDS.has(l.blend)))) return null
     const area = this.strokeArea(this.strokeOpts)
-    return area && clipRect(area, this.width, this.height)
+    // An outline reaches past the stroke.
+    const m = Math.max(0, ...doc.layers.map((l) => (l.outline && l.visible ? outlineReach(l.outline) : 0)))
+    return area && clipRect(m ? { x: area.x - m, y: area.y - m, w: area.w + 2 * m, h: area.h + 2 * m } : area, this.width, this.height)
   }
 
   /**
@@ -1238,6 +1242,11 @@ export class SketchEngine {
     return e.t
   }
 
+  /** The layer's pixels are being changed right now (a stroke on it, or pixels lifted off it). */
+  private isLive(layer: SketchLayer) {
+    return this.g?.layerId === layer.id || (!!this.stroke && this.strokeOpts?.layer.id === layer.id) || this.floating?.layerId === layer.id
+  }
+
   private gpuNodes(nodes: LayerNode[], keys: Set<string>): GpuLayer[] {
     const out: GpuLayer[] = []
     let base: GpuLayer | null = null
@@ -1260,6 +1269,10 @@ export class SketchEngine {
         continue
       }
       const entry: GpuLayer = { tex: this.gpuSource(layer), key: layer.id, opacity: layer.opacity, blend: layer.blend, mask: m, ...clipTo }
+      if (layer.outline) {
+        keys.add(layer.id)
+        entry.outline = { o: layer.outline, version: this.isLive(layer) ? -1 : this.layerVersion(layer.id) }
+      }
       // A clipping base must be in the stack even when hidden, with no effect of its own.
       const shown = layer.visible ? entry : { ...entry, opacity: 0 }
       if (!layer.clip) base = shown
@@ -1345,6 +1358,28 @@ export class SketchEngine {
     return c.canvas
   }
 
+  /** Outline layers on Canvas 2D: the outlined pixels, kept per layer; while painting only the stroke's part is redone. */
+  private outlineCache = new Map<Id, { settings: string; version: number; c: Canvas2D; changed: Rect | null }>()
+  private outlined2d(layer: SketchLayer, o: OutlineSettings, px: { canvas: HTMLCanvasElement; live: boolean; dirty?: Rect | null }): HTMLCanvasElement {
+    const settings = JSON.stringify(o)
+    const version = this.layerVersions.get(layer.id) ?? 0
+    let hit = this.outlineCache.get(layer.id)
+    if (!hit || hit.c.canvas.width !== this.width || hit.c.canvas.height !== this.height) this.outlineCache.set(layer.id, (hit = { settings: '', version: -1, c: this.canvas(), changed: null }))
+    const all = { x: 0, y: 0, w: this.width, h: this.height }
+    const m = outlineReach(o)
+    let r: Rect | null
+    if (hit.settings !== settings) r = all
+    else if (px.live) r = px.dirty ? clipRect({ x: px.dirty.x - m, y: px.dirty.y - m, w: px.dirty.w + 2 * m, h: px.dirty.h + 2 * m }, this.width, this.height) : all
+    else if (hit.version === version) return hit.c.canvas
+    // The stroke just ended: its pixels are what the live picture already showed, but redo its part to be sure.
+    else r = hit.changed ?? all
+    if (r) outlineInto(px.canvas, hit.c.ctx, o, r)
+    hit.settings = settings
+    hit.changed = px.live ? (r === all ? all : union(hit.changed, r)) : null
+    hit.version = px.live ? -1 : version
+    return hit.c.canvas
+  }
+
   private compose2d(ctx: CanvasRenderingContext2D, nodes: LayerNode[], depth: number) {
     let base: { canvas: HTMLCanvasElement; mask: HTMLCanvasElement | null; opacity: number } | null = null
     for (const { layer, children, mask } of nodes) {
@@ -1369,7 +1404,8 @@ export class SketchEngine {
         if (!layer.visible) continue
         src = this.adjusted(layer, ctx)
       } else {
-        src = this.livePixels(layer).canvas
+        const px = this.livePixels(layer)
+        src = layer.outline ? this.outlined2d(layer, layer.outline, px) : px.canvas
         if (!layer.clip) base = { canvas: this.ensure(layer.id).canvas, mask: m, opacity }
         if (!layer.visible) continue
       }

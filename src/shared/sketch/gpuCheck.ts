@@ -6,6 +6,7 @@ import { SketchEngine } from './engine'
 import { glAllowed } from './gl'
 import { gpuAllowSoftware } from './gpuPaint'
 import { newLayer, type InputPoint, type LayerAdjust } from './model'
+import type { OutlineSettings } from './outline'
 import { transformState } from './transform'
 import { Transformer } from './transformer'
 
@@ -120,6 +121,38 @@ function adjusted(id: LayerAdjust['id'], gpu: boolean) {
   return { px: e.render({ layers: [a, b, adj], backgroundColor: '#ffffff' }).getContext('2d')!.getImageData(0, 0, W, H).data, gpu: e.gpuActive }
 }
 
+const OUTLINES: Record<string, OutlineSettings> = {
+  outside: { size: 6, color: '#202020', where: 'outside', sharpness: 1, roundness: 1 },
+  'center-soft-square': { size: 10, color: '#ff0000', color2: '#0000ff', where: 'center', sharpness: 0.3, roundness: 0 },
+  inside: { size: 5, color: '#00a040', where: 'inside', sharpness: 1, roundness: 0.5 },
+}
+
+/** An outline layer painted on (the outline follows while painting), then the same pixels outlined from scratch. */
+function outlined(name: string, gpu: boolean) {
+  const e = engine(gpu)
+  const layer = { ...newLayer('O'), outline: OUTLINES[name] }
+  const doc = { layers: [layer], backgroundColor: '#ffffff' }
+  e.edit(layer.id, (c) => {
+    c.fillStyle = '#3080c0'
+    c.fillRect(150, 30, 50, 90)
+  })
+  e.render(doc)
+  const brush = defaultLibrary().brushes.find((b) => b.id === 'round-brush')!
+  e.beginStroke({ layer, brush: { ...brush, size: 14 }, color: '#c03020', symmetry: 'off', erase: false }, pt(20, 80, 1, 0))
+  for (let i = 1; i <= 30; i++) {
+    e.strokeTo(pt(20 + i * 6, 80 + Math.sin(i / 3) * 40, 1, i * 8))
+    if (i % 3 === 0) e.draw(doc, [1, 0, 0, 1, 0, 0], W, H, 1, false) || e.render(doc)
+  }
+  e.endStroke()
+  const px = e.render(doc).getContext('2d')!.getImageData(0, 0, W, H).data.slice()
+  const scratch = (on: boolean) => {
+    const f = engine(on)
+    f.setLayerImage(layer.id, e.layerCanvas(layer.id))
+    return f.render(doc).getContext('2d')!.getImageData(0, 0, W, H).data
+  }
+  return { px, fresh: scratch(gpu), other: scratch(!gpu), gpu: e.gpuActive }
+}
+
 /** The Move tool: a layer moved and turned, then dropped (on the GPU it is drawn and dropped there). */
 function moved(gpu: boolean) {
   const e = engine(gpu)
@@ -231,6 +264,13 @@ export async function runSketchGpuCheck(): Promise<{ strokes: GpuDiff[]; adjust:
     const g = adjusted(id, true)
     return diff(id, g.gpu, g.px, adjusted(id, false).px)
   })
+  const outlines: GpuDiff[] = []
+  for (const name of Object.keys(OUTLINES)) {
+    const g = outlined(name, true)
+    const c = outlined(name, false)
+    // The strokes themselves differ a little at their edges (see above), so the engines are compared on the same pixels.
+    outlines.push(diff(`outline ${name}: GPU vs Canvas 2D, same pixels`, g.gpu, g.fresh, g.other), diff(`outline ${name}: GPU live vs from scratch`, g.gpu, g.px, g.fresh), diff(`outline ${name}: Canvas 2D live vs from scratch`, true, c.px, c.fresh))
+  }
   const g = moved(true)
-  return { strokes: [...strokes, diff('Move tool (turned and moved)', g.gpu, g.px, moved(false).px)], adjust, undo: undoRoundTrip(), foreign: foreignPixels() }
+  return { strokes: [...strokes, diff('Move tool (turned and moved)', g.gpu, g.px, moved(false).px)], adjust: [...adjust, ...outlines], undo: undoRoundTrip(), foreign: foreignPixels() }
 }

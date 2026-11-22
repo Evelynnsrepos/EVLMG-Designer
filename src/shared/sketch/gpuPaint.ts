@@ -4,6 +4,7 @@ import { blendIndex, GLSL_BLEND, type BlendMode } from './blend'
 import { glAllowed } from './gl'
 import { MESH_FRAG } from './meshRender'
 import type { LayerAdjust } from './model'
+import { OUTLINE_H_FRAG, OUTLINE_V_FRAG, outlineParams, outlineReach, type OutlineSettings } from './outline'
 import type { Filtering } from './brushes'
 import type { Rect } from './tiles'
 
@@ -86,6 +87,8 @@ export interface GpuLayer {
   clipBase?: boolean
   /** An adjustment layer: the picture below, recoloured, is what gets blended. */
   adjust?: LayerAdjust
+  /** An outline layer: its pixels with their outline are what gets blended; `version` -1 = changing right now. */
+  outline?: { o: OutlineSettings; version: number }
 }
 
 const HEADER = '#version 300 es\nprecision highp float;\n'
@@ -521,6 +524,8 @@ export class GpuPainter {
         wet: [QUAD_VERT, WET_FRAG],
         'adj-hsb': [QUAD_VERT, AS.HSB],
         'adj-lut': [QUAD_VERT, AS.LUT],
+        'outline-h': [QUAD_VERT, OUTLINE_H_FRAG],
+        'outline-v': [QUAD_VERT, OUTLINE_V_FRAG],
       }[name]!
       p = { prog: compile(this.gl, v, f), loc: new Map() }
       this.progs.set(name, p)
@@ -615,6 +620,8 @@ export class GpuPainter {
     this.levels = []
     for (const t of this.groupTex.values()) this.free(t)
     this.groupTex.clear()
+    for (const c of this.outlines.values()) this.free(c.t)
+    this.outlines.clear()
     this.free(this.picture)
     this.width = g.width
     this.height = g.height
@@ -1033,6 +1040,9 @@ export class GpuPainter {
     const byKey = new Map<string, GpuLayer>()
     const index = (ls: GpuLayer[]) => ls.forEach((l) => (byKey.set(l.key, l), l.children && index(l.children)))
     index(layers)
+    // An outline reaches past a change, so a changed spot is blended again that much bigger.
+    const reach = Math.max(0, ...[...byKey.values()].map((l) => (l.outline ? outlineReach(l.outline.o) : 0)))
+    if (r && reach) r = clip({ x: r.x - reach, y: r.y - reach, w: r.w + 2 * reach, h: r.h + 2 * reach }, this.width, this.height)
     const result = this.composeLevel(layers, 0, background, byKey, r, frame)
     this.copy(result, this.picture, r)
   }
@@ -1054,7 +1064,7 @@ export class GpuPainter {
       this.into(targets[cur], r)
     }
     for (const layer of layers) {
-      const src = layer.children ? this.composeLevel(layer.children, depth + 1, null, byKey, r) : layer.adjust ? this.adjusted(targets[cur], layer.adjust, r) : layer.tex
+      const src = layer.children ? this.composeLevel(layer.children, depth + 1, null, byKey, r) : layer.adjust ? this.adjusted(targets[cur], layer.adjust, r) : layer.outline ? this.outlined(layer, r) : layer.tex
       if (layer.children && layer.clipBase) this.keepGroup(layer.key, src, r)
       const next = 1 - cur
       this.into(targets[next], r)
@@ -1072,6 +1082,38 @@ export class GpuPainter {
       cur = next
     }
     return targets[cur]
+  }
+
+  private outlines = new Map<string, { t: Tex; settings: string; version: number }>()
+
+  /** An outline layer's pixels with their outline, kept per layer; only the part `r` is worked out again while it changes. */
+  private outlined(layer: GpuLayer, r: Rect | null): Tex {
+    const gl = this.gl
+    const { o, version } = layer.outline!
+    const settings = JSON.stringify(o)
+    let c = this.outlines.get(layer.key)
+    if (!c) this.outlines.set(layer.key, (c = { t: this.target(), settings: '', version: -2 }))
+    if (c.settings === settings && version >= 0 && c.version === version) return c.t
+    // New settings or a new layer picture: all of it; a change being painted: just its part.
+    const area = c.settings === settings && c.version !== -2 ? r : null
+    c.settings = settings
+    c.version = version
+    const p = outlineParams(o)
+    const rows = this.temp('outlineRows')
+    const S = Math.ceil(p.s)
+    this.into(rows, area && clip({ x: area.x, y: area.y - S, w: area.w, h: area.h + 2 * S }, this.width, this.height))
+    gl.disable(gl.BLEND)
+    let pr = this.prog('outline-h')
+    this.bind(0, layer.tex.tex, pr, 'src')
+    this.set(pr, { S: p.s, useOut: p.sOut > 0, useIn: p.sIn > 0 })
+    this.drawQuad()
+    this.into(c.t, area)
+    pr = this.prog('outline-v')
+    this.bind(0, layer.tex.tex, pr, 'src')
+    this.bind(1, rows.tex, pr, 'rows')
+    this.set(pr, { S: p.s, sOut: p.sOut, sIn: p.sIn, soft: p.soft, round: p.round, c1: p.c1.map((v) => v / 255), c2: p.c2.map((v) => v / 255) })
+    this.drawQuad()
+    return c.t
   }
 
   private luts = new Map<string, WebGLTexture>()
@@ -1129,8 +1171,13 @@ export class GpuPainter {
     this.copy(src, t, r)
   }
 
-  /** Forget kept group results of groups that are gone. */
+  /** Forget kept group results (and outlines) of groups and layers that are gone. */
   pruneGroups(keep: Set<string>) {
+    for (const [k, c] of this.outlines)
+      if (!keep.has(k)) {
+        this.free(c.t)
+        this.outlines.delete(k)
+      }
     for (const [k, t] of this.groupTex)
       if (!keep.has(k)) {
         this.free(t)

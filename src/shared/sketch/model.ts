@@ -11,6 +11,7 @@ import type { DrawingGuide } from './guides'
 import type { AnimationSettings, PageSettings } from './assist'
 import type { AdjustValues } from './adjust/filters'
 import type { SketchText } from './text'
+import type { OutlineSettings } from './outline'
 
 export { BLEND_MODES, type BlendMode } from './blend'
 
@@ -44,6 +45,8 @@ export interface SketchLayer {
   text?: SketchText
   /** Adjustment layer (v0.13): changes the colours of everything below it, without changing those layers. */
   adjust?: LayerAdjust
+  /** Outline layer (0.35): everything on it gets a live outline with these settings; the pixels stay as painted. */
+  outline?: OutlineSettings
 }
 
 /** The colour adjustments a layer can be: hue/saturation/brightness, colour balance, curves or a gradient map. */
