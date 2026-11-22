@@ -201,7 +201,8 @@
   flex-direction: column;
   gap: 6px;
 }
-.adjust-ascii-own input {
+.adjust-ascii-own input,
+.adjust-ascii-own textarea {
   flex: 1;
   min-width: 0;
   font-family: 'JetBrains Mono', ui-monospace, monospace;

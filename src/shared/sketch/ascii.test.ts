@@ -117,6 +117,34 @@ describe('ASCII art', () => {
     expect(asciiSettings({ v: { set: 3 } }).chars).toBe(CHARSETS[0].chars)
   })
 
+  it('Braille: one dot per 1×1 px of a 2×4 px cell', () => {
+    // Left column dark, right column light: dots 1, 2, 3 and 7.
+    const px = picture(2, 4, (x) => (x === 0 ? [0, 0, 0, 255] : [255, 255, 255, 255]))
+    const g = grid(2, 4, px, { set: 4 })
+    g.pickAll()
+    expect(g.text()).toEqual(['\u2847'])
+    // No dots: an empty Braille cell, so the line keeps its width.
+    const w = grid(2, 4, picture(2, 4, () => [255, 255, 255, 255]), { set: 4 })
+    w.pickAll()
+    expect(w.text()).toEqual(['\u2800'])
+  })
+
+  it('your text is written into the shape, by position', () => {
+    const px = picture(6, 4, (x) => (x < 2 ? [0, 0, 0, 0] : [0, 0, 0, 255]))
+    const g = grid(6, 4, px, { set: 6, look: 2 }, { text: 'abc' })
+    g.pickAll()
+    expect(g.text()).toEqual([' bc'])
+  })
+
+  it('lines only: edge lines and nothing else', () => {
+    const px = picture(8, 8, (x) => (x < 4 ? [0, 0, 0, 255] : [255, 255, 255, 255]))
+    const g = grid(8, 8, px, { set: 5 })
+    g.pickAll()
+    const t = g.text().join('')
+    expect(t).toMatch(/^[ |]+$/)
+    expect(t).toContain('|')
+  })
+
   it('exports text, coloured web pages and terminal colours', () => {
     const px = picture(4, 4, (x) => (x < 2 ? [255, 0, 0, 255] : [0, 0, 0, 0]))
     const g = grid(4, 4, px, { look: 2 })

@@ -32,6 +32,9 @@ const LOOKS: { name: string; v: Record<string, number>; ascii?: AdjustValues['as
   { name: 'Amber', v: { set: 0, colour: 1, paper: 1, edges: 0, dither: 2 }, ascii: { ink: '#ffb000', paper: '#140c00' } },
   { name: 'Blocks', v: { set: 2, colour: 0, paper: 0, edges: 0, dither: 0 } },
   { name: 'Line art', v: { set: 0, colour: 0, paper: 0, edges: 0.9, dither: 0 } },
+  { name: 'Lines only', v: { set: 5, colour: 0, paper: 0, edges: 0.8, dither: 0 } },
+  { name: 'Braille', v: { set: 4, colour: 0, paper: 0, edges: 0, dither: 0 } },
+  { name: 'Code', v: { set: 6, colour: 0, paper: 0, edges: 0, dither: 0 } },
 ]
 
 /** New ASCII layers start from these: letters on what is painted. */

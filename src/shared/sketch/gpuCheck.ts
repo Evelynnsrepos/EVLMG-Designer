@@ -299,7 +299,7 @@ export async function runSketchGpuCheck(): Promise<{ strokes: GpuDiff[]; adjust:
   }
   // ASCII layers: live painting must match working it out from scratch exactly; GPU and Canvas 2D average the cells
   // with different rounding (8-bit on the GPU), so a few letters may differ there.
-  for (const [name, v] of [['plain', {}], ['edges + pattern', { edges: 0.8, dither: 1 }], ['spread + background', { dither: 2, paper: 1 }]] as [string, Record<string, number>][]) {
+  for (const [name, v] of [['plain', {}], ['edges + pattern', { edges: 0.8, dither: 1 }], ['spread + background', { dither: 2, paper: 1 }], ['braille + background', { set: 4, paper: 1 }], ['lines only', { set: 5 }], ['your text', { set: 6 }]] as [string, Record<string, number>][]) {
     const g = asciiLayer(true, v)
     const c = asciiLayer(false, v)
     outlines.push(diff(`ascii ${name}: GPU live vs from scratch`, g.gpu, g.px, g.fresh), diff(`ascii ${name}: Canvas 2D live vs from scratch`, true, c.px, c.fresh))

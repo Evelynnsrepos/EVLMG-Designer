@@ -106,7 +106,7 @@ export const FILTERS: FilterDef[] = [
     group: 'Effects',
     main: 'cell',
     params: [
-      { key: 'set', label: 'Letters', min: 0, max: 3, options: ['Classic', 'Fine', 'Blocks', 'Your own'] },
+      { key: 'set', label: 'Letters', min: 0, max: 6, options: ['Classic', 'Fine', 'Blocks', 'Your own', 'Braille dots', 'Lines only', 'Your text'] },
       { key: 'cell', label: 'Letter size', min: 3, max: 48, unit: 'px' },
       { key: 'colour', label: 'Colour', min: 0, max: 1, options: ['Picture colours', 'One colour'] },
       { key: 'look', label: 'Letters go on', min: 0, max: 2, options: ['Dark parts', 'Bright parts', 'Painted parts'], more: true },

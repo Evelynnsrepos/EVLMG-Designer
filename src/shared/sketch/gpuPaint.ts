@@ -139,7 +139,7 @@ void main() {
   vec2 c = floor(p / cell);
   vec4 k = texelFetch(pick, ivec2(c), 0);
   float g = floor(k.a * 255.0 + 0.5);
-  if (g > 254.0) { outColor = vec4(0.0); return; }
+  if (g > 254.0) { outColor = usePaper ? vec4(paper, 1.0) : vec4(0.0); return; }
   vec2 q = p - c * cell;
   float cov = texelFetch(atlas, ivec2(int(g * cell.x + q.x), int(q.y)), 0).a;
   outColor = usePaper ? vec4(k.rgb * cov + paper * (1.0 - cov), 1.0) : vec4(k.rgb * cov, cov);
@@ -1197,7 +1197,7 @@ export class GpuPainter {
     if (fresh) {
       this.free(c.cells)
       if (c.pick) gl.deleteTexture(c.pick)
-      c.cells = this.target(g.cols, g.rows)
+      c.cells = this.target(g.dcols, g.drows)
       c.pick = this.rawTexture(g.cols, g.rows)
       this.clear(c.t, null)
     }
@@ -1215,13 +1215,14 @@ export class GpuPainter {
     }
     const cr = g.cellsOf(area ?? { x: 0, y: 0, w: this.width, h: this.height })
     if (cr.w > 0 && cr.h > 0) {
-      this.into(c.cells!, cr)
+      const dr = g.dotsOf(cr)
+      this.into(c.cells!, dr)
       gl.disable(gl.BLEND)
       const p = this.prog('ascii-cells')
       this.bind(0, src.tex, p, 'src')
-      this.set(p, { cell: [g.cw, g.ch], size: [this.width, this.height] })
+      this.set(p, { cell: [g.dw, g.dh], size: [this.width, this.height] })
       this.drawQuad()
-      g.readCells(this.read(c.cells!, cr).data, cr)
+      g.readCells(this.read(c.cells!, dr).data, cr)
     }
     const changed = g.pickAll()
     if (changed) {

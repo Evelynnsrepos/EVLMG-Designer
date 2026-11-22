@@ -18,6 +18,14 @@ export const CHARSETS = [
   },
   { name: 'Blocks', chars: ' ░▒▓█' },
 ] as const
+/** Braille: every pattern of the 8 dots except none, index = dots - 1 (no dots = an empty cell). */
+const BRAILLE = Array.from({ length: 255 }, (_, i) => String.fromCharCode(0x2801 + i)).join('')
+/** The empty Braille cell, used in the text instead of a space so the lines keep their width in any font. */
+const BRAILLE_BLANK = '\u2800'
+/** Letters (Settings › Letters) after the built-in ramps and "Your own". */
+export const SET_BRAILLE = 4
+export const SET_LINES = 5
+export const SET_TEXT = 6
 /** Edge lines, by direction: vertical, rising, flat, falling. */
 const EDGES = '|/-\\'
 /** A cell with nothing in it (no character, no background). */
@@ -33,6 +41,8 @@ export interface AsciiText {
   ink?: string
   /** Background colour of every cell (when the Background switch is on). */
   paper?: string
+  /** "Your text": written into the shape, letter after letter (like code filling a picture). */
+  text?: string
 }
 
 /** The settings as the renderer reads them, from the adjustment's values. */
@@ -51,6 +61,10 @@ export interface AsciiSettings {
   dither: number
   ink: [number, number, number]
   paper: [number, number, number] | null
+  /** 0 = a letter by brightness, 1 = Braille (8 dots per cell), 2 = "Your text" written into the shape. */
+  mode: number
+  /** "Your text", spaces squeezed. */
+  text: string
 }
 
 export const asciiCell = (v: AdjustValues['v']) => Math.max(2, Math.round(v.cell ?? 8))
@@ -66,16 +80,23 @@ export function asciiSettings(a: Pick<AdjustValues, 'v' | 'ascii'>): AsciiSettin
   const v = a.v
   const set = Math.round(v.set ?? 0)
   const own = [...new Set([...(a.ascii?.chars ?? '')])].join('')
+  const text = set === SET_TEXT ? (a.ascii?.text ?? '').replace(/\s+/g, ' ').trim() || 'ASCII' : ''
+  // Your text: a space first (index 0 = nothing), then each letter once; capped so the edge lines still fit.
+  const textChars = ' ' + [...new Set([...text])].filter((c) => c !== ' ').slice(0, 200).join('')
+  const chars = set === 3 ? own || CHARSETS[0].chars : set === SET_BRAILLE ? BRAILLE : set === SET_LINES ? ' ' : set === SET_TEXT ? textChars : CHARSETS[Math.min(2, Math.max(0, set))].chars
   return {
-    chars: set === 3 ? own || CHARSETS[0].chars : CHARSETS[Math.min(2, Math.max(0, set))].chars,
-    cell: asciiCell(v),
+    chars,
+    // Braille splits a cell into 2×4 dots, so the cell must be even.
+    cell: set === SET_BRAILLE ? Math.max(2, Math.round(asciiCell(v) / 2) * 2) : asciiCell(v),
     look: Math.round(v.look ?? 0),
     colour: Math.round(v.colour ?? 0),
     contrast: v.contrast ?? 0,
-    edges: v.edges ?? 0,
+    edges: set === SET_BRAILLE ? 0 : set === SET_LINES ? Math.max(0.6, v.edges ?? 0) : (v.edges ?? 0),
     dither: Math.round(v.dither ?? 0),
     ink: hex(a.ascii?.ink, [0, 0, 0]),
     paper: v.paper ? hex(a.ascii?.paper, [255, 255, 255]) : null,
+    mode: set === SET_BRAILLE ? 1 : set === SET_TEXT ? 2 : 0,
+    text,
   }
 }
 
@@ -116,7 +137,8 @@ export function glyphAtlas(chars: string, cw: number, own: boolean): Atlas {
   const key = `${chars}|${cw}|${fontReady()}|${own}`
   if (atlasCache?.key === key) return atlasCache
   const ch = cw * 2
-  const all = [...chars, ...EDGES]
+  const edges = chars.length > 250 ? '' : EDGES
+  const all = [...chars, ...edges]
   const c = document.createElement('canvas')
   c.width = cw * all.length
   c.height = ch
@@ -129,6 +151,21 @@ export function glyphAtlas(chars: string, cw: number, own: boolean): Atlas {
       g.globalAlpha = BLOCKS[s] / 255
       g.fillRect(i * cw, 0, cw, ch)
       g.globalAlpha = 1
+    } else if (s > BRAILLE_BLANK && s <= '\u28ff') {
+      // Braille dots drawn by hand: the bundled font has none, and system fonts space them differently.
+      const m = s.charCodeAt(0) - 0x2800
+      const d = cw / 2
+      for (let b = 0; b < 8; b++) {
+        if (!(m & (1 << b))) continue
+        const col = b < 3 || b === 6 ? 0 : 1
+        const row = b < 6 ? b % 3 : 3
+        if (d < 3) g.fillRect(i * cw + col * d, row * d, d, d)
+        else {
+          g.beginPath()
+          g.arc(i * cw + (col + 0.5) * d, (row + 0.5) * d, d * 0.38, 0, Math.PI * 2)
+          g.fill()
+        }
+      }
     } else if (s !== ' ') g.fillText(s, i * cw + (cw - g.measureText(s).width) / 2, ch * 0.74)
   })
   const px = g.getImageData(0, 0, c.width, ch).data
@@ -147,7 +184,7 @@ export function glyphAtlas(chars: string, cw: number, own: boolean): Atlas {
   }
   return (atlasCache = {
     key,
-    chars: ramp.join('') + EDGES,
+    chars: ramp.join('') + edges,
     ramp: ramp.length,
     cw,
     ch,
@@ -170,8 +207,18 @@ export class AsciiGrid {
   ch = 0
   cols = 0
   rows = 0
-  /** Per cell: straight r, g, b (0..255) and coverage (0..1). */
+  /** Samples per cell across and down: 2×4 for Braille (one per dot), else 1×1. */
+  sx = 1
+  sy = 1
+  /** Sample size in px and the sample grid. */
+  dw = 0
+  dh = 0
+  dcols = 0
+  drows = 0
+  /** Per sample: straight r, g, b (0..255) and coverage (0..1). */
   cells = new Float32Array(0)
+  /** Your text: the atlas index of each of its letters. */
+  private order: number[] = []
   /** Per cell: atlas index, or EMPTY. */
   idx = new Uint8Array(0)
   /** Per cell: r, g, b, atlas index (for the GPU's pick texture). */
@@ -193,8 +240,15 @@ export class AsciiGrid {
     this.ch = s.cell * 2
     this.cols = Math.ceil(w / this.cw)
     this.rows = Math.ceil(h / this.ch)
+    this.sx = s.mode === 1 ? 2 : 1
+    this.sy = s.mode === 1 ? 4 : 1
+    this.dw = this.cw / this.sx
+    this.dh = this.ch / this.sy
+    this.dcols = this.cols * this.sx
+    this.drows = this.rows * this.sy
     const n = this.cols * this.rows
-    this.cells = new Float32Array(n * 4)
+    this.order = [...s.text].map((c) => Math.max(0, atlas.chars.indexOf(c)))
+    this.cells = new Float32Array(this.dcols * this.drows * 4)
     this.idx = new Uint8Array(n).fill(EMPTY)
     this.pick = new Uint8Array(n * 4)
     for (let i = 0; i < n; i++) this.pick[i * 4 + 3] = EMPTY
@@ -222,9 +276,15 @@ export class AsciiGrid {
     }
   }
 
-  /** Average the cells `c` from straight RGBA pixels `px` that cover the pixel rectangle `at`. */
-  readPixels(px: Uint8ClampedArray | Uint8Array, at: Rect, c: Rect) {
-    const { cw, ch, cells } = this
+  /** Cells (in cells) → samples (in samples). */
+  dotsOf(c: Rect): Rect {
+    return { x: c.x * this.sx, y: c.y * this.sy, w: c.w * this.sx, h: c.h * this.sy }
+  }
+
+  /** Average the cells `cells` (their samples) from straight RGBA pixels `px` that cover the pixel rectangle `at`. */
+  readPixels(px: Uint8ClampedArray | Uint8Array, at: Rect, cellRect: Rect) {
+    const { dw: cw, dh: ch, cells } = this
+    const c = this.dotsOf(cellRect)
     for (let cy = c.y; cy < c.y + c.h; cy++)
       for (let cx = c.x; cx < c.x + c.w; cx++) {
         let r = 0
@@ -245,7 +305,7 @@ export class AsciiGrid {
             n++
           }
         }
-        const k = (cy * this.cols + cx) * 4
+        const k = (cy * this.dcols + cx) * 4
         cells[k] = a ? r / a : 0
         cells[k + 1] = a ? g / a : 0
         cells[k + 2] = a ? b / a : 0
@@ -253,12 +313,13 @@ export class AsciiGrid {
       }
   }
 
-  /** Cell averages from the GPU (straight RGBA bytes, one pixel per cell) for the cells `c`. */
-  readCells(px: Uint8ClampedArray | Uint8Array, c: Rect) {
+  /** Sample averages from the GPU (straight RGBA bytes, one pixel per sample) for the cells `cellRect`. */
+  readCells(px: Uint8ClampedArray | Uint8Array, cellRect: Rect) {
+    const c = this.dotsOf(cellRect)
     for (let y = 0; y < c.h; y++)
       for (let x = 0; x < c.w; x++) {
         const i = (y * c.w + x) * 4
-        const k = ((c.y + y) * this.cols + c.x + x) * 4
+        const k = ((c.y + y) * this.dcols + c.x + x) * 4
         this.cells[k] = px[i]
         this.cells[k + 1] = px[i + 1]
         this.cells[k + 2] = px[i + 2]
@@ -266,10 +327,10 @@ export class AsciiGrid {
       }
   }
 
-  /** How much ink each cell wants, 0..1. */
+  /** How much ink each sample wants, 0..1. */
   private density(): Float32Array {
     const { cells, s } = this
-    const n = this.cols * this.rows
+    const n = this.dcols * this.drows
     const d = new Float32Array(n)
     const k = s.contrast >= 0 ? 1 / (1 - Math.min(0.95, s.contrast)) : 1 + s.contrast
     for (let i = 0; i < n; i++) {
@@ -284,10 +345,107 @@ export class AsciiGrid {
 
   /** Pick every cell's character and colour. Returns the cells (in cells) that changed, or null. */
   pickAll(): Rect | null {
-    const { cols, rows, s, atlas } = this
-    const n = atlas.ramp
+    const { cols, rows, s, atlas, dcols } = this
+    // Braille dots and Your text are on or off; the ramps have a level per letter.
+    const n = s.mode === 0 ? atlas.ramp : 2
     const d = this.density()
+    const level = this.levels(d, n)
+    const edgeAt = s.edges > 0 && s.mode !== 1 ? 0.25 + (1 - s.edges) * 1.75 : Infinity
+    let x0 = cols
+    let y0 = rows
+    let x1 = -1
+    let y1 = -1
+    const at = (x: number, y: number) => d[Math.min(rows - 1, Math.max(0, y)) * cols + Math.min(cols - 1, Math.max(0, x))]
+    let gxs: Float32Array | null = null
+    let gys: Float32Array | null = null
+    let mag: Float32Array | null = null
+    if (edgeAt < Infinity) {
+      gxs = new Float32Array(cols * rows)
+      gys = new Float32Array(cols * rows)
+      mag = new Float32Array(cols * rows)
+      for (let y = 0; y < rows; y++)
+        for (let x = 0; x < cols; x++) {
+          const i = y * cols + x
+          gxs[i] = at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x - 1, y) - at(x - 1, y + 1)
+          // Cells are twice as tall as wide, so a step down counts half.
+          gys[i] = (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x, y - 1) - at(x + 1, y - 1)) / 2
+          mag[i] = Math.hypot(gxs[i], gys[i])
+        }
+    }
+    const magAt = (x: number, y: number) => (x < 0 || y < 0 || x >= cols || y >= rows ? 0 : mag![y * cols + x])
+    const cell = [0, 0, 0, 0]
+    for (let y = 0; y < rows; y++)
+      for (let x = 0; x < cols; x++) {
+        const i = y * cols + x
+        let g: number
+        if (s.mode === 1) {
+          // Braille: one bit per dot that is on; the colour is the dots' average.
+          let m = 0
+          let r = 0
+          let gg = 0
+          let b = 0
+          let a = 0
+          for (let b8 = 0; b8 < 8; b8++) {
+            const dx = x * 2 + (b8 < 3 || b8 === 6 ? 0 : 1)
+            const dy = y * 4 + (b8 < 6 ? b8 % 3 : 3)
+            const j = dy * dcols + dx
+            const al = this.cells[j * 4 + 3]
+            r += this.cells[j * 4] * al
+            gg += this.cells[j * 4 + 1] * al
+            b += this.cells[j * 4 + 2] * al
+            a += al
+            if (level[j] > 0) m |= 1 << b8
+          }
+          cell[0] = a ? r / a : 0
+          cell[1] = a ? gg / a : 0
+          cell[2] = a ? b / a : 0
+          g = m ? m - 1 : EMPTY
+        } else {
+          const k = i * 4
+          cell[0] = this.cells[k]
+          cell[1] = this.cells[k + 1]
+          cell[2] = this.cells[k + 2]
+          const a = this.cells[k + 3]
+          g = !a && !s.paper ? EMPTY : s.mode === 2 ? (level[i] > 0 && this.order.length ? this.order[i % this.order.length] : 0) : level[i]
+          // Edge lines on cells with ink; "Lines only" (one blank letter) has no ink, so every cell may get one.
+          if (g !== EMPTY && (level[i] > 0 || atlas.ramp === 1) && mag && mag[i] > edgeAt) {
+            const gx = gxs![i]
+            const gy = gys![i]
+            // Thin lines: only where the edge is strongest across it (compared with the two cells along the slope).
+            const sx = Math.round(gx / mag[i])
+            const sy = Math.round(gy / mag[i])
+            if (mag[i] >= magAt(x + sx, y + sy) && mag[i] >= magAt(x - sx, y - sy)) {
+              const t = ((Math.atan2(gy, gx) + Math.PI) % Math.PI) / Math.PI
+              g = atlas.ramp + (Math.round(t * 4) % 4)
+            }
+          }
+        }
+        const k = i * 4
+        const c = s.colour === 1 ? s.ink : null
+        const r = c ? c[0] : Math.round(cell[0])
+        const gg = c ? c[1] : Math.round(cell[1])
+        const b = c ? c[2] : Math.round(cell[2])
+        const p = this.pick
+        if (p[k] !== r || p[k + 1] !== gg || p[k + 2] !== b || p[k + 3] !== g) {
+          p[k] = r
+          p[k + 1] = gg
+          p[k + 2] = b
+          p[k + 3] = g
+          this.idx[i] = g
+          if (x < x0) x0 = x
+          if (y < y0) y0 = y
+          if (x > x1) x1 = x
+          if (y > y1) y1 = y
+        }
+      }
+    return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }
+  }
+
+  /** Each sample's level 0..n-1 (with the chosen dithering). */
+  private levels(d: Float32Array, n: number): Int16Array {
+    const { dcols: cols, drows: rows, s } = this
     const level = new Int16Array(cols * rows)
+    if (n < 2) return level
     if (s.dither === 2) {
       const e = Float32Array.from(d)
       for (let y = 0; y < rows; y++)
@@ -311,64 +469,7 @@ export class AsciiGrid {
           const t = s.dither === 1 ? (BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16 - 0.5 : 0
           level[i] = Math.min(n - 1, Math.max(0, Math.round(d[i] * (n - 1) + t)))
         }
-    const edgeAt = s.edges > 0 ? 0.25 + (1 - s.edges) * 1.75 : Infinity
-    let x0 = cols
-    let y0 = rows
-    let x1 = -1
-    let y1 = -1
-    const at = (x: number, y: number) => d[Math.min(rows - 1, Math.max(0, y)) * cols + Math.min(cols - 1, Math.max(0, x))]
-    let gxs: Float32Array | null = null
-    let gys: Float32Array | null = null
-    let mag: Float32Array | null = null
-    if (edgeAt < Infinity) {
-      gxs = new Float32Array(cols * rows)
-      gys = new Float32Array(cols * rows)
-      mag = new Float32Array(cols * rows)
-      for (let y = 0; y < rows; y++)
-        for (let x = 0; x < cols; x++) {
-          const i = y * cols + x
-          gxs[i] = at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x - 1, y) - at(x - 1, y + 1)
-          // Cells are twice as tall as wide, so a step down counts half.
-          gys[i] = (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x, y - 1) - at(x + 1, y - 1)) / 2
-          mag[i] = Math.hypot(gxs[i], gys[i])
-        }
-    }
-    const magAt = (x: number, y: number) => (x < 0 || y < 0 || x >= cols || y >= rows ? 0 : mag![y * cols + x])
-    for (let y = 0; y < rows; y++)
-      for (let x = 0; x < cols; x++) {
-        const i = y * cols + x
-        const a = this.cells[i * 4 + 3]
-        let g = !a && !s.paper ? EMPTY : level[i]
-        if (g !== EMPTY && level[i] > 0 && mag && mag[i] > edgeAt) {
-          const gx = gxs![i]
-          const gy = gys![i]
-          // Thin lines: only where the edge is strongest across it (compared with the two cells along the slope).
-          const sx = Math.round(gx / mag[i])
-          const sy = Math.round(gy / mag[i])
-          if (mag[i] >= magAt(x + sx, y + sy) && mag[i] >= magAt(x - sx, y - sy)) {
-            const t = ((Math.atan2(gy, gx) + Math.PI) % Math.PI) / Math.PI
-            g = n + (Math.round(t * 4) % 4)
-          }
-        }
-        const k = i * 4
-        const c = s.colour === 1 ? s.ink : null
-        const r = c ? c[0] : Math.round(this.cells[k])
-        const gg = c ? c[1] : Math.round(this.cells[k + 1])
-        const b = c ? c[2] : Math.round(this.cells[k + 2])
-        const p = this.pick
-        if (p[k] !== r || p[k + 1] !== gg || p[k + 2] !== b || p[k + 3] !== g) {
-          p[k] = r
-          p[k + 1] = gg
-          p[k + 2] = b
-          p[k + 3] = g
-          this.idx[i] = g
-          if (x < x0) x0 = x
-          if (y < y0) y0 = y
-          if (x > x1) x1 = x
-          if (y > y1) y1 = y
-        }
-      }
-    return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }
+    return level
   }
 
   /** Draw the pixel rectangle `r` (whole cells) into straight RGBA `out` (r.w × r.h). */
@@ -384,7 +485,13 @@ export class AsciiGrid {
         const k = (cy * this.cols + cx) * 4
         const g = this.pick[k + 3]
         if (g === EMPTY) {
-          out[o] = out[o + 1] = out[o + 2] = out[o + 3] = 0
+          // Only Braille leaves empty cells with the background on (cells with no dots).
+          if (paper) {
+            out[o] = paper[0]
+            out[o + 1] = paper[1]
+            out[o + 2] = paper[2]
+            out[o + 3] = 255
+          } else out[o] = out[o + 1] = out[o + 2] = out[o + 3] = 0
           continue
         }
         const cov = atlas.ink[(g * ch + gy) * cw + (x - cx * cw)]
@@ -408,11 +515,12 @@ export class AsciiGrid {
   text(): string[] {
     const lines: string[] = []
     const chars = [...this.atlas.chars]
+    const blank = this.s.mode === 1 ? BRAILLE_BLANK : ' '
     for (let y = 0; y < this.rows; y++) {
       let line = ''
       for (let x = 0; x < this.cols; x++) {
         const g = this.idx[y * this.cols + x]
-        line += g === EMPTY ? ' ' : chars[g]
+        line += g === EMPTY ? blank : chars[g]
       }
       lines.push(line.replace(/\s+$/, ''))
     }
@@ -428,7 +536,7 @@ export class AsciiGrid {
       for (let x = 0; x < this.cols; x++) {
         const k = (y * this.cols + x) * 4
         const g = this.pick[k + 3]
-        const s = g === EMPTY ? ' ' : chars[g]
+        const s = g === EMPTY ? (this.s.mode === 1 ? BRAILLE_BLANK : ' ') : chars[g]
         const color: [number, number, number] | null = g === EMPTY || s === ' ' ? null : [this.pick[k], this.pick[k + 1], this.pick[k + 2]]
         const last = line[line.length - 1]
         if (last && (color === null ? last.color === null : last.color && last.color.join() === color.join())) last.text += s

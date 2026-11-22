@@ -38,6 +38,8 @@ const UI = {
   more: 'More',
   ownLetters: 'Your letters',
   ownHint: 'Type the letters to use; they are sorted light to dark by themselves.',
+  ownText: 'Your text',
+  ownTextHint: 'This text is written into the shape, letter after letter, and starts again at the end.',
   ink: 'Letter colour',
   paper: 'Background',
   size: 'Size',
@@ -455,6 +457,12 @@ function AsciiExtras({ values, onChange }: { values: AdjustValues; onChange(next
         <label className="sketch-row adjust-ascii-own" title={UI.ownHint}>
           <span className="adjust-label">{UI.ownLetters}</span>
           <input className="input" value={a.chars ?? ''} placeholder=" .oO@" spellCheck={false} onChange={(e) => set({ chars: e.target.value })} aria-label={UI.ownLetters} />
+        </label>
+      )}
+      {values.v.set === 6 && (
+        <label className="sketch-row adjust-ascii-own" title={UI.ownTextHint}>
+          <span className="adjust-label">{UI.ownText}</span>
+          <textarea className="input" rows={3} value={a.text ?? ''} placeholder="function draw() { ... }" spellCheck={false} onChange={(e) => set({ text: e.target.value })} aria-label={UI.ownText} />
         </label>
       )}
       {values.v.colour === 1 && (
