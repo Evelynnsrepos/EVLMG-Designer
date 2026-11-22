@@ -77,3 +77,59 @@
   background: var(--bg-elevated);
   font-weight: 600;
 }
+button.cal-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 34px;
+  border: 1px solid transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+button.cal-day.on {
+  border-color: var(--accent);
+}
+button.cal-day.out {
+  opacity: 0.45;
+}
+.cal-moon {
+  margin-left: 2px;
+  vertical-align: -1px;
+}
+.cal-dots {
+  display: flex;
+  gap: 2px;
+  height: 5px;
+}
+.cal-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+.cal-daypanel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+.cal-entry {
+  padding: 5px 8px;
+  border: none;
+  border-left: 4px solid;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.cal-entry.on {
+  outline: 1px solid var(--accent);
+}
+.cal-entry-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
