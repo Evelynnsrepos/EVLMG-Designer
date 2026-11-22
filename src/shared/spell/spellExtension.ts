@@ -154,8 +154,10 @@ export const SpellCheck = Extension.create<SpellOptions>({
             return set && useSettings.getState().spellCalm ? DecorationSet.create(state.doc, set.find(head.start(), head.end())) : set
           },
           attributes: (): Record<string, string> => (spellAvailable() ? { spellcheck: 'false' } : {}),
-          // A click opens the suggestion card and still places the caret.
+          // A click on an underlined word opens the suggestion card and still places the caret. Only on the word itself:
+          // a click next to it (end of the line, the space after it) is for writing.
           handleClick: (view, pos, event) => {
+            if (!(event.target as HTMLElement | null)?.closest?.('.spell-error, .grammar-error')) return false
             const hit = hitAt(view, pos, event)
             if (hit) options.onMisspelling(hit)
             return false
