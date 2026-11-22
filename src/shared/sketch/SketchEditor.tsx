@@ -26,6 +26,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
+import { flushSync } from 'react-dom'
 import { importAssetFromBlob, pickAndImportAssets, resolveAssetPath } from '@/core/assets'
 import { getFs } from '@/core/fs'
 import { retireAssets } from '@/core/backups'
@@ -901,7 +902,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     if (!q) return
     cancelAnimationFrame(q.raf)
     pendingMove.current = null
-    moveRef.current(q.e, q.events)
+    // Render and redraw now, inside this frame: left to React, the picture showed up a frame later (input lag).
+    flushSync(() => moveRef.current(q.e, q.events))
   }
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     // Pinch and pan with fingers need every finger's moves in order.
