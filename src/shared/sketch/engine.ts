@@ -13,7 +13,7 @@ import { applyRelief } from './relief'
 import { runCpu } from './adjust/cpu'
 import { pngOf } from './encode'
 import { frameOf, toFrame, type Growth } from './growth'
-import { buildMesh, outerBounds, type XfState } from './transform'
+import { buildMesh, curved, outerBounds, type XfState } from './transform'
 import { TileHistory, tilesIn, type Rect, type UndoStep } from './tiles'
 
 /**
@@ -1225,7 +1225,7 @@ export class SketchEngine {
         // Only the part being blended again (where the pixels were and are now) is redrawn.
         const r = this.composeRect
         gpu.copy(this.tex(layer.id), out, r)
-        gpu.mesh(piece.t, out, buildMesh(f.mesh.state, f.mesh.state.warp ? 32 : 16), f.mesh.state.src, f.mesh.mode, r)
+        gpu.mesh(piece.t, out, buildMesh(f.mesh.state, curved(f.mesh.state) ? 32 : 16), f.mesh.state.src, f.mesh.mode, r)
         return out
       }
       gpu.copy(this.tex(layer.id), out, null)

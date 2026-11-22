@@ -233,3 +233,12 @@
   border-radius: var(--radius);
   background: var(--bg-sunken);
 }
+.sketch-xf-extra {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.sketch-xf-num {
+  min-width: 34px;
+  font-variant-numeric: tabular-nums;
+}

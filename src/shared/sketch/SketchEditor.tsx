@@ -1060,11 +1060,14 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     if (activeLayer && !layers.some((l) => l.id === activeLayer.id)) setActiveLayerId(layers.filter((l) => l.kind !== 'group').at(-1)?.id ?? layers[0].id)
   }
   const undo = () => {
+    // While transforming, Ctrl+Z steps back through the transform first.
+    if (xf.active && xf.undo()) return
     markDirty(engine.undo())
     applyMeta()
     sel.sync()
   }
   const redo = () => {
+    if (xf.active && xf.redo()) return
     markDirty(engine.redo())
     applyMeta()
     sel.sync()
@@ -1437,8 +1440,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
           <ToolButton key={t.id} icon={t.icon} label={t.label} active={tool === t.id} onClick={() => setTool(t.id)} hint={`tool.${t.id}`} />
         ))}
         <span className="sketch-sep" />
-        <ToolButton icon={Undo2} label={UI.undo} onClick={undo} disabled={!engine.canUndo} hint="undo" />
-        <ToolButton icon={Redo2} label={UI.redo} onClick={redo} disabled={!engine.canRedo} hint="redo" />
+        <ToolButton icon={Undo2} label={UI.undo} onClick={undo} disabled={!engine.canUndo && !xf.active} hint="undo" />
+        <ToolButton icon={Redo2} label={UI.redo} onClick={redo} disabled={!engine.canRedo && !(xf.active && xf.canRedo)} hint="redo" />
         <span className="sketch-sep" />
         <ToolButton icon={PaintBucket} label={UI.fill} onClick={() => activeLayer && markDirty(engine.fill(activeLayer.id, color, activeLayer.alphaLock))} hint="fill" />
         <ToolButton icon={Trash2} label={UI.clear} onClick={() => activeLayer && markDirty(engine.clear(activeLayer.id))} />
