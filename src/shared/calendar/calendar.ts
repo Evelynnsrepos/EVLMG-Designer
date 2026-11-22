@@ -23,7 +23,7 @@ export interface Era {
   color: string
 }
 
-/** A day in a calendar game (v0.35, Persona / Metaphor style): story beats, deadlines, free days. */
+/** A day in a day-by-day calendar game: story beats, deadlines, free days. */
 export const DAY_KINDS = [
   { id: 'story', label: 'Story', color: '#9c36b5' },
   { id: 'deadline', label: 'Deadline', color: '#e03131' },
