@@ -15,6 +15,7 @@ import { mirrored, type InputPoint, type SketchDoc, type SketchLayer, type Symme
 import { applyRelief } from './relief'
 import { runCpu } from './adjust/cpu'
 import { pngOf } from './encode'
+import { signAt } from './asciiBrush'
 import { frameOf, toFrame, type Growth } from './growth'
 import { buildMesh, curved, outerBounds, type XfState } from './transform'
 import { TileHistory, tilesIn, type Rect, type UndoStep } from './tiles'
@@ -1641,7 +1642,7 @@ export class SketchEngine {
     walk(layerTree(layers))
     for (const { layer, base, mask } of stack.reverse()) {
       if (layer.kind === 'adjust' || !layer.opacity || !shownInTree(layers, layer.id) || lockedInTree(layers, layer.id)) continue
-      if (!this.pixelOf(layer.id, x, y)[3]) continue
+      if (!this.pixelOf(layer.id, x, y)[3] && !(layer.ascii && signAt(layer.ascii, x, y))) continue
       if (mask?.visible) {
         const m = this.pixelOf(mask.id, x, y)
         if (!((0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) * m[3])) continue

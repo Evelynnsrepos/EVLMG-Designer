@@ -61,7 +61,7 @@ import { FloatingPanel, useSpot } from './FloatingPanel'
 import { AsciiBrushPanel, type SignTool } from './AsciiBrushPanel'
 import { beginSigns, signsTo, type SignStroke } from './asciiBrush'
 import type { AsciiMark } from './ascii'
-import { growDoc, growFor, shiftDocData } from './growth'
+import { clearOutside, growDoc, growFor, shiftDocData } from './growth'
 import { SketchHistoryFile } from './historyFile'
 import { boundsOf, maxLayers, type Rect } from './tiles'
 import './sketch.css'
@@ -138,6 +138,8 @@ const UI_PRO = {
   bringFloating: 'Layers, floating at the top right',
   bringDocked: 'Layers, in the side panel',
   editShape: 'Edit shape',
+  keepLine: 'Keep my line',
+  keepLineTitle: 'Take the shape away and keep the line you drew (Backspace)',
   done: 'Done',
 }
 
@@ -147,6 +149,8 @@ interface ShapeOffer {
   opts: Parameters<SketchEngine['beginStroke']>[0]
   pressure: number
   start: { x: number; y: number }
+  /** The line as drawn before it snapped (not on Animated layers). */
+  line?: InputPoint[]
   /** Where the button shows, in stage pixels. */
   at: { x: number; y: number }
   editing: boolean
@@ -159,6 +163,9 @@ const UI = {
   beyondCanvasTitle: 'Draw beyond the canvas?',
   beyondCanvasNote: 'Painting or moving far past the edge, or doing it on a big canvas, needs a lot more memory and can make drawing slower. Exports still only take what is on the canvas. You can turn it off again any time.',
   beyondCanvasOk: 'Turn it on',
+  beyondOffTitle: 'Remove the paint outside the canvas?',
+  beyondOffNote: 'Paint past the edge of the canvas is removed, so only the canvas is left. Ctrl+Z brings it back.',
+  beyondOffOk: 'Turn it off and remove it',
   brush: 'Brush (B)',
   eraser: 'Eraser (E)',
   smudge: 'Smudge (S): drags the colors with the brush',
@@ -204,6 +211,9 @@ const UI = {
   color: 'Color',
   saving: 'Saving…',
 }
+
+/** Fields where keys are typing, not Draw's shortcuts. */
+const TYPING_FIELDS = 'textarea, select, [contenteditable], input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=color])'
 
 type Tool = 'brush' | 'eraser' | 'smudge' | 'lasso' | 'rect' | 'move' | 'rotate3d' | 'mold' | 'eyedropper' | 'layerpick' | 'hand' | 'text' | 'signs'
 
@@ -675,6 +685,17 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     return g
   }
 
+  /** Layers with paint past the canvas's edge (only drawings that grew have any). */
+  const paintOutside = () => {
+    const f = doc.frame
+    if (!f) return []
+    return doc.layers.filter(hasPixels).map((l) => l.id).filter((id) => {
+      const b = engine.paintedBounds([id])
+      const t = 2 * Math.ceil(Math.max(engine.width, engine.height) / 256) // paintedBounds works on a small copy
+      return !!b && (b.x < f.x - t || b.y < f.y - t || b.x + b.w > f.x + f.w + t || b.y + b.h > f.y + f.h + t)
+    })
+  }
+
   // ColorDrop: drag the colour onto the canvas to fill (Sketch Pro).
   const drop = useColorDrop(
     engine,
@@ -861,6 +882,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     // Moves from before the press belong to the hover, not to the new stroke.
     flushMove()
+    // A pen press doesn't always move the focus: leave the side panel's field so the tool keys (E, B…) work again.
+    const focused = document.activeElement
+    if (focused instanceof HTMLElement && focused.closest('.sketch-panel, .sketch-topbar')) focused.blur()
     if (!view || !activeLayer) return
     if (shapeOffer) {
       // Any tap on the canvas ends Edit Shape (or drops the offer).
@@ -1070,7 +1094,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       const b = boundsOf(g.pts, g.opts.brush.size)
       if (b) growTo(b, Math.max(256, g.opts.brush.size * 2))
       if (g.snapped?.drawn && lastPointer.current) {
-        setShapeOffer({ shape: g.snapped.drawn, opts: g.opts, pressure: g.snapped.pressure, start: g.pts[0], at: lastPointer.current, editing: false })
+        setShapeOffer({ shape: g.snapped.drawn, opts: g.opts, pressure: g.snapped.pressure, start: g.pts[0], line: g.animated ? undefined : g.pts, at: lastPointer.current, editing: false })
       }
     }
     else if (g.kind === 'signs') engine.endLayerTweak()
@@ -1468,6 +1492,16 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     setShapeOffer({ ...o, editing: true })
     setVersion(engine.version)
   }
+  /** QuickShape snapped by mistake (a slow stroke): the shape goes, the line as drawn comes back, as one undo step. */
+  function keepLine() {
+    const o = shapeOffer
+    if (!o?.line?.length || o.editing) return
+    setShapeOffer(null)
+    markDirty(engine.undo())
+    engine.beginStroke(o.opts, o.line[0])
+    engine.restroke(o.line)
+    markDirty(engine.endStroke())
+  }
   const changeShape = (shape: Shape) => {
     if (!shapeOffer?.editing) return
     engine.restroke(shapeOutline(shape, 2, shapeOffer.start).map((q) => ({ ...q, pressure: shapeOffer.pressure })))
@@ -1520,7 +1554,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   useEffect(() => {
     if (!active) return
     const down = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]')) return
+      // Only fields that take typing keep the keys; a slider or checkbox still focused from the side panel does not.
+      if ((e.target as HTMLElement).closest?.(TYPING_FIELDS)) return
       const k = e.key.toLowerCase()
       if (k === 'shift' && gesture.current?.kind === 'paint' && gesture.current.snapped) {
         keys.shift = true
@@ -1726,9 +1761,16 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
                   {UI_PRO.done}
                 </button>
               ) : (
-                <button className="btn sketch-small" onClick={startShapeEdit}>
-                  {UI_PRO.editShape}
-                </button>
+                <>
+                  <button className="btn sketch-small" onClick={startShapeEdit}>
+                    {UI_PRO.editShape}
+                  </button>
+                  {shapeOffer.line && (
+                    <button className="btn sketch-small" title={UI_PRO.keepLineTitle} onClick={keepLine}>
+                      {UI_PRO.keepLine}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -1775,6 +1817,10 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
                   // Turning it on asks first: a big working area costs memory.
                   const on = e.target.checked
                   if (on && !(await confirmDialog({ title: UI.beyondCanvasTitle, message: UI.beyondCanvasNote, confirmLabel: UI.beyondCanvasOk }))) return
+                  // Turning it off with paint past the edge asks, then removes that paint (one undo step per layer).
+                  const out = on ? [] : paintOutside()
+                  if (out.length && !(await confirmDialog({ title: UI.beyondOffTitle, message: UI.beyondOffNote, confirmLabel: UI.beyondOffOk }))) return
+                  for (const id of out) markDirty(engine.edit(id, (ctx) => clearOutside(ctx, doc.frame!, engine.width, engine.height)))
                   input.update({ beyondCanvas: on })
                 }}
               />
