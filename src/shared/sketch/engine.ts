@@ -889,6 +889,11 @@ export class SketchEngine {
     this.lastLayerStep = { meta, at: now, tweak: sameIds }
   }
 
+  /** Close the layer step being tweaked, so the next layer change is an undo step of its own (sign brush strokes). */
+  endLayerTweak() {
+    this.lastLayerStep = null
+  }
+
   /**
    * The Selector changed the selection: a step of its own, or (`withLast`) part of the step just made,
    * e.g. the selection following pixels a transform moved.
@@ -1521,7 +1526,11 @@ export class SketchEngine {
     let r: Rect
     if (fresh) r = all
     else if (px.live) r = px.dirty ?? all
-    else if (hit.version === version) return hit.c.canvas
+    else if (hit.version === version) {
+      // Only the sign brushes' cells changed: pick the letters again, nothing to read.
+      if (!hit.grid.marksChanged) return hit.c.canvas
+      r = { x: 0, y: 0, w: 0, h: 0 }
+    }
     // The stroke just ended: read its cells again from the layer itself, to be sure.
     else r = hit.changed ?? all
     asciiInto(hit.grid, px.canvas, hit.c.ctx, r, fresh)

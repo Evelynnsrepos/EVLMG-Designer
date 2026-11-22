@@ -1,3 +1,4 @@
+import type { AsciiMark } from './ascii'
 import { defaultValues } from './adjust/filters'
 import { defaultLibrary } from './brushDefaults'
 import type { BrushSettings } from './brushes'
@@ -154,10 +155,10 @@ function outlined(name: string, gpu: boolean) {
 }
 
 /** An ASCII layer painted on (the letters follow while painting), then the same pixels as letters from scratch. */
-function asciiLayer(gpu: boolean, v: Record<string, number>) {
+function asciiLayer(gpu: boolean, v: Record<string, number>, marks?: Record<string, AsciiMark>) {
   const e = engine(gpu)
   const layer = { ...newLayer('A'), ascii: { ...defaultValues('ascii', W, H), v: { ...defaultValues('ascii', W, H).v, look: 2, ...v } } }
-  const doc = { layers: [layer], backgroundColor: '#ffffff' }
+  let doc = { layers: [layer], backgroundColor: '#ffffff' }
   e.edit(layer.id, (c) => {
     c.fillStyle = '#3080c0'
     c.fillRect(150, 30, 50, 90)
@@ -170,6 +171,11 @@ function asciiLayer(gpu: boolean, v: Record<string, number>) {
     if (i % 3 === 0) e.draw(doc, [1, 0, 0, 1, 0, 0], W, H, 1, false) || e.render(doc)
   }
   e.endStroke()
+  if (marks) {
+    // Sign brushes: only the marks change after the picture was drawn (the letters are picked again, nothing re-read).
+    e.render(doc)
+    doc = { ...doc, layers: [{ ...layer, ascii: { ...layer.ascii, ascii: { marks } } }] }
+  }
   const px = e.render(doc).getContext('2d')!.getImageData(0, 0, W, H).data.slice()
   const scratch = (on: boolean) => {
     const f = engine(on)
@@ -299,9 +305,10 @@ export async function runSketchGpuCheck(): Promise<{ strokes: GpuDiff[]; adjust:
   }
   // ASCII layers: live painting must match working it out from scratch exactly; GPU and Canvas 2D average the cells
   // with different rounding (8-bit on the GPU), so a few letters may differ there.
-  for (const [name, v] of [['plain', {}], ['edges + pattern', { edges: 0.8, dither: 1 }], ['spread + background', { dither: 2, paper: 1 }], ['braille + background', { set: 4, paper: 1 }], ['lines only', { set: 5 }], ['your text', { set: 6 }]] as [string, Record<string, number>][]) {
-    const g = asciiLayer(true, v)
-    const c = asciiLayer(false, v)
+  for (const [name, v] of [['plain', {}], ['edges + pattern', { edges: 0.8, dither: 1 }], ['spread + background', { dither: 2, paper: 1 }], ['braille + background', { set: 4, paper: 1 }], ['lines only', { set: 5 }], ['your text', { set: 6 }], ['sign brushes', { scatter: 0.3 }]] as [string, Record<string, number>][]) {
+    const marks: Record<string, AsciiMark> | undefined = name === 'sign brushes' ? { '64,32': { s: '_' }, '72,32': { s: '(' }, '0,0': { d: 3, c: '#00aa00' }, '160,64': { d: -2 } } : undefined
+    const g = asciiLayer(true, v, marks)
+    const c = asciiLayer(false, v, marks)
     outlines.push(diff(`ascii ${name}: GPU live vs from scratch`, g.gpu, g.px, g.fresh), diff(`ascii ${name}: Canvas 2D live vs from scratch`, true, c.px, c.fresh))
     strokes.push(diff(`ascii ${name}: GPU vs Canvas 2D, same pixels`, g.gpu, g.fresh, g.other))
   }

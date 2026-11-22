@@ -43,6 +43,15 @@ export interface AsciiText {
   paper?: string
   /** "Your text": written into the shape, letter after letter (like code filling a picture). */
   text?: string
+  /** Sign brushes: cells painted by hand, by the pixel corner of the cell they were painted in ("x,y"). */
+  marks?: Record<string, AsciiMark>
+}
+
+/** One hand-painted cell: a fixed sign, steps darker (+) or lighter (-), and the brush colour for unpainted cells. */
+export interface AsciiMark {
+  s?: string
+  d?: number
+  c?: string
 }
 
 /** The settings as the renderer reads them, from the adjustment's values. */
@@ -65,6 +74,11 @@ export interface AsciiSettings {
   mode: number
   /** "Your text", spaces squeezed. */
   text: string
+  /** Letters on the other parts (dark ↔ bright, painted ↔ empty). */
+  invert: boolean
+  /** 0..1: share of cells that get a random letter (glitch). */
+  scatter: number
+  seed: number
 }
 
 export const asciiCell = (v: AdjustValues['v']) => Math.max(2, Math.round(v.cell ?? 8))
@@ -76,7 +90,7 @@ function hex(c: string | undefined, fallback: [number, number, number]): [number
   return [n >> 16, (n >> 8) & 255, n & 255]
 }
 
-export function asciiSettings(a: Pick<AdjustValues, 'v' | 'ascii'>): AsciiSettings {
+export function asciiSettings(a: Pick<AdjustValues, 'v' | 'ascii'> & { seed?: number }): AsciiSettings {
   const v = a.v
   const set = Math.round(v.set ?? 0)
   const own = [...new Set([...(a.ascii?.chars ?? '')])].join('')
@@ -97,6 +111,9 @@ export function asciiSettings(a: Pick<AdjustValues, 'v' | 'ascii'>): AsciiSettin
     paper: v.paper ? hex(a.ascii?.paper, [255, 255, 255]) : null,
     mode: set === SET_BRAILLE ? 1 : set === SET_TEXT ? 2 : 0,
     text,
+    invert: !!v.invert,
+    scatter: v.scatter ?? 0,
+    seed: a.seed ?? 1,
   }
 }
 
@@ -132,13 +149,15 @@ const fontReady = () => typeof document !== 'undefined' && !!document.fonts?.che
 
 let atlasCache: Atlas | null = null
 /** The glyphs of `chars` at this cell size, drawn once (Canvas 2D) and kept while nothing changes. */
-export function glyphAtlas(chars: string, cw: number, own: boolean): Atlas {
+export function glyphAtlas(chars: string, cw: number, own: boolean, extra = ''): Atlas {
   if (!fontAsked) void loadAsciiFont()
-  const key = `${chars}|${cw}|${fontReady()}|${own}`
+  const edges = chars.length > 250 ? '' : EDGES
+  // Signs painted with the sign brushes, after the edge lines (none fit next to Braille's 255).
+  const more = edges ? [...new Set([...extra])].filter((c) => !chars.includes(c) && !EDGES.includes(c)).slice(0, 250 - chars.length - edges.length).join('') : ''
+  const key = `${chars}|${cw}|${fontReady()}|${own}|${more}`
   if (atlasCache?.key === key) return atlasCache
   const ch = cw * 2
-  const edges = chars.length > 250 ? '' : EDGES
-  const all = [...chars, ...edges]
+  const all = [...chars, ...edges, ...more]
   const c = document.createElement('canvas')
   c.width = cw * all.length
   c.height = ch
@@ -184,7 +203,7 @@ export function glyphAtlas(chars: string, cw: number, own: boolean): Atlas {
   }
   return (atlasCache = {
     key,
-    chars: ramp.join('') + edges,
+    chars: ramp.join('') + edges + more,
     ramp: ramp.length,
     cw,
     ch,
@@ -195,6 +214,13 @@ export function glyphAtlas(chars: string, cw: number, own: boolean): Atlas {
 // ---- The grid ------------------------------------------------------------------------
 
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
+
+/** A number 0..1 that stays the same for the same cell and seed. */
+function hash(x: number, y: number, seed: number): number {
+  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(seed, 2246822519)
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296
+}
 
 /**
  * The characters of one picture: cell averages in, a character and a colour per cell out. Keeps its arrays, so a
@@ -219,6 +245,13 @@ export class AsciiGrid {
   cells = new Float32Array(0)
   /** Your text: the atlas index of each of its letters. */
   private order: number[] = []
+  /** Sign brushes, per cell: fixed atlas index or -1, steps darker/lighter, brush colour (rgb) or -1. */
+  private mSign = new Int16Array(0)
+  private mShade = new Int8Array(0)
+  private mColor = new Int32Array(0)
+  private marks: AsciiText['marks'] = undefined
+  /** The hand-painted cells changed since the last pickAll (the picture did not). */
+  marksChanged = false
   /** Per cell: atlas index, or EMPTY. */
   idx = new Uint8Array(0)
   /** Per cell: r, g, b, atlas index (for the GPU's pick texture). */
@@ -228,9 +261,12 @@ export class AsciiGrid {
   private sig = ''
 
   /** Set up for a w×h picture; true when everything has to be worked out again. */
-  prepare(w: number, h: number, s: AsciiSettings, atlas: Atlas): boolean {
+  prepare(w: number, h: number, s: AsciiSettings, atlas: Atlas, marks?: AsciiText['marks']): boolean {
     const sig = `${w}x${h}|${JSON.stringify(s)}|${atlas.key}`
-    if (sig === this.sig) return false
+    if (sig === this.sig) {
+      if (marks !== this.marks) this.setMarks(marks)
+      return false
+    }
     this.sig = sig
     this.s = s
     this.atlas = atlas
@@ -252,7 +288,37 @@ export class AsciiGrid {
     this.idx = new Uint8Array(n).fill(EMPTY)
     this.pick = new Uint8Array(n * 4)
     for (let i = 0; i < n; i++) this.pick[i * 4 + 3] = EMPTY
+    this.mSign = new Int16Array(n)
+    this.mShade = new Int8Array(n)
+    this.mColor = new Int32Array(n)
+    this.setMarks(marks)
     return true
+  }
+
+  /** The cell (in cells) a mark key points at, or -1 when it is outside. */
+  cellOfKey(key: string): number {
+    const [x, y] = key.split(',').map(Number)
+    const cx = Math.floor(x / this.cw)
+    const cy = Math.floor(y / this.ch)
+    return cx >= 0 && cy >= 0 && cx < this.cols && cy < this.rows ? cy * this.cols + cx : -1
+  }
+
+  private setMarks(marks: AsciiText['marks']) {
+    this.marks = marks
+    this.marksChanged = true
+    this.mSign.fill(-1)
+    this.mShade.fill(0)
+    this.mColor.fill(-1)
+    for (const key in marks ?? {}) {
+      const i = this.cellOfKey(key)
+      if (i < 0) continue
+      const m = marks![key]
+      const at = m.s ? this.atlas.chars.indexOf(m.s) : -1
+      if (at >= 0) this.mSign[i] = at
+      if (m.d) this.mShade[i] = Math.max(-127, Math.min(127, Math.round(m.d)))
+      const c = /^#?([0-9a-f]{6})$/i.exec(m.c ?? '')
+      if (c) this.mColor[i] = parseInt(c[1], 16)
+    }
   }
 
   /** The pixel rectangle `r` grown to whole cells (in cells). */
@@ -336,9 +402,10 @@ export class AsciiGrid {
     for (let i = 0; i < n; i++) {
       const a = cells[i * 4 + 3]
       const l = (cells[i * 4] * 0.299 + cells[i * 4 + 1] * 0.587 + cells[i * 4 + 2] * 0.114) / 255
-      const v = s.look === 2 ? a : s.look === 1 ? a * l : a * (1 - l)
+      let v = s.look === 2 ? a : s.look === 1 ? a * l : a * (1 - l)
+      if (s.invert) v = 1 - v
       d[i] = Math.min(1, Math.max(0, (v - 0.5) * k + 0.5))
-      if (!a) d[i] = 0
+      if (!a && !s.invert) d[i] = 0
     }
     return d
   }
@@ -349,6 +416,20 @@ export class AsciiGrid {
     // Braille dots and Your text are on or off; the ramps have a level per letter.
     const n = s.mode === 0 ? atlas.ramp : 2
     const d = this.density()
+    // Shade and Subtract brushes: a step darker or lighter per pass (one letter, or about a third for on/off cells).
+    const step = s.mode === 0 ? 1 / Math.max(1, n - 1) : 0.34
+    for (let i = 0; i < cols * rows; i++) {
+      const sh = this.mShade[i]
+      if (!sh) continue
+      const x = i % cols
+      const y = (i - x) / cols
+      for (let j = 0; j < this.sy; j++)
+        for (let q = 0; q < this.sx; q++) {
+          const k = (y * this.sy + j) * dcols + x * this.sx + q
+          d[k] = Math.min(1, Math.max(0, d[k] + sh * step))
+        }
+    }
+    this.marksChanged = false
     const level = this.levels(d, n)
     const edgeAt = s.edges > 0 && s.mode !== 1 ? 0.25 + (1 - s.edges) * 1.75 : Infinity
     let x0 = cols
@@ -406,9 +487,9 @@ export class AsciiGrid {
           cell[1] = this.cells[k + 1]
           cell[2] = this.cells[k + 2]
           const a = this.cells[k + 3]
-          g = !a && !s.paper ? EMPTY : s.mode === 2 ? (level[i] > 0 && this.order.length ? this.order[i % this.order.length] : 0) : level[i]
+          g = !a && !s.paper && !s.invert && this.mShade[i] <= 0 ? EMPTY : s.mode === 2 ? (level[i] > 0 && this.order.length ? this.order[i % this.order.length] : 0) : level[i]
           // Edge lines on cells with ink; "Lines only" (one blank letter) has no ink, so every cell may get one.
-          if (g !== EMPTY && (level[i] > 0 || atlas.ramp === 1) && mag && mag[i] > edgeAt) {
+          if (g !== EMPTY && (level[i] > 0 || atlas.ramp === 1) && this.mShade[i] >= 0 && mag && mag[i] > edgeAt) {
             const gx = gxs![i]
             const gy = gys![i]
             // Thin lines: only where the edge is strongest across it (compared with the two cells along the slope).
@@ -420,8 +501,17 @@ export class AsciiGrid {
             }
           }
         }
+        // Scatter: some letters swapped for random ones (the same cells every time, so painting doesn't flicker).
+        if (s.scatter > 0 && s.mode !== 1 && g !== EMPTY && g > 0 && g < atlas.ramp && atlas.ramp > 2) {
+          const h = hash(x, y, s.seed)
+          if (h < s.scatter) g = 1 + Math.floor(hash(y, x, s.seed + 7) * (atlas.ramp - 1))
+        }
+        if (this.mSign[i] >= 0) g = this.mSign[i]
         const k = i * 4
-        const c = s.colour === 1 ? s.ink : null
+        const mc = this.mColor[i]
+        // Cells with nothing painted take the brush colour they were marked with.
+        const own = mc >= 0 && (s.mode === 1 ? g !== EMPTY : !this.cells[k + 3]) ? [mc >> 16, (mc >> 8) & 255, mc & 255] : null
+        const c = s.colour === 1 ? s.ink : own
         const r = c ? c[0] : Math.round(cell[0])
         const gg = c ? c[1] : Math.round(cell[1])
         const b = c ? c[2] : Math.round(cell[2])
@@ -557,9 +647,8 @@ export class AsciiGrid {
 }
 
 /** The whole CPU path: a picture's straight pixels → the ASCII picture (Adjustments, adjustment layers). */
-export function renderAscii(img: ImageData, a: Pick<AdjustValues, 'v' | 'ascii'>, grid = new AsciiGrid()): ImageData {
-  const s = asciiSettings(a)
-  grid.prepare(img.width, img.height, s, glyphAtlas(s.chars, s.cell, (a.v.set ?? 0) === 3))
+export function renderAscii(img: ImageData, a: Pick<AdjustValues, 'v' | 'ascii' | 'seed'>, grid = new AsciiGrid()): ImageData {
+  prepareGrid(grid, img.width, img.height, a)
   const all = { x: 0, y: 0, w: img.width, h: img.height }
   grid.readPixels(img.data, all, grid.cellsOf(all))
   grid.pickAll()
@@ -600,9 +689,11 @@ export function asciiReach(a: Pick<AdjustValues, 'v'>): number {
 }
 
 /** The grid for these settings, set up for a w×h picture; `fresh` = everything is worked out again. */
-export function prepareGrid(grid: AsciiGrid, w: number, h: number, a: Pick<AdjustValues, 'v' | 'ascii'>): boolean {
+export function prepareGrid(grid: AsciiGrid, w: number, h: number, a: Pick<AdjustValues, 'v' | 'ascii'> & { seed?: number }): boolean {
   const s = asciiSettings(a)
-  return grid.prepare(w, h, s, glyphAtlas(s.chars, s.cell, Math.round(a.v.set ?? 0) === 3))
+  const marks = a.ascii?.marks
+  const extra = marks ? Object.values(marks).map((m) => m.s ?? '').join('') : ''
+  return grid.prepare(w, h, s, glyphAtlas(s.chars, s.cell, Math.round(a.v.set ?? 0) === 3, extra), marks)
 }
 
 /** Canvas 2D: read the cells under `r` from `src`, and draw the cells whose letter changed into `out`. */

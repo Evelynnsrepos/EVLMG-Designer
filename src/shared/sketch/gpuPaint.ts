@@ -1191,8 +1191,10 @@ export class GpuPainter {
     if (!c) this.asciis.set(key, (c = { t: this.target(), grid: new AsciiGrid(), version: -2, cells: null, pick: null, atlas: null, atlasTex: null }))
     const g = c.grid
     const fresh = prepareGrid(g, this.width, this.height, a)
-    if (!fresh && version >= 0 && c.version === version) return c.t
-    const area = !fresh && c.version !== -2 ? r : null
+    // Same pixels, new sign-brush cells: pick the letters again without averaging anything.
+    const onlyMarks = !fresh && version >= 0 && c.version === version
+    if (onlyMarks && !g.marksChanged) return c.t
+    const area = onlyMarks ? { x: 0, y: 0, w: 0, h: 0 } : !fresh && c.version !== -2 ? r : null
     c.version = version
     if (fresh) {
       this.free(c.cells)

@@ -114,7 +114,10 @@ export const FILTERS: FilterDef[] = [
       { ...pct('edges', 'Edge lines'), more: true },
       { key: 'dither', label: 'Dithering', min: 0, max: 2, options: ['Off', 'Pattern', 'Spread'], more: true },
       { key: 'paper', label: 'Background colour', min: 0, max: 1, toggle: true, more: true },
+      { key: 'invert', label: 'Invert', min: 0, max: 1, toggle: true, more: true },
+      { ...pct('scatter', 'Scatter'), more: true },
     ],
+    seeded: true,
   },
 ]
 

@@ -145,6 +145,19 @@ describe('ASCII art', () => {
     expect(t).toContain('|')
   })
 
+  it('sign brush marks: a fixed sign, a step darker, and the brush colour on empty cells', () => {
+    const px = picture(6, 4, (x) => (x < 2 ? [255, 255, 255, 255] : [0, 0, 0, 0]))
+    const s = asciiSettings({ v: { set: 0, cell: 2, look: 0, colour: 0 } })
+    const g = new AsciiGrid()
+    const marks = { '0,0': { d: 2 }, '2,0': { s: '#', c: '#00ff00' }, '4,0': { d: 1, c: '#0000ff' } }
+    g.prepare(6, 4, s, atlas(s.chars + '', s.cell), marks)
+    g.readPixels(px, { x: 0, y: 0, w: 6, h: 4 }, g.cellsOf({ x: 0, y: 0, w: 6, h: 4 }))
+    g.pickAll()
+    // White cell two steps darker: ':'; '#' from the ramp; an empty cell one step: '.' in blue.
+    expect(g.text()).toEqual([':#.'])
+    expect(g.runs()[0].map((r) => r.color)).toEqual([[255, 255, 255], [0, 255, 0], [0, 0, 255]])
+  })
+
   it('exports text, coloured web pages and terminal colours', () => {
     const px = picture(4, 4, (x) => (x < 2 ? [255, 0, 0, 255] : [0, 0, 0, 0]))
     const g = grid(4, 4, px, { look: 2 })
