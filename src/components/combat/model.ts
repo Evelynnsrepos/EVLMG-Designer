@@ -508,17 +508,27 @@ export function simulateCombat(d: CombatDoc, seed = 1, abilities: SimAbility[] =
   return result
 }
 
-/** Results in one plain sentence. */
-export function summary(d: Pick<CombatDoc, 'teamNames' | 'timeLimit'>, r: CombatResult): string {
+export const SUMMARY_WORDS = {
+  rounds: ' rounds',
+  seconds: ' s',
+  win: (team: string, pct: string) => `${team} win ${pct} of fights`,
+  usually: (mid: string, fast: string, slow: string) => `, usually in ${mid} (fastest ${fast}, slowest ${slow})`,
+  otherWin: (team: string, pct: string) => `${team} win ${pct}.`,
+  timeout: (pct: string, limit: string) => `${pct} run out of time (${limit}).`,
+  draw: (pct: string) => `${pct} end without a winner.`,
+}
+
+/** Results in one plain sentence (words can be another language). */
+export function summary(d: Pick<CombatDoc, 'teamNames' | 'timeLimit'>, r: CombatResult, w: typeof SUMMARY_WORDS = SUMMARY_WORDS): string {
   const n = r.wins[0] + r.wins[1] + r.draws
   if (!n) return ''
   const pct = (x: number) => `${Math.round((x / n) * 100)}%`
-  const unit = r.unit === 'rounds' ? ' rounds' : ' s'
+  const unit = r.unit === 'rounds' ? w.rounds : w.seconds
   const time = (x: number) => `${r.unit === 'rounds' ? Math.round(x) : x.toFixed(1)}${unit}`
-  const parts = [`${d.teamNames[0] || 'Team 1'} win ${pct(r.wins[0])} of fights${r.winTimes ? `, usually in ${time(r.winTimes.mid)} (fastest ${time(r.winTimes.fast)}, slowest ${time(r.winTimes.slow)})` : ''}.`]
-  if (r.wins[1]) parts.push(`${d.teamNames[1] || 'Team 2'} win ${pct(r.wins[1])}.`)
-  if (r.timeouts) parts.push(`${pct(r.timeouts)} run out of time (${time(d.timeLimit ?? 0)}).`)
-  else if (r.draws) parts.push(`${pct(r.draws)} end without a winner.`)
+  const parts = [`${w.win(d.teamNames[0] || 'Team 1', pct(r.wins[0]))}${r.winTimes ? w.usually(time(r.winTimes.mid), time(r.winTimes.fast), time(r.winTimes.slow)) : ''}.`]
+  if (r.wins[1]) parts.push(w.otherWin(d.teamNames[1] || 'Team 2', pct(r.wins[1])))
+  if (r.timeouts) parts.push(w.timeout(pct(r.timeouts), time(d.timeLimit ?? 0)))
+  else if (r.draws) parts.push(w.draw(pct(r.draws)))
   return parts.join(' ')
 }
 

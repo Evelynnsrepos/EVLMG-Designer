@@ -12,12 +12,41 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px 18px;
+  gap: 14px;
+  padding: 12px 18px 24px;
+}
+.cb-body h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+.cb-body h4 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+}
+.cb-muted {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.cb-bad {
+  color: var(--danger);
+}
+
+/* Cards: plain panels, glass when the glass look is on. */
+.cb-card {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+.cb-team {
+  border-left: 3px solid var(--cb-side, var(--accent));
+}
+.cb-scroll {
+  overflow-x: auto;
 }
 .cb-teamname {
   width: 240px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   font-weight: 600;
 }
 .cb-table {
@@ -29,11 +58,20 @@
 .cb-table .calc-number {
   width: 70px;
 }
+.cb-namecell {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.cb-detailrow > td {
+  padding: 4px 0 10px;
+}
 .cb-vs {
+  align-self: center;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 .cb-add {
@@ -41,18 +79,75 @@
   align-items: center;
   gap: 4px;
 }
-.cb-settings {
-  align-items: flex-end;
-  gap: 14px;
+.cb-examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
-.cb-bar {
+.cb-examples .cb-muted {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cb-pill {
+  border-radius: 999px;
+}
+
+/* How the fight works */
+.cb-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px 14px;
+  align-items: end;
+}
+.cb-settings .cb-wide {
+  grid-column: span 2;
+}
+.cb-settings .input,
+.cb-settings .calc-number {
+  width: 100%;
+}
+.cb-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 13px;
+}
+.cb-formula {
+  margin-top: 12px;
+}
+.cb-formula .input {
+  width: 100%;
+  font-family: var(--font-mono, monospace);
+}
+.cb-formula p {
+  margin: 6px 0 0;
+}
+.cb-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 8px 22px;
+  font-size: 14px;
+}
+
+/* Results */
+.cb-summary {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.cb-winbar {
   display: flex;
   height: 30px;
   overflow: hidden;
-  border-radius: var(--radius);
-  margin-bottom: 10px;
+  border-radius: 999px;
+  margin-bottom: 12px;
 }
-.cb-bar div {
+.cb-winbar div {
   display: grid;
   place-items: center;
   min-width: 34px;
@@ -60,23 +155,40 @@
   font-weight: 700;
   font-size: 12px;
 }
+.cb-share {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.cb-share-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 160px) 1fr 80px 40px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.cb-share-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  overflow: hidden;
+}
+.cb-share-bar div {
+  height: 100%;
+  border-radius: 999px;
+}
 .cb-log {
   max-height: 260px;
   overflow: auto;
-  padding: 10px;
+  margin: 0;
+  padding: 10px 12px;
   border-radius: var(--radius);
-  background: var(--bg-elevated);
+  background: var(--bg-sunken, var(--bg));
   font-size: 12px;
 }
-.cb-bad {
-  color: var(--danger);
-}
-.cb-body h4 {
-  margin: 12px 0 6px;
-}
-.cb-settings .calc-number {
-  width: 100px;
-}
+
+/* Abilities column */
 .cb-abilities {
   min-width: 110px;
 }
@@ -94,90 +206,119 @@
   width: 44px;
   padding: 2px;
 }
-.cb-namecell {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.cb-muted {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-.cb-examples {
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.cb-summary {
-  font-size: 15px;
-  font-weight: 600;
-  margin: 0 0 8px;
-}
-.cb-formula .input {
-  width: 100%;
-  font-family: var(--font-mono, monospace);
-}
+
+/* Fighter details: small boxes */
 .cb-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+.cb-box {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg-elevated);
+  background: var(--bg);
+  font-size: 12px;
 }
-.cb-drow {
+.cb-box-wide {
+  grid-column: 1 / -1;
+}
+.cb-box h5 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.cb-box p {
+  margin: 0;
+}
+.cb-drow,
+.cb-line {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
 }
-.cb-drow label {
+.cb-field {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: center;
+  gap: 6px;
+}
+.cb-inline {
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
-.cb-sub {
-  padding-left: 14px;
-}
 .cb-details .calc-number {
-  width: 60px;
+  width: 62px;
 }
 .cb-details .cb-short {
-  width: 120px;
+  width: 140px;
+}
+.cb-details .cb-name {
+  width: 170px;
 }
 .cb-details .cb-tiny {
-  width: 64px;
+  width: 72px;
 }
 .cb-resist {
-  width: 200px;
+  width: 100%;
+  min-width: 150px;
 }
 .cb-chip {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 1px 4px;
-  border-radius: 8px;
+  padding: 2px 4px 2px 8px;
+  border-radius: 999px;
   background: var(--bg-hover);
 }
-.cb-share {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-bottom: 8px;
+.cb-pill-note {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text-muted);
 }
-.cb-share-row {
-  display: grid;
-  grid-template-columns: 140px 1fr 80px 40px;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
+
+/* Glass look */
+:root[data-glass] .cb-card {
+  border-color: var(--glass-border);
+  border-radius: var(--radius-xl);
+  background: var(--glass-chip);
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow-sm);
 }
-.cb-share-bar {
-  height: 10px;
-  border-radius: 5px;
-  background: var(--bg-hover);
-  overflow: hidden;
+:root[data-glass] .cb-team {
+  border-left: 1px solid var(--glass-border);
+  box-shadow:
+    inset 3px 0 0 var(--cb-side, var(--accent)),
+    inset 0 1px 0 var(--glass-hi),
+    var(--glass-shadow-sm);
 }
-.cb-share-bar div {
-  height: 100%;
+:root[data-glass] .cb-box {
+  border-color: var(--glass-border);
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-hi) 50%, transparent);
+}
+:root[data-glass] .cb-log {
+  background: color-mix(in srgb, var(--bg-sunken, var(--bg)) 70%, transparent);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.18);
+}
+:root[data-glass] .cb-winbar {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.3), var(--glass-shadow-sm);
+}
+:root[data-glass] .cb-share-bar {
+  background: color-mix(in srgb, var(--bg-sunken, var(--bg)) 70%, transparent);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.15);
+}
+:root[data-glass] .cb-chip {
+  background: var(--glass-chip);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
 }

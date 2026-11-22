@@ -171,3 +171,15 @@
   font: inherit;
   text-decoration: underline;
 }
+
+/* Glass look */
+:root[data-glass] .bal-source {
+  border-color: var(--glass-border);
+  background: var(--glass-chip);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+}
+:root[data-glass] .bal-tile {
+  border-color: var(--glass-border);
+  background: var(--glass-chip);
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow-sm);
+}
