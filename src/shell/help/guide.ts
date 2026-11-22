@@ -473,6 +473,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'The middle is an isometric view. At the top level, and inside universes, nebulae and star clusters, everything is drawn as a node graph: lines connect each body to what is inside it.',
       'Double-click a galaxy or a solar system to see its orbits. Moons circle their planets. Click to select, double-click to look inside, and use the breadcrumb or the up arrow to go back out.',
       'Add places a new body where you are looking; it picks a sensible kind (planets in a solar system, moons around a planet) and you can choose another in the drop-down. Give each body a name, a color, a picture of your own and notes on the right.',
+      'Pick an art style at the top right: Painted, Pixel art or Flat. Every picture is tinted with the body\'s color, so change the color to restyle it, and use Next look to try the other pictures for that kind. Your own set lets you pick one picture per kind for the whole cosmos (grey pictures tint best; you can switch tinting off).',
     ],
     tips: ['Each cosmos is its own document, so you can keep several (for example one per game or era).', 'Ctrl+Z undoes, including deletes.'],
   },

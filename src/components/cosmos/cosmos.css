@@ -172,3 +172,42 @@
   flex-direction: column;
   gap: 4px;
 }
+
+.cosmos-set {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sunken);
+}
+.cosmos-set-hint {
+  margin: 0 0 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.cosmos-set-tint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.cosmos-set-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 4px;
+  max-height: 180px;
+  overflow: auto;
+}
+.cosmos-set-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.cosmos-set-item span {
+  flex: 1;
+}
+.cosmos-set-preview {
+  flex: none;
+  width: 32px;
+  height: 32px;
+}

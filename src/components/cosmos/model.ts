@@ -1,4 +1,5 @@
 import { newId, type Id } from '@/core/model'
+import type { ArtStyle } from './art'
 
 /** Everything that can be placed in a cosmos, roughly from biggest to smallest. */
 export const BODY_KINDS = [
@@ -84,11 +85,19 @@ export interface Body {
   color: string | null
   /** Custom picture (`assets/images/<uuid>.png`), drawn instead of the colored ball. Added in v0.4. */
   image?: string | null
+  /** Which of the style's pictures to use (null/absent = picked from the id). Added in v0.35. */
+  look?: number | null
 }
 
 /** One cosmos document. Bodies are a flat list; order among siblings is list order. */
 export interface Cosmos {
   bodies: Body[]
+  /** Art style (absent = painted). Added in v0.35. */
+  style?: ArtStyle
+  /** "Your own set": one picture per kind (`assets/images/<uuid>.png`). Added in v0.35. */
+  customArt?: Partial<Record<BodyKind, string>>
+  /** "Your own set": tint the pictures with each body's colour (absent = yes). Added in v0.35. */
+  customTint?: boolean
 }
 
 export const createCosmos = (): Cosmos => ({ bodies: [] })

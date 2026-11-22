@@ -455,6 +455,8 @@ Donating on [Ko-fi](https://ko-fi.com/evelynnevlmg) is welcome but never require
 
 The planar head in Draw's light preview is ["planarhead-model"](https://sketchfab.com/3d-models/planarhead-model-df4a384d5c3a4b358b6d3b5bd80e6d60) by [Beenga](https://sketchfab.com/beangarik), under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), used unchanged. The posable figure is ["Mannequiny"](https://github.com/GDQuest/godot-3d-mannequin) by [GDQuest](https://www.gdquest.com/) (model by Luciano Muñoz), under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), used unchanged (see [public/models/CREDITS.md](public/models/CREDITS.md)).
 
+The Cosmos Creator pictures are public domain (CC0) art by [Kenney](https://kenney.nl) (Planets, Particle Pack, Simple Space) and Pixel-boy ([Superpowers asset packs](https://github.com/sparklinlabs/superpowers-asset-packs)); see [public/cosmos/CREDITS.md](public/cosmos/CREDITS.md). Thank you!
+
 The app font, [Lexend Deca](https://github.com/googlefonts/lexend), is under the [SIL Open Font License 1.1](public/fonts/OFL.txt).
 
 The game font pack bundled for cards and every font menu is free to use: Almendra, Atkinson Hyperlegible Next, Bangers, Bebas Neue,
