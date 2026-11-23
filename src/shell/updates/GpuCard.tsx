@@ -10,9 +10,8 @@ const UI = {
   body: 'Drawing on big pictures will be slow. Please tell us on GitHub so we can make it work on your computer. The report below is filled in for you; you read it and decide whether to send it.',
   linux: 'On Linux you can also try Settings > Drawing speed > Graphics card (Linux) > "Older screen handover", then restart the app.',
   report: 'Report on GitHub',
-  hide: "Don't show again",
+  close: 'Close (it comes back next start)',
 }
-const KEY = 'egd-gpu-warning-hidden'
 const isLinux = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent)
 
 /** Diagnostic text for the issue: only what the web engine says about the graphics card, nothing about projects. */
@@ -26,11 +25,6 @@ export function gpuIssueUrl(renderer: string, webgl2: boolean, version: string, 
 export function GpuCard() {
   const [url, setUrl] = useState<string | null>(null)
   useEffect(() => {
-    try {
-      if (localStorage.getItem(KEY)) return
-    } catch {
-      // no storage: show it
-    }
     const g = gpuInfo()
     if (!g.software && g.webgl2) return
     void (async () => {
@@ -41,21 +35,14 @@ export function GpuCard() {
     })()
   }, [])
   if (!url) return null
-  const hide = () => {
-    try {
-      localStorage.setItem(KEY, '1')
-    } catch {
-      // ignore
-    }
-    setUrl(null)
-  }
+  const hide = () => setUrl(null)
   return (
     <div className="update-card" role="status">
       <div className="update-card-head">
         <TriangleAlert size={16} />
         <strong>{UI.title}</strong>
         <span className="update-card-grow" />
-        <button className="icon-btn" title={UI.hide} aria-label={UI.hide} onClick={hide}>
+        <button className="icon-btn" title={UI.close} aria-label={UI.close} onClick={hide}>
           <X size={16} />
         </button>
       </div>
@@ -64,9 +51,6 @@ export function GpuCard() {
       <div className="update-card-actions">
         <button className="btn btn-primary" onClick={() => void import('@tauri-apps/plugin-opener').then((o) => o.openUrl(url)).catch(() => window.open(url))}>
           {UI.report}
-        </button>
-        <button className="btn btn-ghost" onClick={hide}>
-          {UI.hide}
         </button>
       </div>
     </div>
