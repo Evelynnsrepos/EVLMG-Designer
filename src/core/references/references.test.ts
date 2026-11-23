@@ -2,7 +2,14 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { MemoryFs, setFs } from '../fs'
 import { createEntity, newId } from '../model'
 import { createProject, saveCollection, saveMeta, writeDocument } from '../project'
-import { buildReferenceIndex, collectIds, findReferencesIn } from '.'
+import { buildReferenceIndex, collectIds, collectOwnIds, findReferencesIn } from '.'
+
+describe('collectOwnIds', () => {
+  it('lists the ids of records kept inside, not the ids they point at', () => {
+    const [doc, article, item] = [newId(), newId(), newId()]
+    expect(collectOwnIds({ id: doc, articles: [{ id: article, itemId: item }], plain: { id: 'not-a-uuid' } })).toEqual([doc, article])
+  })
+})
 
 describe('collectIds', () => {
   it('finds ids in values, keys and inside text, but not a record’s own id', () => {

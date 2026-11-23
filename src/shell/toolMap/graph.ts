@@ -1,5 +1,5 @@
 import type { ComponentType, Entity, Id, LinkTarget, ProjectMeta } from '@/core/model'
-import type { ReferenceIndex } from '@/core/references'
+import type { ReferenceIndex, ReferenceSource } from '@/core/references'
 import { ENTITY_COMPONENT } from '@/shared/entityList/navigation'
 
 /**
@@ -23,9 +23,9 @@ export const nodeKey = (type: ComponentType, documentId: Id | null | undefined) 
  * The bubbles of one tool: one per document for tools with several documents (in the sidebar's
  * order), else the tool itself; a multi-document tool without documents yet keeps one bubble.
  */
-export function toolNodes(type: ComponentType, multiDocument: boolean, documents: { id: Id; type: ComponentType; title: string }[]): MapNode[] {
+export function toolNodes(type: ComponentType, multiDocument: boolean, documents: { id: Id; type: ComponentType; title: string }[], untitled = 'Untitled'): MapNode[] {
   const docs = multiDocument ? documents.filter((d) => d.type === type) : []
-  return docs.length ? docs.map((d) => ({ key: nodeKey(type, d.id), type, documentId: d.id, title: d.title || 'Untitled' })) : [{ key: type, type, documentId: null, title: null }]
+  return docs.length ? docs.map((d) => ({ key: nodeKey(type, d.id), type, documentId: d.id, title: d.title || untitled })) : [{ key: type, type, documentId: null, title: null }]
 }
 
 export interface MapGroup {
@@ -84,7 +84,10 @@ const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
 /**
  * Every line of the map between two bubbles. `index` (the slow file scan) may come later; the jump
  * points and entry connections are known at once. A link to a whole tool (no document) goes to the
- * tool's bubble, or to each of its documents' bubbles when it has several.
+ * tool's bubble, or to each of its documents' bubbles when it has several. `owned` (from the same scan)
+ * says which document keeps a record (a wiki article, an asset), so mentions of it reach that bubble.
+ * `routesFor`: the dotted lines only of this bubble (null: none). Between every drawing and every
+ * moodboard there would be thousands, and only the pointed bubble's are ever shown.
  */
 export function mapEdges(
   nodes: MapNode[],
@@ -92,6 +95,8 @@ export function mapEdges(
   entities: Entity[],
   imageTargets: ComponentType[],
   index?: ReferenceIndex,
+  owned?: Map<Id, ReferenceSource>,
+  routesFor?: string | null,
 ): MapEdge[] {
   const keys = new Set(nodes.map((n) => n.key))
   const ofType = new Map<ComponentType, string[]>()
@@ -99,7 +104,9 @@ export function mapEdges(
   const at = (t: LinkTarget): string[] => {
     if (t.kind === 'entity') return ofType.get(ENTITY_COMPONENT[t.type]) ?? []
     const own = nodeKey(t.type, t.documentId)
-    return keys.has(own) ? [own] : t.documentId ? [] : (ofType.get(t.type) ?? [])
+    if (keys.has(own)) return [own]
+    if (keys.has(t.type)) return [t.type] // a tool with one bubble: its own file, or a tool without documents yet
+    return t.documentId ? [] : (ofType.get(t.type) ?? [])
   }
   const doc = (type: ComponentType, documentId: Id | null): LinkTarget => ({ kind: 'document', type, documentId })
 
@@ -118,8 +125,8 @@ export function mapEdges(
   for (const j of meta.jumps ?? []) link(at(j.from), at(j.to), 'jumps')
   for (const e of entities) for (const c of e.connections ?? []) link(at({ kind: 'entity', type: e.type, id: e.id }), at(c), 'connections')
   if (index) {
-    // shortcut: only ids of list entries and documents are known here; ids inside a document (assets, wiki articles) are skipped, map them when someone misses those lines.
     const owner = new Map<Id, LinkTarget>()
+    for (const [id, s] of owned ?? []) owner.set(id, s.kind === 'entity' ? { kind: 'entity', type: s.entityType, id: s.entityId } : doc(s.componentType, s.documentId))
     for (const e of entities) owner.set(e.id.toLowerCase(), { kind: 'entity', type: e.type, id: e.id })
     for (const d of meta.documents) owner.set(d.id.toLowerCase(), doc(d.type, d.id))
     for (const [id, refs] of index) {
@@ -137,9 +144,10 @@ export function mapEdges(
 
   const routes = new Map<string, MapEdge>()
   const route = (a: ComponentType, b: ComponentType, why: string) => {
-    if (a === b) return
+    if (a === b || routesFor === null) return
     for (const x0 of ofType.get(a) ?? [])
       for (const y0 of ofType.get(b) ?? []) {
+        if (routesFor !== undefined && x0 !== routesFor && y0 !== routesFor) continue
         const [x, y] = x0 < y0 ? [x0, y0] : [y0, x0]
         const key = `${x}|${y}`
         const e = routes.get(key)
@@ -241,7 +249,10 @@ export function neighbourIn(nodes: Map<string, Point>, from: string, dx: number,
 
 /** How far a line bows out sideways, as a share of its length; the sign is the side. Gentle bends are tried first. */
 const BENDS = [0.16, -0.16, 0.05, -0.05, 0.3, -0.3, 0.45, -0.45]
+export const DEFAULT_BEND = BENDS[0]
 const SAMPLES = 12
+/** More lines than this keep the default bend (see bendEdges). */
+export const MAX_BENT = 250
 /** A line this close to the middle of a bubble that is not its own runs through it. */
 const BUBBLE_CLEAR = 44
 
@@ -271,6 +282,8 @@ export function edgePath(a: Point, b: Point, bend: number): string {
  * Greedy: each line in turn takes its best bend against the others, twice over. Same input, same result.
  */
 export function bendEdges(nodes: Map<string, Point>, edges: (Pick<MapEdge, 'a' | 'b'> & { kind?: MapEdge['kind'] })[]): number[] {
+  // shortcut: every line is tested against every other, so past this many lines all keep the gentle default; use a grid of cells if huge maps need bends too.
+  if (edges.length > MAX_BENT) return edges.map(() => BENDS[0])
   // Dotted "works together" lines only show for the bubble pointed at; they keep the default bend and are not avoided.
   const ends = edges.map((e): [Point | undefined, Point | undefined] => (e.kind === 'route' ? [undefined, undefined] : [nodes.get(e.a), nodes.get(e.b)]))
   const bends = edges.map(() => BENDS[0])

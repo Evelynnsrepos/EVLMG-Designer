@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { COMPONENT_TYPES, type ComponentType, type Entity } from '@/core/model'
-import { bendEdges, edgePath, groupTools, toolNodes, IMAGE_SENDERS, layoutMap, mapEdges, neighbourIn, ROUTES, STEP } from './graph'
+import { bendEdges, DEFAULT_BEND, edgePath, groupTools, toolNodes, IMAGE_SENDERS, layoutMap, mapEdges, MAX_BENT, neighbourIn, ROUTES, STEP } from './graph'
 
 const types = COMPONENT_TYPES as readonly string[]
 
@@ -91,5 +91,34 @@ describe('tool map', () => {
     expect(neighbourIn(nodes, 'wiki', 1, 0)).toBe('map')
     expect(neighbourIn(nodes, 'wiki', 0, 1)).toBe('writer')
     expect(neighbourIn(nodes, 'wiki', -1, 0)).toBeNull()
+  })
+
+  it('builds dotted lines only for the bubble asked for, so many documents stay cheap', () => {
+    const docs = Array.from({ length: 40 }, (_, i) => ({ id: `s${i}`, type: i % 2 ? ('sketch' as const) : ('moodboard' as const), title: `${i}` }))
+    const nodes = [...toolNodes('sketch', true, docs), ...toolNodes('moodboard', true, docs)]
+    const meta = { documents: docs, jumps: [] } as never
+    expect(mapEdges(nodes, meta, [], ['moodboard']).filter((e) => e.kind === 'route')).toHaveLength(400) // every pair
+    const one = mapEdges(nodes, meta, [], ['moodboard'], undefined, undefined, 'sketch:s1')
+    expect(one).toHaveLength(20)
+    expect(one.every((e) => e.a === 'sketch:s1' || e.b === 'sketch:s1')).toBe(true)
+    expect(mapEdges(nodes, meta, [], ['moodboard'], undefined, undefined, null)).toEqual([])
+  })
+
+  it('draws mentions of records kept inside a document, and of one-bubble tools', () => {
+    const article = 'cccccccc-0000-4000-8000-000000000003'
+    const docs = [{ id: 'dddddddd-0000-4000-8000-000000000004', type: 'writer' as const, title: 'Story' }]
+    const nodes = [...toolNodes('writer', true, docs), ...toolNodes('wiki', false, docs)]
+    const writer = { kind: 'document' as const, componentType: 'writer' as const, documentId: docs[0].id, title: 'Story' }
+    const wikiFile = { kind: 'document' as const, componentType: 'wiki' as const, documentId: 'wiki', title: null }
+    const index = new Map([[article, [{ source: writer, fields: ['html'] }]]])
+    const owned = new Map([[article, wikiFile]])
+    expect(mapEdges(nodes, { documents: docs, jumps: [] } as never, [], [], index, owned, null)).toEqual([{ a: 'wiki', b: `writer:${docs[0].id}`, kind: 'link', count: 1, why: '1 mention' }])
+    expect(mapEdges(nodes, { documents: docs, jumps: [] } as never, [], [], index, undefined, null)).toEqual([]) // without knowing the owner: nothing
+  })
+
+  it('keeps the gentle bend on huge maps instead of comparing every line', () => {
+    const nodes = new Map(Array.from({ length: MAX_BENT + 2 }, (_, i) => [`n${i}`, { x: i * 10, y: 0 }]))
+    const edges = Array.from({ length: MAX_BENT + 1 }, (_, i) => ({ a: `n${i}`, b: `n${i + 1}` }))
+    expect(bendEdges(nodes, edges).every((b) => b === DEFAULT_BEND)).toBe(true)
   })
 })
