@@ -6,7 +6,7 @@ import { MESH_FRAG } from './meshRender'
 import type { LayerAdjust } from './model'
 import { asciiReach, AsciiGrid, prepareGrid, type Atlas } from './ascii'
 import type { AdjustValues } from './adjust/filters'
-import { OUTLINE_H_FRAG, OUTLINE_V_FRAG, outlineParams, outlineReach, type OutlineSettings } from './outline'
+import { OUTLINE_H_FRAG, OUTLINE_V_FRAG, outlineOpacity, outlineParams, outlineReach, secondOutline, type OutlineSettings } from './outline'
 import type { Filtering } from './brushes'
 import type { Rect } from './tiles'
 
@@ -672,7 +672,10 @@ export class GpuPainter {
     this.levels = []
     for (const t of this.groupTex.values()) this.free(t)
     this.groupTex.clear()
-    for (const c of this.outlines.values()) this.free(c.t)
+    for (const c of this.outlines.values()) {
+      this.free(c.t)
+      this.free(c.mid)
+    }
     this.outlines.clear()
     for (const k of [...this.asciis.keys()]) this.dropAscii(k)
     this.free(this.picture)
@@ -1120,7 +1123,7 @@ export class GpuPainter {
       this.into(targets[cur], r)
     }
     for (const layer of layers) {
-      const src = layer.children ? this.composeLevel(layer.children, depth + 1, null, byKey, r) : layer.adjust?.id === 'ascii' ? this.asciied(layer.key, targets[cur], layer.adjust.values, -1, null) : layer.adjust ? this.adjusted(targets[cur], layer.adjust, r) : layer.ascii ? this.asciied(layer.key, layer.tex, layer.ascii.a, layer.ascii.version, r) : layer.outline ? this.outlined(layer, r) : layer.tex
+      const src = layer.children ? this.groupPicture(layer, depth, byKey, r) : layer.adjust?.id === 'ascii' ? this.asciied(layer.key, targets[cur], layer.adjust.values, -1, null) : layer.adjust ? this.adjusted(targets[cur], layer.adjust, r) : layer.ascii ? this.asciied(layer.key, layer.tex, layer.ascii.a, layer.ascii.version, r) : layer.outline ? this.outlined(layer.key, layer.tex, layer.outline.o, layer.outline.version, r) : layer.tex
       if (layer.children && layer.clipBase) this.keepGroup(layer.key, src, r)
       const next = 1 - cur
       this.into(targets[next], r)
@@ -1140,36 +1143,58 @@ export class GpuPainter {
     return targets[cur]
   }
 
-  private outlines = new Map<string, { t: Tex; settings: string; version: number }>()
+  /** A group's blended children, with its outline when it has one. */
+  private groupPicture(layer: GpuLayer, depth: number, byKey: Map<string, GpuLayer>, r: Rect | null): Tex {
+    const ol = layer.outline
+    if (!ol) return this.composeLevel(layer.children!, depth + 1, null, byKey, r)
+    const fresh = this.outlines.get(layer.key)?.settings !== JSON.stringify(ol.o)
+    // The outline reads the group's picture around the changed part too, so the children are blended that much bigger.
+    const m = outlineReach(ol.o)
+    const cr = fresh || !r ? null : clip({ x: r.x - m, y: r.y - m, w: r.w + 2 * m, h: r.h + 2 * m }, this.width, this.height)
+    return this.outlined(layer.key, this.composeLevel(layer.children!, depth + 1, null, byKey, cr), ol.o, -1, fresh ? null : r)
+  }
 
-  /** An outline layer's pixels with their outline, kept per layer; only the part `r` is worked out again while it changes. */
-  private outlined(layer: GpuLayer, r: Rect | null): Tex {
-    const gl = this.gl
-    const { o, version } = layer.outline!
+  private outlines = new Map<string, { t: Tex; mid: Tex | null; settings: string; version: number }>()
+
+  /** An outline layer's (or group's) pixels with their outline, kept per key; only the part `r` is worked out again while it changes. */
+  private outlined(key: string, src: Tex, o: OutlineSettings, version: number, r: Rect | null): Tex {
     const settings = JSON.stringify(o)
-    let c = this.outlines.get(layer.key)
-    if (!c) this.outlines.set(layer.key, (c = { t: this.target(), settings: '', version: -2 }))
+    let c = this.outlines.get(key)
+    if (!c) this.outlines.set(key, (c = { t: this.target(), mid: null, settings: '', version: -2 }))
     if (c.settings === settings && version >= 0 && c.version === version) return c.t
     // New settings or a new layer picture: all of it; a change being painted: just its part.
     const area = c.settings === settings && c.version !== -2 ? r : null
     c.settings = settings
     c.version = version
+    const sec = secondOutline(o)
+    if (!sec) this.outlinePass(src, src, c.t, o, outlineOpacity(o), area)
+    else {
+      c.mid ??= this.target()
+      this.outlinePass(src, src, c.mid, o, 1, area)
+      this.outlinePass(c.mid, src, c.t, sec, outlineOpacity(o), area)
+    }
+    return c.t
+  }
+
+  /** The two outline passes from `src` into `dst`, faded by `op` from `base`. */
+  private outlinePass(src: Tex, base: Tex, dst: Tex, o: OutlineSettings, op: number, area: Rect | null) {
+    const gl = this.gl
     const p = outlineParams(o)
     const rows = this.temp('outlineRows')
     const S = Math.ceil(p.s)
     this.into(rows, area && clip({ x: area.x, y: area.y - S, w: area.w, h: area.h + 2 * S }, this.width, this.height))
     gl.disable(gl.BLEND)
     let pr = this.prog('outline-h')
-    this.bind(0, layer.tex.tex, pr, 'src')
+    this.bind(0, src.tex, pr, 'src')
     this.set(pr, { S: p.s, useOut: p.sOut > 0, useIn: p.sIn > 0 })
     this.drawQuad()
-    this.into(c.t, area)
+    this.into(dst, area)
     pr = this.prog('outline-v')
-    this.bind(0, layer.tex.tex, pr, 'src')
+    this.bind(0, src.tex, pr, 'src')
     this.bind(1, rows.tex, pr, 'rows')
-    this.set(pr, { S: p.s, sOut: p.sOut, sIn: p.sIn, soft: p.soft, round: p.round, c1: p.c1.map((v) => v / 255), c2: p.c2.map((v) => v / 255) })
+    this.bind(2, base.tex, pr, 'base')
+    this.set(pr, { S: p.s, sOut: p.sOut, sIn: p.sIn, soft: p.soft, round: p.round, op, c1: p.c1.map((v) => v / 255), c2: p.c2.map((v) => v / 255) })
     this.drawQuad()
-    return c.t
   }
 
   private asciis = new Map<string, { t: Tex; grid: AsciiGrid; version: number; cells: Tex | null; pick: WebGLTexture | null; back: WebGLTexture | null; atlas: Atlas | null; atlasTex: WebGLTexture | null }>()
@@ -1314,6 +1339,7 @@ export class GpuPainter {
     for (const [k, c] of this.outlines)
       if (!keep.has(k)) {
         this.free(c.t)
+        this.free(c.mid)
         this.outlines.delete(k)
       }
     for (const [k, t] of this.groupTex)

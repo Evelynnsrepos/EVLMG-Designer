@@ -17,6 +17,10 @@ export interface OutlineSettings {
   sharpness: number
   /** 0 = square corners, 1 = round. */
   roundness: number
+  /** 0..1, how see-through the outline is (the drawing itself stays as it is). Missing = 1. */
+  opacity?: number
+  /** A second ring outside the first (a sticker's white and black line), same sharpness and roundness. */
+  second?: { size: number; color: string } | null
 }
 
 export const MAX_OUTLINE = 120
@@ -24,7 +28,13 @@ export const MAX_OUTLINE = 120
 export const defaultOutline = (): OutlineSettings => ({ size: 8, color: '#111111', color2: null, where: 'outside', sharpness: 1, roundness: 1 })
 
 /** How far an outline reaches past the paint (and how far a change moves it). */
-export const outlineReach = (o: OutlineSettings) => Math.ceil(clampSize(o.size)) + 2
+export const outlineReach = (o: OutlineSettings) => Math.ceil(clampSize(o.size)) + (o.second ? Math.ceil(clampSize(o.second.size)) : 0) + 2
+
+/** The second ring as settings of its own: outside whatever the first pass made. */
+export const secondOutline = (o: OutlineSettings): OutlineSettings | null =>
+  o.second ? { size: o.second.size, color: o.second.color, where: 'outside', sharpness: o.sharpness, roundness: o.roundness } : null
+
+export const outlineOpacity = (o: OutlineSettings) => Math.max(0, Math.min(1, o.opacity ?? 1))
 
 const clampSize = (s: number) => Math.max(1, Math.min(MAX_OUTLINE, s || 1))
 
@@ -47,6 +57,45 @@ export function outlineParams(o: OutlineSettings) {
  * Outside `img` counts as empty, so pass a piece `outlineReach` bigger than the part you keep.
  */
 export function outlineCpu(img: ImageData, o: OutlineSettings, ringOnly = false): ImageData {
+  const sec = secondOutline(o)
+  let out: ImageData
+  if (!sec) out = rings(img, o, ringOnly)
+  else if (!ringOnly) out = rings(rings(img, o, false), sec, false)
+  else {
+    // Just the two rings: the first, over the second (which rings the drawing with its first ring).
+    out = rings(img, o, true)
+    const two = rings(rings(img, o, false), sec, true).data
+    const d = out.data
+    for (let i = 0; i < d.length; i += 4) {
+      const a = d[i + 3] / 255
+      const b = (two[i + 3] / 255) * (1 - a)
+      const t = a + b
+      if (!t) continue
+      for (let k = 0; k < 3; k++) d[i + k] = (d[i + k] * a + two[i + k] * b) / t
+      d[i + 3] = t * 255
+    }
+  }
+  const op = outlineOpacity(o)
+  if (op >= 1) return out
+  // Opacity fades from the drawing (or nothing, for rings only) to the outlined picture, premultiplied, like the GPU.
+  const d = out.data
+  const src = img.data
+  for (let i = 0; i < d.length; i += 4) {
+    const pa = ringOnly ? 0 : src[i + 3] / 255
+    const oa = d[i + 3] / 255
+    const a = pa + (oa - pa) * op
+    if (a <= 0) {
+      d[i + 3] = 0
+      continue
+    }
+    for (let k = 0; k < 3; k++) d[i + k] = (src[i + k] * pa * (1 - op) * (ringOnly ? 0 : 1) + d[i + k] * oa * op) / a
+    d[i + 3] = a * 255
+  }
+  return out
+}
+
+/** One ring pass at full strength. */
+function rings(img: ImageData, o: OutlineSettings, ringOnly: boolean): ImageData {
   const { width: w, height: h, data } = img
   const p = outlineParams(o)
   const S = Math.ceil(p.s)
@@ -111,7 +160,8 @@ export function outlineCpu(img: ImageData, o: OutlineSettings, ringOnly = false)
       let a = 0
       if (p.sOut) {
         const d = dist(hOut, x, y)
-        const ra = d <= p.sOut + p.soft ? ramp(d, p.sOut) : 0
+        // Rings only: no outer ring under solid paint (it would fill the shape); under soft edges it stays, so nothing shows through.
+        const ra = d <= p.sOut + p.soft && !(ringOnly && la >= 1) ? ramp(d, p.sOut) : 0
         if (ra > 0) {
           const t = Math.min(1, d / p.sOut)
           r = (p.c1[0] + (p.c2[0] - p.c1[0]) * t) * ra
@@ -193,8 +243,8 @@ void main() {
 }`
 
 export const OUTLINE_V_FRAG = `${GLSL_HEADER}
-uniform sampler2D src, rows;
-uniform float S, sOut, sIn, soft, round;
+uniform sampler2D src, rows, base;
+uniform float S, sOut, sIn, soft, round, op;
 uniform vec3 c1, c2;
 out vec4 outColor;
 float ramp(float d, float size) {
@@ -230,5 +280,6 @@ void main() {
     float ra = ramp(dIn, sIn) * layer.a;
     o = vec4(mix(c1, c2, min(1.0, dIn / sIn)) * ra, ra) + o * (1.0 - ra);
   }
-  outColor = o;
+  // Opacity fades from the drawing (base) to the outlined picture.
+  outColor = mix(texelFetch(base, c, 0), o, op);
 }`

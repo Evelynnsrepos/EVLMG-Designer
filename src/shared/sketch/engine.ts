@@ -1416,6 +1416,8 @@ export class SketchEngine {
         // A hidden group stays in the stack, invisible, for its clipped layers.
         keys.add(layer.id)
         const entry: GpuLayer = { tex: this.gpu!.picture, key: layer.id, opacity: layer.visible ? layer.opacity : 0, blend: layer.blend, mask: m, ...clipTo, children: this.gpuNodes(children, keys) }
+        // A group's outline is worked out from its blended picture every time (only the changed part).
+        if (layer.outline) entry.outline = { o: layer.outline, version: -1 }
         if (!layer.clip) base = entry
         out.push(entry)
         continue
@@ -1520,7 +1522,7 @@ export class SketchEngine {
   }
 
   /** Outline layers on Canvas 2D: the outlined pixels, kept per layer; while painting only the stroke's part is redone. */
-  private outlineCache = new Map<Id, { settings: string; version: number; c: Canvas2D; changed: Rect | null }>()
+  private outlineCache = new Map<Id, { settings: string; version: number; c: Canvas2D; changed: Rect | null; inside?: SketchLayer[] }>()
   private outlined2d(layer: SketchLayer, o: OutlineSettings, px: { canvas: HTMLCanvasElement; live: boolean; dirty?: Rect | null }): HTMLCanvasElement {
     const settings = JSON.stringify(o)
     const version = this.layerVersions.get(layer.id) ?? 0
@@ -1538,6 +1540,27 @@ export class SketchEngine {
     hit.settings = settings
     hit.changed = px.live ? (r === all ? all : union(hit.changed, r)) : null
     hit.version = px.live ? -1 : version
+    return hit.c.canvas
+  }
+
+  /**
+   * A group's outline on Canvas 2D, worked out again after any change in the drawing.
+   * shortcut: while a stroke is painted inside the group, its outline catches up when the stroke ends; redo only the stroke's part if Canvas 2D users miss it.
+   */
+  private outlinedGroup2d(layer: SketchLayer, o: OutlineSettings, picture: HTMLCanvasElement, children: LayerNode[]): HTMLCanvasElement {
+    // Pixels changed (version), or a layer inside changed (a new layer object: visibility, opacity, order).
+    const inside: SketchLayer[] = []
+    const walk = (ns: LayerNode[]) => ns.forEach((n) => (inside.push(n.layer), n.mask && inside.push(n.mask), n.children && walk(n.children)))
+    walk(children)
+    const settings = JSON.stringify(o)
+    let hit = this.outlineCache.get(layer.id)
+    if (!hit || hit.c.canvas.width !== this.width || hit.c.canvas.height !== this.height) this.outlineCache.set(layer.id, (hit = { settings: '', version: -1, c: this.canvas(), changed: null }))
+    const same = hit.settings === settings && hit.inside?.length === inside.length && inside.every((l, i) => hit!.inside![i] === l)
+    if (same && (hit.version === this.version || this.stroke)) return hit.c.canvas
+    hit.inside = inside
+    outlineInto(picture, hit.c.ctx, o, { x: 0, y: 0, w: this.width, h: this.height })
+    hit.settings = settings
+    hit.version = this.version
     return hit.c.canvas
   }
 
@@ -1576,7 +1599,7 @@ export class SketchEngine {
         // v0.13: groups are clipping bases too; their result is kept so later groups can reuse the pool.
         const g = this.pooled(depth * 2)
         this.compose2d(g.ctx, children, depth + 1)
-        src = g.canvas
+        src = layer.outline ? this.outlinedGroup2d(layer, layer.outline, g.canvas, children) : g.canvas
         if (!layer.clip) {
           const keep = (this.groupBases[depth] ??= this.canvas())
           keep.ctx.clearRect(0, 0, this.width, this.height)

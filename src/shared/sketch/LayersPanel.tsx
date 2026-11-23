@@ -107,6 +107,8 @@ const UI = {
 export interface LayerHost {
   doc: SketchDoc
   update(recipe: (d: SketchDoc) => SketchDoc): void
+  /** A change shown right away but not an undo step (a dialog's live preview); undo it with another `preview` before the real change. */
+  preview(recipe: (d: SketchDoc) => SketchDoc): void
   engine: SketchEngine
   activeId: Id | undefined
   setActive(id: Id): void
@@ -147,15 +149,27 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
   // 0.35: outline layers. 'new' = the dialog for a new outline layer.
   const [outlineFor, setOutlineFor] = useState<Id | 'new' | null>(null)
   const outlineLayer = outlineFor && outlineFor !== 'new' ? doc.layers.find((l) => l.id === outlineFor) : undefined
-  const setOutline = (id: Id, o: OutlineSettings | null) =>
-    update((d) => ({
+  const withOutline = (id: Id, o: OutlineSettings | null | undefined) => (d: SketchDoc): SketchDoc => ({
       ...d,
       layers: d.layers.map((l) => {
         if (l.id !== id) return l
         const { outline: _, ...rest } = l
         return o ? { ...rest, outline: o } : rest
       }),
-    }))
+    })
+  const setOutline = (id: Id, o: OutlineSettings | null) => update(withOutline(id, o))
+  /** The settings the dialog opened with. */
+  const [outlineStart, setOutlineStart] = useState<OutlineSettings | undefined>()
+  const openOutline = (l: SketchLayer) => {
+    setOutlineStart(l.outline)
+    setOutlineFor(l.id)
+  }
+  /** Back to the settings the dialog opened with (the live preview is not an undo step), then the real change. */
+  const endOutline = (l: SketchLayer, then?: () => void) => {
+    setOutlineFor(null)
+    host.preview(withOutline(l.id, outlineStart))
+    then?.()
+  }
   /** Paint the outline into the layer's pixels, as one undo step with the layer turning normal. */
   const rasterizeOutline = (l: SketchLayer) => {
     const { outline: _, ...plain } = l
@@ -369,8 +383,8 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
       !group && { label: UI.fill, run: () => host.markDirty(engine.fill(l.id, host.color, l.alphaLock)) },
       !group && { label: UI.clear, run: () => host.markDirty(engine.clear(l.id)) },
       !group && { label: UI.invert, run: () => host.markDirty(engine.invert(l.id)) },
-      !group && !mask && { label: l.outline ? UI.outlineSettings : UI.makeOutline, run: () => setOutlineFor(l.id) },
-      !!l.outline && { label: UI.rasterizeOutline, run: () => rasterizeOutline(l) },
+      !mask && l.kind !== 'adjust' && { label: l.outline ? UI.outlineSettings : UI.makeOutline, run: () => openOutline(l) },
+      !!l.outline && !group && { label: UI.rasterizeOutline, run: () => rasterizeOutline(l) },
       !group && !mask && { label: l.ascii ? UI.asciiSettings : UI.makeAscii, run: () => (l.ascii || setAscii(l.id, rememberedAscii(engine.width, engine.height)), setAsciiFor(l.id)) },
       !!l.ascii && { label: UI.rasterizeAscii, run: () => rasterizeAscii(l) },
       !mask && { label: UI.duplicate, run: () => duplicate(l.id) },
@@ -582,7 +596,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
                     aria-label={UI.isOutline}
                     onClick={(e) => {
                       e.stopPropagation()
-                      setOutlineFor(l.id)
+                      openOutline(l)
                     }}
                   >
                     <CircleDashed size={12} />
@@ -668,18 +682,19 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
         <OutlineDialog
           mode="layer"
           initial={outlineLayer?.outline}
-          onClose={() => setOutlineFor(null)}
+          onChange={outlineLayer ? (o) => host.preview(withOutline(outlineLayer.id, o)) : undefined}
+          onClose={() => (outlineLayer ? endOutline(outlineLayer) : setOutlineFor(null))}
           onOk={(o) => {
+            if (outlineLayer) return endOutline(outlineLayer, () => setOutline(outlineLayer.id, o))
             setOutlineFor(null)
-            if (outlineLayer) return setOutline(outlineLayer.id, o)
             const layer: SketchLayer = { ...newLayer(UI.outlineName), outline: o }
             host.adopt(layer.id)
             engine.setLayerImage(layer.id, null)
             update((d) => ({ ...d, layers: insertAbove(d.layers, layer, host.activeId) }))
             host.setActive(layer.id)
           }}
-          onOff={outlineLayer?.outline ? () => (setOutlineFor(null), setOutline(outlineLayer.id, null)) : undefined}
-          onRasterize={outlineLayer?.outline ? () => (setOutlineFor(null), rasterizeOutline(outlineLayer)) : undefined}
+          onOff={outlineLayer?.outline ? () => endOutline(outlineLayer, () => setOutline(outlineLayer.id, null)) : undefined}
+          onRasterize={outlineLayer?.outline && !isGroup(outlineLayer) ? () => endOutline(outlineLayer, () => rasterizeOutline(outlineLayer)) : undefined}
         />
       )}
       {asciiFor && (asciiFor === 'new' || asciiLayer) && (
