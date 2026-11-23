@@ -27,8 +27,7 @@ pub fn apply_env() {
   let vars: &[&str] = match read_mode().as_str() {
     "no-dmabuf" => &["WEBKIT_DISABLE_DMABUF_RENDERER"],
     "software" => &["WEBKIT_DISABLE_DMABUF_RENDERER", "WEBKIT_DISABLE_COMPOSITING_MODE", "LIBGL_ALWAYS_SOFTWARE"],
-    // NVIDIA's own driver often shows a blank window with WebKitGTK's DMA-BUF renderer; the older handover works there.
-    _ if std::path::Path::new("/proc/driver/nvidia/version").exists() => &["WEBKIT_DISABLE_DMABUF_RENDERER"],
+    // NVIDIA uses the fast handover too; "Older screen handover" in Settings helps if the window stays blank there.
     _ => &[],
   };
   for v in vars {

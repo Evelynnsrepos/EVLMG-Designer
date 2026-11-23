@@ -15,6 +15,9 @@ import { leaves } from '../workspace/layoutTree'
 import { BOARD_TOOLS, setScale } from '../workspace/ToolHelp'
 import './hotwheel.css'
 
+/** WebKitGTK's fast screen handover (DMA-BUF) squashes the Draw GPU canvas while the wheel's scale/turn animations run. */
+const webkitGtk = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent)
+
 // ---- Where the actions come from ---------------------------------------------------
 
 /** Send a shortcut to a tool as if it was typed there (the tools listen on the window). */
@@ -489,7 +492,7 @@ function Wheel({ open }: { open: Open }) {
   // Outer drops are a size smaller than the inner ones: big in the middle, getting smaller outwards.
   const outer = open.outer.length ? bubbles(open.outer, MID + 6, OUT, hit, 'out', 70, true, bubbleLayout(open.inner.length, HOLE + 6, MID).radius * 0.74) : null
   return (
-    <div className={`hotwheel${glass ? ' bubbles' : ''}${open.closing ? ' closing' : ''}`} style={{ left: cx, top: cy, '--s': scale } as React.CSSProperties} role="menu" aria-label="QuickSelect">
+    <div className={`hotwheel${glass ? ' bubbles' : ''}${open.closing ? ' closing' : ''}${webkitGtk ? ' still' : ''}`} style={{ left: cx, top: cy, '--s': scale } as React.CSSProperties} role="menu" aria-label="QuickSelect">
       <svg width={w} height={w} viewBox={`${-w / 2} ${-w / 2} ${w} ${w}`}>
         {glass ? (
           <>
