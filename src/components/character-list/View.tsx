@@ -3,6 +3,7 @@ import { useCallback } from 'react'
 import type { Character } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
 import { useProjectStore } from '@/core/state'
+import { BehaviourSection } from '@/components/behaviour/BehaviourSection'
 import {
   backlinksTo,
   DetailFrame,
@@ -71,6 +72,7 @@ function CharacterDetail({ character, ctx }: { character: Character; ctx: Detail
           onNavigate={goTo}
         />
       </Section>
+      <BehaviourSection type="character" id={character.id} />
     </DetailFrame>
   )
 }
