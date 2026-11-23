@@ -1,6 +1,6 @@
 import { newId, type Id } from '@/core/model'
 import { defaultValues, getFormula, tryCompile, type CompiledFormula } from '@/shared/formulas'
-import { reactionFor, type StatusDoc, type StatusEffect } from '@/components/status-effects/model'
+import { AURA_SECONDS, blocks, effectReactionFor, reactionFor, removes, type Reaction, type StatusDoc, type StatusEffect } from '@/components/status-effects/model'
 
 /**
  * Combat simulator (v0.10): two teams fight many times over. Each fighter
@@ -221,8 +221,6 @@ function rng(seed: number) {
 
 const MAX_SECONDS = 600
 const MAX_ROUNDS = 200
-/** shortcut: an element hit leaves its element on the target this long for reactions; make it a setting if people ask. */
-export const AURA_SECONDS = 8
 
 interface ActiveEffect {
   e: StatusEffect
@@ -248,25 +246,31 @@ const up = (s: string) => s.trim().toUpperCase()
 const STAT_ALIASES: Record<string, string> = { SPEED: 'SPD', 'CRIT DMG': 'CRITDMG', 'CRIT DAMAGE': 'CRITDMG', 'DMG TAKEN': 'TAKEN' }
 const norm = (s: string) => STAT_ALIASES[up(s)] ?? up(s)
 
-/** Puts an effect on a unit by its stacking rule; returns a log note ('' when nothing changed). */
-function applyEffect(u: { fx: ActiveEffect[] }, e: StatusEffect, seconds: number | null, t: number): string {
+/**
+ * Puts an effect on a unit by its stacking rule; returns a log note ('' when nothing changed or it was blocked)
+ * and the effect-meets-effect reaction it set off, if any.
+ */
+function applyEffect(u: { fx: ActiveEffect[] }, e: StatusEffect, seconds: number | null, t: number, reactions: Reaction[] = []): { note: string; reaction?: Reaction } {
+  if (u.fx.some((a) => a.e.id !== e.id && blocks(a.e, e))) return { note: '' }
   const len = Math.max(0, seconds ?? e.seconds)
-  if (e.cancels.length) u.fx = u.fx.filter((a) => !e.cancels.includes(a.e.id))
+  u.fx = u.fx.filter((a) => a.e.id === e.id || !removes(e, a.e))
+  const met = u.fx.map((a) => ({ a, r: effectReactionFor({ reactions }, a.e.id, e.id) })).find((x) => x.r)
+  if (met?.r?.consumes) u.fx = u.fx.filter((a) => a !== met.a)
   const have = u.fx.find((a) => a.e.id === e.id)
   if (!have) {
     u.fx.push({ e, stacks: 1, until: t + len, nextTick: t + (e.tick?.every ?? 0) })
-    return e.name
+    return { note: e.name, reaction: met?.r }
   }
-  if (e.stacking === 'ignore') return ''
+  if (e.stacking === 'ignore') return { note: '', reaction: met?.r }
   have.until = t + len
   if (e.stacking === 'stronger' && have.stacks < Math.max(1, e.maxStacks)) have.stacks++
-  return e.stacking === 'stronger' ? `${e.name} x${have.stacks}` : e.name
+  return { note: e.stacking === 'stronger' ? `${e.name} x${have.stacks}` : e.name, reaction: met?.r }
 }
 
 /** Whether a buff with a rhythm is on at time t: on for `lasts` at the start of every `every`. */
 export const buffOn = (b: Pick<Buff, 'every' | 'lasts'>, t: number) => b.every <= 0 || t % b.every < Math.max(0, b.lasts)
 
-export function simulateCombat(d: CombatDoc, seed = 1, abilities: SimAbility[] = [], status?: Pick<StatusDoc, 'items' | 'reactions'>, presets: SimPreset[] = []): CombatResult {
+export function simulateCombat(d: CombatDoc, seed = 1, abilities: SimAbility[] = [], status?: Pick<StatusDoc, 'items' | 'reactions' | 'auraSeconds'>, presets: SimPreset[] = []): CombatResult {
   const basic = basicFormula(d, presets)
   const compiled = basic ? tryCompile(basic.expression) : null
   const turns = d.mode === 'turns'
@@ -281,6 +285,8 @@ export function simulateCombat(d: CombatDoc, seed = 1, abilities: SimAbility[] =
   const result = empty
   const effectsById = new Map((status?.items ?? []).map((e) => [e.id, e]))
   if (status) result.effects = { damage: 0, reactions: {} }
+  const reactions = status?.reactions ?? []
+  const auraSeconds = Math.max(0, status?.auraSeconds ?? AURA_SECONDS)
   const limit = d.timeLimit && d.timeLimit > 0 ? d.timeLimit : Infinity
   if (limit < Infinity) result.timeouts = 0
   const winTimes: number[] = []
@@ -311,7 +317,12 @@ export function simulateCombat(d: CombatDoc, seed = 1, abilities: SimAbility[] =
     const mods = (u: Unit, stat: string, t: number) => {
       let pct = 0
       let flat = 0
-      for (const a of u.fx) for (const s of a.e.stats) if (norm(s.stat) === stat) pct += s.percent * a.stacks
+      for (const a of u.fx)
+        for (const s of a.e.stats)
+          if (norm(s.stat) === stat) {
+            pct += s.percent * a.stacks
+            flat += (s.flat ?? 0) * a.stacks
+          }
       if (anyBuffs)
         for (const g of units) {
           if (!inFight(g) || !g.f.buffs) continue
@@ -414,7 +425,7 @@ export function simulateCombat(d: CombatDoc, seed = 1, abilities: SimAbility[] =
           if (r.consumes) target.aura = null
           const add = r.addsEffectId ? effectsById.get(r.addsEffectId) : undefined
           if (add) applyEffect(target, add, null, t)
-        } else target.aura = { element, until: t + AURA_SECONDS }
+        } else target.aura = { element, until: t + auraSeconds }
       }
       target.hp -= dmg
       result.damage[actor.f.id] = (result.damage[actor.f.id] ?? 0) + dmg / runs
@@ -422,7 +433,19 @@ export function simulateCombat(d: CombatDoc, seed = 1, abilities: SimAbility[] =
       if (skill && target.hp > 0)
         for (const ap of skill.a.applies ?? []) {
           const e = effectsById.get(ap.effectId)
-          if (e && random() * 100 < ap.chance) landed.push(applyEffect(target, e, ap.seconds ?? null, t))
+          if (!e || random() * 100 >= ap.chance) continue
+          const got = applyEffect(target, e, ap.seconds ?? null, t, reactions)
+          landed.push(got.note)
+          const r = got.reaction
+          if (!r) continue
+          // Effect meets effect: the hit counts again by (multiplier - 1), and the reaction's own effect lands.
+          const more = dmg * (r.multiplier - 1)
+          target.hp -= more
+          result.damage[actor.f.id] = (result.damage[actor.f.id] ?? 0) + more / runs
+          result.effects!.reactions[r.name] = (result.effects!.reactions[r.name] ?? 0) + 1 / runs
+          reacted = reacted ? `${reacted}, ${r.name}` : r.name
+          const add = r.addsEffectId ? effectsById.get(r.addsEffectId) : undefined
+          if (add) landed.push(applyEffect(target, add, null, t).note)
         }
       const weak = res > 1
       note(`${stamp(t)} ${actor.label} ${skill ? `uses ${skill.a.name} on` : 'hits'} ${target.label} for ${Math.round(dmg)}${crit ? ' (crit)' : ''}${weak ? ' (weak!)' : ''}${reacted ? ` (${reacted}!)` : ''}${landed.filter(Boolean).length ? `, ${landed.filter(Boolean).join(', ')}` : ''}${target.hp <= 0 ? `, ${target.label} falls` : ''}`)
