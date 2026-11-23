@@ -167,4 +167,27 @@ describe('ASCII art', () => {
     expect(asciiHtml(g, 'a<b')).toContain('a&lt;b')
     expect(asciiAnsi(g)).toBe('\x1b[38;2;255;0;0m@\x1b[0m\n')
   })
+
+  it('fills from the sign brushes show in the picture and in the exports', () => {
+    const px = picture(4, 4, (x) => (x < 2 ? [255, 0, 0, 255] : [0, 0, 0, 0]))
+    const s = asciiSettings({ v: { set: 0, cell: 2, look: 2, colour: 0 } })
+    const g = new AsciiGrid()
+    g.prepare(4, 4, s, atlas(s.chars, s.cell), { '2,0': { b: '#0000ff' } })
+    g.readPixels(px, { x: 0, y: 0, w: 4, h: 4 }, g.cellsOf({ x: 0, y: 0, w: 4, h: 4 }))
+    expect(g.pickAll()).not.toBeNull()
+    const out = new Uint8ClampedArray(4 * 4 * 4)
+    g.paint(out, { x: 0, y: 0, w: 4, h: 4 })
+    // The empty, filled cell is solid blue.
+    expect([...out.subarray(8, 12)]).toEqual([0, 0, 255, 255])
+    expect(asciiHtml(g, 'x', 'data:font/woff2;base64,AA')).toContain('background:#0000ff')
+    expect(asciiHtml(g, 'x', 'data:font/woff2;base64,AA')).toContain('@font-face')
+    expect(asciiAnsi(g)).toContain('\x1b[48;2;0;0;255m')
+  })
+
+  it('box lines draw edges with joined box signs', () => {
+    const s = asciiSettings({ v: { set: 7, cell: 2 } })
+    expect(s.chars).toBe(' ')
+    expect(s.edgeChars).toBe('│╱─╲')
+    expect(s.edges).toBeGreaterThan(0.5)
+  })
 })

@@ -58,7 +58,9 @@ import { ReferencePicker } from './ReferencePicker'
 import { ReferenceWindow } from './ReferenceWindow'
 import { ShortcutSheet } from './ShortcutSheet'
 import { FloatingPanel, useSpot } from './FloatingPanel'
-import { AsciiBrushPanel, type SignTool } from './AsciiBrushPanel'
+import { AsciiBrushPanel, AsciiWays, type SignTool } from './AsciiBrushPanel'
+import { rememberedAscii } from './AsciiDialog'
+import { localized } from '../i18n'
 import { beginSigns, signsTo, type SignStroke } from './asciiBrush'
 import type { AsciiMark } from './ascii'
 import { clearOutside, growDoc, growFor, shiftDocData } from './growth'
@@ -267,10 +269,22 @@ function paperPicture(c: HTMLCanvasElement, w: number, h: number, dpr: number, a
   return key
 }
 
-const UI_SIGNS = {
-  title: 'Sign brushes',
-  noLayer: 'Pick an ASCII layer to paint signs on (Layers: the letter button makes one).',
-}
+const UI_SIGNS = localized(
+  {
+    title: 'Sign brushes',
+    noLayer: 'Sign brushes paint on an ASCII layer: a layer whose paint is shown as letters.',
+    make: 'Make an ASCII layer',
+    turn: 'Show this layer as letters',
+    name: 'ASCII layer',
+  },
+  {
+    title: 'Zeichenpinsel',
+    noLayer: 'Zeichenpinsel malen auf eine ASCII-Ebene: eine Ebene, deren Farbe als Zeichen gezeigt wird.',
+    make: 'ASCII-Ebene anlegen',
+    turn: 'Diese Ebene als Zeichen zeigen',
+    name: 'ASCII-Ebene',
+  },
+)
 
 /** Tools that paint: switching between them doesn't save (switching to any other tool does). */
 const PAINT_TOOLS = new Set<Tool>(['brush', 'eraser', 'smudge'])
@@ -1925,7 +1939,33 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       )}
       {tool === 'signs' && (
         <FloatingPanel title={UI_SIGNS.title} at={textSpot} onMove={setTextSpot} onClose={() => setTool('brush')} width={290}>
-          {activeLayer?.ascii ? <AsciiBrushPanel value={signTool} onChange={setSignTool} /> : <p className="ascii-brush-hint">{UI_SIGNS.noLayer}</p>}
+          {activeLayer?.ascii ? (
+            <AsciiBrushPanel value={signTool} onChange={setSignTool} />
+          ) : (
+            <div className="ascii-brush">
+              <p className="ascii-brush-hint">{UI_SIGNS.noLayer}</p>
+              <button
+                className="btn btn-primary sketch-small"
+                disabled={doc.layers.filter((l) => !isGroup(l)).length >= layerLimit}
+                onClick={() => {
+                  // One undo step: a new, empty ASCII layer above the active one, with the settings used last.
+                  const layer: SketchLayer = { ...newLayer(UI_SIGNS.name), ascii: rememberedAscii(doc.width, doc.height) }
+                  layerHost.adopt(layer.id)
+                  engine.setLayerImage(layer.id, null)
+                  update((d) => ({ ...d, layers: insertAbove(d.layers, layer, activeLayer?.id) }))
+                  setActiveLayerId(layer.id)
+                }}
+              >
+                {UI_SIGNS.make}
+              </button>
+              {activeLayer && !activeLayer.kind && !activeLayer.text && (
+                <button className="btn btn-ghost sketch-small" onClick={() => update((d) => ({ ...d, layers: d.layers.map((l) => (l.id === activeLayer.id ? { ...l, ascii: rememberedAscii(doc.width, doc.height) } : l)) }))}>
+                  {UI_SIGNS.turn}
+                </button>
+              )}
+              <AsciiWays />
+            </div>
+          )}
         </FloatingPanel>
       )}
       {activeLayer?.text && tool === 'text' && (

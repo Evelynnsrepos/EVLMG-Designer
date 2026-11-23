@@ -129,7 +129,7 @@ void main() {
 
 /** ASCII art, pass 2: each pixel takes its cell's letter (pick: colour + atlas index) from the glyph atlas. */
 const ASCII_DRAW_FRAG = `${HEADER}
-uniform sampler2D pick, atlas;
+uniform sampler2D pick, atlas, back;
 uniform vec2 cell;
 uniform bool usePaper;
 uniform vec3 paper;
@@ -138,11 +138,15 @@ void main() {
   vec2 p = floor(gl_FragCoord.xy);
   vec2 c = floor(p / cell);
   vec4 k = texelFetch(pick, ivec2(c), 0);
+  // A fill painted with the sign brushes wins over the layer's background colour.
+  vec4 f = texelFetch(back, ivec2(c), 0);
+  bool on = usePaper || f.a > 0.5;
+  vec3 bg = f.a > 0.5 ? f.rgb : paper;
   float g = floor(k.a * 255.0 + 0.5);
-  if (g > 254.0) { outColor = usePaper ? vec4(paper, 1.0) : vec4(0.0); return; }
+  if (g > 254.0) { outColor = on ? vec4(bg, 1.0) : vec4(0.0); return; }
   vec2 q = p - c * cell;
   float cov = texelFetch(atlas, ivec2(int(g * cell.x + q.x), int(q.y)), 0).a;
-  outColor = usePaper ? vec4(k.rgb * cov + paper * (1.0 - cov), 1.0) : vec4(k.rgb * cov, cov);
+  outColor = on ? vec4(k.rgb * cov + bg * (1.0 - cov), 1.0) : vec4(k.rgb * cov, cov);
 }`
 
 const BLEND_FRAG = `${HEADER}
@@ -1168,7 +1172,7 @@ export class GpuPainter {
     return c.t
   }
 
-  private asciis = new Map<string, { t: Tex; grid: AsciiGrid; version: number; cells: Tex | null; pick: WebGLTexture | null; atlas: Atlas | null; atlasTex: WebGLTexture | null }>()
+  private asciis = new Map<string, { t: Tex; grid: AsciiGrid; version: number; cells: Tex | null; pick: WebGLTexture | null; back: WebGLTexture | null; atlas: Atlas | null; atlasTex: WebGLTexture | null }>()
 
   private dropAscii(key: string) {
     const c = this.asciis.get(key)
@@ -1176,6 +1180,7 @@ export class GpuPainter {
     this.free(c.t)
     this.free(c.cells)
     if (c.pick) this.gl.deleteTexture(c.pick)
+    if (c.back) this.gl.deleteTexture(c.back)
     if (c.atlasTex) this.gl.deleteTexture(c.atlasTex)
     this.asciis.delete(key)
   }
@@ -1188,7 +1193,7 @@ export class GpuPainter {
   private asciied(key: string, src: Tex, a: AdjustValues, version: number, r: Rect | null): Tex {
     const gl = this.gl
     let c = this.asciis.get(key)
-    if (!c) this.asciis.set(key, (c = { t: this.target(), grid: new AsciiGrid(), version: -2, cells: null, pick: null, atlas: null, atlasTex: null }))
+    if (!c) this.asciis.set(key, (c = { t: this.target(), grid: new AsciiGrid(), version: -2, cells: null, pick: null, back: null, atlas: null, atlasTex: null }))
     const g = c.grid
     const fresh = prepareGrid(g, this.width, this.height, a)
     // Same pixels, new sign-brush cells: pick the letters again without averaging anything.
@@ -1199,8 +1204,10 @@ export class GpuPainter {
     if (fresh) {
       this.free(c.cells)
       if (c.pick) gl.deleteTexture(c.pick)
+      if (c.back) gl.deleteTexture(c.back)
       c.cells = this.target(g.dcols, g.drows)
       c.pick = this.rawTexture(g.cols, g.rows)
+      c.back = this.rawTexture(g.cols, g.rows)
       this.clear(c.t, null)
     }
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)
@@ -1230,11 +1237,14 @@ export class GpuPainter {
     if (changed) {
       gl.bindTexture(gl.TEXTURE_2D, c.pick)
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, g.cols, g.rows, gl.RGBA, gl.UNSIGNED_BYTE, g.pick)
+      gl.bindTexture(gl.TEXTURE_2D, c.back)
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, g.cols, g.rows, gl.RGBA, gl.UNSIGNED_BYTE, g.back)
       this.into(c.t, g.pixelsOf(changed))
       gl.disable(gl.BLEND)
       const p = this.prog('ascii-draw')
       this.bind(0, c.pick, p, 'pick')
       this.bind(1, c.atlasTex, p, 'atlas')
+      this.bind(2, c.back, p, 'back')
       const paper = g.s.paper
       this.set(p, { cell: [g.cw, g.ch], usePaper: !!paper, paper: paper ? paper.map((v) => v / 255) : [0, 0, 0] })
       this.drawQuad()

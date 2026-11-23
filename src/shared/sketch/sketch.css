@@ -708,9 +708,10 @@
 }
 .ascii-brush-sign {
   height: 26px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 6px;
+  /* See-through, so the tiles sit in the glass panel instead of on top of it. */
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   color: var(--text);
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   cursor: pointer;
@@ -724,6 +725,20 @@
   grid-column: span 2;
   min-width: 0;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.ascii-brush-sign:hover {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+.ascii-brush-ways {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.ascii-brush-ways summary {
+  cursor: pointer;
+}
+.ascii-brush-ways ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
 }
 .ascii-brush-hint {
   margin: 0;

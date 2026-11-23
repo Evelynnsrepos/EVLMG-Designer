@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lineSign, signAt, signsTo, type SignStroke } from './asciiBrush'
+import { boxCorner, boxSign, lineSign, signAt, signsTo, type SignStroke } from './asciiBrush'
 import { asciiSettings } from './ascii'
 import type { AdjustValues } from './adjust/filters'
 
@@ -47,5 +47,36 @@ describe('sign brushes', () => {
     expect(signAt(a, 1, 1)).toBe(false)
     expect(signAt(a, cw * 3, cw * 4)).toBe(false)
     expect(signAt(base, 1, 1)).toBe(false)
+  })
+
+  it('box brush draws joined lines, corners where it turns, and crossings', () => {
+    expect(boxSign({ x: 5, y: 1 })).toBe('─')
+    expect(boxSign({ x: 0, y: 5 }, '─')).toBe('┼')
+    // Right then down: ┐; down then right: └; left then up: └; up then left: ┐
+    expect(boxCorner({ x: 1, y: 0 }, { x: 0, y: 1 })).toBe('┐')
+    expect(boxCorner({ x: 0, y: 1 }, { x: 1, y: 0 })).toBe('└')
+    expect(boxCorner({ x: -1, y: 0 }, { x: 0, y: -1 })).toBe('└')
+    expect(boxCorner({ x: 0, y: -1 }, { x: -1, y: 0 })).toBe('┐')
+    expect(boxCorner({ x: 1, y: 0 }, { x: 2, y: 0 })).toBeNull()
+    const st = stroke('box')
+    // Right along the top row, then down the 4th column.
+    let last = { x: 1, y: 1 }
+    signsTo(st, last, null)
+    for (const p of [{ x: 5, y: 1 }, { x: 9, y: 1 }, { x: 13, y: 1 }, { x: 13, y: 9 }, { x: 13, y: 17 }]) {
+      signsTo(st, p, last)
+      last = p
+    }
+    expect(st.marks['0,0'].s).toBe('─')
+    expect(st.marks['12,0'].s).toBe('┐')
+    expect(st.marks['12,8'].s).toBe('│')
+  })
+
+  it('fill brush paints the cell background, auto takes it away', () => {
+    const st = stroke('fill')
+    signsTo(st, { x: 1, y: 1 }, null)
+    expect(st.marks['0,0']).toEqual({ b: '#ff0000' })
+    expect(signAt({ v: { cell: 4 }, ascii: { marks: st.marks } } as unknown as AdjustValues, 1, 1)).toBe(true)
+    const auto = { ...stroke('auto'), marks: st.marks }
+    expect(signsTo(auto, { x: 1, y: 1 }, null)).toEqual({})
   })
 })

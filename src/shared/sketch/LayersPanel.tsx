@@ -28,7 +28,7 @@ import './layers.css'
 import { rasterized } from './animatedLayers'
 import { FilterControls } from './adjust/AdjustStudio'
 import { OutlineDialog } from './OutlineDialog'
-import { AsciiDialog, defaultAscii, type AsciiStart } from './AsciiDialog'
+import { AsciiDialog, rememberedAscii, type AsciiStart } from './AsciiDialog'
 import { ASCII_FORMATS, asciiGridOf, exportAscii, type AsciiFormat } from './asciiExport'
 import type { AdjustValues } from './adjust/filters'
 import type { OutlineSettings } from './outline'
@@ -188,12 +188,14 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
     if (count >= host.limit) return
     const layer: SketchLayer = { ...newLayer(UI.asciiName), ascii: a }
     host.adopt(layer.id)
-    const from = start === 'layer' && host.activeId ? engine.layerCanvas(host.activeId) : start === 'picture' ? engine.render({ ...doc, layers: doc.layers.filter((l) => !l.private) }, false) : null
+    const from = startArt(start)
     engine.setLayerImage(layer.id, from)
     update((d) => ({ ...d, layers: insertAbove(d.layers, layer, host.activeId) }))
     host.setActive(layer.id)
     if (from) host.markDirty(layer.id)
   }
+  /** What a new ASCII layer starts from (also its preview). */
+  const startArt = (start: AsciiStart) => (start === 'layer' && host.activeId ? engine.layerCanvas(host.activeId) : start === 'picture' ? engine.render({ ...doc, layers: doc.layers.filter((l) => !l.private) }, false) : null)
   /** The letters of an ASCII layer, or of the picture below an ASCII adjustment layer. */
   const asciiExport = (l: SketchLayer, format: AsciiFormat, a: AdjustValues) => {
     const below = doc.layers.slice(0, doc.layers.findIndex((x) => x.id === l.id))
@@ -369,7 +371,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
       !group && { label: UI.invert, run: () => host.markDirty(engine.invert(l.id)) },
       !group && !mask && { label: l.outline ? UI.outlineSettings : UI.makeOutline, run: () => setOutlineFor(l.id) },
       !!l.outline && { label: UI.rasterizeOutline, run: () => rasterizeOutline(l) },
-      !group && !mask && { label: l.ascii ? UI.asciiSettings : UI.makeAscii, run: () => (l.ascii || setAscii(l.id, defaultAscii(engine.width, engine.height)), setAsciiFor(l.id)) },
+      !group && !mask && { label: l.ascii ? UI.asciiSettings : UI.makeAscii, run: () => (l.ascii || setAscii(l.id, rememberedAscii(engine.width, engine.height)), setAsciiFor(l.id)) },
       !!l.ascii && { label: UI.rasterizeAscii, run: () => rasterizeAscii(l) },
       !mask && { label: UI.duplicate, run: () => duplicate(l.id) },
       !group && !mask && { label: UI.alphaLock, run: () => set(l.id, { alphaLock: !l.alphaLock }), on: l.alphaLock },
@@ -683,6 +685,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
       {asciiFor && (asciiFor === 'new' || asciiLayer) && (
         <AsciiDialog
           initial={asciiLayer?.ascii}
+          art={(start) => (asciiLayer ? engine.layerCanvas(asciiLayer.id) : startArt(start))}
           canCopyLayer={!!active && !isGroup(active) && active.kind !== 'adjust' && hasPixels(active)}
           onClose={() => setAsciiFor(null)}
           onOk={(a, start) => {

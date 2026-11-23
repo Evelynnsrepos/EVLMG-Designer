@@ -26,8 +26,17 @@ const BRAILLE_BLANK = '\u2800'
 export const SET_BRAILLE = 4
 export const SET_LINES = 5
 export const SET_TEXT = 6
+/** Box lines: like Lines only, drawn with joined box lines (menus, maps, frames in text-mode games). */
+export const SET_BOX = 7
 /** Edge lines, by direction: vertical, rising, flat, falling. */
 const EDGES = '|/-\\'
+const BOX_EDGES = '│╱─╲'
+/** Box lines drawn by hand so they join cell to cell in any font: arms up, right, down, left (2 = double). */
+const BOX: Record<string, [number, number, number, number]> = {
+  '─': [0, 1, 0, 1], '│': [1, 0, 1, 0], '┌': [0, 1, 1, 0], '┐': [0, 0, 1, 1], '└': [1, 1, 0, 0], '┘': [1, 0, 0, 1],
+  '├': [1, 1, 1, 0], '┤': [1, 0, 1, 1], '┬': [0, 1, 1, 1], '┴': [1, 1, 0, 1], '┼': [1, 1, 1, 1],
+  '═': [0, 2, 0, 2], '║': [2, 0, 2, 0], '╔': [0, 2, 2, 0], '╗': [0, 0, 2, 2], '╚': [2, 2, 0, 0], '╝': [2, 0, 0, 2],
+}
 /** A cell with nothing in it (no character, no background). */
 const EMPTY = 255
 /** The font the letters are drawn in; bundled (public/fonts, OFL) so they look the same everywhere. */
@@ -47,11 +56,12 @@ export interface AsciiText {
   marks?: Record<string, AsciiMark>
 }
 
-/** One hand-painted cell: a fixed sign, steps darker (+) or lighter (-), and the brush colour for unpainted cells. */
+/** One hand-painted cell: a fixed sign, steps darker (+) or lighter (-), the brush colour for unpainted cells, a fill (cell background). */
 export interface AsciiMark {
   s?: string
   d?: number
   c?: string
+  b?: string
 }
 
 /** The settings as the renderer reads them, from the adjustment's values. */
@@ -74,6 +84,8 @@ export interface AsciiSettings {
   mode: number
   /** "Your text", spaces squeezed. */
   text: string
+  /** The four edge-line signs (vertical, rising, flat, falling). */
+  edgeChars: string
   /** Letters on the other parts (dark ↔ bright, painted ↔ empty). */
   invert: boolean
   /** 0..1: share of cells that get a random letter (glitch). */
@@ -97,7 +109,7 @@ export function asciiSettings(a: Pick<AdjustValues, 'v' | 'ascii'> & { seed?: nu
   const text = set === SET_TEXT ? (a.ascii?.text ?? '').replace(/\s+/g, ' ').trim() || 'ASCII' : ''
   // Your text: a space first (index 0 = nothing), then each letter once; capped so the edge lines still fit.
   const textChars = ' ' + [...new Set([...text])].filter((c) => c !== ' ').slice(0, 200).join('')
-  const chars = set === 3 ? own || CHARSETS[0].chars : set === SET_BRAILLE ? BRAILLE : set === SET_LINES ? ' ' : set === SET_TEXT ? textChars : CHARSETS[Math.min(2, Math.max(0, set))].chars
+  const chars = set === 3 ? own || CHARSETS[0].chars : set === SET_BRAILLE ? BRAILLE : set === SET_LINES || set === SET_BOX ? ' ' : set === SET_TEXT ? textChars : CHARSETS[Math.min(2, Math.max(0, set))].chars
   return {
     chars,
     // Braille splits a cell into 2×4 dots, so the cell must be even.
@@ -105,12 +117,13 @@ export function asciiSettings(a: Pick<AdjustValues, 'v' | 'ascii'> & { seed?: nu
     look: Math.round(v.look ?? 0),
     colour: Math.round(v.colour ?? 0),
     contrast: v.contrast ?? 0,
-    edges: set === SET_BRAILLE ? 0 : set === SET_LINES ? Math.max(0.6, v.edges ?? 0) : (v.edges ?? 0),
+    edges: set === SET_BRAILLE ? 0 : set === SET_LINES || set === SET_BOX ? Math.max(0.6, v.edges ?? 0) : (v.edges ?? 0),
     dither: Math.round(v.dither ?? 0),
     ink: hex(a.ascii?.ink, [0, 0, 0]),
     paper: v.paper ? hex(a.ascii?.paper, [255, 255, 255]) : null,
     mode: set === SET_BRAILLE ? 1 : set === SET_TEXT ? 2 : 0,
     text,
+    edgeChars: set === SET_BOX ? BOX_EDGES : EDGES,
     invert: !!v.invert,
     scatter: v.scatter ?? 0,
     seed: a.seed ?? 1,
@@ -149,12 +162,12 @@ const fontReady = () => typeof document !== 'undefined' && !!document.fonts?.che
 
 let atlasCache: Atlas | null = null
 /** The glyphs of `chars` at this cell size, drawn once (Canvas 2D) and kept while nothing changes. */
-export function glyphAtlas(chars: string, cw: number, own: boolean, extra = ''): Atlas {
+export function glyphAtlas(chars: string, cw: number, own: boolean, extra = '', edgeChars = EDGES): Atlas {
   if (!fontAsked) void loadAsciiFont()
-  const edges = chars.length > 250 ? '' : EDGES
+  const edges = chars.length > 250 ? '' : edgeChars
   // Signs painted with the sign brushes, after the edge lines (none fit next to Braille's 255).
-  const more = edges ? [...new Set([...extra])].filter((c) => !chars.includes(c) && !EDGES.includes(c)).slice(0, 250 - chars.length - edges.length).join('') : ''
-  const key = `${chars}|${cw}|${fontReady()}|${own}|${more}`
+  const more = edges ? [...new Set([...extra])].filter((c) => !chars.includes(c) && !edges.includes(c)).slice(0, 250 - chars.length - edges.length).join('') : ''
+  const key = `${chars}|${cw}|${fontReady()}|${own}|${edges}|${more}`
   if (atlasCache?.key === key) return atlasCache
   const ch = cw * 2
   const all = [...chars, ...edges, ...more]
@@ -170,6 +183,25 @@ export function glyphAtlas(chars: string, cw: number, own: boolean, extra = ''):
       g.globalAlpha = BLOCKS[s] / 255
       g.fillRect(i * cw, 0, cw, ch)
       g.globalAlpha = 1
+    } else if (s in BOX || s === '╱' || s === '╲') {
+      const t = Math.max(1, Math.round(cw / 6))
+      const mx = i * cw + Math.floor((cw - t) / 2)
+      const my = Math.floor((ch - t) / 2)
+      if (s === '╱' || s === '╲') {
+        g.lineWidth = t
+        g.beginPath()
+        g.moveTo(i * cw + (s === '╱' ? 0 : cw), ch)
+        g.lineTo(i * cw + (s === '╱' ? cw : 0), 0)
+        g.stroke()
+      } else {
+        const [u, rr, d, l] = BOX[s]
+        // Double lines: two thin lines, one each side of the middle.
+        const bar = (n: number, f: (o: number) => void) => (n === 2 ? (f(-t), f(t)) : n && f(0))
+        bar(u, (o) => g.fillRect(mx + o, 0, t, my + t))
+        bar(d, (o) => g.fillRect(mx + o, my, t, ch - my))
+        bar(l, (o) => g.fillRect(i * cw, my + o, mx - i * cw + t, t))
+        bar(rr, (o) => g.fillRect(mx, my + o, i * cw + cw - mx, t))
+      }
     } else if (s > BRAILLE_BLANK && s <= '\u28ff') {
       // Braille dots drawn by hand: the bundled font has none, and system fonts space them differently.
       const m = s.charCodeAt(0) - 0x2800
@@ -249,6 +281,9 @@ export class AsciiGrid {
   private mSign = new Int16Array(0)
   private mShade = new Int8Array(0)
   private mColor = new Int32Array(0)
+  /** Per cell: fill colour r, g, b and 255 (or 0 = none), and the fills last drawn. */
+  back = new Uint8Array(0)
+  private backDrawn = new Uint8Array(0)
   private marks: AsciiText['marks'] = undefined
   /** The hand-painted cells changed since the last pickAll (the picture did not). */
   marksChanged = false
@@ -291,6 +326,8 @@ export class AsciiGrid {
     this.mSign = new Int16Array(n)
     this.mShade = new Int8Array(n)
     this.mColor = new Int32Array(n)
+    this.back = new Uint8Array(n * 4)
+    this.backDrawn = new Uint8Array(n * 4)
     this.setMarks(marks)
     return true
   }
@@ -309,6 +346,7 @@ export class AsciiGrid {
     this.mSign.fill(-1)
     this.mShade.fill(0)
     this.mColor.fill(-1)
+    this.back.fill(0)
     for (const key in marks ?? {}) {
       const i = this.cellOfKey(key)
       if (i < 0) continue
@@ -318,6 +356,11 @@ export class AsciiGrid {
       if (m.d) this.mShade[i] = Math.max(-127, Math.min(127, Math.round(m.d)))
       const c = /^#?([0-9a-f]{6})$/i.exec(m.c ?? '')
       if (c) this.mColor[i] = parseInt(c[1], 16)
+      const f = /^#?([0-9a-f]{6})$/i.exec(m.b ?? '')
+      if (f) {
+        const n = parseInt(f[1], 16)
+        this.back.set([n >> 16, (n >> 8) & 255, n & 255, 255], i * 4)
+      }
     }
   }
 
@@ -516,7 +559,11 @@ export class AsciiGrid {
         const gg = c ? c[1] : Math.round(cell[1])
         const b = c ? c[2] : Math.round(cell[2])
         const p = this.pick
-        if (p[k] !== r || p[k + 1] !== gg || p[k + 2] !== b || p[k + 3] !== g) {
+        const bk = this.back
+        const bd = this.backDrawn
+        const backChanged = bk[k] !== bd[k] || bk[k + 1] !== bd[k + 1] || bk[k + 2] !== bd[k + 2] || bk[k + 3] !== bd[k + 3]
+        if (backChanged) bd.set(bk.subarray(k, k + 4), k)
+        if (backChanged || p[k] !== r || p[k + 1] !== gg || p[k + 2] !== b || p[k + 3] !== g) {
           p[k] = r
           p[k + 1] = gg
           p[k + 2] = b
@@ -565,7 +612,6 @@ export class AsciiGrid {
   /** Draw the pixel rectangle `r` (whole cells) into straight RGBA `out` (r.w × r.h). */
   paint(out: Uint8ClampedArray, r: Rect) {
     const { cw, ch, atlas, s } = this
-    const paper = s.paper
     for (let y = r.y; y < r.y + r.h; y++) {
       const cy = Math.floor(y / ch)
       const gy = y - cy * ch
@@ -574,8 +620,10 @@ export class AsciiGrid {
         const cx = Math.floor(x / cw)
         const k = (cy * this.cols + cx) * 4
         const g = this.pick[k + 3]
+        // A fill painted with the sign brushes wins over the layer's background colour.
+        const paper = this.back[k + 3] ? (this.back.subarray(k, k + 3) as unknown as number[]) : s.paper
         if (g === EMPTY) {
-          // Only Braille leaves empty cells with the background on (cells with no dots).
+          // Braille cells with no dots, and filled cells with no letter, keep their background.
           if (paper) {
             out[o] = paper[0]
             out[o + 1] = paper[1]
@@ -617,22 +665,24 @@ export class AsciiGrid {
     return lines
   }
 
-  /** Each line as runs of characters with the same colour. */
-  runs(): { text: string; color: [number, number, number] | null }[][] {
+  /** Each line as runs of characters with the same colour and fill (fill = a cell background from the sign brushes). */
+  runs(): AsciiRun[][] {
     const chars = [...this.atlas.chars]
-    const out: { text: string; color: [number, number, number] | null }[][] = []
+    const out: AsciiRun[][] = []
     for (let y = 0; y < this.rows; y++) {
-      const line: { text: string; color: [number, number, number] | null }[] = []
+      const line: AsciiRun[] = []
       for (let x = 0; x < this.cols; x++) {
         const k = (y * this.cols + x) * 4
         const g = this.pick[k + 3]
         const s = g === EMPTY ? (this.s.mode === 1 ? BRAILLE_BLANK : ' ') : chars[g]
         const color: [number, number, number] | null = g === EMPTY || s === ' ' ? null : [this.pick[k], this.pick[k + 1], this.pick[k + 2]]
+        const fill: [number, number, number] | null = this.back[k + 3] ? [this.back[k], this.back[k + 1], this.back[k + 2]] : null
         const last = line[line.length - 1]
-        if (last && (color === null ? last.color === null : last.color && last.color.join() === color.join())) last.text += s
-        else line.push({ text: s, color })
+        const same = (a: number[] | null, b: number[] | null) => (a === null ? b === null : !!b && a.join() === b.join())
+        if (last && same(color, last.color) && same(fill, last.fill ?? null)) last.text += s
+        else line.push(fill ? { text: s, color, fill } : { text: s, color })
       }
-      while (line.length && line[line.length - 1].color === null) {
+      while (line.length && line[line.length - 1].color === null && !line[line.length - 1].fill) {
         const t = line[line.length - 1].text.replace(/\s+$/, '')
         if (t) {
           line[line.length - 1].text = t
@@ -644,6 +694,13 @@ export class AsciiGrid {
     }
     return out
   }
+}
+
+/** A run of letters with one colour (null = blank) and maybe a fill. */
+export interface AsciiRun {
+  text: string
+  color: [number, number, number] | null
+  fill?: [number, number, number]
 }
 
 /** The whole CPU path: a picture's straight pixels → the ASCII picture (Adjustments, adjustment layers). */
@@ -662,14 +719,22 @@ export function renderAscii(img: ImageData, a: Pick<AdjustValues, 'v' | 'ascii' 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 const css = (c: [number, number, number]) => `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`
 
-/** A web page with the characters in their colours. */
-export function asciiHtml(grid: AsciiGrid, title: string): string {
+/** A web page with the characters in their colours; `fontUrl` (a data: URL) puts the letters' font inside the page. */
+export function asciiHtml(grid: AsciiGrid, title: string, fontUrl?: string): string {
   const bg = grid.s.paper ? css(grid.s.paper) : 'transparent'
   const body = grid
     .runs()
-    .map((line) => line.map((r) => (r.color ? `<span style="color:${css(r.color)}">${esc(r.text)}</span>` : esc(r.text))).join(''))
+    .map((line) =>
+      line
+        .map((r) => {
+          const st = [r.color && `color:${css(r.color)}`, r.fill && `background:${css(r.fill)}`].filter(Boolean).join(';')
+          return st ? `<span style="${st}">${esc(r.text)}</span>` : esc(r.text)
+        })
+        .join(''),
+    )
     .join('\n')
-  return `<!doctype html>\n<html><head><meta charset="utf-8"><title>${esc(title)}</title></head>\n<body style="margin:0;background:${bg}">\n<pre style="font:${grid.cw / 0.6}px/${grid.ch}px '${ASCII_FONT}',ui-monospace,monospace;margin:0;padding:8px">${body}</pre>\n</body></html>\n`
+  const face = fontUrl ? `<style>@font-face{font-family:'${ASCII_FONT}';src:url(${fontUrl}) format('woff2')}</style>` : ''
+  return `<!doctype html>\n<html><head><meta charset="utf-8"><title>${esc(title)}</title>${face}</head>\n<body style="margin:0;background:${bg}">\n<pre style="font:${grid.cw / 0.6}px/${grid.ch}px '${ASCII_FONT}',ui-monospace,monospace;margin:0;padding:8px">${body}</pre>\n</body></html>\n`
 }
 
 /** Text for terminals, with 24-bit colour codes (ANSI). */
@@ -678,7 +743,7 @@ export function asciiAnsi(grid: AsciiGrid): string {
   return (
     grid
       .runs()
-      .map((line) => bg + line.map((r) => (r.color ? `\x1b[38;2;${r.color.join(';')}m${r.text}` : r.text)).join('') + '\x1b[0m')
+      .map((line) => bg + line.map((r) => (r.fill ? `\x1b[48;2;${r.fill.join(';')}m` : '') + (r.color ? `\x1b[38;2;${r.color.join(';')}m${r.text}` : r.text) + (r.fill ? '\x1b[49m' + bg : '')).join('') + '\x1b[0m')
       .join('\n') + '\n'
   )
 }
@@ -693,7 +758,7 @@ export function prepareGrid(grid: AsciiGrid, w: number, h: number, a: Pick<Adjus
   const s = asciiSettings(a)
   const marks = a.ascii?.marks
   const extra = marks ? Object.values(marks).map((m) => m.s ?? '').join('') : ''
-  return grid.prepare(w, h, s, glyphAtlas(s.chars, s.cell, Math.round(a.v.set ?? 0) === 3, extra), marks)
+  return grid.prepare(w, h, s, glyphAtlas(s.chars, s.cell, Math.round(a.v.set ?? 0) === 3, extra, s.edgeChars), marks)
 }
 
 /** Canvas 2D: read the cells under `r` from `src`, and draw the cells whose letter changed into `out`. */

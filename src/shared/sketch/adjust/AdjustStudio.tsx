@@ -466,7 +466,7 @@ export function FilterControls({ id, values, onChange, histogram: hist0 }: { id:
 }
 
 /** ASCII art: your own letters and the two colours, shown when they are used. */
-function AsciiExtras({ values, onChange }: { values: AdjustValues; onChange(next: AdjustValues): void }) {
+export function AsciiExtras({ values, onChange }: { values: AdjustValues; onChange(next: AdjustValues): void }) {
   const a = values.ascii ?? {}
   const set = (patch: Partial<NonNullable<AdjustValues['ascii']>>) => onChange({ ...values, ascii: { ...a, ...patch } })
   return (

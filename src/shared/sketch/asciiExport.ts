@@ -1,19 +1,65 @@
 import { saveBinaryFile, safeFileName } from '@/core/export'
+import { localized } from '../i18n'
 import type { AdjustValues } from './adjust/filters'
 import { asciiAnsi, asciiHtml, AsciiGrid, prepareGrid } from './ascii'
 
 /** What an ASCII layer can be saved as (0.35). */
 export type AsciiFormat = 'copy' | 'txt' | 'html' | 'ans' | 'png' | 'jpg' | 'webp'
 
-export const ASCII_FORMATS: { id: AsciiFormat; label: string; title: string }[] = [
-  { id: 'copy', label: 'Copy text', title: 'Copy the letters, to paste them anywhere' },
-  { id: 'txt', label: '.txt', title: 'Plain text (colours are left out)' },
-  { id: 'html', label: '.html', title: 'A web page with the letters in their colours' },
-  { id: 'ans', label: '.ans', title: 'Text with colours for terminals (ANSI)' },
-  { id: 'png', label: '.png', title: 'Picture, see-through where there are no letters' },
-  { id: 'jpg', label: '.jpg', title: 'Picture on a white background' },
-  { id: 'webp', label: '.webp', title: 'Picture, see-through where there are no letters' },
-]
+const UI = localized(
+  {
+    copy: 'Copy text',
+    save: 'Export ASCII art',
+    titles: {
+      copy: 'Copy the letters, to paste them anywhere',
+      txt: 'Plain text (colours are left out)',
+      html: 'A web page with the letters in their colours and fills, font included',
+      ans: 'Text with colours and fills for terminals (ANSI)',
+      png: 'Picture, see-through where there are no letters',
+      jpg: 'Picture on a white background',
+      webp: 'Picture, see-through where there are no letters',
+    } as Record<AsciiFormat, string>,
+  },
+  {
+    copy: 'Text kopieren',
+    save: 'ASCII-Art exportieren',
+    titles: {
+      copy: 'Die Zeichen kopieren, um sie überall einzufügen',
+      txt: 'Reiner Text (ohne Farben)',
+      html: 'Eine Webseite mit den Zeichen in ihren Farben und Füllungen, Schrift eingebaut',
+      ans: 'Text mit Farben und Füllungen für Terminals (ANSI)',
+      png: 'Bild, durchsichtig wo keine Zeichen sind',
+      jpg: 'Bild auf weißem Hintergrund',
+      webp: 'Bild, durchsichtig wo keine Zeichen sind',
+    },
+  },
+)
+
+/** Labels and hints follow the interface language (read on every use). */
+export const ASCII_FORMATS: { id: AsciiFormat; label: string; title: string }[] = (['copy', 'txt', 'html', 'ans', 'png', 'jpg', 'webp'] as const).map((id) => ({
+  id,
+  get label() {
+    return id === 'copy' ? UI.copy : `.${id}`
+  },
+  get title() {
+    return UI.titles[id]
+  },
+}))
+
+/** The bundled letter font as a data: URL, so an exported web page looks the same on every computer. */
+async function fontDataUrl(): Promise<string | undefined> {
+  try {
+    const res = await fetch('/fonts/game/JetBrainsMono-400-latin.woff2')
+    if (!res.ok) return undefined
+    const bytes = new Uint8Array(await res.arrayBuffer())
+    let bin = ''
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+    return `data:font/woff2;base64,${btoa(bin)}`
+  } catch {
+    // Without it the page falls back to the computer's own monospace font.
+    return undefined
+  }
+}
 
 const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' }
 
@@ -51,8 +97,8 @@ export async function exportAscii(grid: AsciiGrid, format: AsciiFormat, name: st
     await navigator.clipboard.writeText(text)
     return true
   }
-  const bytes = format === 'txt' ? new TextEncoder().encode(text) : format === 'html' ? new TextEncoder().encode(asciiHtml(grid, name)) : format === 'ans' ? new TextEncoder().encode(asciiAnsi(grid)) : await picture(grid, format)
-  return saveBinaryFile({ title: 'Export ASCII art', defaultName: `${safeFileName(name)}.${format}`, bytes, filter: { name: format.toUpperCase(), extensions: [format] } })
+  const bytes = format === 'txt' ? new TextEncoder().encode(text) : format === 'html' ? new TextEncoder().encode(asciiHtml(grid, name, await fontDataUrl())) : format === 'ans' ? new TextEncoder().encode(asciiAnsi(grid)) : await picture(grid, format)
+  return saveBinaryFile({ title: UI.save, defaultName: `${safeFileName(name)}.${format}`, bytes, filter: { name: format.toUpperCase(), extensions: [format] } })
 }
 
 /** The letters of a small picture (Pixel Art): each picture pixel becomes `scale` px, one letter per 1×2 pixels. */

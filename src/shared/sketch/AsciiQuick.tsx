@@ -1,12 +1,21 @@
 import { useState } from 'react'
+import { localized } from '../i18n'
+import { AsciiExtras } from './adjust/AdjustStudio'
 import { defaultValues, filterDef, type AdjustValues } from './adjust/filters'
 import { ASCII_FORMATS, asciiGridOfImage, exportAscii } from './asciiExport'
 
-const UI = {
-  title: 'ASCII art',
-  hint: 'Every pixel pair (one wide, two tall) becomes a letter.',
-  copied: 'Copied',
-}
+const UI = localized(
+  {
+    title: 'ASCII art',
+    hint: 'Every pixel pair (one wide, two tall) becomes a letter.',
+    copied: 'Copied',
+  },
+  {
+    title: 'ASCII-Art',
+    hint: 'Jedes Pixelpaar (eins breit, zwei hoch) wird ein Zeichen.',
+    copied: 'Kopiert',
+  },
+)
 
 /** Pixel Art (0.35): the frame as letters, copied or saved as text, a web page, terminal colours or a picture. */
 export function AsciiQuick({ picture, name }: { picture(): ImageData; name: string }) {
@@ -25,7 +34,7 @@ export function AsciiQuick({ picture, name }: { picture(): ImageData; name: stri
         <label key={p.key} className="px-row">
           <span className="px-adjust-name">{p.label}</span>
           <select className="input" value={values.v[p.key]} onChange={(e) => setValues((x) => ({ ...x, v: { ...x.v, [p.key]: Number(e.target.value) } }))}>
-            {p.options!.slice(0, p.key === 'set' ? 3 : undefined).map((o, i) => (
+            {p.options!.map((o, i) => (
               <option key={o} value={i}>
                 {o}
               </option>
@@ -33,12 +42,7 @@ export function AsciiQuick({ picture, name }: { picture(): ImageData; name: stri
           </select>
         </label>
       ))}
-      {values.v.colour === 1 && (
-        <label className="px-row">
-          <span className="px-adjust-name">Letter colour</span>
-          <input type="color" value={values.ascii?.ink ?? '#000000'} onChange={(e) => setValues((x) => ({ ...x, ascii: { ...x.ascii, ink: e.target.value } }))} />
-        </label>
-      )}
+      <AsciiExtras values={values} onChange={setValues} />
       <div className="px-row px-wrap">
         {ASCII_FORMATS.map((f) => (
           <button
