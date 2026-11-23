@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createEntity } from '@/core/model'
+import { createBehaviourDoc } from '@/components/behaviour/model'
 import { assetPaths, buildExport, customListRecords, ident, relationshipRecords, type ExportInput } from './build'
 
 const input = (): ExportInput => {
@@ -57,6 +58,14 @@ describe('engine export of everything (0.28)', () => {
     expect(tree.documents.map((d: { id: string }) => d.id)).toEqual(['warrior', 'warrior_2'])
     expect(tree.documents[0].data.skills[0].image).toBe('images/abc.png')
     expect(files.find((f) => f.path === 'egd/egd_data.gd')!.text).toContain('func tool(type: String')
+  })
+
+  it('writes behaviours as a plain state machine next to the raw data', () => {
+    const files = buildExport({ ...input(), tools: [{ type: 'behaviour', documents: [{ id: 'b1', title: 'Guard', data: createBehaviourDoc() }] }] }, 'json')
+    const doc = JSON.parse(files.find((f) => f.path === 'tools/behaviour.json')!.text).documents[0]
+    expect(doc.id).toBe('guard')
+    expect(doc.stateMachine.states.map((s: { name: string }) => s.name)).toContain('Chase')
+    expect(doc.stateMachine.transitions[0]).toMatchObject({ fromName: 'Idle', toName: 'Chase', priority: 0, join: 'all' })
   })
 
   it('writes Custom Lists with values by field name', () => {

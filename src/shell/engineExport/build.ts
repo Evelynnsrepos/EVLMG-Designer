@@ -1,4 +1,5 @@
 import type { Category, ComponentType, Entity, EntityType, ProjectMeta } from '@/core/model'
+import { toStateMachine, type BehaviourDoc } from '@/components/behaviour/model'
 import { toCSV } from '@/shared/csv'
 
 /**
@@ -186,7 +187,7 @@ export function buildExport(input: ExportInput, engine: Engine): OutFile[] {
       const n = (used.get(id) ?? 0) + 1
       used.set(id, n)
       if (n > 1) id = `${id}_${n}`
-      return { id, uid: d.id, title: d.title, data: relinkAssets(t.type === 'custom-list' ? customListRecords(d.data) : t.type === 'relationships' ? relationshipRecords(d.data, input) : d.data) }
+      return { id, uid: d.id, title: d.title, data: relinkAssets(t.type === 'custom-list' ? customListRecords(d.data) : t.type === 'relationships' ? relationshipRecords(d.data, input) : d.data), ...(t.type === 'behaviour' ? { stateMachine: toStateMachine(d.data as BehaviourDoc, flagName) } : {}) }
     })
     files.push({ path: `${data}tools/${t.type}.json`, text: json({ type: t.type, documents }) })
   }
@@ -213,7 +214,7 @@ export function buildExport(input: ExportInput, engine: Engine): OutFile[] {
 function readme(name: string, engine: Engine) {
   const intro = `# ${name}: data from Eve.Lopment Games Designer\n\nExported ${new Date().toISOString().slice(0, 10)}. Export again after changes; files are overwritten.\n\n`
   const how: Record<Engine, string> = {
-    json: 'Plain JSON files: items, characters, towns, enemies (with stats and categories), quests, dialogues (with conditions and flag changes by flag name), flags, and tools/<tool>.json for the data tools (abilities, skill trees, recipes, loot and banners, waves, achievements, XP curves, economy and more), plus strings.csv for translations. Load them with any JSON library. `uid` fields never change, so use them to match entries across exports.\n',
+    json: 'Plain JSON files: items, characters, towns, enemies (with stats and categories), quests, dialogues (with conditions and flag changes by flag name), flags, and tools/<tool>.json for the data tools (abilities, skill trees, recipes, loot and banners, waves, achievements, XP curves, economy and more; behaviours also come as a plain `stateMachine`), plus strings.csv for translations. Load them with any JSON library. `uid` fields never change, so use them to match entries across exports.\n',
     godot:
       'Godot 4: copy the `egd` folder into your project. Add `egd/egd_data.gd` as an Autoload named `Egd` (Project Settings → Autoload). Then use `Egd.items`, `Egd.find("items", "fire_sword")`, `Egd.quests`, `Egd.flags`, `Egd.tool("skill-tree", "warrior")` and so on. For translations, import `egd/strings.csv` (Godot makes .translation files from it). When you export the game, add `egd/*.json, egd/tools/*.json` to \"Filters to export non-resource files\" in the export preset so the data goes into the build.\n',
     unity:

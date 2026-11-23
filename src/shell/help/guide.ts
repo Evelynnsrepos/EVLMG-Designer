@@ -641,10 +641,13 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
   behaviour: {
     title: 'Behaviour Designer',
     body: [
-      'Draw how an enemy or NPC decides what to do. Each box is a state like Idle, Chase or Search; arrows show when it switches. A new behaviour starts with a zombie example to change.',
-      'S places a state, L draws an arrow: click the first state, then the second. Click a state to name it, say what it does, set its speed and the ability it uses, or make it the start (green outline). Click an arrow to pick its condition: sees the player, hears a noise, loses sight, health below, after some time, time of day, reaches the spot, a flag, or your own words.',
-      'Try it walks through the behaviour: start at the start state and click the condition that becomes true to move on. States that can never be reached are dashed, and states with no way out are listed.',
-      'Used by links the behaviour to enemies and characters. Daily routine is a 24-hour strip for NPCs: where they are and what they do from when to when; a block may run past midnight.',
+      'Draw how an enemy, NPC, companion, boss or any other actor decides what to do. Each box is a state like Idle, Chase or Search; arrows show when it switches. A new behaviour starts with an example creature to change.',
+      'S places a state, G a group, L draws an arrow: click where it starts, then where it goes (the first box glows until you pick the second). Click a state to name it, say what it does, set its speed, the ability it uses, your own fields and what it changes in variables when it enters, or make it the start (thick outline with ▶).',
+      'Click an arrow to give it conditions: sees the target, hears a noise, loses sight, health below, after some time, time of day, reaches the spot, a variable (e.g. alertness >= 3), a flag, your own condition types, or your own words. Add several and pick whether all must be true (and) or one is enough (or); tick "not" to turn one around. An arrow with no condition always goes on. When a state has several arrows out, they are numbered on the canvas and checked in that order: change it with the arrows in the state\'s panel.',
+      'Groups are boxes around states, for phases, modes or a sub-behaviour. An arrow out of a group leaves from every state inside it, so "health below 50%" from Phase 1 to Phase 2 needs one arrow. An arrow into a group goes to its entry state. Dragging a group moves everything inside.',
+      'Variables & fields: variables are numbers the behaviour keeps track of, own fields add anything a state needs (animation, sound, cooldown), own condition types cover what the built-in ones don\'t, and the distance unit (m, tiles, px) is your choice.',
+      'Try it walks through the behaviour: start at the start state and click the arrow that becomes true. Variables count along, and arrows that check only variables say whether they are true now. States that can never be reached are dashed, states with no way out get a red outline.',
+      'Used by links the behaviour to enemies and characters; their pages show it under Behaviour, where you can also add or remove it. Daily routine is a 24-hour strip: drag blocks to move them and their right edge to make them longer, pick the weekdays a block happens on, and which state the character is in. The engine export writes each behaviour as a plain state machine (states, transitions in check order, conditions, variables) next to the raw data.',
     ],
   },
   'live-ops': {
