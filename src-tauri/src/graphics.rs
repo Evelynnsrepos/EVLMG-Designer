@@ -27,9 +27,9 @@ pub fn apply_env() {
   let vars: &[&str] = match read_mode().as_str() {
     "no-dmabuf" => &["WEBKIT_DISABLE_DMABUF_RENDERER"],
     "software" => &["WEBKIT_DISABLE_DMABUF_RENDERER", "WEBKIT_DISABLE_COMPOSITING_MODE", "LIBGL_ALWAYS_SOFTWARE"],
-    // NVIDIA's own driver often shows a blank window with WebKitGTK's DMA-BUF renderer; the older handover works there.
-    _ if std::path::Path::new("/proc/driver/nvidia/version").exists() => &["WEBKIT_DISABLE_DMABUF_RENDERER"],
-    _ => &[],
+    // WebKitGTK's DMA-BUF renderer shows a blank window on NVIDIA and squashes the Draw canvas flat on AMD (Mesa)
+    // when the QuickSelect opens; the older handover still draws on the graphics card and works on both.
+    _ => &["WEBKIT_DISABLE_DMABUF_RENDERER"],
   };
   for v in vars {
     // A value the user set themselves wins.
