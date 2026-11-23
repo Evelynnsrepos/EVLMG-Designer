@@ -1,7 +1,7 @@
 # German interface: word list
 
 Words that must stay the same everywhere in the German interface. Evelynn reviewed these on 2026-11-17, then each
-translated part. Code: `localized(UI_EN, UI_DE)` from `src/shared/i18n`. Translated so far: Settings window, Relationships (needs her review).
+translated part. Code: `localized(UI_EN, UI_DE)` from `src/shared/i18n`. Translated so far: Settings window, Relationships (needs her review), Tool map (needs her review).
 
 | English | German | Note |
 |---|---|---|
@@ -17,6 +17,9 @@ translated part. Code: `localized(UI_EN, UI_DE)` from `src/shared/i18n`. Transla
 | Undo / Redo | Rückgängig / Wiederherstellen | |
 | QuickSelect (was Hotwheel) | QuickSelect | name, same in both languages |
 | Jump point | Sprungpunkt | |
+| Tool map | Werkzeugkarte | new 2026-11-23, needs her review |
+| link (between tools) | Verknüpfung | Tool map |
+| bubble | Blase | Tool map |
 | Layout Mode | Layout-Modus | |
 | Glass look | Glas-Look | |
 | Strong contrast | Starker Kontrast | |

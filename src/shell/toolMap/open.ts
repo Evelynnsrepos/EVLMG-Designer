@@ -24,3 +24,6 @@ export function closeToolMap() {
 }
 
 export const toggleToolMap = () => (useToolMap.getState().open ? closeToolMap() : openToolMap())
+
+/** The element the map gave focus back to on closing; Tab there opens the map again instead of moving focus on. */
+export const quietFocus: { el: HTMLElement | null } = { el: null }
