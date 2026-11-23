@@ -85,7 +85,7 @@ export interface LiveOpsDoc {
   store: StoreSlot[]
   /** Warn when a character is featured again sooner than this many weeks. */
   rerunWeeks: number
-  /** Rows of the person's own (0.31+, optional: older files have none). */
+  /** Rows of the person's own (0.35+, optional: older files have none). */
   rows?: CustomRow[]
 }
 
