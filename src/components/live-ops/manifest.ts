@@ -5,7 +5,7 @@ import type { ComponentManifest } from '@/core/registry'
 export const manifest: ComponentManifest = {
   type: 'live-ops',
   name: 'Live-Service Planner',
-  description: 'The weeks after launch: versions and seasons, events, gacha banners, a battle pass and the store, with warnings for reruns that come too soon.',
+  description: 'The weeks after launch: versions or seasons, events, what is featured when, passes and the store, with warnings when something comes back too soon.',
   icon: CalendarRange,
   specSection: 'Missing tools 4',
   multiDocument: true,
