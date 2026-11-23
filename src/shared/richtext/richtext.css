@@ -636,6 +636,10 @@
 }
 .richtext-style {
   width: auto;
+  /* Same size as the font and size boxes next to it. */
+  height: 28px;
+  padding: 0 6px;
+  font-size: 12px;
 }
 .richtext-ribbon-note {
   font-size: 12px;
