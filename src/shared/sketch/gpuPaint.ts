@@ -1373,7 +1373,11 @@ export class GpuPainter {
       this.canvas.style.height = `${h}px`
     }
     this.into(null, null)
-    gl.viewport(0, 0, cw, ch)
+    // The real drawing buffer: a driver may hand back a smaller one than asked for (low graphics memory), and the
+    // page stretches it to the canvas's CSS size. Drawing for the asked size then showed the picture squashed.
+    const bw = gl.drawingBufferWidth
+    const bh = gl.drawingBufferHeight
+    gl.viewport(0, 0, bw, bh)
     gl.disable(gl.BLEND)
     gl.clearColor(0, 0, 0, 0)
     gl.clear(gl.COLOR_BUFFER_BIT)
@@ -1400,7 +1404,7 @@ export class GpuPainter {
       // In the same canvas as the drawing, so the page has no extra layer that could flicker or cover it.
       const pp = this.prog('paper')
       this.bind(1, paperTex, pp, 'paper')
-      this.set(pp, { doc: [this.width, this.height], rect: [paper.frame.x, paper.frame.y, paper.frame.w, paper.frame.h], toClip, screen: [cw, ch] })
+      this.set(pp, { doc: [this.width, this.height], rect: [paper.frame.x, paper.frame.y, paper.frame.w, paper.frame.h], toClip, screen: [bw, bh] })
       this.drawQuad()
       gl.enable(gl.BLEND)
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
