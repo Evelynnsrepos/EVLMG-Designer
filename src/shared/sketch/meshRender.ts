@@ -1,4 +1,4 @@
-import { buildMesh, type XfState } from './transform'
+import { buildMesh, curved, type XfState } from './transform'
 
 /**
  * Draws lifted pixels through a transform mesh (Sketch Pro) with nearest, bilinear or
@@ -117,7 +117,7 @@ export function renderMesh(src: HTMLCanvasElement, s: XfState, out: CanvasRender
       c.pixelStorei(c.UNPACK_FLIP_Y_WEBGL, false)
       c.texImage2D(c.TEXTURE_2D, 0, c.RGBA8, c.RGBA, c.UNSIGNED_BYTE, src)
     }
-    const mesh = buildMesh(s, s.warp ? 32 : 16)
+    const mesh = buildMesh(s, curved(s) ? 32 : 16)
     c.bindBuffer(c.ARRAY_BUFFER, g.pos)
     c.bufferData(c.ARRAY_BUFFER, mesh.pos, c.DYNAMIC_DRAW)
     c.enableVertexAttribArray(0)
@@ -131,8 +131,11 @@ export function renderMesh(src: HTMLCanvasElement, s: XfState, out: CanvasRender
     c.uniform2f(loc('size'), W, H)
     c.uniform4f(loc('box'), s.src.x, s.src.y, s.src.w, s.src.h)
     c.uniform1i(loc('mode'), mode === 'nearest' ? 0 : mode === 'bilinear' ? 1 : 2)
-    c.disable(c.BLEND)
+    // Blended (premultiplied), so a molded part folded over another keeps what shows through its see-through pixels.
+    c.enable(c.BLEND)
+    c.blendFunc(c.ONE, c.ONE_MINUS_SRC_ALPHA)
     c.drawArrays(c.TRIANGLES, 0, mesh.pos.length / 2)
+    c.disable(c.BLEND)
     out.drawImage(g.canvas, 0, 0)
   } else drawTriangles(src, s, out, mode)
   out.restore()
@@ -140,7 +143,7 @@ export function renderMesh(src: HTMLCanvasElement, s: XfState, out: CanvasRender
 
 /** Canvas 2D fallback: each mesh triangle drawn with its own affine transform. */
 function drawTriangles(src: HTMLCanvasElement, s: XfState, out: CanvasRenderingContext2D, mode: Interpolation) {
-  const mesh = buildMesh(s, s.warp ? 16 : 1)
+  const mesh = buildMesh(s, curved(s) ? 16 : 8)
   out.imageSmoothingEnabled = mode !== 'nearest'
   out.imageSmoothingQuality = mode === 'bicubic' ? 'high' : 'low'
   const { x: bx, y: by, w: bw, h: bh } = s.src

@@ -1,3 +1,5 @@
+import { choiceDialog } from '@/shared/dialogs'
+import { hasAnimatedLayers, mapWiggle } from '../animatedLayers'
 import { Crop, Download, FileUp, Film, PictureInPicture2 } from 'lucide-react'
 import { frameOf } from '../growth'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
@@ -33,6 +35,10 @@ const UI = {
   ] as { id: ExportFormat; label: string }[],
   animTitle: 'Animation: each visible top-level layer or group is one frame',
   animAssist: 'Animation: the Animation Assist frames, at its speed',
+  animLayers: 'Animation: one loop of the animated layers, at their speed',
+  stillTitle: 'This drawing moves',
+  stillMessage: 'It has animated layers. A still picture keeps only their first frame. Export the moving loop instead?',
+  stillChoices: ['Animated GIF', 'Still picture (first frame)'],
   animFormats: [
     { id: 'gif', label: 'Animated GIF' },
     { id: 'apng', label: 'Animated PNG' },
@@ -157,7 +163,11 @@ export function useSketchFiles(host: FilesHost) {
           ...d,
           width: c.width,
           height: c.height,
-          layers: d.layers.map((l) => (paths.has(l.id) ? { ...l, image: paths.get(l.id)! } : l)),
+          // 0.35: Animated layers' strokes go along. shortcut: brush sizes are not scaled with a resample; rasterize first for that.
+          layers: d.layers.map((l) => {
+            const moved = l.wiggle ? { ...l, wiggle: mapWiggle(l.wiggle, (p) => mapPoint(c, p)) } : l
+            return paths.has(l.id) ? { ...moved, image: paths.get(l.id)! } : moved
+          }),
           sticker,
           ...(d.selections ? { selections } : {}),
           ...(guide ? { guide } : {}),
@@ -242,6 +252,12 @@ export function useSketchFiles(host: FilesHost) {
   const exportAs = async (format: ExportFormat) => {
     setMenu(false)
     const { engine, doc, title } = hostRef.current
+    // 0.35: animated layers aren't a regular image; a still export says so first.
+    if (!['gif', 'apng', 'webm'].includes(format) && hasAnimatedLayers(exportLayers(doc.layers))) {
+      const pick = await choiceDialog({ title: UI.stillTitle, message: UI.stillMessage, choices: UI.stillChoices })
+      if (pick === null) return
+      if (pick === 0) format = 'gif'
+    }
     setBusy(true)
     try {
       const file = await exportDrawing(format, engine, doc, fps)
@@ -280,14 +296,14 @@ export function useSketchFiles(host: FilesHost) {
                 {f.label}
               </button>
             ))}
-            <div className="sketch-files-menu-head">{doc.animation?.on ? UI.animAssist : UI.animTitle}</div>
+            <div className="sketch-files-menu-head">{doc.animation?.on ? UI.animAssist : hasAnimatedLayers(doc.layers) ? UI.animLayers : UI.animTitle}</div>
             {UI.animFormats.map((f) => (
               <button key={f.id} onClick={() => void exportAs(f.id)}>
                 {f.label}
                 {f.id === 'webm' && !canEncodeVideo() ? ' (GIF here)' : ''}
               </button>
             ))}
-            <label className="sketch-files-fps" hidden={!!doc.animation?.on}>
+            <label className="sketch-files-fps" hidden={!!doc.animation?.on || hasAnimatedLayers(doc.layers)}>
               {UI.fps}
               <select className="input" value={fps} onChange={(e) => setFps(Number(e.target.value))}>
                 {[2, 4, 6, 8, 12, 15, 24, 30].map((n) => (

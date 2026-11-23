@@ -78,7 +78,7 @@ export const pluginApi = {
   promptDialog,
   RichTextEditor,
   newId,
-  // v0.18 Hotwheel (additions to API 1)
+  // v0.18 QuickSelect (additions to API 1)
   useHotwheel,
   addHotwheelAction,
   openHotwheel,

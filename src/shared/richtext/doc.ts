@@ -4,6 +4,11 @@ import type { RefTarget, RichTextDoc } from './types'
 
 /** Pure helpers for stored rich text. They need no DOM, so writers, exporters and tests can run anywhere. */
 
+/** 0.35: how the Writer's page break, table of contents and HTML-only marks are written in Markdown. */
+export const PAGE_BREAK_HTML = '<div style="page-break-after: always"></div>'
+export const TOC_MARK = '[TOC]'
+export const SMALL_CAPS_HTML = '<span style="font-variant: small-caps">'
+
 export const REF_NODE = 'ref'
 /** `![[Name]]`: a jump card to a document, article or entry, on its own line (0.19). */
 export const REF_CARD_NODE = 'refCard'
@@ -61,9 +66,9 @@ export type LabelResolver = (target: RefTarget) => string | undefined
 export const MISSING_REF_LABEL = 'missing link'
 
 /** A link's shown text: its own text from `[[Name|text]]`, else the target's current name. */
-const refLabel = (n: RichTextDoc, resolve?: LabelResolver) =>
+export const refLabel = (n: RichTextDoc, resolve?: LabelResolver) =>
   (n.attrs?.text as string | null) || (resolve?.({ kind: n.attrs?.kind, id: n.attrs?.id }) ?? MISSING_REF_LABEL)
-const targetLabel = (n: RichTextDoc, resolve?: LabelResolver) => resolve?.({ kind: n.attrs?.kind, id: n.attrs?.id }) ?? MISSING_REF_LABEL
+export const targetLabel = (n: RichTextDoc, resolve?: LabelResolver) => resolve?.({ kind: n.attrs?.kind, id: n.attrs?.id }) ?? MISSING_REF_LABEL
 
 const hasMark = (n: RichTextDoc, type: string) => n.marks?.some((m) => m.type === type) ?? false
 
@@ -73,7 +78,7 @@ export function countRichTextWords(doc: RichTextDoc, resolve?: LabelResolver): n
 }
 
 function inlineText(n: RichTextDoc, resolve?: LabelResolver, forCount = false): string {
-  if (n.type === 'text') return hasMark(n, 'comment') || (forCount && hasMark(n, 'tag')) ? '' : (n.text ?? '')
+  if (n.type === 'text') return hasMark(n, 'comment') || hasMark(n, 'deletion') || (forCount && hasMark(n, 'tag')) ? '' : (n.text ?? '')
   if (n.type === REF_NODE) return refLabel(n, resolve)
   if (n.type === 'hardBreak') return '\n'
   if (n.type === 'footnote') return ''
@@ -141,6 +146,8 @@ function inlineMarkdown(nodes: RichTextDoc[] | undefined, resolve?: LabelResolve
       if (n.type !== 'text') return inlineMarkdown(n.content, resolve, note)
       const marks = n.marks ?? []
       const has = (type: string) => marks.some((m) => m.type === type)
+      // Text crossed out by track changes is left out, as if accepted.
+      if (has('deletion')) return ''
       if (has('tag')) return n.text ?? ''
       let text = has('code') ? '`' + (n.text ?? '') + '`' : escapeMarkdown(n.text ?? '')
       if (has('comment')) return `%%${n.text ?? ''}%%`
@@ -149,6 +156,9 @@ function inlineMarkdown(nodes: RichTextDoc[] | undefined, resolve?: LabelResolve
       if (has('italic')) text = `*${text}*`
       if (has('underline')) text = `<u>${text}</u>`
       if (has('strike')) text = `~~${text}~~`
+      if (has('superscript')) text = `<sup>${text}</sup>`
+      if (has('subscript')) text = `<sub>${text}</sub>`
+      if (has('smallCaps')) text = `${SMALL_CAPS_HTML}${text}</span>`
       const link = marks.find((m) => m.type === 'link')
       if (link?.attrs?.href) text = `[${text}](${link.attrs.href})`
       return text
@@ -199,6 +209,10 @@ export function richTextToMarkdown(doc: RichTextDoc, resolve?: LabelResolver): s
         return [`${lead}\`\`\`\n${inlineText(n)}\n\`\`\``]
       case 'horizontalRule':
         return [`${lead}---`]
+      case 'pageBreak':
+        return [lead + PAGE_BREAK_HTML]
+      case 'tableOfContents':
+        return [lead + TOC_MARK]
       case 'image':
         return [`${lead}![${escapeMarkdown(n.attrs?.alt ?? '')}](${n.attrs?.src ?? ''})`]
       default:
@@ -207,6 +221,19 @@ export function richTextToMarkdown(doc: RichTextDoc, resolve?: LabelResolver): s
   }
   const body = render(doc, '', '').join('\n\n').trim()
   return body + (notes.length ? '\n\n' + notes.map((note, i) => `[^${i + 1}]: ${note}`).join('\n') : '') + '\n'
+}
+
+/** Alignment and indent of a paragraph or heading (0.35) as a style attribute. */
+const blockStyle = (n: RichTextDoc) => {
+  const css = `${n.attrs?.textAlign ? `text-align:${n.attrs.textAlign};` : ''}${n.attrs?.indent ? `margin-left:${n.attrs.indent * 2}em;` : ''}${n.attrs?.lineHeight ? `line-height:${n.attrs.lineHeight};` : ''}`
+  return css ? ` style="${escapeHtml(css)}"` : ''
+}
+
+/** Every heading of the document, in order. */
+function tocOf(doc: RichTextDoc) {
+  const list: { level: number; text: string }[] = []
+  walk(doc, (n) => void (n.type === 'heading' && list.push({ level: n.attrs?.level ?? 1, text: inlineText(n) })))
+  return list
 }
 
 export const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -221,7 +248,7 @@ export function richTextToHtml(doc: RichTextDoc, resolve?: LabelResolver, image:
         if (n.type === 'hardBreak') return '<br>'
         if (n.type === 'footnote') return `<sup title="${escapeHtml(n.attrs?.note ?? '')}">${++noteCount}</sup>`
         if (n.type !== 'text') return inline(n.content)
-        if (hasMark(n, 'comment')) return ''
+        if (hasMark(n, 'comment') || hasMark(n, 'deletion')) return ''
         const marks = n.marks ?? []
         let html = escapeHtml(n.text ?? '')
         for (const m of marks) {
@@ -230,7 +257,11 @@ export function richTextToHtml(doc: RichTextDoc, resolve?: LabelResolver, image:
           else if (m.type === 'underline') html = `<u>${html}</u>`
           else if (m.type === 'strike') html = `<s>${html}</s>`
           else if (m.type === 'code') html = `<code>${html}</code>`
-          else if (m.type === 'highlight') html = `<mark>${html}</mark>`
+          else if (m.type === 'highlight') html = m.attrs?.color ? `<mark style="background:${escapeHtml(m.attrs.color)}">${html}</mark>` : `<mark>${html}</mark>`
+          else if (m.type === 'superscript') html = `<sup>${html}</sup>`
+          else if (m.type === 'subscript') html = `<sub>${html}</sub>`
+          else if (m.type === 'smallCaps') html = `<span style="font-variant:small-caps">${html}</span>`
+          else if (m.type === 'textColor' && m.attrs?.color) html = `<span style="color:${escapeHtml(m.attrs.color)}">${html}</span>`
           else if (m.type === 'tag') html = `<span class="tag">${html}</span>`
           else if (m.type === 'link' && /^https?:/i.test(m.attrs?.href ?? '')) html = `<a href="${escapeHtml(m.attrs!.href)}">${html}</a>`
           else if (m.type === 'font') html = `<span style="${escapeHtml(fontStyle(m.attrs?.family, m.attrs?.size))}">${html}</span>`
@@ -248,7 +279,7 @@ export function richTextToHtml(doc: RichTextDoc, resolve?: LabelResolver, image:
       case 'heading': {
         // Article headings sit below the book's own h1/h2.
         const level = Math.min(6, (n.attrs?.level ?? 1) + 2)
-        return `<h${level}>${inline(n.content)}</h${level}>`
+        return `<h${level}${blockStyle(n)}>${inline(n.content)}</h${level}>`
       }
       case 'bulletList':
         return `<ul>${inner()}</ul>`
@@ -267,21 +298,30 @@ export function richTextToHtml(doc: RichTextDoc, resolve?: LabelResolver, image:
       case 'tableRow':
         return `<tr>${inner()}</tr>`
       case 'tableHeader':
-        return `<th>${inner()}</th>`
-      case 'tableCell':
-        return `<td>${inner()}</td>`
+      case 'tableCell': {
+        const tag = n.type === 'tableHeader' ? 'th' : 'td'
+        const span = (n.attrs?.colspan ?? 1) > 1 ? ` colspan="${n.attrs!.colspan}"` : ''
+        const bg = n.attrs?.background ? ` style="background:${escapeHtml(n.attrs.background)}"` : ''
+        return `<${tag}${span}${bg}>${inner()}</${tag}>`
+      }
       case REF_CARD_NODE:
         return `<p class="ref">${escapeHtml(targetLabel(n, resolve))}</p>`
       case 'codeBlock':
         return `<pre><code>${escapeHtml(inlineText(n))}</code></pre>`
       case 'horizontalRule':
         return '<hr>'
+      case 'pageBreak':
+        return '<div style="break-after:page"></div>'
+      case 'tableOfContents':
+        return `<ul class="toc">${tocOf(doc)
+          .map((h) => `<li style="margin-left:${(h.level - 1) * 1.2}em">${escapeHtml(h.text)}</li>`)
+          .join('')}</ul>`
       case 'image':
         if (!n.attrs?.src) return ''
         if (!n.attrs.width && !n.attrs.align) return `<img src="${escapeHtml(image(n.attrs.src))}" alt="${escapeHtml(n.attrs?.alt ?? '')}">`
         return `<div style="${imageStyle(n.attrs.width, n.attrs.align)}"><img style="width:100%" src="${escapeHtml(image(n.attrs.src))}" alt="${escapeHtml(n.attrs?.alt ?? '')}"></div>`
       default:
-        return `<p>${inline(n.content)}</p>`
+        return `<p${blockStyle(n)}>${inline(n.content)}</p>`
     }
   }
   return block(doc)

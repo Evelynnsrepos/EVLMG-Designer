@@ -56,6 +56,21 @@ export function assetPaths(v: unknown, out = new Set<string>()): Set<string> {
   return out
 }
 
+/** Relationships for a game: names next to every id (who, towards, gifts, flag), since a game can't look ids up. */
+export function relationshipRecords(data: unknown, input: Pick<ExportInput, 'entities' | 'flags' | 'tools'>) {
+  const d = data as { items?: { characterId: string | null; fromId?: string | null; gifts?: { itemId: string; mood: string }[]; flagId?: string | null }[]; moods?: { id: string; label: string }[] }
+  const names = new Map<string, string>()
+  for (const list of Object.values(input.entities)) for (const e of list) names.set(e.id, e.name)
+  for (const t of input.tools ?? []) if (t.type === 'factions') for (const doc of t.documents) for (const f of (doc.data as { items?: { id: string; name: string }[] }).items ?? []) names.set(f.id, f.name)
+  const flag = (id?: string | null) => (id ? (input.flags?.find((f) => f.id === id)?.name ?? null) : null)
+  const mood = (id: string) => d.moods?.find((m) => m.id === id)?.label ?? id
+  const named = (id?: string | null) => (id ? (names.get(id) ?? null) : null)
+  return {
+    ...d,
+    items: (d.items ?? []).map((b) => ({ ...b, characterName: named(b.characterId), fromName: b.fromId ? named(b.fromId) : 'player', gifts: (b.gifts ?? []).map((g) => ({ ...g, itemName: named(g.itemId), moodName: mood(g.mood) })), flagName: flag(b.flagId) })),
+  }
+}
+
 /** A Custom List for a game: values by field name (not field id), entry ids made from names, links as entry uids. */
 export function customListRecords(data: unknown) {
   const d = data as { one?: string; fields?: { id: string; name: string; kind: string }[]; items?: { id: string; name: string; image: string | null; values: Record<string, unknown> }[] }
@@ -171,7 +186,7 @@ export function buildExport(input: ExportInput, engine: Engine): OutFile[] {
       const n = (used.get(id) ?? 0) + 1
       used.set(id, n)
       if (n > 1) id = `${id}_${n}`
-      return { id, uid: d.id, title: d.title, data: relinkAssets(t.type === 'custom-list' ? customListRecords(d.data) : d.data) }
+      return { id, uid: d.id, title: d.title, data: relinkAssets(t.type === 'custom-list' ? customListRecords(d.data) : t.type === 'relationships' ? relationshipRecords(d.data, input) : d.data) }
     })
     files.push({ path: `${data}tools/${t.type}.json`, text: json({ type: t.type, documents }) })
   }

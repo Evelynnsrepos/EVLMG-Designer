@@ -39,12 +39,12 @@ export interface AppSettings {
   shortcuts: Record<string, string[]>
   /** v0.18: size of each tool in percent (by tool type), e.g. bigger for a graphics tablet; missing = 100. */
   toolScale: Record<string, number>
-  /** v0.18: the Hotwheel (hold Q). */
+  /** v0.18: the QuickSelect (hold Q). */
   hotwheel: HotwheelSettings
   /** 0.19: new Writer documents start with the Markdown Syntax switch on. */
   writerMarkdownSyntax: boolean
   /** Writer reading comfort: text size (px), line spacing, page width (px, 0 = full) and the open side panel. */
-  writerView: { size: number; spacing: number; width: number; side: '' | 'outline' | 'help' }
+  writerView: { size: number; spacing: number; width: number; side: '' | 'outline' | 'help' | 'review'; /** 0.35: show the text on a sheet of paper. */ paper?: boolean }
   /** 0.20: the GitHub user Git saving makes repositories for; '' = GitHub not connected on this computer. */
   githubLogin: string
   /** Hotkey hint mode, every button with a key shows it in its corner. On unless turned off in Settings. */

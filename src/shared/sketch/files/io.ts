@@ -1,3 +1,4 @@
+import { fpsOf, framesOf } from '../animatedLayers'
 import { zipSync } from 'fflate'
 import { frameOf, toFrame } from '../growth'
 import { resolveAssetPath } from '@/core/assets'
@@ -128,9 +129,11 @@ function flat(engine: SketchEngine, doc: SketchDoc, background: string | null): 
 export function layerFrames(engine: SketchEngine, doc: SketchDoc): (() => HTMLCanvasElement)[] {
   const layers = exportLayers(doc.layers)
   const f = frameOf(doc)
-  const draw = (stack: SketchDoc['layers']) => () => {
+  // 0.35: animated layers move along: frame i of the export shows their frame i (they loop).
+  const draw = (stack: SketchDoc['layers'], i = 0) => () => {
     const { canvas, ctx } = makeCanvas(f.w, f.h)
-    ctx.drawImage(engine.render({ layers: stack, backgroundColor: doc.backgroundColor }, true), -f.x, -f.y)
+    const d = { layers: stack, backgroundColor: doc.backgroundColor }
+    ctx.drawImage(engine.animated ? engine.renderFrame(d, true, i) : engine.render(d, true), -f.x, -f.y)
     return canvas
   }
   if (doc.animation?.on) {
@@ -139,11 +142,24 @@ export function layerFrames(engine: SketchEngine, doc: SketchDoc): (() => HTMLCa
     const frames = playable(ids.length, a)
     // Background and foreground frames show under / over every frame.
     const fixed = ids.map((_, i) => i).filter((i) => !frames.includes(i))
-    return sequence(ids, frames, a.holds, a.mode).map((f) => draw(showFrames(layers, ids, [...fixed, f])))
+    return sequence(ids, frames, a.holds, a.mode).map((f, i) => draw(showFrames(layers, ids, [...fixed, f]), i))
   }
+  // Animated layers without Animation Assist: one loop of their frames.
+  const loop = animatedLoop(layers)
+  if (loop) return [...Array(loop.frames)].map((_, i) => draw(layers, i))
   return layerTree(layers)
     .filter((n) => n.layer.visible)
     .map((n) => draw(subtreeStack(layers, n.layer.id)))
+}
+
+/** Frames and speed of the drawing's animated layers (one full loop, the first layer's speed); null = none. */
+export function animatedLoop(layers: SketchDoc['layers']): { frames: number; fps: number } | null {
+  const anim = layers.filter((l) => l.wiggle && l.visible)
+  if (!anim.length) return null
+  // Every layer's loop fits a whole number of times (4 and 6 frames → 12), so none of them jumps.
+  const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a)
+  const frames = anim.reduce((n, l) => Math.min(120, (n * framesOf(l.wiggle!)) / gcd(n, framesOf(l.wiggle!))), 1)
+  return { frames, fps: fpsOf(anim[0].wiggle!) }
 }
 
 export async function exportDrawing(format: ExportFormat, engine: SketchEngine, doc: SketchDoc, fps = 8): Promise<Exported> {
@@ -180,6 +196,7 @@ export async function exportDrawing(format: ExportFormat, engine: SketchEngine, 
     default: {
       const frames = layerFrames(engine, doc)
       if (doc.animation?.on) fps = normalizeAnimation(doc.animation).fps
+      else fps = animatedLoop(exportLayers(doc.layers))?.fps ?? fps
       return encodeAnimation(
         format,
         width,

@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Ellipsis, Eye, EyeOff, Folder, FolderPlus, ListChecks, Lock, Merge, Plus, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { CornerDownRight, Grid2x2, ArrowDown, ArrowUp, Circle, Contrast, Diff, Moon, Palette, Sun, ChevronDown, ChevronRight, CircleDashed, Type as LetterIcon, Ellipsis, Eye, EyeOff, Folder, FolderPlus, ListChecks, Lock, Merge, Plus, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react'
 import { dragFromRowOnly } from '@/shared/dragGuard'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Id } from '@/core/model'
@@ -25,7 +25,13 @@ import {
   ungroup,
 } from './layers'
 import './layers.css'
+import { rasterized } from './animatedLayers'
 import { FilterControls } from './adjust/AdjustStudio'
+import { OutlineDialog } from './OutlineDialog'
+import { AsciiDialog, rememberedAscii, type AsciiStart } from './AsciiDialog'
+import { ASCII_FORMATS, asciiGridOf, exportAscii, type AsciiFormat } from './asciiExport'
+import type { AdjustValues } from './adjust/filters'
+import type { OutlineSettings } from './outline'
 import { defaultValues, filterDef } from './adjust/filters'
 import type { LayerAdjust } from './model'
 import { BLEND_MODES, newLayer, nextLayerName, updateLayer, type BlendMode, type SketchDoc, type SketchLayer } from './model'
@@ -48,6 +54,8 @@ const UI = {
   groupPicked: 'Group',
   deletePicked: 'Delete',
   rename: 'Rename',
+  rasterize: 'Make it a normal still layer (stops the animation)',
+  animated: 'Animated layer: it moves. Click for its settings and exports',
   selectContents: 'Select contents',
   copy: 'Copy',
   paste: 'Paste as new layer',
@@ -77,6 +85,22 @@ const UI = {
   deleteTitle: (n: string) => `Delete ${n}?`,
   deleteMsg: 'The layer and its drawing are removed.',
   deleteMany: (n: number) => `Delete ${n} layers?`,
+  newOutline: 'New outline layer: everything you draw on it gets an outline',
+  outlineName: 'Outline layer',
+  makeOutline: 'Make outline layer',
+  outlineSettings: 'Outline settings',
+  rasterizeOutline: 'Rasterize outline (normal layer again)',
+  isOutline: 'Outline layer: edit the outline',
+  newAscii: 'New ASCII layer: everything you paint on it is shown as letters (or turn a layer or the picture into letters)',
+  asciiName: 'ASCII layer',
+  makeAscii: 'Make ASCII layer',
+  asciiSettings: 'ASCII settings and export',
+  rasterizeAscii: 'Rasterize letters (normal layer again)',
+  isAscii: 'ASCII layer: letters, settings and export',
+  exportAscii: 'Export the letters',
+  blend: 'Blend mode',
+  moveUp: 'Move up',
+  moveDown: 'Move down',
 }
 
 /** What the layer list needs from the editor. */
@@ -93,6 +117,8 @@ export interface LayerHost {
   discard(layers: SketchLayer[]): void
   /** v0.17: change the layer list as one undo step together with the pixel edit just made on `layerId`. */
   restructure(layers: SketchLayer[], layerId: Id, pushesBefore: number): void
+  /** 0.35: open the active Animated layer's settings. */
+  openAnimated?(): void
   limit: number
   /** The layer the Layer picker points at, highlighted in the list. */
   pointedId?: Id | null
@@ -109,6 +135,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
   // Picks of layers that are gone are dropped.
   const picked = new Set([...pickedRaw].filter((id) => doc.layers.some((l) => l.id === id)))
   const [menu, setMenu] = useState<{ id: Id; x: number; y: number } | null>(null)
+  const [blendMenu, setBlendMenu] = useState<{ id: Id; x: number; y: number } | null>(null)
   const [drop, setDrop] = useState<{ id: Id; where: 'above' | 'below' | 'inside' } | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const rows = layerRows(doc.layers)
@@ -116,6 +143,65 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
   const count = doc.layers.filter((l) => !isGroup(l)).length
 
   const set = (id: Id, patch: Partial<SketchLayer>) => update((d) => updateLayer(d, id, patch))
+
+  // 0.35: outline layers. 'new' = the dialog for a new outline layer.
+  const [outlineFor, setOutlineFor] = useState<Id | 'new' | null>(null)
+  const outlineLayer = outlineFor && outlineFor !== 'new' ? doc.layers.find((l) => l.id === outlineFor) : undefined
+  const setOutline = (id: Id, o: OutlineSettings | null) =>
+    update((d) => ({
+      ...d,
+      layers: d.layers.map((l) => {
+        if (l.id !== id) return l
+        const { outline: _, ...rest } = l
+        return o ? { ...rest, outline: o } : rest
+      }),
+    }))
+  /** Paint the outline into the layer's pixels, as one undo step with the layer turning normal. */
+  const rasterizeOutline = (l: SketchLayer) => {
+    const { outline: _, ...plain } = l
+    const pushes = engine.pushes
+    host.markDirty(engine.mergeInto([{ ...l, opacity: 1, blend: 'source-over', clip: false, visible: true, parent: null }], l.id))
+    host.restructure(doc.layers.map((x) => (x.id === l.id ? plain : x)), l.id, pushes)
+  }
+
+  // 0.35: ASCII layers. 'new' = the dialog for a new ASCII layer.
+  const [asciiFor, setAsciiFor] = useState<Id | 'new' | null>(null)
+  const asciiLayer = asciiFor && asciiFor !== 'new' ? doc.layers.find((l) => l.id === asciiFor) : undefined
+  const setAscii = (id: Id, a: AdjustValues | null) =>
+    update((d) => ({
+      ...d,
+      layers: d.layers.map((l) => {
+        if (l.id !== id) return l
+        const { ascii: _, ...rest } = l
+        return a ? { ...rest, ascii: a } : rest
+      }),
+    }))
+  /** Paint the letters into the layer's pixels, as one undo step with the layer turning normal. */
+  const rasterizeAscii = (l: SketchLayer) => {
+    const { ascii: _, ...plain } = l
+    const pushes = engine.pushes
+    host.markDirty(engine.mergeInto([{ ...l, opacity: 1, blend: 'source-over', clip: false, visible: true, parent: null }], l.id))
+    host.restructure(doc.layers.map((x) => (x.id === l.id ? plain : x)), l.id, pushes)
+  }
+  /** A new ASCII layer above the active one: empty, or with a copy of the active layer or of the whole picture. */
+  const newAscii = (a: AdjustValues, start: AsciiStart) => {
+    if (count >= host.limit) return
+    const layer: SketchLayer = { ...newLayer(UI.asciiName), ascii: a }
+    host.adopt(layer.id)
+    const from = startArt(start)
+    engine.setLayerImage(layer.id, from)
+    update((d) => ({ ...d, layers: insertAbove(d.layers, layer, host.activeId) }))
+    host.setActive(layer.id)
+    if (from) host.markDirty(layer.id)
+  }
+  /** What a new ASCII layer starts from (also its preview). */
+  const startArt = (start: AsciiStart) => (start === 'layer' && host.activeId ? engine.layerCanvas(host.activeId) : start === 'picture' ? engine.render({ ...doc, layers: doc.layers.filter((l) => !l.private) }, false) : null)
+  /** The letters of an ASCII layer, or of the picture below an ASCII adjustment layer. */
+  const asciiExport = (l: SketchLayer, format: AsciiFormat, a: AdjustValues) => {
+    const below = doc.layers.slice(0, doc.layers.findIndex((x) => x.id === l.id))
+    const px = l.kind === 'adjust' ? engine.render({ ...doc, layers: below }, true) : engine.layerCanvas(l.id)
+    return exportAscii(asciiGridOf(px, a), format, `${host.title} ${l.name}`)
+  }
 
   /** A new pixel layer above `aboveId`, optionally filled by `paint`. */
   const addLayer = (paint?: (ctx: CanvasRenderingContext2D) => void, name = nextLayerName(doc)) => {
@@ -178,7 +264,8 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
 
   /** Merge `ids` (bottom to top, groups included) into the lowest pixel layer among them. */
   const mergeInto = (target: SketchLayer, ids: Id[]) => {
-    const stack = [{ ...target, opacity: 1, blend: 'source-over' as BlendMode, clip: false, visible: true, parent: null }, ...ids.flatMap((id) => subtreeStack(doc.layers, id))]
+    // An outline layer receiving others keeps its outline as a setting (it is not painted in).
+    const stack = [{ ...target, opacity: 1, blend: 'source-over' as BlendMode, clip: false, visible: true, parent: null, outline: undefined }, ...ids.flatMap((id) => subtreeStack(doc.layers, id))]
     const pushes = engine.pushes
     host.markDirty(engine.mergeInto(stack, target.id))
     let layers = doc.layers
@@ -275,12 +362,17 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
     const below = siblingBelow(doc.layers, l.id)
     const items: (Item | false)[] = [
       { label: UI.rename, run: () => void promptDialog(UI.rename, l.name).then((n) => n?.trim() && set(l.id, { name: n.trim() })) },
+      !!l.wiggle && { label: UI.rasterize, run: () => update((d) => ({ ...d, layers: d.layers.map((x) => (x.id === l.id ? rasterized(x) : x)) })) },
       !group && { label: UI.selectContents, run: () => host.selectFrom(engine.layerCanvas(l.id)) },
       !group && { label: UI.copy, run: () => copyPixels(engine.layerCanvas(l.id)) },
       { label: UI.paste, run: paste, off: !copiedPixels() },
       !group && { label: UI.fill, run: () => host.markDirty(engine.fill(l.id, host.color, l.alphaLock)) },
       !group && { label: UI.clear, run: () => host.markDirty(engine.clear(l.id)) },
       !group && { label: UI.invert, run: () => host.markDirty(engine.invert(l.id)) },
+      !group && !mask && { label: l.outline ? UI.outlineSettings : UI.makeOutline, run: () => setOutlineFor(l.id) },
+      !!l.outline && { label: UI.rasterizeOutline, run: () => rasterizeOutline(l) },
+      !group && !mask && { label: l.ascii ? UI.asciiSettings : UI.makeAscii, run: () => (l.ascii || setAscii(l.id, rememberedAscii(engine.width, engine.height)), setAsciiFor(l.id)) },
+      !!l.ascii && { label: UI.rasterizeAscii, run: () => rasterizeAscii(l) },
       !mask && { label: UI.duplicate, run: () => duplicate(l.id) },
       !group && !mask && { label: UI.alphaLock, run: () => set(l.id, { alphaLock: !l.alphaLock }), on: l.alphaLock },
       !mask && { label: UI.clip, run: () => set(l.id, { clip: !l.clip }), on: l.clip },
@@ -328,6 +420,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
   }
 
   const shownMenu = menu && doc.layers.find((l) => l.id === menu.id)
+  const blendLayer = blendMenu && doc.layers.find((l) => l.id === blendMenu.id)
 
   return (
     <section className="sketch-layers">
@@ -353,7 +446,7 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
           </button>
           {adjustMenu && (
             <div className="menu sketch-adjust-menu">
-              {(['hsb', 'balance', 'curves', 'gradient'] as const).map((id) => (
+              {(['hsb', 'balance', 'curves', 'gradient', 'ascii'] as const).map((id) => (
                 <button key={id} onClick={() => addAdjust(id)}>
                   {filterDef(id).label}
                 </button>
@@ -361,6 +454,12 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
             </div>
           )}
         </span>
+        <button className="icon-btn sketch-tool" title={UI.newAscii} aria-label={UI.newAscii} onClick={() => count < host.limit && setAsciiFor('new')}>
+          <LetterIcon size={16} />
+        </button>
+        <button className="icon-btn sketch-tool" title={UI.newOutline} aria-label={UI.newOutline} onClick={() => count < host.limit && setOutlineFor('new')}>
+          <CircleDashed size={16} />
+        </button>
         <button className="icon-btn sketch-tool" title={UI.addGroup} aria-label={UI.addGroup} onClick={addGroup}>
           <FolderPlus size={16} />
         </button>
@@ -376,6 +475,15 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
       {active?.kind === 'adjust' && active.adjust && (
         <div className="sketch-adjust-settings">
           <FilterControls id={active.adjust.id} values={active.adjust.values} onChange={(values) => set(active.id, { adjust: { ...active.adjust!, values } })} />
+          {active.adjust.id === 'ascii' && (
+            <div className="sketch-outline-row" aria-label={UI.exportAscii}>
+              {ASCII_FORMATS.map((f) => (
+                <button key={f.id} className="btn btn-ghost sketch-small" title={f.title} onClick={() => void asciiExport(active, f.id, active.adjust!.values)}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {picked.size > 1 && (
@@ -454,6 +562,46 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
                   </span>
                 )}
                 <span className="sketch-layer-name">{l.name}</span>
+                {l.ascii && (
+                  <button
+                    className="icon-btn sketch-outline-btn"
+                    title={UI.isAscii}
+                    aria-label={UI.isAscii}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setAsciiFor(l.id)
+                    }}
+                  >
+                    <LetterIcon size={12} />
+                  </button>
+                )}
+                {l.outline && (
+                  <button
+                    className="icon-btn sketch-outline-btn"
+                    title={UI.isOutline}
+                    aria-label={UI.isOutline}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setOutlineFor(l.id)
+                    }}
+                  >
+                    <CircleDashed size={12} />
+                  </button>
+                )}
+                {l.wiggle && (
+                  <button
+                    className="icon-btn sketch-anim-badge"
+                    title={UI.animated}
+                    aria-label={UI.animated}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      host.setActive(l.id)
+                      host.openAnimated?.()
+                    }}
+                  >
+                    <Sparkles size={12} />
+                  </button>
+                )}
                 {l.locked && <Lock size={11} aria-label={UI.locked} />}
                 {l.reference && <span className="sketch-badge" title={UI.isReference}>R</span>}
                 {l.private && <EyeOff size={11} aria-label={UI.isPrivate} className="sketch-private" />}
@@ -476,38 +624,38 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
                     <input type="range" min={0} max={1} step={0.01} value={l.opacity} onChange={(e) => set(l.id, { opacity: Number(e.target.value) })} />
                     <span className="sketch-slider-value">{Math.round(l.opacity * 100)}%</span>
                   </label>
-                  <select className="input" value={l.blend} onChange={(e) => set(l.id, { blend: e.target.value as BlendMode })}>
-                    {[...new Set(BLEND_MODES.map((m) => m.group))].map((g) => (
-                      <optgroup key={g} label={g}>
-                        {BLEND_MODES.filter((m) => m.group === g).map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
                   <div className="sketch-layer-actions">
-                    <button className={`btn btn-ghost sketch-small${l.alphaLock ? ' is-active' : ''}`} disabled={isGroup(l)} title={UI.alphaLock} onClick={() => set(l.id, { alphaLock: !l.alphaLock })}>
-                      Alpha
+                    <button
+                      className={`btn btn-ghost sketch-small sketch-blend-btn${l.blend !== 'source-over' ? ' is-active' : ''}`}
+                      title={`${UI.blend}: ${blendOf(l.blend).label}`}
+                      aria-label={`${UI.blend}: ${blendOf(l.blend).label}`}
+                      onClick={(e) => {
+                        const r = e.currentTarget.getBoundingClientRect()
+                        setBlendMenu(blendMenu ? null : { id: l.id, x: r.left, y: r.bottom + 4 })
+                      }}
+                    >
+                      <BlendIcon mode={l.blend} />
                     </button>
-                    <button className={`btn btn-ghost sketch-small${l.clip ? ' is-active' : ''}`} title={UI.clip} onClick={() => set(l.id, { clip: !l.clip })}>
-                      Clip
+                    <button className={`btn btn-ghost sketch-small${l.alphaLock ? ' is-active' : ''}`} disabled={isGroup(l)} title={UI.alphaLock} aria-label={UI.alphaLock} onClick={() => set(l.id, { alphaLock: !l.alphaLock })}>
+                      <Grid2x2 size={14} />
                     </button>
-                    <button className={`btn btn-ghost sketch-small${l.locked ? ' is-active' : ''}`} title={UI.lock} onClick={() => set(l.id, { locked: !l.locked })}>
-                      Lock
+                    <button className={`btn btn-ghost sketch-small${l.clip ? ' is-active' : ''}`} title={UI.clip} aria-label={UI.clip} onClick={() => set(l.id, { clip: !l.clip })}>
+                      <CornerDownRight size={14} />
                     </button>
-                    <button className="btn btn-ghost sketch-small" title="Move up" onClick={() => update((d) => ({ ...d, layers: moveSibling(d.layers, l.id, 1) }))}>
-                      ↑
+                    <button className={`btn btn-ghost sketch-small${l.locked ? ' is-active' : ''}`} title={UI.lock} aria-label={UI.lock} onClick={() => set(l.id, { locked: !l.locked })}>
+                      <Lock size={14} />
                     </button>
-                    <button className="btn btn-ghost sketch-small" title="Move down" onClick={() => update((d) => ({ ...d, layers: moveSibling(d.layers, l.id, -1) }))}>
-                      ↓
+                    <button className="btn btn-ghost sketch-small" title={UI.moveUp} aria-label={UI.moveUp} onClick={() => update((d) => ({ ...d, layers: moveSibling(d.layers, l.id, 1) }))}>
+                      <ArrowUp size={14} />
+                    </button>
+                    <button className="btn btn-ghost sketch-small" title={UI.moveDown} aria-label={UI.moveDown} onClick={() => update((d) => ({ ...d, layers: moveSibling(d.layers, l.id, -1) }))}>
+                      <ArrowDown size={14} />
                     </button>
                     <button className="btn btn-ghost sketch-small" title={UI.mergeDown} onClick={() => mergeDown(l)}>
-                      <Merge size={12} />
+                      <Merge size={14} />
                     </button>
                     <button className="btn btn-ghost sketch-small" title={UI.remove} onClick={() => void remove([l.id])}>
-                      <Trash2 size={12} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
@@ -516,6 +664,68 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
           )
         })}
       </div>
+      {outlineFor && (outlineFor === 'new' || outlineLayer) && (
+        <OutlineDialog
+          mode="layer"
+          initial={outlineLayer?.outline}
+          onClose={() => setOutlineFor(null)}
+          onOk={(o) => {
+            setOutlineFor(null)
+            if (outlineLayer) return setOutline(outlineLayer.id, o)
+            const layer: SketchLayer = { ...newLayer(UI.outlineName), outline: o }
+            host.adopt(layer.id)
+            engine.setLayerImage(layer.id, null)
+            update((d) => ({ ...d, layers: insertAbove(d.layers, layer, host.activeId) }))
+            host.setActive(layer.id)
+          }}
+          onOff={outlineLayer?.outline ? () => (setOutlineFor(null), setOutline(outlineLayer.id, null)) : undefined}
+          onRasterize={outlineLayer?.outline ? () => (setOutlineFor(null), rasterizeOutline(outlineLayer)) : undefined}
+        />
+      )}
+      {asciiFor && (asciiFor === 'new' || asciiLayer) && (
+        <AsciiDialog
+          initial={asciiLayer?.ascii}
+          art={(start) => (asciiLayer ? engine.layerCanvas(asciiLayer.id) : startArt(start))}
+          canCopyLayer={!!active && !isGroup(active) && active.kind !== 'adjust' && hasPixels(active)}
+          onClose={() => setAsciiFor(null)}
+          onOk={(a, start) => {
+            setAsciiFor(null)
+            if (asciiLayer) return setAscii(asciiLayer.id, a)
+            newAscii(a, start)
+          }}
+          onOff={asciiLayer?.ascii ? () => (setAsciiFor(null), setAscii(asciiLayer.id, null)) : undefined}
+          onRasterize={asciiLayer?.ascii ? () => (setAsciiFor(null), rasterizeAscii(asciiLayer)) : undefined}
+          onExport={asciiLayer ? (f, a) => asciiExport(asciiLayer, f, a) : undefined}
+        />
+      )}
+      {blendLayer && (
+        <>
+          <div className="menu-backdrop" onClick={() => setBlendMenu(null)} />
+          <div className="menu sketch-layer-menu sketch-blend-menu" role="menu" style={{ position: 'fixed', left: Math.max(8, Math.min(blendMenu!.x, window.innerWidth - 420)), top: Math.max(8, Math.min(blendMenu!.y, window.innerHeight - 540)) }}>
+            {[...new Set(BLEND_MODES.map((m) => m.group))].map((g) => (
+              <div key={g} className="sketch-blend-group">
+                <div className="sketch-blend-group-name">
+                  <BlendIcon mode={BLEND_MODES.find((m) => m.group === g)!.id} />
+                  {g}
+                </div>
+                {BLEND_MODES.filter((m) => m.group === g).map((m) => (
+                  <button
+                    key={m.id}
+                    role="menuitem"
+                    className={blendLayer.blend === m.id ? 'is-on' : ''}
+                    onClick={() => {
+                      setBlendMenu(null)
+                      set(blendLayer.id, { blend: m.id })
+                    }}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       {shownMenu && (
         <>
           <div className="menu-backdrop" onClick={() => setMenu(null)} />
@@ -538,6 +748,15 @@ export function LayersPanel({ host, headerExtra }: { host: LayerHost; headerExtr
       )}
     </section>
   )
+}
+
+const blendOf = (m: BlendMode) => BLEND_MODES.find((b) => b.id === m) ?? BLEND_MODES[0]
+const GROUP_ICONS: Record<string, typeof Circle> = { Normal: Circle, Darken: Moon, Lighten: Sun, Contrast: Contrast, Difference: Diff, Color: Palette }
+
+/** The blend mode's family as an icon, so the closed button still says which kind of mode is on (name in its tooltip). */
+function BlendIcon({ mode }: { mode: BlendMode }) {
+  const Icon = GROUP_ICONS[blendOf(mode).group] ?? Circle
+  return <Icon size={14} />
 }
 
 function Thumb({ engine, id, version }: { engine: SketchEngine; id: Id; version: number }) {

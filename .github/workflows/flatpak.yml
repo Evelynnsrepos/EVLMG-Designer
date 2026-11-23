@@ -62,9 +62,10 @@ jobs:
           missing=$(flatpak run --command=sh io.github.Evelynnsrepos.Evelopment-Games-Designer -c 'ldd /app/bin/evelopment-games-designer | grep "not found"' || true)
           echo "$missing"
           test -z "$missing"
+      # Unstable pre-releases (version with a dash) never go into the update repo stable Flatpak users follow.
       # Update repo: add this build to the Pages repo, so installs made from the .flatpak below update through Flatpak.
       - name: Add the build to the update repo
-        if: steps.version.outputs.ready == 'true' && env.FLATPAK_GPG_PRIVATE_KEY != '' && env.FLATPAK_REPO_TOKEN != ''
+        if: steps.version.outputs.ready == 'true' && !contains(steps.version.outputs.version, '-') && env.FLATPAK_GPG_PRIVATE_KEY != '' && env.FLATPAK_REPO_TOKEN != ''
         run: |
           set -eu
           export GNUPGHOME=$(mktemp -d)

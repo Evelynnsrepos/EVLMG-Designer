@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createEntity } from '@/core/model'
-import { assetPaths, buildExport, customListRecords, ident, type ExportInput } from './build'
+import { assetPaths, buildExport, customListRecords, ident, relationshipRecords, type ExportInput } from './build'
 
 const input = (): ExportInput => {
   const sword = { ...createEntity('item'), name: 'Fire Sword', stats: { ATK: 12 }, categories: { c1: 'Rare' } }
@@ -65,6 +65,16 @@ describe('engine export of everything (0.28)', () => {
       { id: 'tank', uid: 'u1', name: 'Tank', image: null, values: { Speed: 40 } },
       { id: 'tank_2', uid: 'u2', name: 'Tank', image: null, values: { Speed: null } },
     ])
+  })
+
+  it('writes Relationships with names next to ids', () => {
+    const mira = { ...createEntity('character'), name: 'Mira' }
+    const cake = { ...createEntity('item'), name: 'Cake' }
+    const out = relationshipRecords(
+      { moods: [{ id: 'love', label: 'Loves' }], items: [{ characterId: mira.id, fromId: 'f1', gifts: [{ itemId: cake.id, mood: 'love' }], flagId: 'fl' }] },
+      { entities: { item: [cake], character: [mira], town: [], enemy: [] }, flags: [{ id: 'fl', name: 'bond_mira', kind: 'number', initial: 0, note: '' }], tools: [{ type: 'factions', documents: [{ id: 'factions', title: 'Factions', data: { items: [{ id: 'f1', name: 'Guild' }] } }] }] },
+    )
+    expect(out.items[0]).toMatchObject({ characterName: 'Mira', fromName: 'Guild', flagName: 'bond_mira', gifts: [{ itemName: 'Cake', moodName: 'Loves' }] })
   })
 
   it('finds project pictures inside tool data', () => {

@@ -1,5 +1,5 @@
 import { Marked, type Token, type Tokens, type TokenizerExtension } from 'marked'
-import { REF_CARD_NODE, REF_NODE } from './doc'
+import { PAGE_BREAK_HTML, REF_CARD_NODE, REF_NODE, SMALL_CAPS_HTML, TOC_MARK } from './doc'
 import type { RefTarget, RichTextDoc } from './types'
 
 /**
@@ -143,6 +143,8 @@ export function markdownToRichText(markdown: string, findRef: FindRef = () => un
           // Our own export writes underline as <u>…</u>; other HTML stays as written.
           if (/^<u>$/i.test(tok.raw)) own = [...own, { type: 'underline' }]
           else if (/^<\/u>$/i.test(tok.raw)) own = own.filter((m) => m.type !== 'underline')
+          else if (HTML_MARKS[tok.raw]) own = [...own, { type: HTML_MARKS[tok.raw] }]
+          else if (HTML_MARK_ENDS[tok.raw]) own = own.filter((m) => m.type !== HTML_MARK_ENDS[tok.raw])
           else if (/^<br\s*\/?>$/i.test(tok.raw)) out.push({ type: 'hardBreak' })
           else out.push(...text(tok.raw, own))
           break
@@ -196,6 +198,8 @@ export function markdownToRichText(markdown: string, findRef: FindRef = () => un
         case 'heading':
           return [{ type: 'heading', attrs: { level: tok.depth }, content: inline(tok.tokens) }]
         case 'paragraph':
+          if (tok.text.trim() === TOC_MARK) return [{ type: 'tableOfContents' }]
+          return paragraphs(tok.tokens ?? [{ type: 'text', raw: tok.text, text: tok.text } as Token])
         case 'text':
           return paragraphs(tok.tokens ?? [{ type: 'text', raw: tok.text, text: tok.text } as Token])
         case 'list': {
@@ -229,6 +233,9 @@ export function markdownToRichText(markdown: string, findRef: FindRef = () => un
           return [{ type: 'codeBlock', attrs: { language: tok.lang || null }, ...(tok.text ? { content: [{ type: 'text', text: tok.text }] } : {}) }]
         case 'hr':
           return [{ type: 'horizontalRule' }]
+        case 'html':
+          if (tok.raw.trim() === PAGE_BREAK_HTML) return [{ type: 'pageBreak' }]
+          return tok.raw.trim() ? [{ type: 'paragraph', content: text(tok.raw.trim(), []) }] : []
         case 'table': {
           const table = t as Tokens.Table
           return [
@@ -249,6 +256,9 @@ export function markdownToRichText(markdown: string, findRef: FindRef = () => un
   const content = blocks(tokens)
   return { type: 'doc', content: content.length ? content : [{ type: 'paragraph' }] }
 }
+
+const HTML_MARKS: Record<string, string> = { '<sup>': 'superscript', '<sub>': 'subscript', [SMALL_CAPS_HTML]: 'smallCaps' }
+const HTML_MARK_ENDS: Record<string, string> = { '</sup>': 'superscript', '</sub>': 'subscript', '</span>': 'smallCaps' }
 
 /** True when pasted plain text uses Markdown, so it is worth converting instead of pasting as is. */
 export function looksLikeMarkdown(text: string): boolean {

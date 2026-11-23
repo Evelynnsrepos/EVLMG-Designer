@@ -15,10 +15,13 @@ export const ACTIONS = [
   { id: 'tool.lasso', label: 'Lasso selection', keys: ['l'] },
   { id: 'tool.rect', label: 'Rectangle selection', keys: ['m'] },
   { id: 'tool.move', label: 'Move', keys: ['v'] },
+  { id: 'tool.rotate3d', label: 'Rotate object (3D)', keys: ['r'] },
+  { id: 'tool.mold', label: 'Mold object', keys: ['w'] },
   { id: 'tool.eyedropper', label: 'Eyedropper', keys: ['i'] },
   { id: 'tool.layerpick', label: 'Layer picker (or hold Ctrl)', keys: ['k'] },
   { id: 'tool.hand', label: 'Pan', keys: ['h'] },
   { id: 'tool.text', label: 'Text', keys: ['t'] },
+  { id: 'tool.signs', label: 'Sign brushes (ASCII layers)', keys: ['a'] },
   { id: 'swapEraser', label: 'Switch brush / eraser', keys: ['x'] },
   { id: 'undo', label: 'Undo', keys: ['ctrl+z'] },
   { id: 'redo', label: 'Redo', keys: ['ctrl+y', 'ctrl+shift+z'] },
@@ -34,9 +37,9 @@ export const ACTIONS = [
   { id: 'rotateLeft', label: 'Turn view left', keys: [','] },
   { id: 'rotateRight', label: 'Turn view right', keys: ['.'] },
   { id: 'flipView', label: 'Mirror view', keys: ['shift+h'] },
-  // v0.18: the Hotwheel replaces the QuickMenu; Q opens it everywhere (app shortcut), so Draw has no key of its own.
-  { id: 'quickMenu', label: 'Hotwheel', keys: [] },
-  { id: 'nextMenu', label: 'Next Hotwheel profile', keys: [] },
+  // v0.18: the QuickSelect replaces the QuickMenu; Q opens it everywhere (app shortcut), so Draw has no key of its own.
+  { id: 'quickMenu', label: 'QuickSelect', keys: [] },
+  { id: 'nextMenu', label: 'Next QuickSelect profile', keys: [] },
   { id: 'pair.size', label: 'Brush size (smaller | bigger)', keys: [] },
   { id: 'pair.turn', label: 'Turn view (left | right)', keys: [] },
   { id: 'pair.undo', label: 'Undo | Redo', keys: [] },
@@ -87,7 +90,7 @@ export function conflicts(combo: string, except: ActionId, custom: ShortcutMap):
 
 export const QUICK_SLOTS = 10
 
-/** Slots that hold two actions, one per half (Hotwheel). */
+/** Slots that hold two actions, one per half (QuickSelect). */
 export const PAIRS: Partial<Record<ActionId, [ActionId, ActionId]>> = { 'pair.size': ['sizeDown', 'sizeUp'], 'pair.turn': ['rotateLeft', 'rotateRight'], 'pair.undo': ['undo', 'redo'] }
 
 export interface QuickMenuProfile {

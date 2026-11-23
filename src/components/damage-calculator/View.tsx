@@ -16,7 +16,7 @@ import {
 } from '@/shared/calculators'
 import { formatNumber, FUNCTION_HELP, libraryFor } from '@/shared/formulas'
 import { activeFormula, evaluateDoc, filledValues, rangeRows, switchFormula, withRangeVariable } from './logic'
-import { ScoreSection, TtkSection } from './Extras'
+import { ScoreSection, TtkSection } from './ExtrasPanel'
 import './damage-calculator.css'
 
 const T = {

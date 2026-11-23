@@ -6,13 +6,13 @@ import { hotwheelKey, innerActions, outerRing, toolActions } from './Hotwheel'
 
 const set = (patch: Partial<HotwheelSettings>) => useSettings.getState().update({ hotwheel: { ...useSettings.getState().hotwheel, ...patch } })
 
-/** Settings → Hotwheel: how it opens, its size and the inner ring. */
+/** Settings → QuickSelect: how it opens, its size and the inner ring. */
 export function HotwheelSection() {
   const h = useSettings((s) => s.hotwheel)
   const choices = innerActions(null)
   return (
     <section data-section="hotwheel">
-      <h3>Hotwheel</h3>
+      <h3>QuickSelect</h3>
       <p className="muted settings-hint">
         Hold {hotwheelKey()} anywhere in a project, point at a slice and let go; or tap {hotwheelKey()} and click a slice. The inner ring is the same in every tool, the outer ring changes with the tool (set it with the keyboard button in a tool's header). Esc or the centre closes it.
       </p>
@@ -28,7 +28,7 @@ export function HotwheelSection() {
         <input type="checkbox" checked={h.middle} onChange={(e) => set({ middle: e.target.checked })} />
         Open with the middle mouse button
       </label>
-      {h.middle && <p className="settings-error">The middle mouse button also pans in Draw, Pixel Art, Level Layout, the Map and on boards; while this is on, it opens the Hotwheel there instead.</p>}
+      {h.middle && <p className="settings-error">The middle mouse button also pans in Draw, Pixel Art, Level Layout, the Map and on boards; while this is on, it opens the QuickSelect there instead.</p>}
       <label className="settings-row">
         Size
         <select className="input" value={h.size} onChange={(e) => set({ size: e.target.value as HotwheelSettings['size'] })}>
@@ -64,7 +64,7 @@ export function ToolRingEditor({ panel }: { panel: Panel }) {
   // The tool is open, so what it offers can be read once.
   const [{ actions, ownOrder }] = useState(() => toolActions(panel))
   const name = getManifest(panel.type)?.name ?? panel.type
-  if (ownOrder) return <p className="muted">{name}'s ring follows your Hotwheel profiles: Pen and keys settings, Hotwheel.</p>
+  if (ownOrder) return <p className="muted">{name}'s ring follows your QuickSelect profiles: Pen and keys settings, QuickSelect.</p>
   if (!actions.length) return <p className="muted">{name} has nothing of its own for the outer ring; the inner ring works here as everywhere.</p>
   const ids = outer[panel.type] ?? outerRing(panel).map((a) => a.id)
   const change = (i: number, id: string) => {

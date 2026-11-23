@@ -6,9 +6,10 @@ import { useDocument, useProjectStore, useUndoRedoKeys } from '@/core/state'
 import { createTasksDoc, type TasksDoc } from '@/components/tasks/model'
 import { NumberInput, PresetHeader } from '@/shared/calculators'
 import { useEditSession } from '@/shared/calculators/editSession'
+import { promptDialog } from '@/shared/dialogs'
 import { jumpTo } from '@/shared/entityList'
 import { pickJumpTarget, targetLabel } from '@/shared/jumps/Jumps'
-import { createLiveOpsDoc, passDays, rerunWarnings, shiftWeeks, totalWeeks, VERSION_COLORS, versionStarts, weekDate, type LiveOpsDoc } from './model'
+import { createLiveOpsDoc, passDays, rerunWarnings, shiftWeeks, totalWeeks, VERSION_COLORS, versionStarts, weekDate, type CustomItem, type CustomRow, type LiveOpsDoc } from './model'
 import './live-ops.css'
 
 const WEEK = 56
@@ -20,7 +21,7 @@ const PROFILES = [
 ]
 
 type Tab = 'plan' | 'list' | 'pass' | 'store'
-type Drag = { kind: 'version' | 'event' | 'banner'; id: Id; mode: 'move' | 'size'; x0: number; orig: LiveOpsDoc }
+type Drag = { kind: 'version' | 'event' | 'banner' | 'custom'; id: Id; mode: 'move' | 'size'; x0: number; orig: LiveOpsDoc }
 
 /** Live-Service Planner (missing tools phase 4). */
 export default function View({ documentId, active }: PanelProps) {
@@ -58,6 +59,8 @@ export default function View({ documentId, active }: PanelProps) {
     const o = g.orig
     session.change(() => {
       if (g.kind === 'version') return { ...o, versions: o.versions.map((v) => (v.id === g.id ? { ...v, weeks: Math.max(1, v.weeks + dw) } : v)) }
+      if (g.kind === 'custom')
+        return { ...o, rows: (o.rows ?? []).map((r) => ({ ...r, items: r.items.map((v) => (v.id !== g.id ? v : g.mode === 'size' ? { ...v, weeks: Math.max(1, v.weeks + dw) } : { ...v, startWeek: Math.max(0, v.startWeek + dw) })) })) }
       if (g.kind === 'event') return { ...o, events: o.events.map((v) => (v.id !== g.id ? v : g.mode === 'size' ? { ...v, days: Math.max(1, v.days + dd) } : { ...v, startWeek: Math.max(0, v.startWeek + dw) })) }
       return { ...o, banners: o.banners.map((v) => (v.id !== g.id ? v : g.mode === 'size' ? { ...v, weeks: Math.max(1, v.weeks + dw) } : { ...v, startWeek: Math.max(0, v.startWeek + dw) })) }
     })
@@ -66,6 +69,13 @@ export default function View({ documentId, active }: PanelProps) {
     if (!drag.current) return
     drag.current = null
     session.end()
+  }
+  const rows = d.rows ?? []
+  const editRow = (id: Id, fn: (r: CustomRow) => CustomRow) => set((x) => ({ ...x, rows: (x.rows ?? []).map((r) => (r.id === id ? fn(r) : r)) }))
+  const addItem = (r: CustomRow) => editRow(r.id, (o) => ({ ...o, items: [...o.items, { id: newId(), name: `New ${o.name.toLowerCase() || 'item'}`, startWeek: Math.max(0, ...o.items.map((i) => i.startWeek + i.weeks)), weeks: 1, notes: '' }] }))
+  const addRow = async () => {
+    const name = (await promptDialog('Name your row (for example Collabs, Sales or Maintenance)', ''))?.trim()
+    if (name) set((x) => ({ ...x, rows: [...(x.rows ?? []), { id: newId(), name, color: VERSION_COLORS[(x.rows?.length ?? 0) % VERSION_COLORS.length], items: [] }] }))
   }
   const makeMilestones = () =>
     tasks.update((t) => {
@@ -84,8 +94,13 @@ export default function View({ documentId, active }: PanelProps) {
               {{ plan: 'Weeks', list: 'List', pass: 'Battle pass', store: 'Store' }[t]}
             </button>
           ))}
-          <label className="ld-inline lo-start">
-            Launch <input className="input" type="date" value={d.start} onChange={(e) => set((x) => ({ ...x, start: e.target.value }))} />
+          <label
+            className="ld-inline lo-start"
+            title="The day version 1 comes out. Every week in the plan counts from it."
+            // WebKit only opens the date picker from its small icon, so the label opens it too.
+            onClick={(e) => { const i = e.currentTarget.querySelector('input'); if (e.target !== i) try { i?.showPicker() } catch { i?.focus() } }}
+          >
+            <span className="lo-start-name">Launch day</span> <input className="input" type="date" value={d.start} onChange={(e) => set((x) => ({ ...x, start: e.target.value }))} />
           </label>
           <button className="btn btn-ghost" onClick={makeMilestones} title="One Task Board milestone per version, so the production plan matches">
             <Flag size={14} /> Make milestones
@@ -145,6 +160,15 @@ export default function View({ documentId, active }: PanelProps) {
                 </Bar>
               ))}
             </Row>
+            {rows.map((r) => (
+              <Row key={r.id} name={r.name || 'Untitled row'} tall={Math.max(1, r.items.length)} onAdd={() => addItem(r)}>
+                {r.items.map((v, i) => (
+                  <Bar key={v.id} top={i * 30} left={v.startWeek * WEEK} width={v.weeks * WEEK} color={r.color} title={`${v.name}: ${v.weeks} week${v.weeks === 1 ? '' : 's'}${v.notes ? ` · ${v.notes}` : ''}`} onMove={(e) => down(e, 'custom', v.id, 'move')} onSize={(e) => down(e, 'custom', v.id, 'size')}>
+                    {v.name}
+                  </Bar>
+                ))}
+              </Row>
+            ))}
             {d.pass && (
               <Row name="Battle pass">
                 <Bar left={0} width={d.pass.weeks * WEEK} color="#2f9e44" title={`${d.pass.tiers} tiers over ${d.pass.weeks} weeks`}>
@@ -153,6 +177,9 @@ export default function View({ documentId, active }: PanelProps) {
               </Row>
             )}
           </div>
+          <button className="btn btn-ghost lo-addrow" onClick={addRow}>
+            <Plus size={14} /> Add your own row
+          </button>
           <p className="muted lo-hint">Drag an event or banner to move it, drag its right edge to make it longer. Versions follow each other: drag a version's right edge and everything after it moves. Details and bulk moves are in List.</p>
         </div>
       )}
@@ -306,6 +333,55 @@ export default function View({ documentId, active }: PanelProps) {
               })}
             </tbody>
           </table>
+
+          {rows.map((r) => (
+            <section key={r.id}>
+              <h3 className="ld-inline">
+                <input type="color" value={r.color} onChange={(e) => editRow(r.id, (o) => ({ ...o, color: e.target.value }))} aria-label="Colour" />
+                <input className="input" value={r.name} placeholder="Row name" onChange={(e) => editRow(r.id, (o) => ({ ...o, name: e.target.value }))} aria-label="Row name" />
+                <button className="btn btn-ghost" onClick={() => addItem(r)}>
+                  <Plus size={13} /> Add
+                </button>
+                <button className="icon-btn" aria-label="Remove this row" title="Remove this row and everything on it" onClick={() => set((x) => ({ ...x, rows: (x.rows ?? []).filter((o) => o.id !== r.id) }))}>
+                  <X size={13} />
+                </button>
+              </h3>
+              <table className="calc-table lo-table">
+                <tbody>
+                  {r.items.map((v) => {
+                    const edit = (p: Partial<CustomItem>) => editRow(r.id, (o) => ({ ...o, items: o.items.map((i) => (i.id === v.id ? { ...i, ...p } : i)) }))
+                    return (
+                      <tr key={v.id}>
+                        <td>
+                          <input type="checkbox" checked={picked.has(v.id)} onChange={() => setPicked(toggle(picked, v.id))} aria-label="Pick" />
+                        </td>
+                        <td>
+                          <input className="input" value={v.name} onChange={(e) => edit({ name: e.target.value })} />
+                        </td>
+                        <td>
+                          week <NumberInput value={v.startWeek} min={0} onChange={(startWeek) => edit({ startWeek })} />
+                        </td>
+                        <td>
+                          <NumberInput value={v.weeks} min={1} onChange={(weeks) => edit({ weeks: Math.max(1, weeks) })} /> weeks
+                        </td>
+                        <td>
+                          <input className="input" placeholder="Notes" value={v.notes} onChange={(e) => edit({ notes: e.target.value })} />
+                        </td>
+                        <td>
+                          <button className="icon-btn" aria-label="Remove" onClick={() => editRow(r.id, (o) => ({ ...o, items: o.items.filter((i) => i.id !== v.id) }))}>
+                            <X size={13} />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </section>
+          ))}
+          <button className="btn btn-ghost lo-addrow" onClick={addRow}>
+            <Plus size={14} /> Add your own row
+          </button>
         </div>
       )}
 

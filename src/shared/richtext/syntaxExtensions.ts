@@ -1,7 +1,7 @@
 import { Extension, InputRule, Mark, markInputRule, mergeAttributes, Node } from '@tiptap/core'
 import Heading from '@tiptap/extension-heading'
 import { TaskItem, TaskList } from '@tiptap/extension-list'
-import { TableKit } from '@tiptap/extension-table'
+import { TableCell, TableHeader, TableKit } from '@tiptap/extension-table'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { promptDialog } from '../dialogs'
 import { looksLikeMarkdown, markdownToRichText } from './markdown'
@@ -43,6 +43,10 @@ export const SyntaxHeading = Heading.extend<SyntaxOptions & { levels: (1 | 2 | 3
 export const Highlight = Mark.create<SyntaxOptions>({
   name: 'highlight',
   addOptions: () => ({ enabled: off }),
+  // 0.35: an optional colour; none = the normal yellow, as before.
+  addAttributes: () => ({
+    color: { default: null, parseHTML: (el) => el.style.backgroundColor || null, renderHTML: (a) => (a.color ? { style: `background-color:${a.color};color:#1a1a1a` } : {}) },
+  }),
   parseHTML: () => [{ tag: 'mark' }],
   renderHTML: ({ HTMLAttributes }) => ['mark', mergeAttributes({ class: 'richtext-highlight' }, HTMLAttributes), 0],
   addInputRules() {
@@ -322,6 +326,17 @@ export const MarkdownSyntax = Extension.create<MarkdownPasteOptions>({
   },
 })
 
+function cellColor(this: { parent?: () => Record<string, unknown> }) {
+  return {
+    ...this.parent?.(),
+    background: {
+      default: null,
+      parseHTML: (el: HTMLElement) => el.style.backgroundColor || null,
+      renderHTML: (a: Record<string, unknown>) => (a.background ? { style: `background-color:${a.background}` } : {}),
+    },
+  }
+}
+
 /** Everything above, wired to the switch. Tables have no typing rule; they come in by paste or import. */
 export function syntaxExtensions(enabled: () => boolean, getProvider: () => RefProvider | null) {
   return [
@@ -333,7 +348,10 @@ export function syntaxExtensions(enabled: () => boolean, getProvider: () => RefP
     SyntaxTaskItem.configure({ enabled }),
     Callout.configure({ enabled }),
     Footnote.configure({ enabled }),
-    TableKit.configure({ table: { resizable: false } }),
+    // 0.35: drag column edges to resize, cells can have a colour.
+    TableKit.configure({ table: { resizable: true }, tableCell: false, tableHeader: false }),
+    TableCell.extend({ addAttributes: cellColor }),
+    TableHeader.extend({ addAttributes: cellColor }),
     MarkdownSyntax.configure({ enabled, getProvider }),
   ]
 }

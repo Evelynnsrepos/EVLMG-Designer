@@ -233,3 +233,188 @@
   border-radius: var(--radius);
   background: var(--bg-sunken);
 }
+
+/* 0.35: outline layers and the Outliner */
+.sketch-outline-btn {
+  color: var(--accent);
+}
+.sketch-outline-dialog {
+  width: min(380px, 86vw);
+}
+.sketch-outline-intro {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+.sketch-outline-preview {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  /* A soft neutral check, so black and white letters both show in either theme without a harsh pattern. */
+  background: repeating-conic-gradient(color-mix(in srgb, #9a9a9a 55%, transparent) 0 25%, color-mix(in srgb, #bdbdbd 55%, transparent) 0 50%) 0 0 / 16px 16px;
+  border: 1px solid var(--border);
+}
+.sketch-outline-presets,
+.sketch-outline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+.sketch-outline-row > span:first-child {
+  width: 68px;
+}
+.sketch-outline-dialog .modal-actions {
+  flex-wrap: wrap;
+}
+.sketch-xf-extra {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.sketch-xf-num {
+  min-width: 34px;
+  font-variant-numeric: tabular-nums;
+}
+.sketch-xf-title {
+  font-weight: 600;
+  margin: 0 6px;
+}
+.sketch-xf-pin {
+  fill: var(--accent);
+  stroke: var(--bg);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+/* Mold: picked pins move or turn together; front/back parts are tinted. */
+.sketch-xf-pin.is-picked {
+  stroke: var(--text);
+  stroke-width: 2.5;
+}
+.sketch-xf-mesh {
+  stroke-width: 0.6;
+  opacity: 0.7;
+}
+.sketch-xf-front {
+  fill: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.sketch-xf-back {
+  fill: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+/* 0.35: Animated layers */
+.sketch-anim-badge {
+  color: var(--accent);
+  padding: 2px;
+}
+
+/* Layer buttons: one row, the blend mode as a small icon button that opens its list (2026-11-22). */
+.sketch-layer-actions {
+  flex-wrap: nowrap;
+  gap: 3px;
+}
+.sketch-layer-actions .sketch-small {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 30px;
+  padding: 2px 4px;
+  background: var(--bg-sunken);
+  display: inline-grid;
+  place-items: center;
+}
+.sketch-blend-menu {
+  /* Two columns: every mode fits without scrolling, which is hard with a wobbly pen. */
+  width: 400px;
+  columns: 2;
+  max-height: none;
+  overflow: visible;
+  column-gap: 4px;
+}
+.sketch-blend-group {
+  break-inside: avoid;
+}
+.sketch-blend-menu button {
+  padding: 5px 10px 5px 30px;
+}
+.sketch-blend-group-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Shaky hand help, Strong (Settings): bigger targets in the Draw side panel and the brush library. */
+[data-steady='strong'] .sketch-panel .icon-btn,
+[data-steady='strong'] .brushlib .icon-btn {
+  min-width: 36px;
+  min-height: 36px;
+}
+[data-steady='strong'] .sketch-layer-list .sketch-layer {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+[data-steady='strong'] .sketch-layer-actions .sketch-small {
+  min-height: 38px;
+}
+[data-steady='strong'] .sketch-blend-menu button,
+[data-steady='strong'] .sketch-layer-menu button {
+  padding-top: 11px;
+  padding-bottom: 11px;
+}
+/* The picked brush keeps its buttons, so a pen that can't hover still reaches them. */
+.brushlib-brush.is-active .brushlib-brush-actions {
+  display: flex;
+}
+[data-steady='strong'] .brushlib-brush,
+[data-steady='strong'] .brushlib-set {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+[data-steady='strong'] .sketch-layers-head {
+  flex-wrap: wrap;
+}
+
+/* 0.35: ASCII layer dialog, quick looks with small previews */
+.sketch-ascii-looks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+.sketch-ascii-look {
+  position: relative;
+  display: inline-flex;
+}
+.sketch-ascii-look > .btn {
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  height: auto;
+  border: 1px solid transparent;
+}
+.sketch-ascii-dialog .sketch-ascii-look.is-active > .btn {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.sketch-ascii-thumb {
+  width: 64px;
+  height: 28px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.sketch-ascii-look-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+}

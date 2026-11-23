@@ -10,7 +10,7 @@ export const SHORTCUT_GROUPS = [
     items: [
       { id: 'app.search', label: 'Search and commands', keys: ['ctrl+k'] },
       { id: 'app.map', label: 'Tool map (all tools and their links)', keys: ['tab'] },
-      { id: 'app.hotwheel', label: 'Hotwheel (hold, or tap to keep it open)', keys: ['q'] },
+      { id: 'app.hotwheel', label: 'QuickSelect (hold, or tap to keep it open)', keys: ['q'] },
       { id: 'app.help', label: 'User guide', keys: ['f1'] },
       { id: 'app.layout', label: 'Layout Mode on / off', keys: ['esc'] },
       { id: 'app.back', label: 'Back to the last entry', keys: ['alt+left'] },

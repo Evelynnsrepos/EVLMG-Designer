@@ -173,3 +173,138 @@
     box-shadow: var(--shadow);
   }
 }
+
+/* 0.35 page look: the text on an A4-wide sheet */
+.writer-page.is-paper .richtext-content {
+  background: var(--bg-sunken);
+}
+.writer-page.is-paper .richtext-content .ProseMirror {
+  max-width: 794px;
+  min-height: 1123px;
+  margin: 24px auto;
+  padding: 72px 76px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.writer-page.is-paper .richtext-page-break {
+  margin: 48px -76px;
+  border-top: 24px solid var(--bg-sunken);
+}
+.writer-page.is-paper .richtext-page-break::after {
+  content: none;
+}
+.writer-page .richtext.is-hidden {
+  display: none;
+}
+
+/* 0.35 Edit as Markdown */
+.writer-source {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 10px 16px;
+  gap: 6px;
+}
+.writer-source p {
+  margin: 0;
+  font-size: 13px;
+}
+.writer-source-text {
+  flex: 1;
+  min-height: 200px;
+  font-family: ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: none;
+}
+
+/* 0.35 comments and changes panel */
+.writer-review h4 {
+  margin: 10px 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.writer-card {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid #e0a800;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: pointer;
+}
+.writer-card.is-active {
+  border-color: var(--accent);
+}
+.writer-card.is-insertion {
+  border-left-color: #2f9e44;
+}
+.writer-card.is-deletion {
+  border-left-color: #d33a3a;
+}
+.writer-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.writer-card-tools {
+  margin-left: auto;
+  display: inline-flex;
+}
+.writer-card-quote {
+  margin: 2px 0 4px;
+  font-style: italic;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.writer-card-text {
+  margin: 4px 0;
+  white-space: pre-wrap;
+}
+.writer-card-reply {
+  margin: 4px 0 4px 10px;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+}
+.writer-card-input {
+  width: 100%;
+  margin-top: 4px;
+  resize: vertical;
+  font-size: 13px;
+}
+.writer-page-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 260px;
+  padding: 10px;
+  font-size: 13px;
+}
+.writer-page-setup label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.writer-page-setup label.writer-syntax {
+  flex-direction: row;
+}
+/* Header and footer on the page look */
+.writer-page.is-paper .richtext-content .ProseMirror::before {
+  content: var(--writer-header);
+  display: block;
+  margin: -48px 0 32px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.writer-page.is-paper .richtext-content .ProseMirror::after {
+  content: var(--writer-footer);
+  display: block;
+  margin-top: 48px;
+  font-size: 12px;
+  color: var(--text-muted);
+}

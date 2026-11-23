@@ -78,6 +78,14 @@ export function outlineColorOf(b: BrushSettings, color: string): string {
   const c = b.outlineColor
   return c === 'black' ? '#000000' : c === 'white' ? '#ffffff' : c === 'darker' ? shiftColor(color, 0, 0.1, -0.45) : color
 }
+export type WiggleStyle = 'boil' | 'wave'
+export const WIGGLE_STYLES: { id: WiggleStyle; label: string }[] = [
+  { id: 'boil', label: 'Boil: a new wobble every frame, like hand-drawn animation' },
+  { id: 'wave', label: 'Wave: a smooth wave runs along the line' },
+]
+/** True for an animated brush (its strokes wiggle in a loop). */
+export const isAnimatedBrush = (b: BrushSettings) => (b.wiggle ?? 0) > 0
+
 export const hasOutline = (b: BrushSettings) => (b.outline ?? 0) > 0
 
 export interface BrushSettings {
@@ -160,6 +168,10 @@ export interface BrushSettings {
   outlineColor?: OutlineColor
   /** 0.35: inside the outline: the brush colour, nothing (hollow), clear (also wipes what was there, so outlines join up) or white. */
   outlineFill?: OutlineFill
+  /** 0.35: animated brush: how far the line wiggles (0 = a still brush). Its strokes go on an Animated layer. */
+  wiggle?: number
+  /** 0.35: how it wiggles: a new wobble every frame (boil), or a wave that runs along the line. */
+  wiggleStyle?: WiggleStyle
   /** Turn stamps with the pen's direction (azimuth). */
   azimuth: boolean
   /** Flip each stamp at random. */
@@ -351,6 +363,8 @@ export const BASE_BRUSH: BrushSettings = {
   outline: 0,
   outlineColor: 'main',
   outlineFill: 'paint',
+  wiggle: 0,
+  wiggleStyle: 'boil',
   azimuth: false,
   randomize: false,
   flipX: false,
@@ -460,6 +474,8 @@ export function normalizeSettings(b: Partial<BrushSettings>): BrushSettings {
   s.outline = Math.max(0, Math.min(200, s.outline ?? 0))
   s.outlineColor = oneOf(OUTLINE_COLORS, s.outlineColor, 'main')
   s.outlineFill = oneOf(OUTLINE_FILLS, s.outlineFill, 'paint')
+  s.wiggle = Math.max(0, Math.min(1, Number(s.wiggle) || 0))
+  s.wiggleStyle = s.wiggleStyle === 'wave' ? 'wave' : 'boil'
   s.capStart = typeof s.capStart === 'string' && s.capStart ? s.capStart : null
   s.capEnd = typeof s.capEnd === 'string' && s.capEnd ? s.capEnd : null
   s.grainImage = typeof s.grainImage === 'string' && s.grainImage ? s.grainImage : null

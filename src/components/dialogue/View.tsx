@@ -1,5 +1,5 @@
 import { accentNow } from '@/shared/canvas/theme'
-import { Download, Flag as FlagIcon, Play, Plus, Trash2, X } from 'lucide-react'
+import { Download, Flag as FlagIcon, LayoutGrid, Network, PanelRight, Play, Plus, Trash2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { Character, Id } from '@/core/model'
 import type { PanelProps } from '@/core/registry'
@@ -10,7 +10,8 @@ import { saveTextFile, safeFileName } from '@/core/export'
 import { applyChange, ChangesEditor, checkCondition, ConditionsEditor, FlagsEditor, useFlags, type Flag } from '@/shared/flags'
 import { FlowGraph } from '@/shared/graph'
 import { Modal } from '@/shared/ui'
-import { actorScript, createDialogueDoc, exportInk, exportJson, exportYarn, newChoice, newLine, unreachable, type Choice, type DialogueDoc, type Line } from './model'
+import { CardBoard } from './CardBoard'
+import { actorScript, addLineAfter, createDialogueDoc, linkTo, type LinkFrom, exportInk, exportJson, exportYarn, newChoice, newLine, unreachable, type Choice, type DialogueDoc, type Line } from './model'
 import './dialogue.css'
 
 const T = {
@@ -42,6 +43,11 @@ const T = {
   continue: 'Continue',
   theEnd: 'The conversation ended.',
   flagState: 'Flags now',
+  cards: 'Cards',
+  cardsHint: 'Write and connect lines as cards',
+  map: 'Map',
+  mapHint: 'See the whole conversation as a small map',
+  panel: 'Side panel: conditions, flags and voice for the selected line',
 }
 
 const shortText = (t: string) => (t.length > 40 ? `${t.slice(0, 39)}…` : t)
@@ -57,29 +63,24 @@ export default function View({ documentId, active }: PanelProps) {
   const [playing, setPlaying] = useState(false)
   const [showFlags, setShowFlags] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [view, setView] = useState<'cards' | 'map'>('cards')
+  /** In Cards the side panel is only open when asked for (the cards hold the everyday fields). */
+  const [panel, setPanel] = useState(false)
+  const [focusId, setFocusId] = useState<Id | null>(null)
   const d = doc.data
   const lost = useMemo(() => (d ? unreachable(d) : new Set<Id>()), [d])
   if (!d) return null
 
   const speakerOf = (l: Line) => (l.speakerId ? characters.find((c) => c.id === l.speakerId)?.name || '(deleted)' : l.speakerName || 'Narrator')
   const edit = (id: Id, patch: Partial<Line>) => doc.update((x) => ({ ...x, lines: x.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) }))
-  const addLine = (after?: { lineId: Id; choiceId?: Id }) => {
+  const addLine = (after?: LinkFrom) => {
     const prev = after ? d.lines.find((l) => l.id === after.lineId) : undefined
     // Alternate speakers: answering a character defaults to the player and back.
     const line = newLine(prev?.speakerId ? null : (characters[0]?.id ?? null))
     if (prev?.speakerId) line.speakerName = 'Player'
-    doc.update((x) => ({
-      startId: x.startId ?? line.id,
-      lines: [
-        ...x.lines.map((l) => {
-          if (!after || l.id !== after.lineId) return l
-          if (after.choiceId) return { ...l, choices: l.choices.map((c) => (c.id === after.choiceId ? { ...c, to: line.id } : c)) }
-          return { ...l, next: line.id }
-        }),
-        line,
-      ],
-    }))
+    doc.update((x) => addLineAfter(x, line, after))
     setSelectedId(line.id)
+    setFocusId(line.id)
   }
   const remove = async (l: Line) => {
     if (!(await confirmDialog({ title: T.deleteLine, message: 'Links to this line end the conversation instead. You can undo with Ctrl+Z.', confirmLabel: 'Delete', danger: true }))) return
@@ -129,6 +130,20 @@ export default function View({ documentId, active }: PanelProps) {
         <button className={`btn btn-ghost${showFlags ? ' is-active' : ''}`} onClick={() => setShowFlags(!showFlags)}>
           <FlagIcon size={14} /> {T.flags}
         </button>
+        <span style={{ flex: 1 }} />
+        <span className="dlg-seg" role="radiogroup">
+          <button role="radio" aria-checked={view === 'cards'} className={`btn btn-ghost${view === 'cards' ? ' is-active' : ''}`} title={T.cardsHint} onClick={() => setView('cards')}>
+            <LayoutGrid size={14} /> {T.cards}
+          </button>
+          <button role="radio" aria-checked={view === 'map'} className={`btn btn-ghost${view === 'map' ? ' is-active' : ''}`} title={T.mapHint} onClick={() => setView('map')}>
+            <Network size={14} /> {T.map}
+          </button>
+        </span>
+        {view === 'cards' && (
+          <button className={`icon-btn${panel ? ' is-active' : ''}`} title={T.panel} aria-label={T.panel} aria-pressed={panel} onClick={() => setPanel(!panel)}>
+            <PanelRight size={15} />
+          </button>
+        )}
       </div>
       <div className="dlg-body">
         <div className="dlg-graph">
@@ -136,6 +151,26 @@ export default function View({ documentId, active }: PanelProps) {
             <FlagsEditor />
           ) : d.lines.length === 0 ? (
             <p className="muted">{T.empty}</p>
+          ) : view === 'cards' ? (
+            <CardBoard
+              doc={d}
+              characters={characters}
+              lost={lost}
+              selectedId={selectedId}
+              focusId={focusId}
+              onFocused={() => setFocusId(null)}
+              speakerOf={speakerOf}
+              onSelect={setSelectedId}
+              onEdit={edit}
+              onAdd={addLine}
+              onLink={(from, to) => doc.update((x) => linkTo(x, from, to))}
+              onStart={(id) => doc.update((x) => ({ ...x, startId: id }))}
+              onRemove={(l) => void remove(l)}
+              onDetails={(id) => {
+                setSelectedId(id)
+                setPanel(true)
+              }}
+            />
           ) : (
             <FlowGraph
               starts={d.startId ? [d.startId] : undefined}
@@ -155,7 +190,7 @@ export default function View({ documentId, active }: PanelProps) {
             />
           )}
         </div>
-        {line && (
+        {line && (view === 'map' || panel) && (
           <LineEditor
             line={line}
             doc={d}

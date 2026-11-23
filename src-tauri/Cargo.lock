@@ -1393,7 +1393,7 @@ dependencies = [
 
 [[package]]
 name = "evelopment-games-designer"
-version = "0.34.0"
+version = "0.35.0-5"
 dependencies = [
  "anyhow",
  "futures-util",

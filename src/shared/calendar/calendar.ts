@@ -23,6 +23,38 @@ export interface Era {
   color: string
 }
 
+/** A day in a day-by-day calendar game: story beats, deadlines, free days. */
+export const DAY_KINDS = [
+  { id: 'story', label: 'Story', color: '#9c36b5' },
+  { id: 'deadline', label: 'Deadline', color: '#e03131' },
+  { id: 'event', label: 'Event', color: '#3e8ef7' },
+  { id: 'free', label: 'Free time', color: '#2f9e44' },
+  { id: 'exam', label: 'Exam / test', color: '#f5a623' },
+  { id: 'holiday', label: 'Holiday', color: '#c2255c' },
+  { id: 'locked', label: 'No free time', color: '#495057' },
+] as const
+export type DayKind = (typeof DAY_KINDS)[number]['id']
+
+export interface CalendarDate {
+  year: number
+  /** 0-based month index. */
+  month: number
+  day: number
+}
+
+export interface DayEntry extends CalendarDate {
+  id: Id
+  title: string
+  kind: DayKind
+  /** Index into `timeSlots`; -1 or missing = the whole day. */
+  slot?: number
+  /** Weekly repeats on the same weekday, yearly on the same date. */
+  repeat?: 'none' | 'weekly' | 'yearly'
+  notes?: string
+  /** Show it on linked timelines (default yes; repeats never show). */
+  onTimeline?: boolean
+}
+
 export interface CalendarDoc {
   months: Month[]
   weekdays: string[]
@@ -31,6 +63,17 @@ export interface CalendarDoc {
   firstWeekday: number
   /** Show era years on timelines. */
   useOnTimeline: boolean
+  /** v0.35 calendar games: parts of a day, e.g. Morning, After school, Evening. */
+  timeSlots?: string[]
+  entries?: DayEntry[]
+  /** First and last in-game day, for "day 12 of 300" and countdowns. */
+  gameStart?: CalendarDate | null
+  gameEnd?: CalendarDate | null
+  /** Moon cycle in days (0 = off) and the day number of a full moon. */
+  moonCycle?: number
+  fullMoonDay?: number
+  /** Timeline documents that follow this calendar (their events come from the entries). */
+  linkedTimelines?: Id[]
 }
 
 const month = (name: string, days: number): Month => ({ id: newId(), name, days })
@@ -53,7 +96,72 @@ export function createCalendarDoc(): CalendarDoc {
     eras: [],
     firstWeekday: 0,
     useOnTimeline: true,
+    timeSlots: ['Morning', 'Daytime', 'Evening'],
+    entries: [],
+    gameStart: null,
+    gameEnd: null,
+    moonCycle: 0,
+    fullMoonDay: 0,
+    linkedTimelines: [],
   }
+}
+
+/** Real-world months and weekdays (no leap years), for games set in our world. */
+export const REAL_MONTHS: [string, number][] = [
+  ['January', 31], ['February', 28], ['March', 31], ['April', 30], ['May', 31], ['June', 30],
+  ['July', 31], ['August', 31], ['September', 30], ['October', 31], ['November', 30], ['December', 31],
+]
+export const REAL_WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+export const realMonths = (): Month[] => REAL_MONTHS.map(([n, d]) => month(n, d))
+
+export const newDayEntry = (date: CalendarDate, title = 'New entry'): DayEntry => ({ id: newId(), ...date, title, kind: 'event', slot: -1, repeat: 'none', notes: '', onTimeline: true })
+
+export const dayKindColor = (k: DayKind) => DAY_KINDS.find((x) => x.id === k)?.color
+
+export const dateNumber = (c: CalendarDoc, d: CalendarDate) => toDayNumber(c, d.year, d.month, d.day)
+
+/** Entries on a day, repeats included, sorted by time slot. */
+export function entriesOn(c: CalendarDoc, n: number): DayEntry[] {
+  const date = fromDayNumber(c, n)
+  return (c.entries ?? [])
+    .filter((e) => {
+      const en = dateNumber(c, e)
+      if (en === n) return true
+      if (n < en) return false
+      if (e.repeat === 'weekly') return c.weekdays.length > 0 && (n - en) % c.weekdays.length === 0
+      if (e.repeat === 'yearly') return e.month === date.month && e.day === date.day
+      return false
+    })
+    .sort((a, b) => (a.slot ?? -1) - (b.slot ?? -1))
+}
+
+/** "Day 12 of 300" inside the game's span, or null outside / without a start. */
+export function gameDay(c: CalendarDoc, n: number): { day: number; of: number | null } | null {
+  if (!c.gameStart) return null
+  const start = dateNumber(c, c.gameStart)
+  const end = c.gameEnd ? dateNumber(c, c.gameEnd) : null
+  if (n < start || (end !== null && n > end)) return null
+  return { day: n - start + 1, of: end === null ? null : end - start + 1 }
+}
+
+/** The next deadline on or after day n, with days left (0 = today). */
+export function nextDeadline(c: CalendarDoc, n: number): { entry: DayEntry; daysLeft: number } | null {
+  let best: { entry: DayEntry; daysLeft: number } | null = null
+  for (const e of c.entries ?? []) {
+    if (e.kind !== 'deadline' || e.repeat === 'weekly' || e.repeat === 'yearly') continue
+    const left = dateNumber(c, e) - n
+    if (left >= 0 && (!best || left < best.daysLeft)) best = { entry: e, daysLeft: left }
+  }
+  return best
+}
+
+/** Is day n a full moon? */
+export const isFullMoon = (c: CalendarDoc, n: number) => !!c.moonCycle && c.moonCycle > 0 && (((n - (c.fullMoonDay ?? 0)) % c.moonCycle) + c.moonCycle) % c.moonCycle === 0
+
+/** "7 April" or "7 April, year 3" when the calendar spans more than one year. */
+export function formatDate(c: CalendarDoc, d: CalendarDate, withYear = true): string {
+  const base = `${d.day} ${c.months[d.month]?.name ?? '?'}`
+  return withYear ? `${base}, ${c.eras.length ? formatYear(c, d.year) : `year ${d.year}`}` : base
 }
 
 export const newEra = (start: number): Era => ({ id: newId(), name: 'New era', abbr: 'NE', start, color: '#9c36b5' })

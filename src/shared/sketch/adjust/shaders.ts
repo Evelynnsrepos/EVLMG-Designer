@@ -70,6 +70,18 @@ void main() {
   o = pre(r, c.a);
 }`
 
+/** Values to opacity: see cpu.ts valueAlpha. */
+export const VALUE_ALPHA = `${HEAD}
+uniform float amount, reach, soft, keep, kr, kg, kb;
+float dist(float c, float k) { return c > k ? (c - k) / (1.0 - k) : c < k ? (k - c) / k : 0.0; }
+void main() {
+  vec4 c = unpre(texture(src, uv));
+  vec3 k = vec3(kr, kg, kb);
+  float t = clamp((max(dist(c.r, k.r), max(dist(c.g, k.g), dist(c.b, k.b))) - reach) / max(soft, 1e-4), 0.0, 1.0);
+  vec3 un = keep > 0.5 || t <= 0.0 ? c.rgb : clamp(k + (c.rgb - k) / t, 0.0, 1.0);
+  o = pre(mix(c.rgb, un, amount), c.a * mix(1.0, t, amount));
+}`
+
 /** One direction of a Gaussian blur (run twice). */
 export const GAUSS = `${HEAD}
 uniform vec2 dir;

@@ -79,7 +79,7 @@ export function useAssist(host: AssistHost) {
 
   /** Draw the picture as the editor shows it (replaces `engine.render(doc)` in the view). */
   const paint = (ctx: CanvasRenderingContext2D) => {
-    if (!mode) return ctx.drawImage(engine.render(doc), 0, 0)
+    if (!mode) return ctx.drawImage(engine.render(doc, true, true), 0, 0)
     const skins = mode === 'animation' && !playing ? onionSkins(shown, frames, anim) : []
     if (!skins.length) return ctx.drawImage(render(uniq([bg, shown, fg]), true), 0, 0)
     // ponytail: with onion skins on, the current frame is blended over a flattened background frame,

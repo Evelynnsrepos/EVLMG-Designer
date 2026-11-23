@@ -369,7 +369,7 @@
   color: var(--text);
 }
 
-/* v0.18: a tool's Hotwheel ring in its shortcuts window */
+/* v0.18: a tool's QuickSelect ring in its shortcuts window */
 .tool-ring {
   display: grid;
   grid-template-columns: 1fr 1fr;

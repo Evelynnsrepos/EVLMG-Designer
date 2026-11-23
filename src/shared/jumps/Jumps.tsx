@@ -58,7 +58,7 @@ export function syncBoardJumps(type: ComponentType, documentId: Id | null, nodes
   if (key(next) !== key(all)) s.updateMeta({ jumps: next })
 }
 
-/** Ask where to, then add a jump point from this tool or document (header button, Hotwheel). */
+/** Ask where to, then add a jump point from this tool or document (header button, QuickSelect). */
 export async function addJumpHere(type: ComponentType, documentId: Id | null) {
   const to = await pickJumpTarget()
   if (to) addJump(placeOf(type, documentId), to)

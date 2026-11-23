@@ -37,6 +37,7 @@ function readAloud(hit: ProofHit) {
   speechSynthesis.cancel()
   speechSynthesis.speak(say)
 }
+const NOT_TYPING = new Set(['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock', 'Escape'])
 const canRead = () => typeof speechSynthesis !== 'undefined' && speechSynthesis.getVoices().length > 0
 
 const UI = {
@@ -86,10 +87,12 @@ export function ProofCard({
     const close = (e: MouseEvent | KeyboardEvent) => {
       // Esc closes the card only; preventDefault keeps the shell from switching to Layout Mode (ED-7).
       if (e instanceof KeyboardEvent && e.key === 'Escape') e.preventDefault()
-      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !(e.target as Element).closest?.('.proof-card')) onClose()
+      const walkKey = e instanceof KeyboardEvent && hit.walk && (e.key === 'Enter' || e.key === 'ArrowRight')
+      // Esc, a click elsewhere, or typing in the text (any key but a bare modifier) closes the card.
+      const typed = e instanceof KeyboardEvent && !walkKey && !NOT_TYPING.has(e.key) && !(e.target as Element | null)?.closest?.('.proof-card')
+      if (e instanceof KeyboardEvent ? e.key === 'Escape' || typed : !(e.target as Element).closest?.('.proof-card')) onClose()
       // Walk-through keys: Enter takes the first fix, the right arrow skips to the next mistake.
-      if (!(e instanceof KeyboardEvent) || !hit.walk) return
-      if (e.key === 'Enter' || e.key === 'ArrowRight') {
+      if (walkKey) {
         e.preventDefault()
         e.stopPropagation()
         const first = card.current?.querySelector<HTMLButtonElement>('.proof-card-option')

@@ -473,7 +473,7 @@ export default function View({ documentId, active }: PanelProps) {
     return () => clearTimeout(t)
   }, [scene, art])
 
-  // Hotwheel (hold Q): the ring is filled from the current render below, so it always matches the selection.
+  // QuickSelect (hold Q): the ring is filled from the current render below, so it always matches the selection.
   const wheel = useRef<{ actions: HotAction[]; size?: { label: string; smaller(): void; bigger(): void } }>({ actions: [] })
   useHotwheel(() => wheel.current.actions, true, { label: 'Outline width', smaller: () => wheel.current.size?.smaller(), bigger: () => wheel.current.size?.bigger() })
 

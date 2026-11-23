@@ -1,6 +1,7 @@
 import { balanceLut, curvesLut, gradientLut, hsbAdjust, luma, type Balance, type RGB } from './color'
 import type { AdjustValues, FilterId } from './filters'
 import { fieldAt } from './liquify'
+import { renderAscii } from '../ascii'
 
 /**
  * CPU versions of the Adjustments and Liquify (Sketch Pro), for machines
@@ -155,8 +156,29 @@ const cmyk = ([r, g, b]: RGB) => {
   return [(1 - r - k) / n, (1 - g - k) / n, (1 - b - k) / n, k]
 }
 
+/** Values to opacity: the colour that turns see-through (mode 0 white, 1 black, 2 the picked colour). */
+export function valueAlphaKey(a: AdjustValues): RGB {
+  if (a.v.mode === 1) return [0, 0, 0]
+  const hex = a.v.mode === 2 && /^#[0-9a-f]{6}$/i.test(a.key ?? '') ? a.key! : '#ffffff'
+  return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as RGB
+}
+
+/**
+ * Values to opacity (like colour to alpha in Krita or GIMP): colours near the key colour `k` turn see-through,
+ * and colours are unblended so the result over `k` looks the same. `reach` = distance that is fully see-through,
+ * `soft` = how far past it the fade runs; `keep` keeps the colours and only changes opacity.
+ */
+export function valueAlpha(c: RGB, a: number, k: RGB, amount: number, reach = 0, soft = 1, keep = 0): [RGB, number] {
+  const d = c.map((x, i) => (x > k[i] ? (x - k[i]) / (1 - k[i]) : x < k[i] ? (k[i] - x) / k[i] : 0))
+  const t = Math.min(1, Math.max(0, (Math.max(d[0], d[1], d[2]) - reach) / Math.max(soft, 1e-4)))
+  const un = keep || t <= 0 ? c : c.map((x, i) => Math.min(1, Math.max(0, k[i] + (x - k[i]) / t)))
+  const mix = (x: number, y: number) => x + (y - x) * amount
+  return [[mix(c[0], un[0]), mix(c[1], un[1]), mix(c[2], un[2])], a * mix(1, t)]
+}
+
 /** An adjustment of `img` on the CPU. */
 export function runCpu(id: FilterId, a: AdjustValues, img: ImageData): ImageData {
+  if (id === 'ascii') return renderAscii(img, a)
   const { width: w, height: h } = img
   const v = a.v
   const p = toPx(img)
@@ -179,6 +201,11 @@ export function runCpu(id: FilterId, a: AdjustValues, img: ImageData): ImageData
     case 'gradient':
       lutPass(p, out, gradientLut(a.gradient), true, false, v.amount)
       break
+    case 'valueAlpha': {
+      const k = valueAlphaKey(a)
+      for (let i = 0; i < p.length; i += 4) if (p[i + 3]) put(out, i, ...valueAlpha(straight(p, i), p[i + 3], k, v.amount, v.reach ?? 0, v.soft ?? 1, v.keepColour ?? 0))
+      break
+    }
     case 'gaussian':
       out = gauss(p, w, h, v.radius / 2)
       break

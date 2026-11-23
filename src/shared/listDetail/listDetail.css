@@ -169,3 +169,13 @@
 .ach-over {
   color: var(--danger);
 }
+/* Toggle buttons in the toolbar (a page like Points & actions): one rule for every list tool, with a glass version. */
+.ld-toolbar .btn.on {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+:root[data-glass] .ld-toolbar .btn.on {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, var(--glass-border));
+}

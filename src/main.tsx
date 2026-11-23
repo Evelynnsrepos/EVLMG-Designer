@@ -7,8 +7,10 @@ import { flushOn } from './core/state'
 import { glAllowed } from './shared/sketch/gl'
 import { applyTheme } from './shell/theme'
 import { getLang } from './shared/i18n'
+import { installSteadyPen } from './shell/steadyPen'
 
 applyTheme()
+installSteadyPen()
 document.documentElement.lang = getLang()
 
 // Waiting saves are written when the window loses focus or is hidden (minimised, another desktop).

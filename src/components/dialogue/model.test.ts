@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { exportInk, exportJson, exportYarn, newChoice, newLine, unreachable, type DialogueDoc } from './model'
+import { addLineAfter, cardColumns, createDialogueDoc, exportInk, exportJson, exportYarn, linkTo, newChoice, newLine, unreachable, type DialogueDoc } from './model'
 
 const flags = [{ id: 'f', name: 'met_king', kind: 'bool' as const, initial: 0, note: '' }]
 
@@ -51,5 +51,26 @@ describe('actor script', () => {
     expect(csv.split(/\r?\n/).filter(Boolean)).toHaveLength(3)
     expect(csv).toContain('cave_talk_001_mira,Mira,Run!,shouted,Cave Talk')
     expect(csv).toContain('mira_ok,Mira,Okay,,Cave Talk')
+  })
+})
+
+describe('dialogue cards', () => {
+  it('adds a connected line and lays cards out in columns', () => {
+    const a = newLine()
+    let doc = addLineAfter(createDialogueDoc(), a)
+    expect(doc.startId).toBe(a.id)
+    const b = newLine()
+    doc = addLineAfter(doc, b, { lineId: a.id })
+    expect(doc.lines[0].next).toBe(b.id)
+    const ch = newChoice()
+    doc = { ...doc, lines: doc.lines.map((l) => (l.id === b.id ? { ...l, choices: [ch] } : l)) }
+    const c = newLine()
+    doc = addLineAfter(doc, c, { lineId: b.id, choiceId: ch.id })
+    expect(doc.lines.find((l) => l.id === b.id)!.choices[0].to).toBe(c.id)
+    const lost = newLine()
+    doc = addLineAfter(doc, lost)
+    // a loop back to the start does not move it
+    doc = linkTo(doc, { lineId: c.id }, a.id)
+    expect(cardColumns(doc)).toEqual([[a.id, lost.id], [b.id], [c.id]])
   })
 })

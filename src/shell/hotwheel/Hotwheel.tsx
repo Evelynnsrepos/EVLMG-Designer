@@ -5,7 +5,7 @@ import type { ComponentType, Panel } from '@/core/model'
 import { getManifest } from '@/core/registry'
 import { formatCombo, isShortcut, keysOf, SHORTCUT_GROUPS } from '@/core/shortcuts'
 import { isTextField, useAppStore, useProjectStore, useSettings } from '@/core/state'
-import { extraHotActions, hotwheelSources, setHotwheelOpener, type HotAction, type HotSlider } from '@/shared/hotwheel'
+import { extraHotActions, hotwheelChanged, hotwheelSources, setHotwheelOpener, type HotAction, type HotSlider } from '@/shared/hotwheel'
 import { addJumpHere } from '@/shared/jumps/Jumps'
 import { closePanel } from '../editor/actions'
 import { useHelp } from '../help/help'
@@ -14,6 +14,9 @@ import { useGlass } from '../theme'
 import { leaves } from '../workspace/layoutTree'
 import { BOARD_TOOLS, setScale } from '../workspace/ToolHelp'
 import './hotwheel.css'
+
+/** WebKitGTK's fast screen handover (DMA-BUF) squashes the Draw GPU canvas while the wheel's scale/turn animations run. */
+const webkitGtk = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent)
 
 // ---- Where the actions come from ---------------------------------------------------
 
@@ -51,7 +54,7 @@ const GROUP_OF: Partial<Record<ComponentType, string>> = { 'level-layout': 'Leve
 /** Shortcut pairs that share one slice (left half, right half). */
 const KEY_PAIRS: Record<string, [string, string, string]> = { 'pixel.size': ['pixel.smaller', 'pixel.bigger', 'Pencil size'], 'pixel.frame': ['pixel.prev', 'pixel.next', 'Frame'] }
 
-/** Default outer rings from the Hotwheel plan; other tools get their first ten. */
+/** Default outer rings from the QuickSelect plan; other tools get their first ten. */
 const DEFAULT_RING: Record<string, string[]> = {
   boards: ['board.note', 'btn:Add image or audio', 'board.pen', 'board.eraser', 'board.arrow', 'board.select', 'btn:Any colour', 'board.jump'],
   'level-layout': ['level.paint', 'level.erase', 'level.fill', 'level.select', 'level.block', 'level.note', 'btn:New layer'],
@@ -133,7 +136,11 @@ const useWheel = create<{ open: Open | null }>()(() => ({ open: null }))
 /** Play the closing animation, then take the wheel away (unless it was opened again meanwhile). */
 function closeWheel(open: Open) {
   useWheel.setState({ open: { ...open, closing: true } })
-  setTimeout(() => useWheel.getState().open?.at === open.at && useWheel.setState({ open: null }), 130)
+  setTimeout(() => {
+    if (useWheel.getState().open?.at !== open.at) return
+    useWheel.setState({ open: null })
+    hotwheelChanged.forEach((f) => f())
+  }, 130)
 }
 const isOpen = () => !!useWheel.getState().open && !useWheel.getState().open!.closing
 
@@ -485,7 +492,7 @@ function Wheel({ open }: { open: Open }) {
   // Outer drops are a size smaller than the inner ones: big in the middle, getting smaller outwards.
   const outer = open.outer.length ? bubbles(open.outer, MID + 6, OUT, hit, 'out', 70, true, bubbleLayout(open.inner.length, HOLE + 6, MID).radius * 0.74) : null
   return (
-    <div className={`hotwheel${glass ? ' bubbles' : ''}${open.closing ? ' closing' : ''}`} style={{ left: cx, top: cy, '--s': scale } as React.CSSProperties} role="menu" aria-label="Hotwheel">
+    <div className={`hotwheel${glass ? ' bubbles' : ''}${open.closing ? ' closing' : ''}${webkitGtk ? ' still' : ''}`} style={{ left: cx, top: cy, '--s': scale } as React.CSSProperties} role="menu" aria-label="QuickSelect">
       <svg width={w} height={w} viewBox={`${-w / 2} ${-w / 2} ${w} ${w}`}>
         {glass ? (
           <>
@@ -543,7 +550,7 @@ function Wheel({ open }: { open: Open }) {
         )}
         {open.sliders.length > 0 && <Sliders sliders={open.sliders} values={values} radius={sliderR} />}
       </svg>
-      <div className="hotwheel-name">{name || 'Hotwheel'}</div>
+      <div className="hotwheel-name">{name || 'QuickSelect'}</div>
     </div>
   )
 }
@@ -572,6 +579,7 @@ function openAt(at?: { x: number; y: number }, hold?: Open['hold']) {
   if (document.documentElement.dataset.glass) inner = inner.filter(Boolean)
   const p = at ?? pointer
   useWheel.setState({ open: { x: p.x, y: p.y, panel, inner, outer, sliders, hold, at: performance.now() } })
+  hotwheelChanged.forEach((f) => f())
 }
 
 /** Mount once in the editor: the wheel, and Q / pen button / right-hold / middle button to open it. */

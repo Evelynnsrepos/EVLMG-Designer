@@ -1,4 +1,7 @@
-import { defaultValues } from './adjust/filters'
+import type { AsciiMark } from './ascii'
+import { runCpu } from './adjust/cpu'
+import { defaultValues, type AdjustValues, type FilterId } from './adjust/filters'
+import { AdjustGl } from './adjust/gpu'
 import { defaultLibrary } from './brushDefaults'
 import type { BrushSettings } from './brushes'
 import { loadImageMask } from './brushTextures'
@@ -6,6 +9,7 @@ import { SketchEngine } from './engine'
 import { glAllowed } from './gl'
 import { gpuAllowSoftware } from './gpuPaint'
 import { newLayer, type InputPoint, type LayerAdjust } from './model'
+import type { OutlineSettings } from './outline'
 import { transformState } from './transform'
 import { Transformer } from './transformer'
 
@@ -120,6 +124,95 @@ function adjusted(id: LayerAdjust['id'], gpu: boolean) {
   return { px: e.render({ layers: [a, b, adj], backgroundColor: '#ffffff' }).getContext('2d')!.getImageData(0, 0, W, H).data, gpu: e.gpuActive }
 }
 
+/** An Adjustments menu filter (not a layer) on the GPU preview vs the CPU, on a see-through gradient. */
+function filtered(id: FilterId, values: AdjustValues): GpuDiff | null {
+  const src = document.createElement('canvas')
+  src.width = W
+  src.height = H
+  const c = src.getContext('2d')!
+  const g = c.createLinearGradient(0, 0, W, 0)
+  g.addColorStop(0, '#102030')
+  g.addColorStop(0.5, '#e08040')
+  g.addColorStop(1, '#ffffff')
+  c.fillStyle = g
+  c.fillRect(0, 0, W, H)
+  c.fillStyle = 'rgba(40,200,120,0.6)'
+  c.fillRect(40, 40, 120, 80)
+  const gl = AdjustGl.create(W, H)
+  if (!gl) return null
+  gl.setSource(src)
+  const out = document.createElement('canvas')
+  out.width = W
+  out.height = H
+  const o = out.getContext('2d')!
+  o.drawImage(gl.run(id, values), 0, 0)
+  const cpu = runCpu(id, values, c.getImageData(0, 0, W, H)).data
+  return diff(`${id} (Adjustments menu): GPU vs CPU`, true, o.getImageData(0, 0, W, H).data, cpu)
+}
+
+const OUTLINES: Record<string, OutlineSettings> = {
+  outside: { size: 6, color: '#202020', where: 'outside', sharpness: 1, roundness: 1 },
+  'center-soft-square': { size: 10, color: '#ff0000', color2: '#0000ff', where: 'center', sharpness: 0.3, roundness: 0 },
+  inside: { size: 5, color: '#00a040', where: 'inside', sharpness: 1, roundness: 0.5 },
+}
+
+/** An outline layer painted on (the outline follows while painting), then the same pixels outlined from scratch. */
+function outlined(name: string, gpu: boolean) {
+  const e = engine(gpu)
+  const layer = { ...newLayer('O'), outline: OUTLINES[name] }
+  const doc = { layers: [layer], backgroundColor: '#ffffff' }
+  e.edit(layer.id, (c) => {
+    c.fillStyle = '#3080c0'
+    c.fillRect(150, 30, 50, 90)
+  })
+  e.render(doc)
+  const brush = defaultLibrary().brushes.find((b) => b.id === 'round-brush')!
+  e.beginStroke({ layer, brush: { ...brush, size: 14 }, color: '#c03020', symmetry: 'off', erase: false }, pt(20, 80, 1, 0))
+  for (let i = 1; i <= 30; i++) {
+    e.strokeTo(pt(20 + i * 6, 80 + Math.sin(i / 3) * 40, 1, i * 8))
+    if (i % 3 === 0) e.draw(doc, [1, 0, 0, 1, 0, 0], W, H, 1, false) || e.render(doc)
+  }
+  e.endStroke()
+  const px = e.render(doc).getContext('2d')!.getImageData(0, 0, W, H).data.slice()
+  const scratch = (on: boolean) => {
+    const f = engine(on)
+    f.setLayerImage(layer.id, e.layerCanvas(layer.id))
+    return f.render(doc).getContext('2d')!.getImageData(0, 0, W, H).data
+  }
+  return { px, fresh: scratch(gpu), other: scratch(!gpu), gpu: e.gpuActive }
+}
+
+/** An ASCII layer painted on (the letters follow while painting), then the same pixels as letters from scratch. */
+function asciiLayer(gpu: boolean, v: Record<string, number>, marks?: Record<string, AsciiMark>) {
+  const e = engine(gpu)
+  const layer = { ...newLayer('A'), ascii: { ...defaultValues('ascii', W, H), v: { ...defaultValues('ascii', W, H).v, look: 2, ...v } } }
+  let doc = { layers: [layer], backgroundColor: '#ffffff' }
+  e.edit(layer.id, (c) => {
+    c.fillStyle = '#3080c0'
+    c.fillRect(150, 30, 50, 90)
+  })
+  e.render(doc)
+  const brush = defaultLibrary().brushes.find((b) => b.id === 'round-brush')!
+  e.beginStroke({ layer, brush: { ...brush, size: 14 }, color: '#c03020', symmetry: 'off', erase: false }, pt(20, 80, 1, 0))
+  for (let i = 1; i <= 30; i++) {
+    e.strokeTo(pt(20 + i * 6, 80 + Math.sin(i / 3) * 40, 1, i * 8))
+    if (i % 3 === 0) e.draw(doc, [1, 0, 0, 1, 0, 0], W, H, 1, false) || e.render(doc)
+  }
+  e.endStroke()
+  if (marks) {
+    // Sign brushes: only the marks change after the picture was drawn (the letters are picked again, nothing re-read).
+    e.render(doc)
+    doc = { ...doc, layers: [{ ...layer, ascii: { ...layer.ascii, ascii: { marks } } }] }
+  }
+  const px = e.render(doc).getContext('2d')!.getImageData(0, 0, W, H).data.slice()
+  const scratch = (on: boolean) => {
+    const f = engine(on)
+    f.setLayerImage(layer.id, e.layerCanvas(layer.id))
+    return f.render(doc).getContext('2d')!.getImageData(0, 0, W, H).data
+  }
+  return { px, fresh: scratch(gpu), other: scratch(!gpu), gpu: e.gpuActive }
+}
+
 /** The Move tool: a layer moved and turned, then dropped (on the GPU it is drawn and dropped there). */
 function moved(gpu: boolean) {
   const e = engine(gpu)
@@ -231,6 +324,27 @@ export async function runSketchGpuCheck(): Promise<{ strokes: GpuDiff[]; adjust:
     const g = adjusted(id, true)
     return diff(id, g.gpu, g.px, adjusted(id, false).px)
   })
+  for (const [mode, extra] of [[0, {}], [1, { keepColour: 1 }], [2, { reach: 0.1, soft: 0.6, amount: 0.8 }]] as [number, Record<string, number>][]) {
+    const values = defaultValues('valueAlpha', W, H)
+    const d = filtered('valueAlpha', { ...values, key: '#e08040', v: { ...values.v, mode, ...extra } })
+    if (d) adjust.push({ ...d, name: `${d.name}, mode ${mode}` })
+  }
+  const outlines: GpuDiff[] = []
+  for (const name of Object.keys(OUTLINES)) {
+    const g = outlined(name, true)
+    const c = outlined(name, false)
+    // The strokes themselves differ a little at their edges (see above), so the engines are compared on the same pixels.
+    outlines.push(diff(`outline ${name}: GPU vs Canvas 2D, same pixels`, g.gpu, g.fresh, g.other), diff(`outline ${name}: GPU live vs from scratch`, g.gpu, g.px, g.fresh), diff(`outline ${name}: Canvas 2D live vs from scratch`, true, c.px, c.fresh))
+  }
+  // ASCII layers: live painting must match working it out from scratch exactly; GPU and Canvas 2D average the cells
+  // with different rounding (8-bit on the GPU), so a few letters may differ there.
+  for (const [name, v] of [['plain', {}], ['edges + pattern', { edges: 0.8, dither: 1 }], ['spread + background', { dither: 2, paper: 1 }], ['braille + background', { set: 4, paper: 1 }], ['lines only', { set: 5 }], ['your text', { set: 6 }], ['sign brushes', { scatter: 0.3 }]] as [string, Record<string, number>][]) {
+    const marks: Record<string, AsciiMark> | undefined = name === 'sign brushes' ? { '64,32': { s: '_' }, '72,32': { s: '(' }, '0,0': { d: 3, c: '#00aa00' }, '160,64': { d: -2 } } : undefined
+    const g = asciiLayer(true, v, marks)
+    const c = asciiLayer(false, v, marks)
+    outlines.push(diff(`ascii ${name}: GPU live vs from scratch`, g.gpu, g.px, g.fresh), diff(`ascii ${name}: Canvas 2D live vs from scratch`, true, c.px, c.fresh))
+    strokes.push(diff(`ascii ${name}: GPU vs Canvas 2D, same pixels`, g.gpu, g.fresh, g.other))
+  }
   const g = moved(true)
-  return { strokes: [...strokes, diff('Move tool (turned and moved)', g.gpu, g.px, moved(false).px)], adjust, undo: undoRoundTrip(), foreign: foreignPixels() }
+  return { strokes: [...strokes, diff('Move tool (turned and moved)', g.gpu, g.px, moved(false).px)], adjust: [...adjust, ...outlines], undo: undoRoundTrip(), foreign: foreignPixels() }
 }

@@ -186,3 +186,59 @@ export function actorScript(doc: DialogueDoc, conversation: string, speaker: Spe
     ...doc.lines.filter((l) => l.text.trim()).map((l) => [voiceFileOf(doc, l, conversation, speaker), speaker(l), l.text, l.direction ?? '', conversation]),
   ])
 }
+
+// ---- cards (2026-11-22) ----------------------------------------------------------
+
+/** Where an arrow leaves: a line's "then", or one of its choices. */
+export interface LinkFrom {
+  lineId: Id
+  choiceId?: Id
+}
+
+/** Point a line's "then" (or one choice) at `to`; null ends the conversation there. */
+export function linkTo(doc: DialogueDoc, from: LinkFrom, to: Id | null): DialogueDoc {
+  return {
+    ...doc,
+    lines: doc.lines.map((l) => {
+      if (l.id !== from.lineId) return l
+      if (from.choiceId) return { ...l, choices: l.choices.map((c) => (c.id === from.choiceId ? { ...c, to } : c)) }
+      return { ...l, next: to }
+    }),
+  }
+}
+
+/** Add `line`, connected after `from` when given; the first line becomes the start. */
+export const addLineAfter = (doc: DialogueDoc, line: Line, from?: LinkFrom): DialogueDoc => {
+  const withLine = { startId: doc.startId ?? line.id, lines: [...doc.lines, line] }
+  return from ? linkTo(withLine, from, line.id) : withLine
+}
+
+/**
+ * Card columns: the start in column 0, every line one column right of the first line that reaches it
+ * (shortest path, so cards don't jump around while you connect). Lines nothing reaches go under column 0.
+ */
+export function cardColumns(doc: DialogueDoc): Id[][] {
+  const byId = new Map(doc.lines.map((l) => [l.id, l]))
+  const depth = new Map<Id, number>()
+  const queue: Id[] = []
+  if (doc.startId && byId.has(doc.startId)) {
+    depth.set(doc.startId, 0)
+    queue.push(doc.startId)
+  }
+  while (queue.length) {
+    const id = queue.shift()!
+    const l = byId.get(id)!
+    const targets = l.choices.length ? l.choices.map((c) => c.to) : [l.next]
+    for (const t of targets)
+      if (t && byId.has(t) && !depth.has(t)) {
+        depth.set(t, depth.get(id)! + 1)
+        queue.push(t)
+      }
+  }
+  const cols: Id[][] = []
+  for (const l of doc.lines) {
+    const d = depth.get(l.id) ?? 0
+    ;(cols[d] ??= []).push(l.id)
+  }
+  return cols.map((c) => c ?? [])
+}

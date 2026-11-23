@@ -27,6 +27,8 @@ export interface PacingDoc {
   curves: Curve[]
   beats: Beat[]
   unit: string
+  /** 0.35: hide what playtesters felt (from the Playtests tool) on this graph. */
+  hideTests?: boolean
 }
 
 export function createPacingDoc(): PacingDoc {

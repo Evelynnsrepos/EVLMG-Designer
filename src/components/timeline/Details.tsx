@@ -85,6 +85,7 @@ function EventFields({ ev, axis, refs, autoFocus, onPatch, onPickImage, onDelete
   const year = axis ? yearAt(axis, ev.x) : null
   return (
     <>
+      {ev.calendarEntryId && <p className="muted timeline-field">From the Calendar: change its date and title there. Image and links stay yours.</p>}
       {axis && year !== null && (
         <label className="timeline-field">
           <span>{DETAILS_UI.year}</span>

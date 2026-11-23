@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createRelationshipsDoc, daysPerRank, newBond, pointsPerDay, rankCost, rankTotals } from './model'
+import { clampLines, createRelationshipsDoc, daysPerRank, moodsOf, newBond, pointsPerDay, rankCost, rankLadder, rankTotals, withMoods } from './model'
 
 describe('relationships', () => {
   it('rank curves', () => {
@@ -18,5 +18,25 @@ describe('relationships', () => {
     const loved = { ...b, gifts: [{ itemId: 'i', mood: 'love' as const }] }
     expect(daysPerRank(loved, d).at(-1)).toBeLessThan(10)
     expect(daysPerRank(b, { ...d, actions: [], giftsPerDay: 0 })[0]).toBe(Infinity)
+  })
+
+  it('ranks below zero, decay, cap and own action points', () => {
+    const flat = { mode: 'flat' as const, base: 100, step: 0, custom: [] }
+    expect(rankLadder({ ranks: 2, minRanks: 2, curve: flat }).map((x) => [x.rank, x.total])).toEqual([[-2, -200], [-1, -100], [0, 0], [1, 100], [2, 200]])
+    const d = { ...createRelationshipsDoc(), actions: [{ id: 'a', name: 'Talk', points: 10, perDay: 1 }], giftsPerDay: 0 }
+    const b = { ...newBond('c'), curve: flat }
+    expect(pointsPerDay({ ...b, decay: 4 }, d)).toBe(6)
+    expect(pointsPerDay({ ...b, actionPoints: { a: 30 }, cap: 20 }, d)).toBe(20)
+    expect(daysPerRank({ ...b, decay: 10 }, d)[0]).toBe(Infinity)
+  })
+
+  it('keeps unlocks inside the ranks and reads old mood points', () => {
+    const b = { ...newBond('c'), ranks: 3, minRanks: 0, unlocks: [{ id: 'u', rank: 8, text: '', target: null }], gates: [{ id: 'g', rank: -2, text: '', target: null }] }
+    expect(clampLines(b)).toMatchObject({ unlocks: [{ rank: 3 }], gates: [{ rank: 1 }] })
+    expect(clampLines({ ...b, minRanks: 1 }).gates![0].rank).toBe(-1)
+    const old = { moodPoints: { love: 99, like: 1, neutral: 0, dislike: 0, hate: 0 } }
+    expect(moodsOf(old).find((m) => m.id === 'love')!.points).toBe(99)
+    const d = withMoods(createRelationshipsDoc(), [{ id: 'x', label: 'Adores', points: 70, color: '#000000' }])
+    expect(d.moodPoints).toEqual({ x: 70 })
   })
 })

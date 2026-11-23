@@ -37,3 +37,100 @@
   height: 10px;
   border-radius: 50%;
 }
+.pt-hint {
+  margin: 0;
+  font-size: 12px;
+}
+.pt-sec-table td,
+.pt-sec-table th {
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+.pt-sec-name {
+  font-weight: 600;
+}
+.pt-dots {
+  display: inline-flex;
+  gap: 2px;
+}
+.pt-dot {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.pt-dot.mid {
+  border-style: dashed;
+}
+.pt-dot.on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+.pt-min {
+  width: 64px !important;
+}
+.pt-sec-note {
+  min-width: 140px;
+}
+.pt-steps {
+  flex-basis: 100%;
+  margin-left: 24px;
+}
+.pt-watch {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.pt-watch.on {
+  border-color: var(--accent);
+}
+.pt-clock {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.pt-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pt-log {
+  max-height: 220px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.pt-log li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 13px;
+}
+.pt-tag {
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  font-size: 11px;
+}
+.pt-flag {
+  color: #f08c00;
+  font-size: 12px;
+}
+.pt-sections {
+  overflow-x: auto;
+}
+.pt-table th,
+.pt-table td {
+  text-align: left;
+}

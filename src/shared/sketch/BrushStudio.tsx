@@ -12,6 +12,7 @@ import {
   GRAIN_BLENDS,
   OUTLINE_COLORS,
   OUTLINE_FILLS,
+  WIGGLE_STYLES,
   isRibbon,
   normalizeBrush,
   normalizeSettings,
@@ -24,8 +25,10 @@ import {
 import { CurveEditor } from './CurveEditor'
 import { DrawingPad } from './DrawingPad'
 import { STARTERS } from './brushDefaults'
+import { letterStrip, loadAsciiFont } from './ascii'
 import { useBrushLibrary } from './library'
 import { blobToMask, TextureEditor } from './TextureEditor'
+import { loadImageMask } from './brushTextures'
 import './studio.css'
 
 const PAGES = [
@@ -60,6 +63,9 @@ const UI = {
   second: 'Second brush',
   noGrain: 'No grain',
   startFrom: 'Start from',
+  letters: 'Letter brush',
+  lettersHint: 'Type a word or letters: they are written along your line, over and over, and turn with it. Uses the brush colour.',
+  makeLetters: 'Make',
   startHint: 'Picks a starting point and replaces the settings (Ctrl+Z goes back). Then fine-tune with the sliders below, or open the other pages for every setting.',
   easyMore: 'Every other setting is on the pages on the left.',
   wetHint: 'Wet mix picks up the colors already on the layer and mixes them with the paint.',
@@ -92,6 +98,7 @@ export function BrushStudio({ brushId, color, onClose }: { brushId: Id; color: s
   const stored = useBrushLibrary((s) => s.brushes.find((b) => b.id === brushId))
   const replace = useBrushLibrary((s) => s.replaceBrush)
   const [draft, setDraft] = useState<BrushDef | undefined>(stored)
+  const [letters, setLetters] = useState('ASCII')
   const [page, setPage] = useState<Page>('Easy')
   const [target, setTarget] = useState<'main' | 'second'>('main')
   const hist = useRef<{ past: BrushDef[]; future: BrushDef[]; key: string; at: number }>({ past: [], future: [], key: '', at: 0 })
@@ -225,6 +232,23 @@ export function BrushStudio({ brushId, color, onClose }: { brushId: Id; color: s
                     </button>
                   ))}
                 </div>
+                <div className="studio-starters" title={UI.lettersHint}>
+                  <span className="muted">{UI.letters}</span>
+                  <input className="input" value={letters} onChange={(e) => setLetters(e.target.value)} aria-label={UI.letters} spellCheck={false} />
+                  <button
+                    className="btn btn-small"
+                    onClick={() =>
+                      void loadAsciiFont().then(async () => {
+                        const shapeImage = letterStrip(letters)
+                        // Decoded before the first stroke needs it.
+                        await loadImageMask(shapeImage)
+                        commit({ ...draft, ...normalizeSettings({ hardness: 1, ribbon: 'tile', shaded: false, pressureSize: 0.2, pressureOpacity: 0, streamline: 0.6, spacing: 0.05, stampPreview: false, size: Math.max(24, draft.size), shapeImage }) }, 'starter')
+                      })
+                    }
+                  >
+                    {UI.makeLetters}
+                  </button>
+                </div>
                 <div className="studio-note muted">{UI.startHint}</div>
                 {num('size', 'Size', s.minSize, s.maxSize, 'px')}
                 {num('opacity', 'Opacity', 0, 1)}
@@ -246,6 +270,8 @@ export function BrushStudio({ brushId, color, onClose }: { brushId: Id; color: s
                 {num('outline', 'Outline', 0, 60, 'px', 'A line around the shape you paint, following it as you draw')}
                 {(s.outline ?? 0) > 0 && choice('outlineFill', 'Inside the outline', OUTLINE_FILLS)}
                 {s.grain !== 'none' || s.grainImage ? num('grainDepth', 'Texture', 0, 1, '%', 'How strongly the paper grain shows') : null}
+                {num('wiggle', 'Wiggle (animated)', 0, 1, '%', 'The line moves in a loop. Strokes go on an Animated layer, which exports as GIF, animated PNG, video or sprite sheet')}
+                {(s.wiggle ?? 0) > 0 && choice('wiggleStyle', 'How it wiggles', WIGGLE_STYLES)}
                 <div className="studio-note muted">{UI.easyMore}</div>
               </>
             )}
@@ -257,6 +283,8 @@ export function BrushStudio({ brushId, color, onClose }: { brushId: Id; color: s
                 {num('count', 'Stamps per point', 1, 16, 'n')}
                 {num('countJitter', 'Count jitter', 0, 1)}
                 {num('falloff', 'Fall off', 0, 1, '%', 'The stroke fades as it gets longer')}
+                {num('wiggle', 'Wiggle (animated)', 0, 1, '%', 'The line moves in a loop on an Animated layer')}
+                {(s.wiggle ?? 0) > 0 && choice('wiggleStyle', 'How it wiggles', WIGGLE_STYLES)}
               </>
             )}
             {page === 'Stabilization' && (

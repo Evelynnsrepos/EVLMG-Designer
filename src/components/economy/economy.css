@@ -16,7 +16,97 @@
   padding: 12px 18px;
 }
 .eco-body h3 {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+.eco-body h4 {
+  margin: 14px 0 6px;
+  font-size: 13px;
+}
+/* Each part of a tab is a card. */
+.eco-body section {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  min-width: 0;
+}
+.eco-scroll {
+  overflow-x: auto;
+}
+.eco-uses-formula .eco-fixed {
+  opacity: 0.45;
+}
+.eco-twocol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 14px;
+}
+.eco-sub {
+  margin-top: 6px;
+}
+.eco-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 620px;
+  margin: 24px auto;
+  text-align: center;
+  color: var(--text-muted);
+}
+.eco-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px 14px;
+}
+.eco-fields .calc-number {
+  width: 100%;
+}
+.eco-goods {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.eco-good {
+  display: grid;
+  grid-template-columns: 1fr 96px auto;
+  align-items: center;
+  gap: 6px;
+}
+.eco-places {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr));
+  gap: 10px;
+  margin: 8px 0;
+}
+.eco-place {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.eco-placename {
+  flex: 1;
+  font-weight: 600;
+}
+.eco-tradehere {
+  width: fit-content;
+}
+.eco-markets .eco-slots .calc-number {
+  width: 68px;
+}
+.eco-markets .eco-slots select.input {
+  width: 110px;
+}
+.eco-leg {
+  margin-bottom: 6px;
+}
+.eco-leg select.input {
+  width: 130px;
 }
 .eco-body p {
   margin: 4px 0;
@@ -45,12 +135,21 @@
 }
 .eco-tabs {
   display: flex;
-  gap: 4px;
-  padding: 4px 0;
+  gap: 2px;
+  width: fit-content;
+  margin: 4px 0;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--bg-sunken, var(--bg));
+}
+.eco-tabs .btn {
+  border-color: transparent;
+  border-radius: 999px;
+  background: transparent;
 }
 .eco-tabs .btn.on {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-contrast, #fff);
 }
 .eco-meter {
   border: 1px solid var(--border);
@@ -62,6 +161,21 @@
 }
 .eco-th {
   padding-left: 18px;
+  flex-wrap: wrap;
+}
+.eco-meter > .ld-inline {
+  flex-wrap: wrap;
+}
+.eco-meter .input.eco-when,
+.input.eco-when {
+  width: auto;
+}
+.eco-note {
+  display: block;
+  font-size: 0.85em;
+}
+.eco-examples {
+  flex-wrap: wrap;
 }
 .eco-meter .input {
   width: 140px;
@@ -69,4 +183,62 @@
 }
 .eco-meter .calc-number {
   width: 80px;
+}
+.eco-formula {
+  width: 150px;
+  font-family: var(--font-mono, monospace);
+}
+.eco-formula-bad {
+  border-color: var(--danger) !important;
+}
+.eco-picked td {
+  background: var(--bg-hover);
+}
+.eco-io {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.eco-io .calc-number {
+  width: 56px;
+}
+.eco-recipe {
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.eco-markets .calc-number {
+  width: 84px;
+}
+.eco-markets .ld-inline {
+  flex-wrap: wrap;
+}
+
+/* Glass look */
+:root[data-glass] .eco-body section,
+:root[data-glass] .eco-meter {
+  border-color: var(--glass-border);
+  border-radius: var(--radius-xl);
+  background: var(--glass-chip);
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow-sm);
+}
+:root[data-glass] .eco-body section.eco-empty {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+:root[data-glass] .eco-place {
+  border-color: var(--glass-border);
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--glass-hi) 50%, transparent);
+}
+:root[data-glass] .eco-tabs {
+  background: color-mix(in srgb, var(--bg-sunken, var(--bg)) 70%, transparent);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.18);
+}
+:root[data-glass] .eco-tabs .btn.on {
+  border-color: var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow-sm);
+}
+:root[data-glass] .eco-picked td {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }

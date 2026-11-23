@@ -6,6 +6,11 @@
 
 <p align="center"><i>EVLMG Designer for short</i></p>
 
+> **Unstable branch.** This branch has changes that are not released yet and are not fully tested.
+> The latest release is v0.34.0 on the [Releases page](https://github.com/Evelynnsrepos/EVLMG-Designer/releases).
+> Tools and features described below may not be in it yet.
+
+
 <p align="center">
   <img src="https://img.shields.io/badge/%F0%9F%9A%A7%20status-UNDER%20CONSTRUCTION-FFC800?style=for-the-badge&labelColor=1a1a1a" alt="Under construction">
 </p>
@@ -77,7 +82,7 @@ The whole app in five minutes.
    right-click a tool for colors, folders and closing it. Right-click a document under a tool (a deck, a board, a
    drawing) to rename, duplicate or delete it.
 4. **Rearrange with `Esc`** (or the Arrange button next to Projects). Layout Mode shows big, easy targets to close, swap or move tool windows.
-5. **Hold `Q` for the Hotwheel.** A round menu under your pointer or pen: program actions inside, the current tool's
+5. **Hold `Q` for the QuickSelect.** A round menu under your pointer or pen: program actions inside, the current tool's
    actions outside. Point and let go. Every tool's header also has its shortcuts and a size button for tablets.
 6. **Jump points.** The crossing-arrows button in every tool's header links it to any other tool, document or entry,
    and lists what points back. On boards, the jump tool (`J`) places a jump point right on the board. Drag a jump point
@@ -117,7 +122,7 @@ The whole app in five minutes.
 - **Rarities**: as many rarity systems as you like (Rarity, Tier, Quality…) with colors, borders, icons or your own
   pictures, star or number ratings, and your own fields like drop rates.
 - **Safe deleting**: before you delete something, the app shows every place it is used. Links follow renames.
-- **Looks**: a glass look (Full, Light or Off in Settings > General) with a bubble Hotwheel, the accent colour everywhere, light and dark themes, a Project look per project (accent, background, wallpaper), a project picture,
+- **Looks**: a glass look (Full, Light or Off in Settings > General) with a bubble QuickSelect, the accent colour everywhere, light and dark themes, a Project look per project (accent, background, wallpaper), a project picture,
   and a font for every tool.
 - **Spell check** in English and German with your own word list; names from your project count as correct.
   Made for mixed English and German text and for people who spell by sound: each part of a sentence is checked in
@@ -133,7 +138,7 @@ The whole app in five minutes.
   restores one (undo works).
 - **Hotkey hints** are on from the start: every button with a key shows it small in its corner. Turn them off in
   Settings > General.
-- **Settings with tabs and search**: General, Writing, Keys & Hotwheel, Project presets, Git and Plugins.
+- **Settings with tabs and search**: General, Writing, Keys & QuickSelect, Project presets, Git and Plugins.
 - **Your own shortcuts**: change any key in Settings; the user guide (`F1`) has a cheatsheet with the default and your key.
 
 </details>
@@ -245,7 +250,7 @@ beginner guides.
 | **Wiki** | Articles with `[[links]]`, articles made from any item, character, town or enemy (with a live info box), backlinks and a connection map. |
 | **Factions** | Factions with leaders, members and towns, and a matrix of how they feel about each other. |
 | **Family Tree** | Characters from the Character List as a family tree with parents, children and partners. |
-| **Relationships** | Friendship, romance and loyalty ranks per character: points per rank, loved and hated gifts, what each rank unlocks, when they're free and how many days it takes. |
+| **Relationships** | Bonds between the player, characters and factions: ranks above and below zero with their own names, points per rank, decay and a cap, your own gift moods, what each rank unlocks and needs, pick-one groups, a network view, when they're free and how many days (or missions, turns…) it takes. |
 | **Map Creator** | Cities, streets, terrain stamps and zones (like the land of a faction) on a blank map, with PNG export. Cities are linked to the Town List; zones link to factions, characters, documents and more. |
 | **Cosmos Creator** | Universes, galaxies, solar systems, planets, moons and more in an isometric view, with your own pictures for any body. |
 | **Names & Languages** | Generate names in about 50 real-world styles (German, Polish, Japanese…) or from a made-up language's sounds, and build that language with a dictionary and translator. |
@@ -257,7 +262,7 @@ beginner guides.
 
 | Tool | What it does |
 |---|---|
-| **Writer** | Rich text documents for design docs, scripts and dialogue, with fonts and sizes, images you can size and let the text flow around, live word count, Markdown/text export, PDF through the print dialog and Markdown import. A per-document Markdown Syntax switch adds typing shortcuts like `==highlight==`, `- [ ]` checklists, `> [!note]` callouts, tags, footnotes and tables, and turns pasted Markdown into formatting. An insert menu (+ button, or type `/`) and a Markdown help panel show what to type for each format, with an outline of headings, find and replace, tables, and text size, line spacing and page width to read comfortably. |
+| **Writer** | Rich text documents for design docs, scripts and dialogue, with fonts and sizes, images you can size and let the text flow around, live word count, Markdown/text export, PDF through the print dialog and Markdown import. A per-document Markdown Syntax switch adds typing shortcuts like `==highlight==`, `- [ ]` checklists, `> [!note]` callouts, tags, footnotes and tables, and turns pasted Markdown into formatting. An insert menu (+ button, or type `/`) and a Markdown help panel show what to type for each format, with an outline of headings, find and replace, tables, and text size, line spacing and page width to read comfortably. A tabbed toolbar (Home, Insert, Review, View, Markdown) adds paragraph styles, superscript, subscript, small caps, change case, text and highlight colours, copy formatting, indent and alignment, a table of contents that updates itself, page breaks, symbols, read aloud, a page view, Edit as Markdown, per-paragraph line spacing, table tools, comments in the margin, optional track changes, headers, footers and page numbers, and web page (.html) and .docx export. |
 | **Story Branch Writer** | Mind-map style branching stories: create, branch, connect and sever nodes, with + Add next under each node, start and ending markers, choice text on arrows, a story check for dead ends, Play through to test it like a player, Tidy up and export for Twine. Stories also go into the Design Book. |
 | **Timeline** | Timelines with optional years, events with images, and branches for alternative histories (press `B`). |
 | **Quest Designer** | Quests with givers, places, objectives, rewards and chains shown as a graph, plus flags shared with the Dialogue Editor. |
@@ -271,7 +276,7 @@ beginner guides.
 
 | Tool | What it does |
 |---|---|
-| **Draw** | A full painting app: pen pressure and tilt (read straight from the pen driver on Linux), about 170 editable brushes, among them ropes, chains, ribbons, grass and leaves, comic outline brushes and hair brushes for coils, braids, cornrows, twists, locs, waves and edges (plus .abr, .brush and .brushset import), a Brush Studio with an Easy page for making your own, 26 blend modes, groups, masks and adjustment layers, selections and transform, adjustments, liquify, guides and symmetry, shape snap (draw roughly, keep holding: circles, tilted ellipses and boxes, arcs; hold longer for a perfect one, with a Shaky hands preset), text layers, animation with sprite sheet export (Godot 4, GameMaker, PNG + JSON), time-lapse, painting on the graphics card (falls back by itself on older computers), painting and moving past the canvas edge (optional, off by default), a layer picker (`K`), 250 undo steps (selections, layers and guides included; the last 100 come back after you close the app), canvases up to 8K, a light preview (lamps you move around 3D objects, a planar head, a posable figure or your own models, with light presets, contact shadows, colour picking and pinning as a reference), layers that float or dock (with a Bring back button if they get lost), and PSD import and export. |
+| **Draw** | A full painting app: pen pressure and tilt (read straight from the pen driver on Linux), about 170 editable brushes, among them ropes, chains, ribbons, grass and leaves, comic outline brushes and hair brushes for coils, braids, cornrows, twists, locs, waves and edges (plus .abr, .brush and .brushset import), a Brush Studio with an Easy page for making your own, 26 blend modes, groups, masks and adjustment layers, selections and transform (Rotate object turns a drawing as a 3D shape; Mold object bends it like a puppet, with pins anywhere, parts that bend on their own, front and back for overlaps, and poses you can copy to the next frame), adjustments (among them Remove background / Values to opacity: any colour, white or black turns see-through, with range and softness, also as an adjustment layer), liquify, guides and symmetry, shape snap (draw roughly, keep holding: circles, tilted ellipses and boxes, arcs; hold longer for a perfect one, with a Shaky hands preset), text layers, ASCII art layers (paint with any brush and see letters, 8 letter sets including box lines and your own, quick looks with previews and looks of your own, sign brushes for lines, box frames, shading and cell fills, export as text, a coloured web page, terminal colours or a picture), animation with sprite sheet export (Godot 4, GameMaker, PNG + JSON), time-lapse, painting on the graphics card (falls back by itself on older computers), painting and moving past the canvas edge (optional, off by default), a layer picker (`K`), 250 undo steps (selections, layers and guides included; the last 100 come back after you close the app), canvases up to 8K, a light preview (lamps you move around 3D objects, a planar head, a posable figure or your own models, with light presets, contact shadows, colour picking and pinning as a reference), layers that float or dock (with a Bring back button if they get lost), and PSD import and export. |
 | **Pixel Art** | Sprites, animations, tilesets and tilemaps on exact pixels that stay sharp at every zoom: live lines, curves, rectangles and ellipses on their own small layers that you can drag into shape later (Ctrl keeps a perfect square or circle), shape layers with in-betweens between key frames, a pencil that snaps rough shapes clean, spray, lasso fill, dithered gradients, a shade brush, pixel text in any font, inks, pen pressure, mirror and seamless drawing, rectangle, ellipse, lasso, polygon and magic wand selections with tolerance, grow, shrink and scale or rotate handles, flip, pixel rotate, outline, adjust colours and effects, canvas size, trim and crop, Draw's colour panel, palettes with a ramp maker, ready-made palettes and a palette switch that connects old colours to new ones, palette-only and gray modes and palette variants, layers in Draw's look with all of Draw's blend modes, groups and per-frame opacity, panels that pop out, floating reference images, frames with onion skin, linked frames, drag-to-reorder, tags with repeats and a preview, tilesets with the current tile outlined, Ctrl+arrow keys to the next tile, layers on all tiles and tiles played as an animation, tile maps with random and mirrored tiles, new tiles drawn right on the map and maps rebuilt from a picture, sprites that play on characters, enemies, items, abilities and achievements, and export as PNG, GIF, sprite sheet + JSON, GameMaker strip, Godot SpriteFrames or .aseprite. Every change can be undone and redone. Opens .ase, .aseprite, GIF, APNG and sprite sheets. |
 | **Card Designer** | Pick a card size, then design card fronts and backs on real layers (select and move only what is on the active layer, lock layers so nothing on them changes), fields with choice lists (pick Tank, Bruiser… per card from a dropdown), text that fills in each card's values with `{Name}` (new cards keep every field box), picture fields, colour slots that recolour the whole deck at once, colour variants for factions or rarities, per-card colours and layers, foil items and layers, picture import by drag and drop with right-click replace and fit, snapping to the bleed, cut and safe lines, and a free font pack. Fill the deck in a table, from a live Spreadsheet, or once from a CSV file or Spreadsheet (rows update cards by name or add new ones, columns map to fields, own-text boxes or pictures), then export from one export window with a live preview: print at home (pages with crop marks and double-sided backs, PDF or PNG, any paper), print shops (exact sizes for MakePlayingCards and The Game Crafter, or one-card-per-page PDFs with 3 mm or 1/8 inch bleed), janky photo-station prints with front and back side by side to fold, Tabletop Simulator (a deck ready to spawn, or card sheets for online games), Godot (card pictures or a sprite sheet with .tres files, plus deck.json) and the deck as JSON or a spreadsheet (CSV). The export window remembers every export and its settings and can match another deck's exports, so two versions of a set come out the same. Bleed added on export never changes your design, warnings point out text over the safe line and soft or missing pictures, and foil masks go to print shops. Pictures from Draw, Pixel Art, Vector and Texture Paint arrive on the shown card with Send to. |
 | **Vector** (experimental) | Clean shapes for inventory and skill icons, app icons, logos, buttons, health bars and panels: pick what you are making for the right size, add live shapes (box, circle, polygon, star, ring, heart, shield, cross, gear, speech bubble, arrow, line) with sliders like rounded corners and points, combine them (join, cut out, keep or remove the overlap, split, shape builder, grow/shrink, outline to shape) with exact shape maths from VectorCraft, draw your own with the pen and pencil and edit every point, import SVG, one-click looks (flat, game icon, glossy, glow, outline), gradients in any direction or round, dashed outlines, shadows and glows, fonts for text, number boxes, align and spread, groups, copy and paste, snapping and crisp pixels, layers, a preview at 16 to 128 px on dark, light and in an inventory slot, and save as PNG at any sizes or SVG. Send an icon to a card, the Asset Pool or a Moodboard, or export every icon of the project for Godot (sprite sheet + .tres). |
@@ -307,7 +312,7 @@ beginner guides.
 | **Level Calculator** | XP curves, stat growth, and damage per level against a fixed defense or an enemy from your Enemy List. |
 | **Resource Calculator** | How many resources and how much play time a goal takes, using level-up costs and enemy drop rates. |
 | **Combat Simulator** | Two teams fight many times with a damage formula: win rates, fight length, damage and an example fight. |
-| **Economy Simulator** | Currency sources and sinks simulated over hours of play: balances, purchases and inflation warnings, plus meters like hunger and stamina that change over time. |
+| **Economy Simulator** | Currency sources and sinks simulated over hours of play: balances, purchases and inflation warnings, plus a meter simulator: bars like hunger, mood, fuel or energy with formulas, levels (below, above, empty, full) that add Status Effects or drain other meters, actions on a clock or when needed, and offline refills per player type. |
 | **Gacha & Loot Simulator** | Banner rates, hard and soft pity and 50/50s simulated over thousands of players, chest and drop table chances, and pick-1-of-N offers for shops and level-ups. |
 | **Balance Dashboard** | Item and enemy numbers that stick out, the enemy difficulty curve and gaps in your data. |
 | **Spreadsheet** | Excel-style sheets: hundreds of Excel functions, formulas across sheets, a fill handle, cell formatting, Damage Calculator results in cells, `=STAT("Iron Sword", "Damage")` and live tables that read your lists (type over a STAT cell to change the entry), CSV import and export, charts, and frozen rows and columns. |
@@ -317,12 +322,12 @@ beginner guides.
 | Tool | What it does |
 |---|---|
 | **Vision & Pillars** | Elevator pitch, vision, player fantasy, selling points, design pillars, references and anti-goals on one page. |
-| **Scope Planner** | Every feature sorted into must, should, could, won't and cut, with effort against the days you have. |
+| **Scope Planner** | Every feature sorted into must, should, could, won't and cut, with effort against the days you have. Versions and updates with release days, scope lock, planned / added / cut with reasons and history, shipping with carry-over, a roadmap of all versions and Markdown patch notes. |
 | **Task Board** | A to-do board with pictures, your own columns and categories, tasks linked to the entries they are about, estimates, milestones, "waits for" blockers and CSV for Jira or Linear. |
 | **Live-Service Planner** | The weeks after launch: versions and seasons, events, gacha banners, a battle pass and the store, with rerun warnings and battle pass days per player type. |
 | **Playtests** | Playtest sessions with scores and findings, scores per build and every open problem in one place. |
 | **Reviews** | Everything with a status or comments on one board, with a "needs review" filter. Approvals remember who signed off and show "changed since" when the content changes. |
-| **Pitch Deck** | Slides built from your vision, pillars, characters and items, presented full screen. |
+| **Pitch Deck** | Slides built from your vision, pillars, characters and items, or free slides with text, pictures and shapes; themes, transitions, click-by-click builds, speaker notes and a presenter view. Exports .pptx (PowerPoint, Keynote, Google Slides), .odp (LibreOffice), PDF and slide pictures. |
 
 </details>
 
@@ -450,11 +455,13 @@ Donating on [Ko-fi](https://ko-fi.com/evelynnevlmg) is welcome but never require
 
 The planar head in Draw's light preview is ["planarhead-model"](https://sketchfab.com/3d-models/planarhead-model-df4a384d5c3a4b358b6d3b5bd80e6d60) by [Beenga](https://sketchfab.com/beangarik), under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), used unchanged. The posable figure is ["Mannequiny"](https://github.com/GDQuest/godot-3d-mannequin) by [GDQuest](https://www.gdquest.com/) (model by Luciano Muñoz), under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), used unchanged (see [public/models/CREDITS.md](public/models/CREDITS.md)).
 
+The Cosmos Creator pictures are public domain (CC0) art by [Kenney](https://kenney.nl) (Planets, Particle Pack, Simple Space) and Pixel-boy ([Superpowers asset packs](https://github.com/sparklinlabs/superpowers-asset-packs)); see [public/cosmos/CREDITS.md](public/cosmos/CREDITS.md). Thank you!
+
 The app font, [Lexend Deca](https://github.com/googlefonts/lexend), is under the [SIL Open Font License 1.1](public/fonts/OFL.txt).
 
 The game font pack bundled for cards and every font menu is free to use: Almendra, Atkinson Hyperlegible Next, Bangers, Bebas Neue,
 Cinzel, Cinzel Decorative, Crimson Pro, EB Garamond, Fredoka, Grenze Gotisch, IM Fell English, MedievalSharp, OpenDyslexic, Oswald,
-Pirata One, Press Start 2P and Uncial Antiqua are under the SIL Open Font License 1.1, and Luckiest Guy is under the Apache License 2.0.
+Pirata One, Press Start 2P, Uncial Antiqua and JetBrains Mono (used for ASCII art) are under the SIL Open Font License 1.1, and Luckiest Guy is under the Apache License 2.0.
 Each font's licence and authors are in [`public/fonts/game/licenses/`](public/fonts/game/licenses/). Thank you to all the font makers!
 
 Material Lab (experimental) gets its node library and its ready materials from [Material Maker](https://github.com/RodZill4/material-maker) by Rodolphe Suescun and

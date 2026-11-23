@@ -1,7 +1,14 @@
 import { glAllowed } from '../gl'
 import { balanceLut, curvesLut, gradientLut, type Balance } from './color'
 import type { AdjustValues, FilterId } from './filters'
+import { valueAlphaKey } from './cpu'
 import * as S from './shaders'
+
+/** The Values to opacity shader's settings (also used by adjustment layers). */
+export function valueAlphaUniforms(a: AdjustValues) {
+  const [kr, kg, kb] = valueAlphaKey(a)
+  return { amount: a.v.amount ?? 1, reach: a.v.reach ?? 0, soft: a.v.soft ?? 1, keep: a.v.keepColour ?? 0, kr, kg, kb }
+}
 
 /**
  * Runs Adjustments and Liquify on the GPU (WebGL2) for a live preview. One per
@@ -170,6 +177,9 @@ export class AdjustGl {
       case 'gradient':
         this.setLut(gradientLut(a.gradient))
         this.pass(S.LUT, src, 0, { byLuma: 1, keepLum: 0, amount: v.amount }, { lut: this.lut })
+        break
+      case 'valueAlpha':
+        this.pass(S.VALUE_ALPHA, src, 0, valueAlphaUniforms(a))
         break
       case 'gaussian':
         this.blur(src, 0, v.radius / 2)

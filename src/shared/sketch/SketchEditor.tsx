@@ -1,15 +1,19 @@
 import {
   Brush as BrushIcon,
+  CircleDashed,
   Eraser,
   FlipHorizontal2,
   FlipVertical2,
   Fingerprint,
   FlipHorizontal,
   Hand,
+  Hash,
   Image as ImageIcon,
   ImagePlus,
   Lasso,
   Move,
+  Rotate3d,
+  Spline,
   PaintBucket,
   Pipette,
   Layers2,
@@ -25,14 +29,17 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
+import { flushSync } from 'react-dom'
 import { importAssetFromBlob, pickAndImportAssets, resolveAssetPath } from '@/core/assets'
 import { getFs } from '@/core/fs'
 import { retireAssets } from '@/core/backups'
 import { newId, type Id } from '@/core/model'
 import { flush as flushSave, IDLE_SAVE_MS, scheduleSave, useProjectStore } from '@/core/state'
 import { saveBinaryFile, safeFileName } from '@/core/export'
-import { SketchEngine } from './engine'
-import { drawPreview } from './brushes'
+import { alphaBounds, SketchEngine } from './engine'
+import { drawPreview, isAnimatedBrush } from './brushes'
+import { hasAnimatedLayers, newWiggle, rasterized, useAnimatedLayers, wiggled, withStroke, framesOf } from './animatedLayers'
+import { AnimatedPanel } from './AnimatedPanel'
 import { BrushLibrary } from './BrushLibrary'
 import { useBrushLibrary } from './library'
 import {
@@ -51,12 +58,19 @@ import { ReferencePicker } from './ReferencePicker'
 import { ReferenceWindow } from './ReferenceWindow'
 import { ShortcutSheet } from './ShortcutSheet'
 import { FloatingPanel, useSpot } from './FloatingPanel'
-import { growDoc, growFor, shiftDocData } from './growth'
+import { AsciiBrushPanel, AsciiWays, type SignTool } from './AsciiBrushPanel'
+import { rememberedAscii } from './AsciiDialog'
+import { localized } from '../i18n'
+import { beginSigns, signsTo, type SignStroke } from './asciiBrush'
+import type { AsciiMark } from './ascii'
+import { clearOutside, growDoc, growFor, shiftDocData } from './growth'
 import { SketchHistoryFile } from './historyFile'
 import { boundsOf, maxLayers, type Rect } from './tiles'
 import './sketch.css'
 // Sketch Pro: layers, selections (feat/sketch-layers)
-import { addMask, exportLayers, hasPixels, insertAbove, isGroup, lockedInTree } from './layers'
+import { addMask, exportLayers, hasPixels, insertAbove, isGroup, lockedInTree, moveSibling } from './layers'
+import { OutlineDialog } from './OutlineDialog'
+import { outlineInto, outlineReach } from './outline'
 import { LayersPanel, type LayerHost } from './LayersPanel'
 import { SelectionBar, SelectionMaskView, SelectionOutline } from './SelectionTools'
 import { useSelector } from './selector'
@@ -75,7 +89,8 @@ import { BrushCursor, GuideOverlay, ShapeNodes } from './GuideOverlay'
 import { GuidePanel } from './GuidePanel'
 import { InputSettingsDialog } from './InputSettingsDialog'
 import { holdTolerance, useInputSettings } from './inputSettings'
-import { confirmDialog } from '../dialogs'
+import { choiceDialog, confirmDialog } from '../dialogs'
+import { exportDrawing } from './files/io'
 import { isEraserEnd, penButton, penData, PenPipeline, type PenPoint } from './pen'
 import { flipAbout, pinch, rotateAbout, toDocPoint, viewMatrix, zoomAbout, type View } from './view'
 // Sketch Pro: canvas, time-lapse and files.
@@ -91,7 +106,7 @@ import { useAssist } from './assistView'
 // Sketch Pro: Adjustments, Liquify and Clone.
 import { AdjustMenu, AdjustStudio, type AdjustMode } from './adjust/AdjustStudio'
 import { pointIn, zoomOf } from '@/shared/zoom'
-import { openHotwheel, useHotwheel, type HotAction } from '@/shared/hotwheel'
+import { hotwheelChanged, openHotwheel, useHotwheel, type HotAction } from '@/shared/hotwheel'
 
 // 3D only loads when the light preview opens.
 const LightPreview = lazy(() => import('./light/LightPreview'))
@@ -106,6 +121,15 @@ const UI_PRO = {
   overrideHint: "Tick to use your own value for every brush. Unticked, each brush uses its own setting (shown greyed out).",
   layers: 'Layers',
   textOptions: 'Text',
+  animatedTitle: 'Animated layer',
+  animatedLayer: 'Animated',
+  animatedFirst: 'Animated brushes paint on an Animated layer, so this one was added above. It moves, so it is not a regular image any more: still exports keep only its first frame.',
+  stillOnly: 'Animated layers take brush strokes and the eraser only. To fill, move or filter it, make it a normal still layer first.',
+  makeStill: 'Make it a normal layer',
+  dismiss: 'OK',
+  stillTitle: 'This drawing moves',
+  stillMessage: 'It has animated layers. A PNG keeps only their first frame. Export the moving loop as an animated GIF instead?',
+  stillChoices: ['Animated GIF', 'PNG (first frame)'],
   showLayers: 'Show the layers',
   lightPreview: 'Light preview: lamps around 3D objects, to see where shadows fall',
   lightPreviewTitle: 'Light preview',
@@ -116,6 +140,8 @@ const UI_PRO = {
   bringFloating: 'Layers, floating at the top right',
   bringDocked: 'Layers, in the side panel',
   editShape: 'Edit shape',
+  keepLine: 'Keep my line',
+  keepLineTitle: 'Take the shape away and keep the line you drew (Backspace)',
   done: 'Done',
 }
 
@@ -125,22 +151,31 @@ interface ShapeOffer {
   opts: Parameters<SketchEngine['beginStroke']>[0]
   pressure: number
   start: { x: number; y: number }
+  /** The line as drawn before it snapped (not on Animated layers). */
+  line?: InputPoint[]
   /** Where the button shows, in stage pixels. */
   at: { x: number; y: number }
   editing: boolean
 }
 
 const UI = {
+  outliner: 'Outliner: draw an outline around the selection or the drawing on this layer',
+  outlineName: 'Outline',
   beyondCanvas: 'Draw beyond the canvas',
   beyondCanvasTitle: 'Draw beyond the canvas?',
   beyondCanvasNote: 'Painting or moving far past the edge, or doing it on a big canvas, needs a lot more memory and can make drawing slower. Exports still only take what is on the canvas. You can turn it off again any time.',
   beyondCanvasOk: 'Turn it on',
+  beyondOffTitle: 'Remove the paint outside the canvas?',
+  beyondOffNote: 'Paint past the edge of the canvas is removed, so only the canvas is left. Ctrl+Z brings it back.',
+  beyondOffOk: 'Turn it off and remove it',
   brush: 'Brush (B)',
   eraser: 'Eraser (E)',
   smudge: 'Smudge (S): drags the colors with the brush',
   lasso: 'Lasso selection (L)',
   rectSelect: 'Rectangle selection (M)',
   move: 'Move (V): drags the selection, or the whole layer',
+  rotate3d: 'Rotate object (R): turn the selection (or layer) as a 3D shape; drag outside it to orbit',
+  mold: 'Mold object (W): bend the selection (or layer) like a puppet: pin what should stay, drag anywhere on it',
   eyedropper: 'Eyedropper (I, or hold Alt)',
   layerPick: 'Layer picker (K, or hold Ctrl): point at paint to see its layer, click to make it active',
   hand: 'Pan (H, or hold Space)',
@@ -179,7 +214,10 @@ const UI = {
   saving: 'Saving…',
 }
 
-type Tool = 'brush' | 'eraser' | 'smudge' | 'lasso' | 'rect' | 'move' | 'eyedropper' | 'layerpick' | 'hand' | 'text'
+/** Fields where keys are typing, not Draw's shortcuts. */
+const TYPING_FIELDS = 'textarea, select, [contenteditable], input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=color])'
+
+type Tool = 'brush' | 'eraser' | 'smudge' | 'lasso' | 'rect' | 'move' | 'rotate3d' | 'mold' | 'eyedropper' | 'layerpick' | 'hand' | 'text' | 'signs'
 
 /** The app's background colour as #rrggbb (the theme's --bg), for the cursor's contrast over see-through areas. */
 function appBackground(): string {
@@ -231,6 +269,23 @@ function paperPicture(c: HTMLCanvasElement, w: number, h: number, dpr: number, a
   return key
 }
 
+const UI_SIGNS = localized(
+  {
+    title: 'Sign brushes',
+    noLayer: 'Sign brushes paint on an ASCII layer: a layer whose paint is shown as letters.',
+    make: 'Make an ASCII layer',
+    turn: 'Show this layer as letters',
+    name: 'ASCII layer',
+  },
+  {
+    title: 'Zeichenpinsel',
+    noLayer: 'Zeichenpinsel malen auf eine ASCII-Ebene: eine Ebene, deren Farbe als Zeichen gezeigt wird.',
+    make: 'ASCII-Ebene anlegen',
+    turn: 'Diese Ebene als Zeichen zeigen',
+    name: 'ASCII-Ebene',
+  },
+)
+
 /** Tools that paint: switching between them doesn't save (switching to any other tool does). */
 const PAINT_TOOLS = new Set<Tool>(['brush', 'eraser', 'smudge'])
 
@@ -241,13 +296,16 @@ const TOOLS: { id: Tool; icon: LucideIcon; label: string; key: string }[] = [
   { id: 'lasso', icon: Lasso, label: UI.lasso, key: 'l' },
   { id: 'rect', icon: SquareDashed, label: UI.rectSelect, key: 'm' },
   { id: 'move', icon: Move, label: UI.move, key: 'v' },
+  { id: 'rotate3d', icon: Rotate3d, label: UI.rotate3d, key: 'r' },
+  { id: 'mold', icon: Spline, label: UI.mold, key: 'w' },
   { id: 'eyedropper', icon: Pipette, label: UI.eyedropper, key: 'i' },
   { id: 'layerpick', icon: Layers2, label: UI.layerPick, key: 'k' },
   { id: 'hand', icon: Hand, label: UI.hand, key: 'h' },
   { id: 'text', icon: Type, label: 'Text (T): click to add text, drag a text box to move it', key: 't' },
+  { id: 'signs', icon: Hash, label: 'Sign brushes (A): paint signs on an ASCII layer', key: 'a' },
 ]
 
-/** Icons for the Hotwheel bubbles (the glass look shows these instead of words). Actions without one keep their name. */
+/** Icons for the QuickSelect bubbles (the glass look shows these instead of words). Actions without one keep their name. */
 const ACTION_ICON: Partial<Record<ActionId, LucideIcon>> = {
   undo: Undo2,
   redo: Redo2,
@@ -358,6 +416,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       if (next.layers !== d.layers || doc) engine.layersChanged(d.layers, next.layers, doc)
       return next
     })
+  /** Sign brushes: the ASCII layer's painted cells (merged into one undo step per stroke by the engine). */
+  const setMarks = (id: Id, marks: Record<string, AsciiMark> | null) =>
+    marks && update((d) => ({ ...d, layers: d.layers.map((l) => (l.id === id && l.ascii ? { ...l, ascii: { ...l.ascii, ascii: { ...l.ascii.ascii, marks } } } : l)) }))
   const docRef = useRef(doc)
   const flushDocRef = useRef(flushDoc)
   useEffect(() => {
@@ -375,6 +436,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     viewRef.current = view
   })
   const [tool, setTool] = useState<Tool>('brush')
+  const [signTool, setSignTool] = useState<SignTool>({ mode: 'line', sign: '#', size: 0 })
   const sel = useSelector(engine, active, tool)
   const [libraryOpen, setLibraryOpen] = useState<'brush' | 'eraser' | null>(null)
   const [libraryAt, setLibraryAt] = useState({ x: 0, y: 0 })
@@ -452,6 +514,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const setGuide = (g: DrawingGuide) => update((d) => ({ ...d, guide: g }))
   const [editingGuide, setEditingGuide] = useState(false)
   const [inputOpen, setInputOpen] = useState(false)
+  const [outlinerOpen, setOutlinerOpen] = useState(false)
   const [shapeOffer, setShapeOffer] = useState<ShapeOffer | null>(null)
   const [hoverEraser, setHoverEraser] = useState(false)
   const [touch] = useState(() => new TouchGestures())
@@ -636,6 +699,17 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     return g
   }
 
+  /** Layers with paint past the canvas's edge (only drawings that grew have any). */
+  const paintOutside = () => {
+    const f = doc.frame
+    if (!f) return []
+    return doc.layers.filter(hasPixels).map((l) => l.id).filter((id) => {
+      const b = engine.paintedBounds([id])
+      const t = 2 * Math.ceil(Math.max(engine.width, engine.height) / 256) // paintedBounds works on a small copy
+      return !!b && (b.x < f.x - t || b.y < f.y - t || b.x + b.w > f.x + f.w + t || b.y + b.h > f.y + f.h + t)
+    })
+  }
+
   // ColorDrop: drag the colour onto the canvas to fill (Sketch Pro).
   const drop = useColorDrop(
     engine,
@@ -709,8 +783,16 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     return () => (gpuView.removeEventListener('webglcontextlost', lost), gpuView.remove())
   }, [gpuView])
 
-  // Redraw the visible canvas.
+  // Redraw the visible canvas (0.35: Animated layers' playback calls it on its own, without a React render).
+  const redrawView = useRef(() => {})
+  // WebKitGTK could squash the GPU canvas flat under the opening or closing QuickSelect until the next redraw (seen
+  // with an ASCII layer): draw it again a few times while the wheel's animation and its compositing settle.
   useEffect(() => {
+    const again = () => [60, 250, 600, 1200].forEach((ms) => setTimeout(() => redrawView.current(), ms))
+    hotwheelChanged.add(again)
+    return () => void hotwheelChanged.delete(again)
+  }, [])
+  redrawView.current = () => {
     const canvas = viewCanvas.current
     const box = boxRef.current
     if (!canvas || !box || !view) return
@@ -779,7 +861,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     ctx.lineWidth = (doc.backgroundColor ? 1 : 1.5) * px
     ctx.strokeRect(f.x - 0.5 * px, f.y - 0.5 * px, f.w + px, f.h + px)
     ctx.restore()
-  })
+  }
+  useEffect(() => redrawView.current())
 
   const toDoc = (e: { clientX: number; clientY: number }, r = viewCanvas.current!.getBoundingClientRect()) => {
     const z = zoomOf(viewCanvas.current)
@@ -803,11 +886,14 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         rest: { x: number; y: number }
         timer?: ReturnType<typeof setTimeout>
         /** Set once the stroke snapped to a shape; further moves resize it. */
-        snapped?: { shape: Shape; at: { x: number; y: number }; pressure: number; drawn?: Shape; perfect?: boolean }
+        snapped?: { shape: Shape; at: { x: number; y: number }; pressure: number; drawn?: Shape; perfect?: boolean; line?: InputPoint[] }
+        /** 0.35: the stroke goes on an Animated layer (its strokes are kept so every frame can paint it). */
+        animated?: boolean
       }
     | { kind: 'pan'; sx: number; sy: number; vx: number; vy: number }
     | { kind: 'select'; pts: { x: number; y: number }[]; rect: boolean }
     | { kind: 'move'; from: { x: number; y: number }; to: { x: number; y: number } }
+    | { kind: 'signs'; st: SignStroke; layerId: Id; last: { x: number; y: number } }
     | null
   >(null)
 
@@ -817,6 +903,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     // Moves from before the press belong to the hover, not to the new stroke.
     flushMove()
+    // A pen press doesn't always move the focus: leave the side panel's field so the tool keys (E, B…) work again.
+    const focused = document.activeElement
+    if (focused instanceof HTMLElement && focused.closest('.sketch-panel, .sketch-topbar')) focused.blur()
     if (!view || !activeLayer) return
     if (shapeOffer) {
       // Any tap on the canvas ends Edit Shape (or drops the offer).
@@ -867,25 +956,44 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       // Near the working area's edge: grow it first, so the stroke can go past the canvas.
       const at = growTo({ x: p.x - strokeBrush.size, y: p.y - strokeBrush.size, w: strokeBrush.size * 2, h: strokeBrush.size * 2 }, 128) ? toDoc(e) : p
       const pt = pipeline.push({ ...at, ...penData(e.nativeEvent, input.pressureCurve) }, e.timeStamp)[0] ?? { ...at, pressure: 1 }
-      const opts = { layer: activeLayer, brush: strokeBrush, color, symmetry: 'off' as const, erase: t === 'eraser', smudge: t === 'smudge', mirror: symmetryMirror(liveGuide, activeLayer.id),
+      // 0.35: an animated brush paints on an Animated layer; one is added above when the active layer isn't one.
+      let target = activeLayer
+      if (t === 'brush' && isAnimatedBrush(strokeBrush) && !activeLayer.wiggle && doc.layers.filter((l) => !isGroup(l)).length < layerLimit) {
+        target = { ...newLayer(UI_PRO.animatedLayer), wiggle: newWiggle() }
+        adoptLayer(target.id)
+        engine.setLayerImage(target.id, null)
+        const layer = target
+        update((d) => ({ ...d, layers: insertAbove(d.layers, layer, activeLayer.id) }))
+        setActiveLayerId(layer.id)
+        if (!hasAnimated) setAnimNote('first')
+      }
+      const opts = { layer: target, brush: strokeBrush, color, symmetry: 'off' as const, erase: t === 'eraser', smudge: t === 'smudge', mirror: symmetryMirror(liveGuide, target.id),
         // Off: a drawing that grew earlier keeps its extra area, but new paint stays on the canvas.
         limit: doc.frame && !input.beyondCanvas ? doc.frame : null,
       }
       engine.beginStroke(opts, pt)
-      gesture.current = { kind: 'paint', pipeline, last: pt, rect: e.currentTarget.getBoundingClientRect(), opts, pts: [pt], rest: pt }
+      gesture.current = { kind: 'paint', pipeline, last: pt, rect: e.currentTarget.getBoundingClientRect(), opts, pts: [pt], rest: pt, animated: !!target.wiggle }
       armHold()
       setVersion(engine.version)
+    } else if (t === 'signs') {
+      const a = activeLayer.ascii
+      if (!a || !activeLayer.visible || lockedInTree(doc.layers, activeLayer.id)) return
+      // Every sign stroke is an undo step of its own.
+      engine.endLayerTweak()
+      const st = beginSigns(a, doc.width, doc.height, signTool.mode, signTool.sign, signTool.size, color)
+      gesture.current = { kind: 'signs', st, layerId: activeLayer.id, last: p }
+      setMarks(activeLayer.id, signsTo(st, p, null))
     } else if (t === 'lasso' || t === 'rect') {
       gesture.current = { kind: 'select', pts: [p], rect: t === 'rect' }
       // The wand only looks at the active layer (or the reference layer, when one is set), never at the others.
       const ref = doc.layers.find((l) => l.reference && !isGroup(l)) ?? (activeLayer && hasPixels(activeLayer) ? activeLayer : null)
       sel.down(p, e, () => engine.pixels(doc, ref?.id ?? null))
-    } else if (t === 'move') {
+    } else if (t === 'move' || t === 'rotate3d' || t === 'mold') {
       if (!activeLayer.visible || !hasPixels(activeLayer) || lockedInTree(doc.layers, activeLayer.id)) return
-      if (activeLayer.text) return textTool.down(p, true)
+      if (activeLayer.text) return t === 'move' ? textTool.down(p, true) : undefined
       // Transform: the first press lifts the pixels; later presses move, scale, turn or bend them.
       if (!xf.active && !xf.begin(activeLayer.id)) return
-      xf.down(p, view.scale)
+      xf.down(p, view.scale, e.altKey, e.shiftKey)
       gesture.current = { kind: 'move', from: p, to: p }
     }
   }
@@ -898,7 +1006,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     if (!q) return
     cancelAnimationFrame(q.raf)
     pendingMove.current = null
-    moveRef.current(q.e, q.events)
+    // Render and redraw now, inside this frame: left to React, the picture showed up a frame later (input lag).
+    flushSync(() => moveRef.current(q.e, q.events))
   }
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     // Pinch and pan with fingers need every finger's moves in order.
@@ -911,11 +1020,14 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   }
   useEffect(() => () => cancelAnimationFrame(pendingMove.current?.raf ?? 0), [])
 
+  const contrastAt = useRef(-Infinity)
   const moveNow = (e: React.PointerEvent<HTMLCanvasElement>, queued?: PointerEvent[]) => {
     if (!view) return
     const p = toDoc(e)
     setCursor(p)
-    if (!gesture.current && (tool === 'brush' || tool === 'eraser' || tool === 'smudge')) {
+    // Reading a pixel back from the graphics card stalls it, so the outline's contrast is checked at most every 100 ms, not on every move.
+    if (!gesture.current && (tool === 'brush' || tool === 'eraser' || tool === 'smudge') && e.timeStamp - contrastAt.current > 100) {
+      contrastAt.current = e.timeStamp
       // Over see-through areas (past the canvas, or a transparent canvas) the app's own background is what's behind.
       const under = engine.pickColor(doc, p.x, p.y) ?? appBackground()
       const [r, g, b] = hexToRgb(under)
@@ -970,6 +1082,9 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         armHold()
       }
       setVersion(engine.version)
+    } else if (g.kind === 'signs') {
+      setMarks(g.layerId, signsTo(g.st, p, g.last))
+      g.last = p
     } else if (g.kind === 'select') {
       sel.move(p, e)
     } else if (g.kind === 'move') {
@@ -988,16 +1103,22 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       setTether(null)
       clearTimeout(g.timer)
       // Let stabilization catch up with the pen (not for a snapped shape, which is redrawn whole).
-      if (!g.snapped) for (const q of g.pipeline.flush()) engine.strokeTo(q)
-      markDirty(engine.endStroke())
+      if (!g.snapped)
+        for (const q of g.pipeline.flush()) {
+          engine.strokeTo(q)
+          g.pts.push(q)
+        }
+      if (g.animated) endAnimatedStroke(g.opts, g.snapped?.line ?? g.pts)
+      else markDirty(engine.endStroke())
       files.stroked()
       // Room for the next stroke when this one came near the edge.
       const b = boundsOf(g.pts, g.opts.brush.size)
       if (b) growTo(b, Math.max(256, g.opts.brush.size * 2))
       if (g.snapped?.drawn && lastPointer.current) {
-        setShapeOffer({ shape: g.snapped.drawn, opts: g.opts, pressure: g.snapped.pressure, start: g.pts[0], at: lastPointer.current, editing: false })
+        setShapeOffer({ shape: g.snapped.drawn, opts: g.opts, pressure: g.snapped.pressure, start: g.pts[0], line: g.animated ? undefined : g.pts, at: lastPointer.current, editing: false })
       }
     }
+    else if (g.kind === 'signs') engine.endLayerTweak()
     else if (g.kind === 'select') {
       sel.up(viewRef.current?.scale ?? 1)
     } else if (g.kind === 'move') {
@@ -1040,8 +1161,23 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     let shape = resize(g.snapped.shape, g.snapped.at, to)
     shape = keys.shift || g.snapped.perfect ? perfect(shape) : gentle(shape)
     g.snapped.drawn = shape
-    engine.restroke(shapeOutline(shape, 2, g.pts[0]).map((q) => ({ ...q, pressure: g.snapped!.pressure })))
+    g.snapped.line = shapeOutline(shape, 2, g.pts[0]).map((q) => ({ ...q, pressure: g.snapped!.pressure }))
+    engine.restroke(g.snapped.line)
     setVersion(engine.version)
+  }
+
+  /**
+   * 0.35: finish a stroke on an Animated layer. Frame 1 (the layer) is painted again with its own wiggle and a fixed
+   * seed, so every frame comes from the same points; the stroke is kept on the layer, in the same undo step.
+   */
+  const endAnimatedStroke = (opts: Extract<NonNullable<typeof gesture.current>, { kind: 'paint' }>['opts'], points: InputPoint[]) => {
+    const id = opts.layer.id
+    const w = docRef.current.layers.find((l) => l.id === id)?.wiggle ?? opts.layer.wiggle
+    const seed = Math.floor(Math.random() * 1e6)
+    if (points.length) engine.restroke(wiggled(points, opts.brush, seed, 0, w ? framesOf(w) : 4))
+    markDirty(engine.endStroke())
+    if (!points.length) return
+    update((d) => ({ ...d, layers: d.layers.map((l) => (l.id === id ? { ...l, wiggle: withStroke(l.wiggle, { brush: opts.brush, color: opts.color, erase: opts.erase, smudge: !!opts.smudge, points, seed }) } : l)) }))
   }
 
   const onWheel = (e: React.WheelEvent) => {
@@ -1063,11 +1199,14 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     if (activeLayer && !layers.some((l) => l.id === activeLayer.id)) setActiveLayerId(layers.filter((l) => l.kind !== 'group').at(-1)?.id ?? layers[0].id)
   }
   const undo = () => {
+    // While transforming, Ctrl+Z steps back through the transform first.
+    if (xf.active && xf.undo()) return
     markDirty(engine.undo())
     applyMeta()
     sel.sync()
   }
   const redo = () => {
+    if (xf.active && xf.redo()) return
     markDirty(engine.redo())
     applyMeta()
     sel.sync()
@@ -1094,7 +1233,43 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     title,
     color,
     selectFrom: (canvas) => sel.fromCanvas(canvas),
+    openAnimated: () => setAnimPanel(true),
   }
+  // 0.35: Animated layers: their frames follow their strokes and play in the view.
+  const hasAnimated = doc.layers.some((l) => l.wiggle)
+  const [animPaused, setAnimPausedState] = useState(() => {
+    try {
+      return localStorage.getItem('egd.sketch.animPaused') === '1'
+    } catch {
+      return false
+    }
+  })
+  const setAnimPaused = (v: boolean) => {
+    setAnimPausedState(v)
+    try {
+      localStorage.setItem('egd.sketch.animPaused', v ? '1' : '0')
+    } catch {
+      // Only a convenience.
+    }
+  }
+  useAnimatedLayers(engine, doc.layers, { paused: animPaused || !active, redraw: () => redrawView.current(), mirror: (id) => symmetryMirror(liveGuide, id) })
+  /** 'first' = the first Animated layer was just added; 'still' = an edit an Animated layer can't take. */
+  const [animNote, setAnimNote] = useState<null | 'first' | { still: Id }>(null)
+  const [animPanel, setAnimPanel] = useState(true)
+  const [animSpot, setAnimSpot] = useSpot('egd.sketch.animSpot', () => ({ x: window.innerWidth - 700, y: 140 }))
+  useEffect(() => {
+    engine.refuseEdit = (id) => {
+      if (!docRef.current.layers.find((l) => l.id === id)?.wiggle) return false
+      setAnimNote({ still: id })
+      return true
+    }
+    return () => void (engine.refuseEdit = null)
+  }, [engine])
+  const rasterizeLayer = (id: Id) => {
+    update((d) => ({ ...d, layers: d.layers.map((l) => (l.id === id ? rasterized(l) : l)) }))
+    setAnimNote(null)
+  }
+
   // Sketch Pro: text layers are drawn again when their settings or fonts change.
   const fontsReady = useImportedFonts(root, doc.fonts)
   useTextLayers(layerHost, fontsReady)
@@ -1167,7 +1342,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   // v0.14: strokes from outside the canvas (Texture Paint's 3D view), through the same brush, pipeline and undo.
   const outside = useRef<PenPipeline | null>(null)
   const paintDown = (p: InputPoint, time: number) => {
-    if (!activeLayer || !activeLayer.visible || !hasPixels(activeLayer) || activeLayer.text || lockedInTree(doc.layers, activeLayer.id)) return false
+    if (!activeLayer || !activeLayer.visible || !hasPixels(activeLayer) || activeLayer.text || activeLayer.wiggle || lockedInTree(doc.layers, activeLayer.id)) return false
     const erase = tool === 'eraser'
     const own = lib.brushes.find((b) => b.id === (erase ? lib.eraserId : lib.brushId)) ?? brush
     const ov = input.overrides
@@ -1203,6 +1378,15 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   useImperativeHandle(editorRef, () => ({ insertImage, setColor, color, engine, render: () => engine.render({ ...docRef.current, layers: exportLayers(docRef.current.layers) }), paintDown, paintMove, paintUp, paintShape, insertPicture, replacePixels }))
 
   const exportPng = async () => {
+    // 0.35: animated layers aren't a regular image: offer the moving loop first.
+    if (hasAnimatedLayers(exportLayers(doc.layers))) {
+      const pick = await choiceDialog({ title: UI_PRO.stillTitle, message: UI_PRO.stillMessage, choices: UI_PRO.stillChoices })
+      if (pick === null) return
+      if (pick === 0) {
+        const file = await exportDrawing('gif', engine, doc)
+        return saveBinaryFile({ title: UI.export, defaultName: `${safeFileName(title)}.gif`, bytes: file.bytes, filter: file.filter })
+      }
+    }
     await saveBinaryFile({
       title: UI.export,
       defaultName: `${safeFileName(title)}.png`,
@@ -1228,10 +1412,13 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     'tool.lasso': () => setTool('lasso'),
     'tool.rect': () => setTool('rect'),
     'tool.move': () => setTool('move'),
+    'tool.rotate3d': () => setTool('rotate3d'),
+    'tool.mold': () => setTool('mold'),
     'tool.eyedropper': () => setTool('eyedropper'),
     'tool.layerpick': () => setTool('layerpick'),
     'tool.hand': () => setTool('hand'),
     'tool.text': () => setTool('text'),
+    'tool.signs': () => setTool('signs'),
     swapEraser: () => setTool(tool === 'eraser' ? 'brush' : 'eraser'),
     undo: () => undo(),
     redo: () => redo(),
@@ -1326,6 +1513,16 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
     setShapeOffer({ ...o, editing: true })
     setVersion(engine.version)
   }
+  /** QuickShape snapped by mistake (a slow stroke): the shape goes, the line as drawn comes back, as one undo step. */
+  function keepLine() {
+    const o = shapeOffer
+    if (!o?.line?.length || o.editing) return
+    setShapeOffer(null)
+    markDirty(engine.undo())
+    engine.beginStroke(o.opts, o.line[0])
+    engine.restroke(o.line)
+    markDirty(engine.endStroke())
+  }
   const changeShape = (shape: Shape) => {
     if (!shapeOffer?.editing) return
     engine.restroke(shapeOutline(shape, 2, shapeOffer.start).map((q) => ({ ...q, pressure: shapeOffer.pressure })))
@@ -1378,7 +1575,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   useEffect(() => {
     if (!active) return
     const down = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]')) return
+      // Only fields that take typing keep the keys; a slider or checkbox still focused from the side panel does not.
+      if ((e.target as HTMLElement).closest?.(TYPING_FIELDS)) return
       const k = e.key.toLowerCase()
       if (k === 'shift' && gesture.current?.kind === 'paint' && gesture.current.snapped) {
         keys.shift = true
@@ -1436,12 +1634,12 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   return (
     <div className="sketch">
       <div className="sketch-topbar" onPointerDown={(e) => e.stopPropagation()}>
-        {TOOLS.map((t) => (
+        {TOOLS.filter((t) => t.id !== 'signs' || activeLayer?.ascii || tool === 'signs').map((t) => (
           <ToolButton key={t.id} icon={t.icon} label={t.label} active={tool === t.id} onClick={() => setTool(t.id)} hint={`tool.${t.id}`} />
         ))}
         <span className="sketch-sep" />
-        <ToolButton icon={Undo2} label={UI.undo} onClick={undo} disabled={!engine.canUndo} hint="undo" />
-        <ToolButton icon={Redo2} label={UI.redo} onClick={redo} disabled={!engine.canRedo} hint="redo" />
+        <ToolButton icon={Undo2} label={UI.undo} onClick={undo} disabled={!engine.canUndo && !xf.active} hint="undo" />
+        <ToolButton icon={Redo2} label={UI.redo} onClick={redo} disabled={!engine.canRedo && !(xf.active && xf.canRedo)} hint="redo" />
         <span className="sketch-sep" />
         <ToolButton icon={PaintBucket} label={UI.fill} onClick={() => activeLayer && markDirty(engine.fill(activeLayer.id, color, activeLayer.alphaLock))} hint="fill" />
         <ToolButton icon={Trash2} label={UI.clear} onClick={() => activeLayer && markDirty(engine.clear(activeLayer.id))} />
@@ -1449,6 +1647,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         <ToolButton icon={FlipVertical2} label={UI.flipX} onClick={(e) => runAction(e?.shiftKey ? 'flipLayerX' : 'flipCanvasX')} />
         <ToolButton icon={FlipHorizontal2} label={UI.flipY} onClick={(e) => runAction(e?.shiftKey ? 'flipLayerY' : 'flipCanvasY')} />
         <AdjustMenu open={adjustMenu} onOpen={setAdjustMenu} onPick={setAdjust} />
+        <ToolButton icon={CircleDashed} label={UI.outliner} onClick={() => setOutlinerOpen(true)} disabled={!activeLayer || !hasPixels(activeLayer)} />
         {sel.active && (
           <>
             <button className={`btn sketch-move-sel${tool === 'move' ? ' is-active' : ''}`} title={UI.moveSelection} onClick={() => setTool('move')}>
@@ -1489,7 +1688,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
             ref={viewCanvas}
             className="sketch-canvas"
             // On the canvas only: toolbars and panels floating over the stage keep the normal pointer.
-            style={{ cursor: tool === 'hand' ? 'grab' : tool === 'brush' || tool === 'eraser' || tool === 'smudge' ? 'none' : 'crosshair' }}
+            // Painting tools keep the system's crosshair too: the brush outline is drawn by the page and always trails the real mouse a little.
+            style={{ cursor: tool === 'hand' ? 'grab' : 'crosshair' }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -1582,9 +1782,16 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
                   {UI_PRO.done}
                 </button>
               ) : (
-                <button className="btn sketch-small" onClick={startShapeEdit}>
-                  {UI_PRO.editShape}
-                </button>
+                <>
+                  <button className="btn sketch-small" onClick={startShapeEdit}>
+                    {UI_PRO.editShape}
+                  </button>
+                  {shapeOffer.line && (
+                    <button className="btn sketch-small" title={UI_PRO.keepLineTitle} onClick={keepLine}>
+                      {UI_PRO.keepLine}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -1631,6 +1838,10 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
                   // Turning it on asks first: a big working area costs memory.
                   const on = e.target.checked
                   if (on && !(await confirmDialog({ title: UI.beyondCanvasTitle, message: UI.beyondCanvasNote, confirmLabel: UI.beyondCanvasOk }))) return
+                  // Turning it off with paint past the edge asks, then removes that paint (one undo step per layer).
+                  const out = on ? [] : paintOutside()
+                  if (out.length && !(await confirmDialog({ title: UI.beyondOffTitle, message: UI.beyondOffNote, confirmLabel: UI.beyondOffOk }))) return
+                  for (const id of out) markDirty(engine.edit(id, (ctx) => clearOutside(ctx, doc.frame!, engine.width, engine.height)))
                   input.update({ beyondCanvas: on })
                 }}
               />
@@ -1666,10 +1877,95 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       </div>
 
       {inputOpen && <InputSettingsDialog onClose={() => setInputOpen(false)} />}
+      {outlinerOpen && activeLayer && (
+        <OutlineDialog
+          mode="tool"
+          hasSelection={!!engine.selectionMask}
+          onClose={() => setOutlinerOpen(false)}
+          onOk={(o, source) => {
+            setOutlinerOpen(false)
+            if (doc.layers.filter((l) => !isGroup(l)).length >= layerLimit) return
+            // What gets the outline: the selection's shape, or this layer's drawing (inside the selection, if any).
+            const src = engine.canvas()
+            const mask = engine.selectionMask
+            if (source === 'selection' && mask) src.ctx.drawImage(mask, 0, 0)
+            else {
+              src.ctx.drawImage(engine.layerCanvas(activeLayer.id), 0, 0)
+              if (mask) {
+                src.ctx.globalCompositeOperation = 'destination-in'
+                src.ctx.drawImage(mask, 0, 0)
+              }
+            }
+            const b = alphaBounds(src.ctx.getImageData(0, 0, engine.width, engine.height), 0, 0)
+            if (!b) return
+            const m = outlineReach(o)
+            const ring = engine.canvas()
+            outlineInto(src.canvas, ring.ctx, o, { x: b.x - m, y: b.y - m, w: b.w + 2 * m, h: b.h + 2 * m }, true)
+            // A new layer: under the drawing it outlines, or over everything for a selection's shape.
+            const layer = newLayer(UI.outlineName)
+            loaded.current.set(layer.id, null)
+            engine.setLayerImage(layer.id, ring.canvas)
+            update((d) => {
+              const layers = insertAbove(d.layers, layer, activeLayer.id)
+              return { ...d, layers: source === 'selection' && mask ? layers : moveSibling(layers, layer.id, -1) }
+            })
+            markDirty(layer.id)
+          }}
+        />
+      )}
       {sheetOpen && <ShortcutSheet onClose={() => setSheetOpen(false)} />}
       {layersMode === 'floating' && layersShown && (
         <FloatingPanel title={UI_PRO.layers} at={layersSpot} onMove={setLayersSpot} onClose={() => setLayersShown(false)} width={300}>
           <LayersPanel host={layerHost} headerExtra={layersButtons} />
+        </FloatingPanel>
+      )}
+      {activeLayer?.wiggle && animPanel && (
+        <FloatingPanel title={UI_PRO.animatedTitle} at={animSpot} onMove={setAnimSpot} onClose={() => setAnimPanel(false)} width={300}>
+          <AnimatedPanel layer={activeLayer} doc={doc} engine={engine} title={title} update={update} paused={animPaused} setPaused={setAnimPaused} onRasterize={() => rasterizeLayer(activeLayer.id)} />
+        </FloatingPanel>
+      )}
+      {animNote && (
+        <div className="sketch-anim-note" role="status">
+          <span>{animNote === 'first' ? UI_PRO.animatedFirst : UI_PRO.stillOnly}</span>
+          {typeof animNote === 'object' && (
+            <button className="btn btn-small" onClick={() => rasterizeLayer(animNote.still)}>
+              {UI_PRO.makeStill}
+            </button>
+          )}
+          <button className="btn btn-small" onClick={() => setAnimNote(null)}>
+            {UI_PRO.dismiss}
+          </button>
+        </div>
+      )}
+      {tool === 'signs' && (
+        <FloatingPanel title={UI_SIGNS.title} at={textSpot} onMove={setTextSpot} onClose={() => setTool('brush')} width={290}>
+          {activeLayer?.ascii ? (
+            <AsciiBrushPanel value={signTool} onChange={setSignTool} />
+          ) : (
+            <div className="ascii-brush">
+              <p className="ascii-brush-hint">{UI_SIGNS.noLayer}</p>
+              <button
+                className="btn btn-primary sketch-small"
+                disabled={doc.layers.filter((l) => !isGroup(l)).length >= layerLimit}
+                onClick={() => {
+                  // One undo step: a new, empty ASCII layer above the active one, with the settings used last.
+                  const layer: SketchLayer = { ...newLayer(UI_SIGNS.name), ascii: rememberedAscii(doc.width, doc.height) }
+                  layerHost.adopt(layer.id)
+                  engine.setLayerImage(layer.id, null)
+                  update((d) => ({ ...d, layers: insertAbove(d.layers, layer, activeLayer?.id) }))
+                  setActiveLayerId(layer.id)
+                }}
+              >
+                {UI_SIGNS.make}
+              </button>
+              {activeLayer && !activeLayer.kind && !activeLayer.text && (
+                <button className="btn btn-ghost sketch-small" onClick={() => update((d) => ({ ...d, layers: d.layers.map((l) => (l.id === activeLayer.id ? { ...l, ascii: rememberedAscii(doc.width, doc.height) } : l)) }))}>
+                  {UI_SIGNS.turn}
+                </button>
+              )}
+              <AsciiWays />
+            </div>
+          )}
         </FloatingPanel>
       )}
       {activeLayer?.text && tool === 'text' && (

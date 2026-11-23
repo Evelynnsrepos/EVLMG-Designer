@@ -5,6 +5,7 @@
 export * from './docs'
 export * from './levels'
 export { LineChart, type ChartSeries } from './LineChart'
+export { ticks } from './ticks'
 export { NumberInput, PresetHeader } from './inputs'
 export { useEditSession } from './editSession'
 export { useDamagePresets, type DamagePreset } from './useDamagePresets'

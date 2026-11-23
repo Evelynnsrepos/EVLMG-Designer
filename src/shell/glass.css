@@ -52,7 +52,7 @@
     .sidebar, .modal, .menu, .palette, .help-tour-card, .proof-card, .ref-picker-menu, .richtext-refmenu,
     .richtext-image-bar, .writer-menu, .map-popup, .map-subbar, .custom-color-pop, .canvas-toolbar,
     .cd-picker-pop, .cd-shapes-menu, .ss-calcmenu, .ss-calcpanel, .ss-menu, .esc-hint,
-    .cp-float, .fp, .brushlib-menu, .adjust-panel, .sketch-floatbars > *
+    .cp-float, .fp, .brushlib-menu, .adjust-panel, .adjust-menu, .sketch-floatbars > *
   ) {
   background: var(--glass-fill-thick);
   border: 1px solid var(--glass-border);
@@ -195,7 +195,7 @@
   box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.15);
 }
 
-/* --- 6. Hotwheel: liquid glass bubbles (Hotwheel.tsx draws them when the glass look is on) ------------
+/* --- 6. QuickSelect: liquid glass bubbles (Hotwheel.tsx draws them when the glass look is on) ------------
  * The drops and the middle blob are one "goo" layer, so they flow together; it is see-through as a whole.
  * The hovered drop (and its neck into the middle) fills with the accent; a soft rim light is the shine.
  * Dark theme: the panels are almost black, so the drops are a lighter grey, less see-through, with a brighter rim. */

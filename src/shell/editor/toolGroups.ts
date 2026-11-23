@@ -41,7 +41,7 @@ export const TOOL_INFO: Partial<Record<ComponentType, { group: ToolGroupId; useW
   'item-list': { group: 'world', useWhen: 'items, weapons and gear' },
   factions: { group: 'world', useWhen: 'groups and how they feel about each other' },
   'family-tree': { group: 'world', useWhen: 'who is related to whom' },
-  relationships: { group: 'world', useWhen: 'friendship and romance ranks, gifts and unlocks' },
+  relationships: { group: 'world', useWhen: 'bonds, reputation and trust between the player, characters and factions' },
   names: { group: 'world', useWhen: 'made-up names and languages' },
   calendar: { group: 'world', useWhen: 'your world’s calendar and eras' },
   cosmos: { group: 'world', useWhen: 'planets, stars and space' },
@@ -70,7 +70,7 @@ export const TOOL_INFO: Partial<Record<ComponentType, { group: ToolGroupId; useW
   'damage-calculator': { group: 'numbers', useWhen: 'how much a hit does' },
   'level-calculator': { group: 'numbers', useWhen: 'experience and levels' },
   'resource-calculator': { group: 'numbers', useWhen: 'how much of each resource you need' },
-  economy: { group: 'numbers', useWhen: 'money and resources flowing in and out' },
+  economy: { group: 'numbers', useWhen: 'money and resources flowing in and out, and meters (hunger, stamina, mood, fuel, energy) that change over time' },
   combat: { group: 'numbers', useWhen: 'simulating fights' },
   gacha: { group: 'numbers', useWhen: 'drop rates and pulls' },
   balance: { group: 'numbers', useWhen: 'all your numbers side by side' },
@@ -82,7 +82,6 @@ export const TOOL_INFO: Partial<Record<ComponentType, { group: ToolGroupId; useW
  * the menu points to the tool to use instead when someone searches for them.
  */
 export const MOVED_TOOLS: Partial<Record<ComponentType, string>> = {
-  'story-writer': 'Dialogue Editor and Quests',
   'design-language': 'Moodboard',
   'resource-calculator': 'Economy Simulator',
 }

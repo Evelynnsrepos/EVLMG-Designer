@@ -4,6 +4,8 @@
  * warp mesh. All pure.
  */
 
+import { moldAt, type Mold } from './mold'
+
 export type Pt = { x: number; y: number }
 export interface Box {
   x: number
@@ -21,6 +23,8 @@ export interface XfState {
   quad: Quad
   /** 16 control points of the warp mesh (row by row), or null when not warped. */
   warp: Pt[] | null
+  /** Mold: a triangle mesh over the painted part (see mold.ts); wins over quad and warp. */
+  mold?: Mold | null
 }
 
 export const initialState = (src: Box): XfState => ({
@@ -56,7 +60,12 @@ export function scaleAlong(c: Pt, ux: Pt, sx: number, sy: number): Affine {
 }
 
 export function transformState(s: XfState, m: Affine): XfState {
-  return { src: s.src, quad: s.quad.map((p) => apply(m, p)) as Quad, warp: s.warp && s.warp.map((p) => apply(m, p)) }
+  return mapAll(s, (p) => apply(m, p))
+}
+
+/** Send every point of the state (corners, warp and mold points) through `f`. */
+export function mapAll(s: XfState, f: (p: Pt) => Pt): XfState {
+  return { src: s.src, quad: s.quad.map(f) as Quad, warp: s.warp && s.warp.map(f), mold: s.mold && { ...s.mold, pts: s.mold.pts.map(f), rest: s.mold.rest.map(f) } }
 }
 
 /** Perspective mapping of the unit square onto a quad (corners TL, TR, BR, BL). */
@@ -107,20 +116,59 @@ export function bezierPatch(ctrl: Pt[], u: number, v: number): Pt {
 
 /** Where the point (u, v) of the source (0..1 each) lands. */
 export function mapPoint(s: XfState, u: number, v: number): Pt {
-  return s.warp ? bezierPatch(s.warp, u, v) : squareToQuad(s.quad)(u, v)
+  return s.mold ? moldAt(s.mold, u, v) : s.warp ? bezierPatch(s.warp, u, v) : squareToQuad(s.quad)(u, v)
+}
+
+/** Bent (warp or mold): needs a finer mesh to draw. */
+export const curved = (s: XfState) => !!(s.warp || s.mold)
+
+export interface Turn {
+  /** Degrees around the across (tilt forward/back), up (turn left/right) and view (spin) axes. */
+  x: number
+  y: number
+  z: number
+  /** 0 flat (no vanishing), 1 strong perspective. */
+  depth: number
+}
+
+/**
+ * 3D turn: the flat picture is a card in space, turned about its centre and seen through a
+ * camera in front of it, so the result is a perspective quad. No AI: plain 3D maths.
+ */
+export function turn3d(base: XfState, t: Turn): XfState {
+  const c = mapPoint(base, 0.5, 0.5)
+  const b = outerBounds(base)
+  const size = Math.max(b.w, b.h, 1)
+  const r = Math.PI / 180
+  const [sx, cx] = [Math.sin(t.x * r), Math.cos(t.x * r)]
+  const [sy, cy] = [Math.sin(t.y * r), Math.cos(t.y * r)]
+  const [sz, cz] = [Math.sin(t.z * r), Math.cos(t.z * r)]
+  // Camera distance: far away (nearly flat) at depth 0, about one picture size at depth 1.
+  const f = size * (1 + 20 * (1 - t.depth) ** 2)
+  return mapAll(base, (p) => {
+    let x = p.x - c.x
+    let y = p.y - c.y
+    let z = 0
+    ;[y, z] = [y * cx - z * sx, y * sx + z * cx]
+    ;[x, z] = [x * cy + z * sy, -x * sy + z * cy]
+    ;[x, y] = [x * cz - y * sz, x * sz + y * cz]
+    const k = f / Math.max(f * 0.1, f - z)
+    return { x: c.x + x * k, y: c.y + y * k }
+  })
 }
 
 /** Start warping: a mesh that matches the current quad. */
 export function toWarp(s: XfState): XfState {
-  if (s.warp) return s
-  const map = squareToQuad(s.quad)
+  if (s.warp && !s.mold) return s
+  // shortcut: from a mold the 4×4 mesh only goes through 16 of its points, so fine mold bends smooth out.
   const warp: Pt[] = []
-  for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) warp.push(map(i / 3, j / 3))
-  return { ...s, warp }
+  for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) warp.push(mapPoint(s, i / 3, j / 3))
+  return { ...s, warp, mold: null }
 }
 
 /** Triangle mesh for drawing: positions (canvas px) and source uvs (0..1), `n` cells per side. */
 export function buildMesh(s: XfState, n = 24): { pos: Float32Array; uv: Float32Array } {
+  if (s.mold) return moldMesh(s.mold)
   const map = s.warp ? (u: number, v: number) => bezierPatch(s.warp!, u, v) : squareToQuad(s.quad)
   const grid: Pt[] = []
   for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) grid.push(map(i / n, j / n))
@@ -128,7 +176,7 @@ export function buildMesh(s: XfState, n = 24): { pos: Float32Array; uv: Float32A
   const uv = new Float32Array(n * n * 12)
   let k = 0
   for (let j = 0; j < n; j++)
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < n; i++)
       for (const [di, dj] of [[0, 0], [1, 0], [0, 1], [1, 0], [1, 1], [0, 1]]) {
         const p = grid[(j + dj) * (n + 1) + i + di]
         pos[k] = p.x
@@ -137,13 +185,31 @@ export function buildMesh(s: XfState, n = 24): { pos: Float32Array; uv: Float32A
         uv[k + 1] = (j + dj) / n
         k += 2
       }
+  return { pos, uv }
+}
+
+/** A mold is drawn with exactly its own triangles, the ones set to the front last. */
+function moldMesh(m: Mold): { pos: Float32Array; uv: Float32Array } {
+  const order = m.depth.map((_, t) => t).sort((a, b) => m.depth[a] - m.depth[b] || a - b)
+  const pos = new Float32Array(m.tris.length * 2)
+  const uv = new Float32Array(m.tris.length * 2)
+  let k = 0
+  for (const t of order)
+    for (let c = 0; c < 3; c++) {
+      const i = m.tris[t * 3 + c]
+      pos[k] = m.pts[i].x
+      pos[k + 1] = m.pts[i].y
+      uv[k] = m.uv[i].x
+      uv[k + 1] = m.uv[i].y
+      k += 2
     }
   return { pos, uv }
 }
 
 /** Axis-aligned bounds of the transformed picture (sampled along the edges). */
 export function outerBounds(s: XfState): Box {
-  const pts: Pt[] = []
+  // A mold's points can be dragged anywhere, so all of them count.
+  const pts: Pt[] = s.mold ? [...s.mold.pts] : []
   for (let t = 0; t <= 8; t++) pts.push(mapPoint(s, t / 8, 0), mapPoint(s, t / 8, 1), mapPoint(s, 0, t / 8), mapPoint(s, 1, t / 8))
   const xs = pts.map((p) => p.x)
   const ys = pts.map((p) => p.y)
