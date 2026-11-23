@@ -161,6 +161,21 @@
 }
 .eco-th {
   padding-left: 18px;
+  flex-wrap: wrap;
+}
+.eco-meter > .ld-inline {
+  flex-wrap: wrap;
+}
+.eco-meter .input.eco-when,
+.input.eco-when {
+  width: auto;
+}
+.eco-note {
+  display: block;
+  font-size: 0.85em;
+}
+.eco-examples {
+  flex-wrap: wrap;
 }
 .eco-meter .input {
   width: 140px;

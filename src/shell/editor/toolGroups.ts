@@ -70,7 +70,7 @@ export const TOOL_INFO: Partial<Record<ComponentType, { group: ToolGroupId; useW
   'damage-calculator': { group: 'numbers', useWhen: 'how much a hit does' },
   'level-calculator': { group: 'numbers', useWhen: 'experience and levels' },
   'resource-calculator': { group: 'numbers', useWhen: 'how much of each resource you need' },
-  economy: { group: 'numbers', useWhen: 'money and resources flowing in and out' },
+  economy: { group: 'numbers', useWhen: 'money and resources flowing in and out, and meters (hunger, stamina, mood, fuel, energy) that change over time' },
   combat: { group: 'numbers', useWhen: 'simulating fights' },
   gacha: { group: 'numbers', useWhen: 'drop rates and pulls' },
   balance: { group: 'numbers', useWhen: 'all your numbers side by side' },
