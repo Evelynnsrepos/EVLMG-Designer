@@ -75,8 +75,10 @@ import { LayersPanel, type LayerHost } from './LayersPanel'
 import { SelectionBar, SelectionMaskView, SelectionOutline } from './SelectionTools'
 import { useSelector } from './selector'
 import { copyPixels } from './clipboard'
-import { TransformBar, TransformOverlay } from './TransformTools'
+import { TurnAgainNote, TransformBar, TransformOverlay } from './TransformTools'
 import { useTransformer } from './transformer'
+import { pngOf } from './encode'
+import type { LayerModel3d } from './model'
 import { ColorDropBar, ColorDropView, ColorPanel } from './ColorPanel'
 import { useColorDrop } from './colordrop'
 // Sketch Pro: pen input, view turning, guides, QuickMenu.
@@ -554,7 +556,29 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const refresh = useCallback(() => setVersion(engine.version), [engine])
 
   const activeLayer = doc.layers.find((l) => l.id === activeLayerId) ?? doc.layers[doc.layers.length - 1]
-  const xf = useTransformer(engine, sel, { active, tool, layerId: activeLayer?.id, done: (id) => markDirty(id) })
+  const droppedRef = useRef<(id: Id | null) => void>(() => {})
+  const xf = useTransformer(engine, sel, { active, tool, layerId: activeLayer?.id, done: (id) => droppedRef.current(id) })
+  /** The active layer's dropped 3D object, loaded while Rotate object is picked, so a click turns it again. */
+  const reopen = useRef<(Omit<LayerModel3d, 'src' | 'image'> & { layerId: Id; source: ImageBitmap; placed: ImageBitmap }) | null>(null)
+  const model3d = tool === 'rotate3d' ? activeLayer?.model3d : undefined
+  const reopenLayer = activeLayer?.id
+  const [canReopen, setCanReopen] = useState(false)
+  useEffect(() => {
+    reopen.current = null
+    setCanReopen(false)
+    if (!model3d || !root || !reopenLayer) return
+    let live = true
+    const layerId = reopenLayer
+    const load = (path: string) => resolveAssetPath(root, path).then((abs) => getFs().readBinary(abs)).then((bytes) => createImageBitmap(new Blob([bytes as BlobPart])))
+    void Promise.all([load(model3d.src), load(model3d.image)])
+      .then(([source, placed]) => {
+        if (!live) return
+        reopen.current = { ...model3d, layerId, source, placed }
+        setCanReopen(true)
+      })
+      .catch(() => {})
+    return () => void (live = false)
+  }, [model3d, root, reopenLayer])
   const lib = useBrushLibrary()
   useEffect(() => {
     void useBrushLibrary.getState().load()
@@ -695,12 +719,37 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const markDirty = useCallback(
     (id: Id | null) => {
       if (!id) return
+      // A 3D object can be turned again only while its layer is unchanged since it was dropped.
+      const m3 = docRef.current.layers.find((l) => l.id === id)?.model3d
+      if (m3) {
+        save((d) => ({ ...d, layers: d.layers.map((l) => (l.id === id ? { ...l, model3d: undefined } : l)) }))
+        if (root) void retireAssets(root, [m3.src, m3.image])
+      }
       dirty.current.add(id)
       setVersion(engine.version)
       scheduleSave(saveKey, flush, IDLE_SAVE_MS)
     },
-    [engine, flush, saveKey],
+    [engine, flush, saveKey, root],
   )
+
+  /** A transform was dropped: a 3D object also keeps what it needs to be turned again (saved next to the layer). */
+  const dropped = (id: Id | null) => {
+    markDirty(id)
+    const d3 = xf.last3d
+    xf.last3d = null
+    if (!d3 || d3.layerId !== id || !root) return
+    void (async () => {
+      const [src, image] = await Promise.all([pngOf(d3.source, colorSpace), pngOf(d3.placed, colorSpace)].map((b) => b.then((blob) => importAssetFromBlob(root, blob, 'image', '3d-object.png'))))
+      if (!src || !image) return
+      // Painted on (or undone) while saving: the saved drawing no longer matches, so it is not kept.
+      if (engine.layerVersion(id!) !== d3.version || !docRef.current.layers.some((l) => l.id === id)) return void retireAssets(root, [src.path, image.path])
+      const model3d = { src: src.path, image: image.path, first: d3.first, base: d3.base, turn: d3.turn, shape: d3.shape }
+      save((d) => ({ ...d, layers: d.layers.map((l) => (l.id === id ? { ...l, model3d } : l)) }))
+    })()
+  }
+  useEffect(() => {
+    droppedRef.current = dropped
+  })
 
   /**
    * 0.31: make room past the canvas's edge before paint or moved pixels reach the working area's edge.
@@ -1018,7 +1067,12 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       if (!activeLayer.visible || !hasPixels(activeLayer) || lockedInTree(doc.layers, activeLayer.id)) return
       if (activeLayer.text) return t === 'move' ? textTool.down(p, true) : undefined
       // Transform: the first press lifts the pixels; later presses move, scale, turn or bend them.
-      if (!xf.active && !xf.begin(activeLayer.id)) return
+      if (!xf.active) {
+        // Rotate object on a layer with a dropped 3D object (and nothing selected): turn that object again.
+        const again = t === 'rotate3d' && !sel.active && reopen.current?.layerId === activeLayer.id ? reopen.current : null
+        if (!(again ? xf.reopen(activeLayer.id, again) : xf.begin(activeLayer.id))) return
+        if (again) sel.clear()
+      }
       xf.down(p, view.scale, e.altKey, e.shiftKey)
       gesture.current = { kind: 'move', from: p, to: p }
     }
@@ -1738,7 +1792,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
           <ColorDropView drop={drop} view={view} />
           <div className="sketch-floatbars">
             <ColorDropBar drop={drop} color={color} />
-            <TransformBar xf={xf} onDone={() => markDirty(xf.commit(sel))} onCancel={() => xf.cancel()} />
+            <TransformBar xf={xf} layers={doc.layers} onDone={() => dropped(xf.commit(sel))} onCancel={() => xf.cancel()} />
+            {canReopen && !xf.active && !sel.active && <TurnAgainNote />}
             <SelectionBar
               sel={sel}
               tool={tool === 'lasso' || tool === 'rect'}

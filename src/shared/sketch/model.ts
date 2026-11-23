@@ -13,6 +13,8 @@ import type { AdjustValues } from './adjust/filters'
 import type { SketchText } from './text'
 import type { OutlineSettings } from './outline'
 import type { BrushSettings } from './brushes'
+import type { Turn, XfState } from './transform'
+import type { Shape3d } from './model3d'
 
 export { BLEND_MODES, type BlendMode } from './blend'
 
@@ -58,6 +60,21 @@ export interface SketchLayer {
    * app show it as one. The other frames are painted again from these strokes, each with its own wiggle.
    */
   wiggle?: LayerWiggle
+  /**
+   * 0.35: the 3D object Rotate object dropped on this layer last, so it can be turned again. `src` is the flat drawing
+   * it was made from, `image` the turned picture as it landed (both document-size PNGs). Removed as soon as the layer
+   * changes in any other way. Older versions and the mobile app ignore it; the layer's PNG is the picture either way.
+   */
+  model3d?: LayerModel3d
+}
+
+export interface LayerModel3d {
+  src: AssetPath
+  image: AssetPath
+  first: XfState
+  base: XfState
+  turn: Turn
+  shape: Shape3d
 }
 
 /** One brush stroke on an Animated layer, kept so every frame can paint it again with a different wiggle. */

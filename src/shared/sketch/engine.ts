@@ -995,6 +995,25 @@ export class SketchEngine {
     this.touched(layerId)
   }
 
+  /**
+   * Lift `piece` (document size) as if it had been selected, after taking `placed` off the layer: Rotate object turns
+   * a dropped 3D object again from the flat drawing it was made from. Cancel puts the layer back as it was.
+   */
+  beginMoveFrom(layerId: Id, piece: CanvasImageSource, placed: CanvasImageSource) {
+    const layer = this.ensure(layerId)
+    const rects = tilesIn({ x: 0, y: 0, w: this.width, h: this.height }, this.width, this.height)
+    const before = this.snapshot(layerId, rects)
+    const p = this.canvas()
+    p.ctx.drawImage(piece, 0, 0)
+    layer.ctx.save()
+    layer.ctx.globalCompositeOperation = 'destination-out'
+    layer.ctx.drawImage(placed, 0, 0)
+    layer.ctx.restore()
+    this.floating = { layerId, piece: p, rects, before, dx: 0, dy: 0 }
+    this.moves++
+    this.touched(layerId)
+  }
+
   moveTo(dx: number, dy: number) {
     if (!this.floating) return
     this.floating.dx = dx

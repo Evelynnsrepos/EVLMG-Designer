@@ -1,8 +1,11 @@
-import { BringToFront, Check, ClipboardCopy, ClipboardPaste, FlipHorizontal2, FlipVertical2, Hand, Layers2, Magnet, Maximize, Pin, PinOff, RotateCcw, RotateCw, Undo2, X } from 'lucide-react'
+import { useState } from 'react'
+import { BringToFront, Check, ChevronDown, ChevronUp, ClipboardCopy, ClipboardPaste, FlipHorizontal2, FlipVertical2, Hand, Layers2, Magnet, Maximize, Pin, PinOff, RotateCcw, RotateCw, Undo2, X } from 'lucide-react'
 import { localized } from '../i18n'
 import type { Interpolation } from './meshRender'
+import type { SketchLayer } from './model'
+import { rotation, type Shape3d } from './model3d'
 import { spotPos } from './mold'
-import { mapPoint } from './transform'
+import { mapPoint, outerBounds } from './transform'
 import { coarsePointer, type Transformer, type XfMode } from './transformer'
 import './layers.css'
 
@@ -20,7 +23,7 @@ const EN = {
     uniform: 'Scale keeping the shape',
     distort: 'Move each corner on its own',
     warp: 'Bend the picture with a mesh',
-    turn: 'Turn the drawing as a 3D shape: drag outside it to orbit, inside to move, or use the sliders',
+    turn: 'Turn the drawing as a 3D shape: drag around it to turn, drag the object to move it, or use the sliders',
     mold: 'Pin what should stay, then drag anywhere on the drawing: it bends and keeps its shape',
   } as Record<XfMode, string>,
   turnX: 'Tilt',
@@ -31,13 +34,28 @@ const EN = {
   turnZHelp: 'Spin flat (around the view axis, Z)',
   depth: 'Perspective',
   depthHelp: 'How much nearer parts grow: none is flat, full is a close camera',
-  turnNote: 'The drawing becomes a 3D shape from its outline. Sides it cannot see are guessed: the back shows the front mirrored, the edges stretch around.',
+  turnNote: 'The drawing becomes a 3D shape from its outline. Sides it cannot see are guessed: the edges stretch around, and the back shows what you pick under Back.',
   thick: 'Thickness',
   thickHelp: 'How thick the 3D shape is: 0 is a flat card',
+  bevel: 'Edge width',
+  bevelHelp: 'How far in the edge slopes or curves: small is cut out with straight sides, 100% is puffed all the way like a pillow',
   round: 'Roundness',
-  roundHelp: 'Straight sides (cut out and extruded) or round (puffed up like a pillow)',
+  roundHelp: 'How the edge rises: 0 a straight slope (a bevel), 100% a round curve',
   light: 'Light',
-  lightHelp: 'Shading from a light at the top left, so the shape reads as 3D',
+  lightHelp: 'How strong the shading is, so the shape reads as 3D (0 is no shading)',
+  lightAngle: 'Light from',
+  lightAngleHelp: 'Where the light comes from on the screen: 0° right, 90° below, 180° left, 270° above (225° is top left)',
+  lightColor: 'Light colour',
+  back: 'Back',
+  backHelp: 'What the back of the object shows when you turn it around',
+  backModes: { mirror: 'Front, mirrored', color: 'One colour', layer: 'A layer' } as Record<Shape3d['back']['mode'], string>,
+  backColor: 'Colour of the back',
+  backLayer: 'The layer painted as the back, as seen from behind (it is read mirrored)',
+  pickLayer: 'Pick a layer',
+  no3d: 'This computer can’t show 3D here (no WebGL2), so the drawing turns as a flat card.',
+  collapse: 'Hide the settings (the bar gets small)',
+  expand: 'Show the settings',
+  again: 'Click the 3D object to turn it again with the settings it had. To turn something else on this layer, select it first.',
   grid: 'Points',
   gridHelp: 'How fine the mesh is: more points bend smaller parts on their own (your bend and pins stay)',
   reach: 'Reach',
@@ -85,7 +103,7 @@ const UI = localized(EN, {
     uniform: 'Skalieren, die Form bleibt',
     distort: 'Jede Ecke einzeln bewegen',
     warp: 'Das Bild mit einem Gitter verbiegen',
-    turn: 'Die Zeichnung als 3D-Form drehen: außerhalb ziehen zum Kreisen, innen zum Bewegen, oder die Regler nutzen',
+    turn: 'Die Zeichnung als 3D-Form drehen: um sie herum ziehen dreht, das Objekt ziehen verschiebt es, oder die Regler nutzen',
     mold: 'Pinne fest, was bleiben soll, dann zieh irgendwo an der Zeichnung: sie biegt sich und behält ihre Form',
   },
   turnX: 'Kippen',
@@ -96,13 +114,28 @@ const UI = localized(EN, {
   turnZHelp: 'Flach rollen (um die Blickachse, Z)',
   depth: 'Perspektive',
   depthHelp: 'Wie stark nähere Teile wachsen: keine ist flach, voll ist eine nahe Kamera',
-  turnNote: 'Die Zeichnung wird aus ihrem Umriss zu einer 3D-Form. Seiten, die sie nicht zeigt, werden geschätzt: hinten das Bild gespiegelt, die Ränder ziehen sich herum.',
+  turnNote: 'Die Zeichnung wird aus ihrem Umriss zu einer 3D-Form. Seiten, die sie nicht zeigt, werden geraten: die Ränder ziehen sich herum, und die Rückseite zeigt, was du unter Rückseite wählst.',
   thick: 'Dicke',
   thickHelp: 'Wie dick die 3D-Form ist: 0 ist eine flache Karte',
+  bevel: 'Randbreite',
+  bevelHelp: 'Wie weit nach innen der Rand schräg oder rund ist: klein ist ausgeschnitten mit geraden Seiten, 100 % ist ganz aufgepolstert wie ein Kissen',
   round: 'Rundung',
-  roundHelp: 'Gerade Seiten (ausgeschnitten) oder rund (aufgeblasen wie ein Kissen)',
+  roundHelp: 'Wie der Rand ansteigt: 0 eine gerade Schräge (Fase), 100 % eine runde Kurve',
   light: 'Licht',
-  lightHelp: 'Schatten von einem Licht oben links, damit die Form nach 3D aussieht',
+  lightHelp: 'Wie stark die Schattierung ist, damit die Form nach 3D aussieht (0 ist keine)',
+  lightAngle: 'Licht von',
+  lightAngleHelp: 'Woher das Licht auf dem Bildschirm kommt: 0° rechts, 90° unten, 180° links, 270° oben (225° ist oben links)',
+  lightColor: 'Lichtfarbe',
+  back: 'Rückseite',
+  backHelp: 'Was die Rückseite des Objekts zeigt, wenn du es umdrehst',
+  backModes: { mirror: 'Vorderseite, gespiegelt', color: 'Eine Farbe', layer: 'Eine Ebene' },
+  backColor: 'Farbe der Rückseite',
+  backLayer: 'Die Ebene, die als Rückseite gemalt ist, so wie von hinten gesehen (sie wird gespiegelt gelesen)',
+  pickLayer: 'Ebene wählen',
+  no3d: 'Dieser Computer kann hier kein 3D zeigen (kein WebGL2), deshalb dreht sich die Zeichnung als flache Karte.',
+  collapse: 'Einstellungen ausblenden (die Leiste wird klein)',
+  expand: 'Einstellungen zeigen',
+  again: 'Klick auf das 3D-Objekt, um es mit seinen Einstellungen weiter zu drehen. Um etwas anderes auf dieser Ebene zu drehen, wähle es zuerst aus.',
   grid: 'Punkte',
   gridHelp: 'Wie fein das Gitter ist: mehr Punkte biegen kleinere Teile einzeln (deine Biegung und Pins bleiben)',
   reach: 'Reichweite',
@@ -139,12 +172,37 @@ const UI = localized(EN, {
   hint: 'Innen ziehen zum Bewegen, Griffe zum Skalieren, der runde Griff zum Drehen.',
 })
 
+const COLLAPSE_KEY = 'egd.sketch.xfCollapsed'
+
 /** The Move tool's own modes; Rotate object and Mold object are tools of their own. */
 const MOVE_MODES: XfMode[] = ['free', 'uniform', 'distort', 'warp']
 
 /** The bar shown while transforming. */
-export function TransformBar({ xf, onDone, onCancel }: { xf: Transformer; onDone(): void; onCancel(): void }) {
+export function TransformBar({ xf, layers = [], onDone, onCancel }: { xf: Transformer; layers?: SketchLayer[]; onDone(): void; onCancel(): void }) {
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(COLLAPSE_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
   if (!xf.active) return null
+  const toggle = () => {
+    setCollapsed(!collapsed)
+    try {
+      localStorage.setItem(COLLAPSE_KEY, collapsed ? '0' : '1')
+    } catch {
+      // ignore
+    }
+  }
+  const turn = xf.mode === 'turn'
+  const flat = turn && !xf.can3d
+  // A change that isn't a slider drag (a colour, a pick): one undo step.
+  const shape = (p: Partial<Shape3d>) => {
+    xf.mark()
+    xf.setShape(p)
+  }
+  const backLayers = layers.filter((l) => !l.kind && !l.text)
   // Molding only needs its own controls; flip, fit, snapping and magnetics stay with Move.
   const m = xf.mode === 'mold' ? xf.state?.mold : null
   return (
@@ -160,18 +218,52 @@ export function TransformBar({ xf, onDone, onCancel }: { xf: Transformer; onDone
           </button>
         ))
       )}
-      {xf.mode === 'turn' && (
+      {(turn || xf.mode === 'mold') && (
+        <button className="icon-btn sketch-tool" title={collapsed ? UI.expand : UI.collapse} aria-label={collapsed ? UI.expand : UI.collapse} aria-expanded={!collapsed} onClick={toggle}>
+          {collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
+        </button>
+      )}
+      {flat && <span className="sketch-xf-hint">{UI.no3d}</span>}
+      {turn && !collapsed && (
         <span className="sketch-xf-extra" title={UI.turnNote}>
           <Slider label={UI.turnX} help={UI.turnXHelp} min={-180} max={180} value={xf.turn.x} unit="°" xf={xf} onChange={(x) => xf.setTurn({ x })} />
           <Slider label={UI.turnY} help={UI.turnYHelp} min={-180} max={180} value={xf.turn.y} unit="°" xf={xf} onChange={(y) => xf.setTurn({ y })} />
           <Slider label={UI.turnZ} help={UI.turnZHelp} min={-180} max={180} value={xf.turn.z} unit="°" xf={xf} onChange={(z) => xf.setTurn({ z })} />
-          <Slider label={UI.thick} help={UI.thickHelp} min={0} max={100} value={Math.round(xf.shape.thick * 100)} unit="%" xf={xf} onChange={(v) => xf.setShape({ thick: v / 100 })} />
-          <Slider label={UI.round} help={UI.roundHelp} min={0} max={100} value={Math.round(xf.shape.round * 100)} unit="%" xf={xf} onChange={(v) => xf.setShape({ round: v / 100 })} />
-          <Slider label={UI.light} help={UI.lightHelp} min={0} max={100} value={Math.round(xf.shape.light * 100)} unit="%" xf={xf} onChange={(v) => xf.setShape({ light: v / 100 })} />
           <Slider label={UI.depth} help={UI.depthHelp} min={0} max={100} value={Math.round(xf.turn.depth * 100)} unit="%" xf={xf} onChange={(d) => xf.setTurn({ depth: d / 100 })} />
+          {!flat && (
+            <>
+              <Slider label={UI.thick} help={UI.thickHelp} min={0} max={100} value={Math.round(xf.shape.thick * 100)} unit="%" xf={xf} onChange={(v) => xf.setShape({ thick: v / 100 })} />
+              <Slider label={UI.bevel} help={UI.bevelHelp} min={2} max={100} value={Math.round(xf.shape.bevel * 100)} unit="%" xf={xf} onChange={(v) => xf.setShape({ bevel: v / 100 })} />
+              <Slider label={UI.round} help={UI.roundHelp} min={0} max={100} value={Math.round(xf.shape.round * 100)} unit="%" xf={xf} onChange={(v) => xf.setShape({ round: v / 100 })} />
+              <Slider label={UI.light} help={UI.lightHelp} min={0} max={100} value={Math.round(xf.shape.light * 100)} unit="%" xf={xf} onChange={(v) => xf.setShape({ light: v / 100 })} />
+              <Slider label={UI.lightAngle} help={UI.lightAngleHelp} min={0} max={359} value={xf.shape.lightAngle} unit="°" xf={xf} onChange={(lightAngle) => xf.setShape({ lightAngle })} />
+              <input type="color" className="sketch-xf-color" title={UI.lightColor} aria-label={UI.lightColor} value={xf.shape.lightColor} onChange={(e) => shape({ lightColor: e.target.value })} />
+              <label className="sketch-selbar-slider" title={UI.backHelp}>
+                {UI.back}
+                <select className="input sketch-xf-interp" value={xf.shape.back.mode} onChange={(e) => shape({ back: { ...xf.shape.back, mode: e.target.value as Shape3d['back']['mode'] } })}>
+                  {(Object.keys(UI.backModes) as Shape3d['back']['mode'][]).map((k) => (
+                    <option key={k} value={k}>
+                      {UI.backModes[k]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {xf.shape.back.mode === 'color' && <input type="color" className="sketch-xf-color" title={UI.backColor} aria-label={UI.backColor} value={xf.shape.back.color} onChange={(e) => shape({ back: { ...xf.shape.back, color: e.target.value } })} />}
+              {xf.shape.back.mode === 'layer' && (
+                <select className="input sketch-xf-interp" title={UI.backLayer} aria-label={UI.backLayer} value={xf.shape.back.layerId ?? ''} onChange={(e) => shape({ back: { ...xf.shape.back, layerId: e.target.value || null } })}>
+                  <option value="">{UI.pickLayer}</option>
+                  {backLayers.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </>
+          )}
         </span>
       )}
-      {xf.mode === 'mold' && m && (
+      {xf.mode === 'mold' && m && !collapsed && (
         <span className="sketch-xf-extra">
           <Slider label={UI.grid} help={UI.gridHelp} min={2} max={48} value={xf.moldGrid} xf={xf} onChange={(n) => xf.setMoldGrid(n)} noMark />
           {(['drag', 'pin', 'front'] as const).map((t) => (
@@ -217,9 +309,11 @@ export function TransformBar({ xf, onDone, onCancel }: { xf: Transformer; onDone
       <button className="icon-btn sketch-tool" title={UI.flipY} aria-label={UI.flipY} onClick={() => xf.flip('y')}>
         <FlipHorizontal2 size={15} />
       </button>
-      <button className="icon-btn sketch-tool" title={UI.rotate} aria-label={UI.rotate} onClick={() => xf.rotate45()}>
-        <RotateCw size={15} />
-      </button>
+      {!turn && (
+        <button className="icon-btn sketch-tool" title={UI.rotate} aria-label={UI.rotate} onClick={() => xf.rotate45()}>
+          <RotateCw size={15} />
+        </button>
+      )}
       <button className="icon-btn sketch-tool" title={UI.fit} aria-label={UI.fit} onClick={() => xf.fit()}>
         <Maximize size={15} />
       </button>
@@ -231,23 +325,27 @@ export function TransformBar({ xf, onDone, onCancel }: { xf: Transformer; onDone
       {!m && (
         <>
       <span className="sketch-sep" />
-      <label className="sketch-selbar-slider" title={UI.snapping}>
-        <input type="checkbox" checked={xf.snapping} onChange={(e) => xf.patch({ snapping: e.target.checked })} />
-        {UI.distance}
-        <input type="range" min={2} max={40} value={xf.snapDistance} disabled={!xf.snapping} onChange={(e) => xf.patch({ snapDistance: Number(e.target.value) })} />
-      </label>
+      {!turn && (
+        <label className="sketch-selbar-slider" title={UI.snapping}>
+          <input type="checkbox" checked={xf.snapping} onChange={(e) => xf.patch({ snapping: e.target.checked })} />
+          {UI.distance}
+          <input type="range" min={2} max={40} value={xf.snapDistance} disabled={!xf.snapping} onChange={(e) => xf.patch({ snapDistance: Number(e.target.value) })} />
+        </label>
+      )}
       <button className={`icon-btn sketch-tool${xf.magnetics ? ' is-active' : ''}`} title={UI.magnetics} aria-label={UI.magnetics} aria-pressed={xf.magnetics} onClick={() => xf.patch({ magnetics: !xf.magnetics })}>
         <Magnet size={15} />
       </button>
         </>
       )}
-      <select className="input sketch-xf-interp" value={xf.interp} onChange={(e) => xf.patch({ interp: e.target.value as Interpolation })}>
-        {(Object.keys(UI.interp) as Interpolation[]).map((k) => (
-          <option key={k} value={k}>
-            {UI.interp[k]}
-          </option>
-        ))}
-      </select>
+      {(!turn || flat) && (
+        <select className="input sketch-xf-interp" value={xf.interp} onChange={(e) => xf.patch({ interp: e.target.value as Interpolation })}>
+          {(Object.keys(UI.interp) as Interpolation[]).map((k) => (
+            <option key={k} value={k}>
+              {UI.interp[k]}
+            </option>
+          ))}
+        </select>
+      )}
       <button className="btn btn-ghost sketch-small" title={UI.cancel} onClick={onCancel}>
         <X size={13} />
       </button>
@@ -264,10 +362,21 @@ function Slider(p: { label: string; help: string; min: number; max: number; valu
     <label className="sketch-selbar-slider" title={p.help}>
       {p.label}
       <input type="range" min={p.min} max={p.max} value={p.value} aria-label={p.label} onPointerDown={() => !p.noMark && p.xf.mark()} onKeyDown={() => !p.noMark && p.xf.mark()} onChange={(e) => p.onChange(Number(e.target.value))} />
-      <span className="sketch-xf-num">
-        {Math.round(p.value)}
-        {p.unit}
-      </span>
+      {/* Type an exact number; one undo step per visit to the box. */}
+      <input
+        type="number"
+        className="input sketch-xf-num"
+        min={p.min}
+        max={p.max}
+        value={Math.round(p.value)}
+        aria-label={p.label}
+        onFocus={() => !p.noMark && p.xf.mark()}
+        onChange={(e) => {
+          const n = Number(e.target.value)
+          if (e.target.value !== '' && Number.isFinite(n)) p.onChange(Math.min(p.max, Math.max(p.min, n)))
+        }}
+      />
+      {p.unit && <span className="sketch-xf-unit">{p.unit}</span>}
     </label>
   )
 }
@@ -299,6 +408,7 @@ export function TransformOverlay({ xf, scale, width, height }: { xf: Transformer
       curves.push(line(Array.from({ length: steps + 1 }, (_, i) => mapPoint(s, t, i / steps))))
     }
   const r = (coarsePointer() ? 9 : 5) / scale
+  if (xf.mode === 'turn') return <OrbitGizmo xf={xf} r={r} />
   const rot = xf.rotateHandle(scale)
   const top = mapPoint(s, 0.5, 0)
   return (
@@ -325,4 +435,31 @@ export function TransformOverlay({ xf, scale, width, height }: { xf: Transformer
         : xf.handles().map((p, i) => <rect key={i} x={p.x - r} y={p.y - r} width={r * 2} height={r * 2} rx={xf.mode === 'warp' ? r : 1 / scale} className="sketch-xf-handle" />)}
     </g>
   )
+}
+
+/**
+ * Rotate object's handle on the canvas: a ring around the object (drag around it to turn) and its three axes as they
+ * are turned now (X across, Y up, Z towards you), instead of a flat box that would not match the 3D shape.
+ */
+function OrbitGizmo({ xf, r }: { xf: Transformer; r: number }) {
+  const s = xf.state!
+  const c = mapPoint(s, 0.5, 0.5)
+  const b = outerBounds(s)
+  const R = Math.max(b.w, b.h) * 0.6 + r * 4
+  const m = rotation(xf.turn)
+  const axis = (k: number, cls: string, sign = 1) => <line x1={c.x} y1={c.y} x2={c.x + m[k] * R * 0.45 * sign} y2={c.y + m[k + 1] * R * 0.45 * sign} className={`sketch-xf-axis ${cls}`} />
+  return (
+    <g className="sketch-xf">
+      <circle cx={c.x} cy={c.y} r={R} className="sketch-xf-ring" />
+      {axis(0, 'is-x')}
+      {axis(3, 'is-y', -1)}
+      {axis(6, 'is-z')}
+      <circle cx={c.x} cy={c.y} r={r} className="sketch-xf-handle" />
+    </g>
+  )
+}
+
+/** The note shown while Rotate object is picked on a layer whose 3D object can be turned again. */
+export function TurnAgainNote() {
+  return <div className="sketch-selbar sketch-xf-again">{UI.again}</div>
 }
