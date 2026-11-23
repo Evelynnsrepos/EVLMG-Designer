@@ -675,10 +675,13 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
   'status-effects': {
     title: 'Status Effects & Reactions',
     body: [
-      'Effects are things that stay on a character for a while: Burn, Poison, Freeze, Stun, Haste, Regeneration, or a survival game\'s Hungry. Start with examples fills in seven to change.',
-      'Each effect has how long it lasts, whether it helps or hurts, damage or healing every few seconds, stat changes while it is active (ATK, DEF, SPD, CRIT in percent), whether the target can\'t act, and how it stacks when it lands again: the timer starts over, it gets one stack stronger, or nothing happens. Removes these when it lands lets Wet put out Burn.',
-      'Reactions is a grid of elements. A row is the element already on the target, a column is the element of the new hit. Click a cell to say what happens: a name like Melt, extra damage, an effect it adds (Water then Lightning stuns) and whether the first element is used up. Arrow keys move between cells, Enter opens one, Delete clears it.',
-      'In Abilities & Spells, Status effects it applies picks which effects an ability puts on its target and how likely. The Combat Simulator then plays them out: ticks hurt or heal, stunned fighters skip turns, stat changes count, and an element hit leaves its element on the target for 8 seconds so the next different element can react. The results show the damage from effects and how often each reaction happened.',
+      'Effects are things that stay on a character for a while: Burn, Poison, Stun, Haste, Exhausted, Hungry, Charmed, Inspired, anything your game needs. Start with examples fills in nine to change. Time in (top right) switches the words between seconds and turns.',
+      'Each effect has how long it lasts, whether it helps or hurts, damage or healing over time, stat changes while it is active, whether the target can\'t act, and how it stacks when it lands again: the timer starts over, it gets one stack stronger, or nothing happens.',
+      'Stat changes work with any stat: ATK, DEF, SPD, CRIT, CRITDMG, DMG (damage dealt), TAKEN (damage taken) or a stat you gave fighters in the Combat Simulator, like Morale or Focus. Each change can be in percent, a flat number, or both.',
+      'Types are your own words, like Debuff, Control or Curse. Removes these when it lands can name single effects or all of a type, so a Cleanse can take away every Debuff. Blocks these while active is an immunity: while the effect is on, those effects or types can\'t land.',
+      'Reactions is a grid of elements. A row is the element already on the target, a column is the element of the new hit. Click a cell to see it; a reaction is only made once you change something: a name, extra damage, an effect it adds and whether the first element is used up. Arrow keys move between cells, Enter opens one, Delete clears it. How long an element stays on a target is set under the grid (8 by default).',
+      'Effect meets effect works the same way for effects: when an effect lands on a target that already has another one, the hit that brought it counts more, a new effect can land and the first can be used up.',
+      'In Abilities & Spells, Status effects it applies picks which effects an ability puts on its target and how likely. The Combat Simulator then plays them out: ticks hurt or heal, stunned fighters skip turns, stat changes count, cleanses and immunities apply, and reactions happen. The results show the damage from effects and how often each reaction happened.',
     ],
   },
   abilities: {

@@ -297,7 +297,7 @@ beginner guides.
 | **Gameplay Loop** | The loop players repeat as a circular timeline: flesh out each step, size steps by time, and branch notes off them. |
 | **Skill Tree** | Skill and talent trees with ranks, costs and requirements, plus a build planner. |
 | **Abilities & Spells** | Abilities and spells with costs, cooldowns, numbers from Damage Calculator formulas and the status effects they apply. |
-| **Status Effects & Reactions** | Burn, Freeze, Stun and your own effects with durations, stacks, ticks and stat changes, and a grid of what happens when two elements meet. The Combat Simulator plays them out. |
+| **Status Effects & Reactions** | Your own effects with durations in seconds or turns, stacks, ticks, changes to any stat (percent or flat), your own types, cleanses and immunities, plus what happens when two elements or two effects meet. The Combat Simulator plays them out. |
 | **Behaviour Designer** | How enemies, NPCs, bosses or any actor decide what to do: states and groups (phases) joined by arrows with one or more conditions (and/or, checked in order), variables, your own fields and condition types, a step-through test, daily routines by weekday, and a plain state machine in the engine export. |
 | **Crafting & Recipes** | Recipes with ingredients, stations and times, a crafting tree and the raw materials anything needs. |
 | **Wave Planner** | Waves of enemies with timing, health growth and drops, the damage per second each wave needs, and which weapons can keep up. |
