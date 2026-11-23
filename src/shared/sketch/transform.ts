@@ -4,6 +4,8 @@
  * warp mesh. All pure.
  */
 
+import { moldAt, type Mold } from './mold'
+
 export type Pt = { x: number; y: number }
 export interface Box {
   x: number
@@ -21,19 +23,8 @@ export interface XfState {
   quad: Quad
   /** 16 control points of the warp mesh (row by row), or null when not warped. */
   warp: Pt[] | null
-  /** Mold: an (n + 1) × (n + 1) grid of points, each cell cut into two triangles; wins over quad and warp. */
+  /** Mold: a triangle mesh over the painted part (see mold.ts); wins over quad and warp. */
   mold?: Mold | null
-}
-
-export interface Mold {
-  n: number
-  pts: Pt[]
-  /** The points before any molding (Keep shape bends back towards these shapes). */
-  rest?: Pt[]
-  /** Per cell (row by row): does it hold paint? Empty cells are left out, so the mesh follows the drawing. */
-  on?: boolean[]
-  /** Pinned points: they stay where they are. */
-  pins?: number[]
 }
 
 export const initialState = (src: Box): XfState => ({
@@ -74,7 +65,7 @@ export function transformState(s: XfState, m: Affine): XfState {
 
 /** Send every point of the state (corners, warp and mold points) through `f`. */
 export function mapAll(s: XfState, f: (p: Pt) => Pt): XfState {
-  return { src: s.src, quad: s.quad.map(f) as Quad, warp: s.warp && s.warp.map(f), mold: s.mold && { ...s.mold, pts: s.mold.pts.map(f), rest: s.mold.rest?.map(f) } }
+  return { src: s.src, quad: s.quad.map(f) as Quad, warp: s.warp && s.warp.map(f), mold: s.mold && { ...s.mold, pts: s.mold.pts.map(f), rest: s.mold.rest.map(f) } }
 }
 
 /** Perspective mapping of the unit square onto a quad (corners TL, TR, BR, BL). */
@@ -123,152 +114,13 @@ export function bezierPatch(ctrl: Pt[], u: number, v: number): Pt {
   return { x, y }
 }
 
-/** A point of the mold grid: flat inside each triangle, like the mesh that is drawn. */
-export function moldPoint(m: Mold, u: number, v: number): Pt {
-  const { n, pts } = m
-  const i = Math.min(n - 1, Math.max(0, Math.floor(u * n)))
-  const j = Math.min(n - 1, Math.max(0, Math.floor(v * n)))
-  const fu = u * n - i
-  const fv = v * n - j
-  const at = (di: number, dj: number) => pts[(j + dj) * (n + 1) + i + di]
-  const [o, a, b, ku, kv] = fu + fv <= 1 ? [at(0, 0), at(1, 0), at(0, 1), fu, fv] : [at(1, 1), at(0, 1), at(1, 0), 1 - fu, 1 - fv]
-  return { x: o.x + ku * (a.x - o.x) + kv * (b.x - o.x), y: o.y + ku * (a.y - o.y) + kv * (b.y - o.y) }
-}
-
 /** Where the point (u, v) of the source (0..1 each) lands. */
 export function mapPoint(s: XfState, u: number, v: number): Pt {
-  return s.mold ? moldPoint(s.mold, u, v) : s.warp ? bezierPatch(s.warp, u, v) : squareToQuad(s.quad)(u, v)
+  return s.mold ? moldAt(s.mold, u, v) : s.warp ? bezierPatch(s.warp, u, v) : squareToQuad(s.quad)(u, v)
 }
 
 /** Bent (warp or mold): needs a finer mesh to draw. */
 export const curved = (s: XfState) => !!(s.warp || s.mold)
-
-/** Start molding: an n × n cell grid that follows the current shape; `on` leaves out cells without paint. */
-export function toMold(s: XfState, n: number, on?: boolean[]): XfState {
-  const pts: Pt[] = []
-  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) pts.push(mapPoint(s, i / n, j / n))
-  return { ...s, mold: { n, pts, rest: pts, on, pins: [] } }
-}
-
-/** Which of the n × n cells over `src` hold any paint (`alpha(x, y)` 0..255). */
-export function paintedCells(alpha: (x: number, y: number) => number, src: Box, n: number): boolean[] {
-  const on = new Array<boolean>(n * n).fill(false)
-  for (let y = Math.floor(src.y); y < src.y + src.h; y++)
-    for (let x = Math.floor(src.x); x < src.x + src.w; x++)
-      if (alpha(x, y) > 0) on[Math.min(n - 1, Math.floor(((y - src.y) / src.h) * n)) * n + Math.min(n - 1, Math.floor(((x - src.x) / src.w) * n))] = true
-  return on
-}
-
-/** True for the points that belong to a cell with paint (the ones shown and dragged). */
-export function moldLive(m: Mold): boolean[] {
-  const n = m.n
-  const live = new Array<boolean>((n + 1) * (n + 1)).fill(!m.on)
-  if (m.on)
-    m.on.forEach((c, k) => {
-      if (!c) return
-      const i = k % n
-      const j = (k - i) / n
-      for (const [di, dj] of [[0, 0], [1, 0], [0, 1], [1, 1]]) live[(j + dj) * (n + 1) + i + di] = true
-    })
-  return live
-}
-
-const neighbourCache = new WeakMap<object, number[][]>()
-/** For each point, the points it shares a triangle edge with (only in cells with paint). */
-export function moldNeighbours(m: Mold): number[][] {
-  const key = m.on ?? m.pts
-  const hit = neighbourCache.get(key)
-  if (hit) return hit
-  const n = m.n
-  const sets = Array.from({ length: (n + 1) * (n + 1) }, () => new Set<number>())
-  const id = (i: number, j: number) => j * (n + 1) + i
-  for (let j = 0; j < n; j++)
-    for (let i = 0; i < n; i++) {
-      if (m.on && !m.on[j * n + i]) continue
-      for (const [a, b] of [[id(i, j), id(i + 1, j)], [id(i, j), id(i, j + 1)], [id(i + 1, j), id(i, j + 1)], [id(i + 1, j), id(i + 1, j + 1)], [id(i, j + 1), id(i + 1, j + 1)]]) {
-        sets[a].add(b)
-        sets[b].add(a)
-      }
-    }
-  const out = sets.map((x) => [...x])
-  neighbourCache.set(key, out)
-  return out
-}
-
-/**
- * Keep shape (as-rigid-as-possible, like a puppet warp; no AI): the `fixed` points (pins and the
- * dragged point) go where they are told, and every other point moves so each little piece of
- * the mesh keeps its shape as well as it can, only turning. So a leg bends instead of stretching.
- * Starts from `m.pts` and runs a few rounds; called on every pointer move, so it keeps improving.
- */
-export function moldKeepShape(m: Mold, fixed: Map<number, Pt>, rounds = 12): Mold {
-  const rest = m.rest ?? m.pts
-  const nb = moldNeighbours(m)
-  const N = m.pts.length
-  const px = Float64Array.from(m.pts, (p) => p.x)
-  const py = Float64Array.from(m.pts, (p) => p.y)
-  for (const [i, p] of fixed) [px[i], py[i]] = [p.x, p.y]
-  const c = new Float64Array(N).fill(1)
-  const sn = new Float64Array(N)
-  for (let r = 0; r < rounds; r++) {
-    // Best turn of each point's neighbourhood from its rest shape to now.
-    for (let i = 0; i < N; i++) {
-      let a = 0
-      let b = 0
-      for (const j of nb[i]) {
-        const ex = px[i] - px[j]
-        const ey = py[i] - py[j]
-        const rx = rest[i].x - rest[j].x
-        const ry = rest[i].y - rest[j].y
-        // Each edge counts by its relative change, so short edges (a thin limb's width) hold as well as long ones.
-        const w = 1 / (rx * rx + ry * ry || 1)
-        a += (ex * rx + ey * ry) * w
-        b += (rx * ey - ry * ex) * w
-      }
-      const l = Math.hypot(a, b) || 1
-      ;[c[i], sn[i]] = [a / l, b / l]
-    }
-    // Each free point moves to where its neighbours, turned that way, say it should be.
-    for (let i = 0; i < N; i++) {
-      if (fixed.has(i) || !nb[i].length) continue
-      let x = 0
-      let y = 0
-      let ws = 0
-      for (const j of nb[i]) {
-        const rx = rest[i].x - rest[j].x
-        const ry = rest[i].y - rest[j].y
-        const w = 1 / (rx * rx + ry * ry || 1)
-        const cc = (c[i] + c[j]) / 2
-        const ss = (sn[i] + sn[j]) / 2
-        x += (px[j] + cc * rx - ss * ry) * w
-        y += (py[j] + ss * rx + cc * ry) * w
-        ws += w
-      }
-      px[i] = x / ws
-      py[i] = y / ws
-    }
-  }
-  return { ...m, pts: m.pts.map((_, i) => ({ x: px[i], y: py[i] })) }
-}
-
-/**
- * Mold drag: the grabbed point moves by (dx, dy); every other point follows by `pull` (0..1),
- * less the further away it is, and not at all past `reach` pixels.
- */
-export function moldDrag(m: Mold, index: number, dx: number, dy: number, reach: number, pull: number): Mold {
-  const g = m.pts[index]
-  const pinned = new Set(m.pins)
-  const pts = m.pts.map((p, i) => {
-    let w = 1
-    if (i !== index && pinned.has(i)) w = 0
-    else if (i !== index) {
-      const t = reach > 0 ? Math.hypot(p.x - g.x, p.y - g.y) / reach : 1
-      w = t >= 1 ? 0 : pull * (1 - t * t) ** 2
-    }
-    return w ? { x: p.x + dx * w, y: p.y + dy * w } : p
-  })
-  return { ...m, pts }
-}
 
 export interface Turn {
   /** Degrees around the across (tilt forward/back), up (turn left/right) and view (spin) axes. */
@@ -316,18 +168,15 @@ export function toWarp(s: XfState): XfState {
 
 /** Triangle mesh for drawing: positions (canvas px) and source uvs (0..1), `n` cells per side. */
 export function buildMesh(s: XfState, n = 24): { pos: Float32Array; uv: Float32Array } {
+  if (s.mold) return moldMesh(s.mold)
   const map = s.warp ? (u: number, v: number) => bezierPatch(s.warp!, u, v) : squareToQuad(s.quad)
-  let grid: Pt[] = []
-  // A mold is drawn with exactly its own triangles (only the cells with paint).
-  const on = s.mold?.on
-  if (s.mold) [n, grid] = [s.mold.n, s.mold.pts]
-  else for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) grid.push(map(i / n, j / n))
+  const grid: Pt[] = []
+  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) grid.push(map(i / n, j / n))
   const pos = new Float32Array(n * n * 12)
   const uv = new Float32Array(n * n * 12)
   let k = 0
   for (let j = 0; j < n; j++)
-    for (let i = 0; i < n; i++) {
-      if (on && !on[j * n + i]) continue
+    for (let i = 0; i < n; i++)
       for (const [di, dj] of [[0, 0], [1, 0], [0, 1], [1, 0], [1, 1], [0, 1]]) {
         const p = grid[(j + dj) * (n + 1) + i + di]
         pos[k] = p.x
@@ -336,8 +185,25 @@ export function buildMesh(s: XfState, n = 24): { pos: Float32Array; uv: Float32A
         uv[k + 1] = (j + dj) / n
         k += 2
       }
+  return { pos, uv }
+}
+
+/** A mold is drawn with exactly its own triangles, the ones set to the front last. */
+function moldMesh(m: Mold): { pos: Float32Array; uv: Float32Array } {
+  const order = m.depth.map((_, t) => t).sort((a, b) => m.depth[a] - m.depth[b] || a - b)
+  const pos = new Float32Array(m.tris.length * 2)
+  const uv = new Float32Array(m.tris.length * 2)
+  let k = 0
+  for (const t of order)
+    for (let c = 0; c < 3; c++) {
+      const i = m.tris[t * 3 + c]
+      pos[k] = m.pts[i].x
+      pos[k + 1] = m.pts[i].y
+      uv[k] = m.uv[i].x
+      uv[k + 1] = m.uv[i].y
+      k += 2
     }
-  return k === pos.length ? { pos, uv } : { pos: pos.slice(0, k), uv: uv.slice(0, k) }
+  return { pos, uv }
 }
 
 /** Axis-aligned bounds of the transformed picture (sampled along the edges). */

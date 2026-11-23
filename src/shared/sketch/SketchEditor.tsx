@@ -173,7 +173,7 @@ const UI = {
   rectSelect: 'Rectangle selection (M)',
   move: 'Move (V): drags the selection, or the whole layer',
   rotate3d: 'Rotate object (R): turn the selection (or layer) as a 3D shape; drag outside it to orbit',
-  mold: 'Mold object (W): a triangle mesh over the selection (or layer); drag its points, nearby points follow',
+  mold: 'Mold object (W): bend the selection (or layer) like a puppet: pin what should stay, drag anywhere on it',
   eyedropper: 'Eyedropper (I, or hold Alt)',
   layerPick: 'Layer picker (K, or hold Ctrl): point at paint to see its layer, click to make it active',
   hand: 'Pan (H, or hold Space)',
@@ -979,7 +979,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       if (activeLayer.text) return t === 'move' ? textTool.down(p, true) : undefined
       // Transform: the first press lifts the pixels; later presses move, scale, turn or bend them.
       if (!xf.active && !xf.begin(activeLayer.id)) return
-      xf.down(p, view.scale, e.altKey)
+      xf.down(p, view.scale, e.altKey, e.shiftKey)
       gesture.current = { kind: 'move', from: p, to: p }
     }
   }

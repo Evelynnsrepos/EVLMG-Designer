@@ -7,20 +7,16 @@ import { buildModel, depthField, ModelRenderer, type DepthField, type Shape3d } 
 import { alphaBounds } from './selection'
 import type { Selector } from './selector'
 import {
+  apply,
   fitAffine,
   initialState,
   magnetAngle,
   magnetMove,
   mapPoint,
-  moldDrag,
-  moldKeepShape,
-  moldLive,
-  paintedCells,
   outerBounds,
   rotateAbout,
   scaleAlong,
   snapShift,
-  toMold,
   toWarp,
   transformState,
   turn3d,
@@ -29,6 +25,7 @@ import {
   type Turn,
   type XfState,
 } from './transform'
+import { buildMold, cellParts, moldFollow, moldKeepShape, pastePose, remold, spotAt, spotPos, type Hold, type Mold, type Pose, type Spot } from './mold'
 
 export type XfMode = 'free' | 'uniform' | 'distort' | 'warp' | 'turn' | 'mold'
 
@@ -45,6 +42,13 @@ type Drag =
   | { kind: 'scale' | 'corner' | 'mesh'; index: number; from: Pt; s0: XfState }
   | { kind: 'rotate'; from: Pt; s0: XfState }
   | { kind: 'turn'; from: Pt; t0: Turn }
+  /** Mold: a spot (`grab`) or picked pins (`group`) moved, or with `turn` turned about `centre`. */
+  | { kind: 'mold'; from: Pt; s0: XfState; grab: Spot | null; group: number[]; turn: boolean; centre: Pt }
+  /** Mold front/back: triangles under the pointer get `level`. */
+  | { kind: 'depth'; from: Pt; s0: XfState; level: number }
+
+/** Touch screens get bigger mold points to hit. */
+export const coarsePointer = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
 
 /**
  * Transform (Sketch Pro): lifts the selection (or layer) and maps it through a quad or
@@ -69,14 +73,18 @@ export class Transformer {
   private model3d: { base: XfState; shape: Shape3d; model: ReturnType<typeof buildModel> } | null = null
   private shown3d = false
   /** Mold: cells per side, how far (canvas px) and how strongly (0..1) other points follow a drag. */
-  moldGrid = 12
+  moldGrid = 16
   moldReach = 100
   moldPull = 0.6
   /** Keep shape: pieces of the mesh only turn, never stretch (a puppet warp). Off: nearby points follow by Reach and Follow. */
   moldKeep = true
-  /** What a click on a mold point does: drag it, or pin it in place. */
-  moldTool: 'drag' | 'pin' = 'drag'
-  private settle: Map<number, Pt> | null = null
+  /** What a click on the mold does: drag, pin or unpin, or paint parts to the front (Alt: to the back). */
+  moldTool: 'drag' | 'pin' | 'front' = 'drag'
+  /** A copied mold pose, to put on the next frame's drawing (kept while the app runs). */
+  pose: Pose | null = null
+  /** Dragging one of several picked pins turns them all about their middle, instead of moving them. */
+  moldTurn = false
+  private settle: Hold[] | null = null
   private alpha: { data: Uint8ClampedArray; w: number } | null = null
   state: XfState | null = null
   layerId: Id | null = null
@@ -171,20 +179,52 @@ export class Transformer {
     return true
   }
 
-  /** A mold over `s` with n cells per side, leaving out the cells without paint. */
+  /** A mold over `s` with n cells per side, leaving out the cells without paint; an existing mold keeps its bend and pins. */
   private moldOf(s: XfState, n: number): XfState {
     const piece = this.engine.floatingPiece
     if (piece && !this.alpha) this.alpha = { data: piece.getContext('2d')!.getImageData(0, 0, piece.width, piece.height).data, w: piece.width }
     const a = this.alpha
-    return toMold({ ...s, mold: null }, n, a ? paintedCells((x, y) => a.data[(y * a.w + x) * 4 + 3], (this.first ?? s).src, n) : undefined)
+    const parts = a ? cellParts((x, y) => a.data[(y * a.w + x) * 4 + 3], (this.first ?? s).src, n) : undefined
+    if (s.mold) return { ...s, mold: remold(s.mold, n, parts) }
+    const flat = { ...s, mold: null }
+    return {
+      ...s,
+      mold: buildMold(n, (u, v) => {
+        const p = mapPoint(flat, u, v)
+        return { p, r: p }
+      }, parts),
+    }
+  }
+
+  private setMold(f: (m: Mold) => Mold) {
+    const s = this.state
+    if (!s?.mold) return
+    this.mark()
+    this.set({ ...s, mold: f(s.mold) })
   }
 
   /** Take every pin off the mold. */
   clearPins() {
+    if (this.state?.mold?.pins.length) this.setMold((m) => ({ ...m, pins: [], sel: [] }))
+  }
+
+  /** Put every part back to the same level (nothing in front or behind). */
+  clearDepth() {
+    if (this.state?.mold?.depth.some(Boolean)) this.setMold((m) => ({ ...m, depth: m.depth.map(() => 0) }))
+  }
+
+  /** Remember the current bend, to put on another drawing (the next animation frame). */
+  copyPose() {
     const s = this.state
-    if (!s?.mold?.pins?.length) return
-    this.mark()
-    this.set({ ...s, mold: { ...s.mold, pins: [] } })
+    if (s?.mold) this.pose = { mold: s.mold, src: s.src }
+    this.changed()
+  }
+
+  /** Bend the current drawing like the copied pose. */
+  pastePose() {
+    const s = this.state
+    const pose = this.pose
+    if (s && pose) this.setMold((m) => pastePose(m, s.src, pose))
   }
 
   /** Change the 3D model's thickness, roundness or light. */
@@ -208,7 +248,7 @@ export class Transformer {
     this.show()
   }
 
-  patch(p: Partial<Pick<Transformer, 'mode' | 'interp' | 'snapping' | 'snapDistance' | 'magnetics' | 'moldReach' | 'moldPull' | 'moldKeep' | 'moldTool'>>) {
+  patch(p: Partial<Pick<Transformer, 'mode' | 'interp' | 'snapping' | 'snapDistance' | 'magnetics' | 'moldReach' | 'moldPull' | 'moldKeep' | 'moldTool' | 'moldTurn'>>) {
     const s = this.state
     if (s && p.mode && p.mode !== this.mode) {
       this.mark()
@@ -351,28 +391,43 @@ export class Transformer {
     return { x: top.x + ((top.x - c.x) / l) * (28 / scale), y: top.y + ((top.y - c.y) / l) * (28 / scale) }
   }
 
-  down(p: Pt, scale: number, alt = false) {
+  down(p: Pt, scale: number, alt = false, shift = false) {
     const s = this.state
     if (!s) return
     this.mark()
     const near = (q: Pt) => Math.hypot(q.x - p.x, q.y - p.y) * scale < 10
     if (this.mode === 'turn') return void (this.drag = inside(s, p) ? { kind: 'move', from: p, s0: s, b0: this.turnBase } : { kind: 'turn', from: p, t0: this.turn })
     if (this.mode === 'mold') {
-      // The nearest mold point within reach of the pointer, so small grids are easy to grab.
       const m = s.mold
-      const live = m ? moldLive(m) : []
-      let best = -1
-      let bd = 14 / scale
-      m?.pts.forEach((q, i) => {
-        const d = Math.hypot(q.x - p.x, q.y - p.y)
-        if (live[i] && d < bd) [best, bd] = [i, d]
+      if (!m) return void (this.drag = { kind: 'move', from: p, s0: s })
+      const hit = (coarsePointer() ? 28 : 14) / scale
+      let pin = -1
+      let bd = hit
+      m.pins.forEach((q, i) => {
+        const d = Math.hypot(spotPos(m, q).x - p.x, spotPos(m, q).y - p.y)
+        if (d < bd) [pin, bd] = [i, d]
       })
-      if (m && best >= 0 && (this.moldTool === 'pin' || alt)) {
-        const pins = m.pins ?? []
-        this.set({ ...s, mold: { ...m, pins: pins.includes(best) ? pins.filter((i) => i !== best) : [...pins, best] } })
+      // Shift-click a pin: pick it (or drop it from the picked ones), to move or turn several together.
+      if (shift && pin >= 0) {
+        this.set({ ...s, mold: { ...m, sel: m.sel.includes(pin) ? m.sel.filter((i) => i !== pin) : [...m.sel, pin] } })
         return void (this.drag = null)
       }
-      return void (this.drag = best >= 0 ? { kind: 'mesh', index: best, from: p, s0: s } : { kind: 'move', from: p, s0: s })
+      if (this.moldTool === 'front') {
+        const level = alt ? Math.min(0, ...m.depth) - 1 : Math.max(0, ...m.depth) + 1
+        this.drag = { kind: 'depth', from: p, s0: s, level }
+        return this.paintDepth(p, scale)
+      }
+      const grab = pin >= 0 ? m.pins[pin] : grabAt(m, p, hit)
+      if (this.moldTool === 'pin' || alt) {
+        if (pin >= 0) this.set({ ...s, mold: { ...m, pins: m.pins.filter((_, i) => i !== pin), sel: m.sel.filter((i) => i !== pin).map((i) => (i > pin ? i - 1 : i)) } })
+        else if (grab) this.set({ ...s, mold: { ...m, pins: [...m.pins, grab] } })
+        return void (this.drag = null)
+      }
+      if (!grab) return void (this.drag = { kind: 'move', from: p, s0: s })
+      const group = pin < 0 ? [] : m.sel.includes(pin) ? m.sel : [pin]
+      const at = group.map((i) => spotPos(m, m.pins[i]))
+      const centre = at.length ? { x: at.reduce((t, q) => t + q.x, 0) / at.length, y: at.reduce((t, q) => t + q.y, 0) / at.length } : p
+      return void (this.drag = { kind: 'mold', from: p, s0: s, grab: pin >= 0 ? null : grab, group, turn: this.moldTurn && group.length > 1, centre })
     }
     const rot = this.rotateHandle(scale)
     if (rot && near(rot)) return void (this.drag = { kind: 'rotate', from: p, s0: s })
@@ -401,6 +456,26 @@ export class Transformer {
     let dx = p.x - d.from.x
     let dy = p.y - d.from.y
     this.guides = { gx: [], gy: [] }
+    if (d.kind === 'depth') return this.paintDepth(p, scale)
+    if (d.kind === 'mold') {
+      const m0 = s0.mold!
+      let a = Math.atan2(p.y - d.centre.y, p.x - d.centre.x) - Math.atan2(d.from.y - d.centre.y, d.from.x - d.centre.x)
+      if ((this.magnetics || shift) && d.turn) a = magnetAngle(a)
+      else if (this.magnetics || shift) [dx, dy] = magnetMove(dx, dy)
+      const turn = rotateAbout(d.centre, a)
+      const to = d.turn ? (q: Pt) => apply(turn, q) : (q: Pt) => ({ x: q.x + dx, y: q.y + dy })
+      const holds: Hold[] = m0.pins.map((pin, i) => ({ ...pin, p: d.group.includes(i) ? to(spotPos(m0, pin)) : spotPos(m0, pin) }))
+      if (d.grab) holds.push({ ...d.grab, p: to(spotPos(m0, d.grab)) })
+      if (this.moldKeep) {
+        // Keep shape: starts from the last result, so it keeps improving while the pointer moves.
+        const now = this.state?.mold ?? m0
+        this.settle = holds
+        return this.set({ ...s0, mold: moldKeepShape({ ...m0, pts: now.pts }, holds, Math.min(80, 20 + m0.n * 2)) })
+      }
+      const moving = d.grab ? [d.grab] : d.group.map((i) => m0.pins[i])
+      const still = holds.slice(0, m0.pins.length).filter((_, i) => !d.group.includes(i))
+      return this.set({ ...s0, mold: moldFollow(m0, moving.map((q) => q.t), moving.map((q) => spotPos(m0, q)), to, this.moldReach, this.moldPull, still) })
+    }
     if (d.kind === 'move') {
       if (this.magnetics || shift) [dx, dy] = magnetMove(dx, dy)
       if (this.snapping) {
@@ -417,16 +492,6 @@ export class Transformer {
       if (this.magnetics || shift) a = magnetAngle(a)
       return this.set(transformState(s0, rotateAbout(c, a)))
     }
-    if (d.kind === 'mesh' && s0.mold) {
-      const m0 = s0.mold
-      if (!this.moldKeep) return this.set({ ...s0, mold: moldDrag(m0, d.index, dx, dy, this.moldReach, this.moldPull) })
-      // Keep shape: pins stay, the grabbed point follows the pointer, the rest bends along (starting from the last result).
-      const fixed = new Map((m0.pins ?? []).map((i) => [i, m0.pts[i]]))
-      fixed.set(d.index, { x: m0.pts[d.index].x + dx, y: m0.pts[d.index].y + dy })
-      const now = this.state?.mold ?? m0
-      this.settle = fixed
-      return this.set({ ...s0, mold: moldKeepShape({ ...m0, pts: now.pts }, fixed, 20 + m0.n * 2) })
-    }
     if (d.kind === 'mesh') {
       const warp = s0.warp!.map((q, i) => (i === d.index ? { x: q.x + dx, y: q.y + dy } : q))
       return this.set({ ...s0, warp })
@@ -440,8 +505,8 @@ export class Transformer {
         return { x: q.x + dx * w, y: q.y + dy * w }
       })
       const m = s0.mold
-      const mold = m && { n: m.n, pts: m.pts.map((q, i) => {
-        const w = (1 - Math.abs(cu - (i % (m.n + 1)) / m.n)) * (1 - Math.abs(cv - Math.floor(i / (m.n + 1)) / m.n))
+      const mold = m && { ...m, pts: m.pts.map((q, i) => {
+        const w = (1 - Math.abs(cu - m.uv[i].x)) * (1 - Math.abs(cv - m.uv[i].y))
         return { x: q.x + dx * w, y: q.y + dy * w }
       }) }
       return this.set({ ...s0, quad, warp, mold })
@@ -479,6 +544,23 @@ export class Transformer {
     this.drag = null
     this.guides = { gx: [], gy: [] }
     this.changed()
+  }
+
+  /** Front/back brush: the triangles under the pointer take the stroke's level. */
+  private paintDepth(p: Pt, scale: number) {
+    const d = this.drag
+    const m = this.state?.mold
+    if (d?.kind !== 'depth' || !m) return
+    const r = (coarsePointer() ? 40 : 24) / scale
+    const under = spotAt(m, p)?.t
+    let changed = false
+    const depth = m.depth.map((v, t) => {
+      const c = spotPos(m, { t, b: [1 / 3, 1 / 3, 1 / 3] })
+      if (v === d.level || (t !== under && Math.hypot(c.x - p.x, c.y - p.y) > r)) return v
+      changed = true
+      return d.level
+    })
+    if (changed) this.set({ ...this.state!, mold: { ...m, depth } })
   }
 
   // ---- Buttons --------------------------------------------------------------
@@ -565,4 +647,19 @@ function inside(s: XfState, p: Pt): boolean {
     return Math.sign((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x))
   })
   return sides.every((x) => x >= 0) || sides.every((x) => x <= 0)
+}
+
+/** The mesh spot to grab at `p`: a mesh point within `hit` px (exact), else the triangle under it. */
+function grabAt(m: Mold, p: Pt, hit: number): Spot | null {
+  let k = -1
+  let bd = hit
+  m.pts.forEach((q, i) => {
+    const d = Math.hypot(q.x - p.x, q.y - p.y)
+    if (d < bd) [k, bd] = [i, d]
+  })
+  if (k < 0) return spotAt(m, p)
+  const at = m.tris.indexOf(k)
+  const b: [number, number, number] = [0, 0, 0]
+  b[at % 3] = 1
+  return { t: Math.floor(at / 3), b }
 }

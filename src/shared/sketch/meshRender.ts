@@ -131,8 +131,11 @@ export function renderMesh(src: HTMLCanvasElement, s: XfState, out: CanvasRender
     c.uniform2f(loc('size'), W, H)
     c.uniform4f(loc('box'), s.src.x, s.src.y, s.src.w, s.src.h)
     c.uniform1i(loc('mode'), mode === 'nearest' ? 0 : mode === 'bilinear' ? 1 : 2)
-    c.disable(c.BLEND)
+    // Blended (premultiplied), so a molded part folded over another keeps what shows through its see-through pixels.
+    c.enable(c.BLEND)
+    c.blendFunc(c.ONE, c.ONE_MINUS_SRC_ALPHA)
     c.drawArrays(c.TRIANGLES, 0, mesh.pos.length / 2)
+    c.disable(c.BLEND)
     out.drawImage(g.canvas, 0, 0)
   } else drawTriangles(src, s, out, mode)
   out.restore()

@@ -286,7 +286,23 @@
 .sketch-xf-pin {
   fill: var(--accent);
   stroke: var(--bg);
+  stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
+}
+/* Mold: picked pins move or turn together; front/back parts are tinted. */
+.sketch-xf-pin.is-picked {
+  stroke: var(--text);
+  stroke-width: 2.5;
+}
+.sketch-xf-mesh {
+  stroke-width: 0.6;
+  opacity: 0.7;
+}
+.sketch-xf-front {
+  fill: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.sketch-xf-back {
+  fill: color-mix(in srgb, var(--text-muted) 22%, transparent);
 }
 /* 0.35: Animated layers */
 .sketch-anim-badge {
