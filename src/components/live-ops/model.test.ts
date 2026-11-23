@@ -31,4 +31,11 @@ describe('live-service planner', () => {
     expect(s.events[0].startWeek).toBe(0)
     expect(s.banners[0]).toBe(d.banners[0])
   })
+
+  it('counts and moves the rows people add themselves', () => {
+    const d = { ...createLiveOpsDoc(), rows: [{ id: 'r', name: 'Collabs', color: '#000', items: [{ id: 'c', name: 'Collab', startWeek: 20, weeks: 3, notes: '' }] }] }
+    expect(totalWeeks(d)).toBe(23)
+    expect(shiftWeeks(d, new Set(['c']), 2).rows![0].items[0].startWeek).toBe(22)
+    expect(shiftWeeks(createLiveOpsDoc(), new Set(['c']), 2).rows).toBeUndefined()
+  })
 })

@@ -58,6 +58,23 @@ export interface StoreSlot {
   currency: string
 }
 
+/** Something on a row of the person's own (a collab, a sale, a maintenance window…). */
+export interface CustomItem {
+  id: Id
+  name: string
+  startWeek: number
+  weeks: number
+  notes: string
+}
+
+/** A row the person names themselves, next to Events and Banners. */
+export interface CustomRow {
+  id: Id
+  name: string
+  color: string
+  items: CustomItem[]
+}
+
 export interface LiveOpsDoc {
   /** Launch date, YYYY-MM-DD; '' = weeks only. */
   start: string
@@ -68,6 +85,8 @@ export interface LiveOpsDoc {
   store: StoreSlot[]
   /** Warn when a character is featured again sooner than this many weeks. */
   rerunWeeks: number
+  /** Rows of the person's own (0.31+, optional: older files have none). */
+  rows?: CustomRow[]
 }
 
 export const VERSION_COLORS = ['#3e8ef7', '#9c36b5', '#2f9e44', '#f08c00', '#c2255c', '#1098ad']
@@ -106,6 +125,7 @@ export const totalWeeks = (d: LiveOpsDoc) =>
     ...d.events.map((e) => e.startWeek + Math.ceil(e.days / 7)),
     ...d.banners.map((b) => b.startWeek + b.weeks),
     ...d.store.map((s) => s.week + 1),
+    ...(d.rows ?? []).flatMap((r) => r.items.map((i) => i.startWeek + i.weeks)),
     12,
   )
 
@@ -141,5 +161,6 @@ export function passDays(p: BattlePass, hoursPerDay: number): { days: number; fi
 /** Move every listed item by some weeks (versions are not moved: they follow each other). */
 export function shiftWeeks(d: LiveOpsDoc, ids: Set<Id>, by: number): LiveOpsDoc {
   const mv = <T extends { id: Id }>(xs: T[], key: keyof T) => xs.map((x) => (ids.has(x.id) ? { ...x, [key]: Math.max(0, (x[key] as number) + by) } : x))
-  return { ...d, events: mv(d.events, 'startWeek'), banners: mv(d.banners, 'startWeek'), store: mv(d.store, 'week') }
+  const rows = d.rows?.map((r) => ({ ...r, items: mv(r.items, 'startWeek') }))
+  return { ...d, events: mv(d.events, 'startWeek'), banners: mv(d.banners, 'startWeek'), store: mv(d.store, 'week'), ...(rows ? { rows } : {}) }
 }

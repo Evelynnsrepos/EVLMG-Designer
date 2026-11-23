@@ -653,6 +653,7 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
       'Plan the weeks after launch. Week 0 is launch week; set a Launch date to see real dates. Versions or seasons follow each other; events, banners and store items sit on any week.',
       'Weeks shows everything on a ruler. Drag an event or banner to move it and drag its right edge to make it longer; drag a version\'s right edge and everything after it moves. Every drag is one undo step. The + next to a row adds one.',
       'List has the details: event rewards and a link to a quest or achievement, the Gacha & Loot document a banner uses and the characters it features. Tick rows and move them together by a week or two. A character featured again sooner than the weeks you set (26 by default) gets a warning and a red banner.',
+      'Add your own row (under the weeks, or at the end of List) makes a row with any name, like Collabs, Sales or Maintenance. Add things to it with its +, drag them like events, and tick them in List to move them with the rest. The Launch day box next to the tabs sets the date week 0 starts on; click it to pick a day.',
       'Battle pass sets tiers, XP per tier, XP per hour played and how many weeks it runs, and tells you in how many days a Casual, Regular and Core player finishes it. Store lists what is on sale which week. Make milestones adds one Task Board milestone per version.',
     ],
   },

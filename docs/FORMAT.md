@@ -82,7 +82,7 @@ Ids are random strings (`newId()` in [`core/model/ids.ts`](../src/core/model/ids
 | Custom List | `custom-list` | many | [`components/custom-list/model.ts`](../src/components/custom-list/model.ts) |
 | Status Effects & Reactions | `status-effects` | one (`status-effects`) | [`components/status-effects/model.ts`](../src/components/status-effects/model.ts) (`StatusDoc`): `items` (effects), `reactions` (element `first` then `second`), `elements` |
 | Relationships | `relationships` | one (`relationships`) | [`components/relationships/model.ts`](../src/components/relationships/model.ts) (`RelationshipsDoc`): `items` (bonds, by `characterId`), `actions`, `moodPoints`, `giftsPerDay` |
-| Live-Service Planner | `live-ops` | many | [`components/live-ops/model.ts`](../src/components/live-ops/model.ts) (`LiveOpsDoc`): weeks from launch week 0 |
+| Live-Service Planner | `live-ops` | many | [`components/live-ops/model.ts`](../src/components/live-ops/model.ts) (`LiveOpsDoc`): weeks from launch week 0; optional `rows` (0.31+): rows the person names, each `{ id, name, color, items: [{ id, name, startWeek, weeks, notes }] }` |
 | Behaviour Designer | `behaviour` | many | [`components/behaviour/model.ts`](../src/components/behaviour/model.ts) (`BehaviourDoc`): a canvas `scene` with `bh-state` nodes and `connector` arrows carrying an optional `cond`, plus `routine` and `users` |
 
 Plugin tools use the type `plugin.<plugin id>` and store their documents the same way ([PLUGINS.md](PLUGINS.md)).
