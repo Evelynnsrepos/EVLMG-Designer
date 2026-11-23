@@ -1,5 +1,7 @@
 import type { AsciiMark } from './ascii'
-import { defaultValues } from './adjust/filters'
+import { runCpu } from './adjust/cpu'
+import { defaultValues, type AdjustValues, type FilterId } from './adjust/filters'
+import { AdjustGl } from './adjust/gpu'
 import { defaultLibrary } from './brushDefaults'
 import type { BrushSettings } from './brushes'
 import { loadImageMask } from './brushTextures'
@@ -120,6 +122,32 @@ function adjusted(id: LayerAdjust['id'], gpu: boolean) {
     c.fillRect(40, 40, 120, 80)
   })
   return { px: e.render({ layers: [a, b, adj], backgroundColor: '#ffffff' }).getContext('2d')!.getImageData(0, 0, W, H).data, gpu: e.gpuActive }
+}
+
+/** An Adjustments menu filter (not a layer) on the GPU preview vs the CPU, on a see-through gradient. */
+function filtered(id: FilterId, values: AdjustValues): GpuDiff | null {
+  const src = document.createElement('canvas')
+  src.width = W
+  src.height = H
+  const c = src.getContext('2d')!
+  const g = c.createLinearGradient(0, 0, W, 0)
+  g.addColorStop(0, '#102030')
+  g.addColorStop(0.5, '#e08040')
+  g.addColorStop(1, '#ffffff')
+  c.fillStyle = g
+  c.fillRect(0, 0, W, H)
+  c.fillStyle = 'rgba(40,200,120,0.6)'
+  c.fillRect(40, 40, 120, 80)
+  const gl = AdjustGl.create(W, H)
+  if (!gl) return null
+  gl.setSource(src)
+  const out = document.createElement('canvas')
+  out.width = W
+  out.height = H
+  const o = out.getContext('2d')!
+  o.drawImage(gl.run(id, values), 0, 0)
+  const cpu = runCpu(id, values, c.getImageData(0, 0, W, H)).data
+  return diff(`${id} (Adjustments menu): GPU vs CPU`, true, o.getImageData(0, 0, W, H).data, cpu)
 }
 
 const OUTLINES: Record<string, OutlineSettings> = {
@@ -296,6 +324,11 @@ export async function runSketchGpuCheck(): Promise<{ strokes: GpuDiff[]; adjust:
     const g = adjusted(id, true)
     return diff(id, g.gpu, g.px, adjusted(id, false).px)
   })
+  for (const [mode, extra] of [[0, {}], [1, { keepColour: 1 }], [2, { reach: 0.1, soft: 0.6, amount: 0.8 }]] as [number, Record<string, number>][]) {
+    const values = defaultValues('valueAlpha', W, H)
+    const d = filtered('valueAlpha', { ...values, key: '#e08040', v: { ...values.v, mode, ...extra } })
+    if (d) adjust.push({ ...d, name: `${d.name}, mode ${mode}` })
+  }
   const outlines: GpuDiff[] = []
   for (const name of Object.keys(OUTLINES)) {
     const g = outlined(name, true)

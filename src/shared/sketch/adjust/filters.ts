@@ -1,4 +1,5 @@
 import type { AsciiText } from '../ascii'
+import { localized } from '../../i18n'
 import { defaultCurves, GRADIENT_PRESETS, type Curves, type GradientStop, type ToneRange } from './color'
 
 /** The Adjustments menu (Sketch Pro): what each adjustment is called and which settings it has. */
@@ -53,7 +54,41 @@ export interface FilterDef {
   center?: boolean
   /** Can reshuffle its random pattern. */
   seeded?: boolean
+  /** A short help line under the settings. */
+  hint?: string
 }
+
+/** Values to opacity texts (the rest of the Adjustments menu is English only so far). */
+export const VA = localized(
+  {
+    label: 'Values to opacity',
+    search: 'Remove background (Values to opacity)',
+    hint: 'Pick a colour: tap the canvas or use the colour box. Under More, Range makes colours close to it fully see-through and Softness sets how gently the rest fades in.',
+    mode: 'Make see-through',
+    bright: 'Bright parts',
+    dark: 'Dark parts',
+    colour: 'A colour',
+    amount: 'Strength',
+    reach: 'Range',
+    soft: 'Softness',
+    keep: 'Keep colours',
+    key: 'Colour',
+  },
+  {
+    label: 'Werte zu Deckkraft',
+    search: 'Hintergrund entfernen (Werte zu Deckkraft)',
+    hint: 'Farbe wählen: auf die Leinwand tippen oder das Farbfeld nutzen. Unter Mehr macht Bereich ähnliche Farben ganz durchsichtig, und Weichheit legt fest, wie sanft der Rest eingeblendet wird.',
+    mode: 'Durchsichtig machen',
+    bright: 'Helle Teile',
+    dark: 'Dunkle Teile',
+    colour: 'Eine Farbe',
+    amount: 'Stärke',
+    reach: 'Bereich',
+    soft: 'Weichheit',
+    keep: 'Farben behalten',
+    key: 'Farbe',
+  },
+)
 
 const pct = (key: string, label: string, min = 0, max = 1): ParamDef => ({ key, label, min, max, step: 0.01, unit: '%' })
 const balance = (range: ToneRange): ParamDef[] =>
@@ -72,10 +107,21 @@ export const FILTERS: FilterDef[] = [
   { id: 'gradient', label: 'Gradient map', group: 'Colour', main: 'amount', params: [pct('amount', 'Strength')] },
   {
     id: 'valueAlpha',
-    label: 'Values to opacity',
+    get label() {
+      return VA.label
+    },
     group: 'Colour',
     main: 'amount',
-    params: [{ key: 'mode', label: 'Make see-through', min: 0, max: 1, options: ['Bright parts', 'Dark parts'] }, pct('amount', 'Strength')],
+    get hint() {
+      return VA.hint
+    },
+    params: [
+      { key: 'mode', get label() { return VA.mode }, min: 0, max: 2, get options() { return [VA.bright, VA.dark, VA.colour] } },
+      { ...pct('amount', ''), get label() { return VA.amount } },
+      { ...pct('reach', ''), get label() { return VA.reach }, more: true },
+      { ...pct('soft', ''), get label() { return VA.soft }, more: true },
+      { key: 'keepColour', get label() { return VA.keep }, min: 0, max: 1, toggle: true, more: true },
+    ],
   },
   { id: 'gaussian', label: 'Gaussian blur', group: 'Blur', main: 'radius', params: [{ key: 'radius', label: 'Amount', min: 0, max: 100, step: 0.5, unit: 'px' }] },
   { id: 'motion', label: 'Motion blur', group: 'Blur', main: 'length', params: [{ key: 'length', label: 'Amount', min: 0, max: 300, unit: 'px' }, { key: 'angle', label: 'Direction', min: 0, max: 360, unit: '°' }] },
@@ -133,6 +179,8 @@ export interface AdjustValues {
   seed: number
   /** 0.35: ASCII art: your own letters and the colours (missing = defaults). */
   ascii?: AsciiText
+  /** Values to opacity: the colour that turns see-through, when "A colour" is picked (missing = white). */
+  key?: string
 }
 
 const DEFAULTS: Record<string, number> = {
@@ -145,6 +193,7 @@ const DEFAULTS: Record<string, number> = {
   size: 12,
   threshold: 0.6,
   keep: 1,
+  soft: 1,
 }
 
 export function defaultValues(id: FilterId, width: number, height: number): AdjustValues {

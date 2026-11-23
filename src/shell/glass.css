@@ -52,7 +52,7 @@
     .sidebar, .modal, .menu, .palette, .help-tour-card, .proof-card, .ref-picker-menu, .richtext-refmenu,
     .richtext-image-bar, .writer-menu, .map-popup, .map-subbar, .custom-color-pop, .canvas-toolbar,
     .cd-picker-pop, .cd-shapes-menu, .ss-calcmenu, .ss-calcpanel, .ss-menu, .esc-hint,
-    .cp-float, .fp, .brushlib-menu, .adjust-panel, .sketch-floatbars > *
+    .cp-float, .fp, .brushlib-menu, .adjust-panel, .adjust-menu, .sketch-floatbars > *
   ) {
   background: var(--glass-fill-thick);
   border: 1px solid var(--glass-border);

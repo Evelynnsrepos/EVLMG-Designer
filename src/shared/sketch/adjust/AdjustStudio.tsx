@@ -9,7 +9,7 @@ import { useInputSettings } from '../inputSettings'
 import { penData } from '../pen'
 import { viewMatrix, type View } from '../view'
 import { CURVE_CHANNELS, histogram, MAX_CURVE_NODES, TONE_RANGES, type CurveChannel, type ToneRange } from './color'
-import { defaultValues, dragMain, filterDef, FILTERS, type AdjustValues, type FilterId, type ParamDef } from './filters'
+import { defaultValues, dragMain, filterDef, FILTERS, VA, type AdjustValues, type FilterId, type ParamDef } from './filters'
 import { GradientEditor } from './GradientEditor'
 import { LIQUIFY_MODES, LiquifyField, type LiquifyMode } from './liquify'
 import { AdjustSession, CloneSession } from './session'
@@ -86,7 +86,7 @@ export function AdjustMenu({ open, onOpen, onPick }: { open: boolean; onOpen(ope
               <h5>{g}</h5>
               {FILTERS.filter((f) => f.group === g).map((f) => (
                 <button key={f.id} role="menuitem" onClick={() => pick({ kind: 'filter', id: f.id })}>
-                  {f.label}
+                  {f.id === 'valueAlpha' ? VA.search : f.label}
                 </button>
               ))}
             </div>
@@ -331,6 +331,17 @@ function FilterStudio(p: AdjustStudioProps & { id: FilterId }) {
     } else if (drag.current && !drag.current.moved && def.center) {
       const c = p.toDoc(e)
       setValues((x) => ({ ...x, center: c }))
+    } else if (drag.current && !drag.current.moved && p.id === 'valueAlpha' && session) {
+      // Tapping picks the colour to make see-through from the layer itself (not the preview).
+      const c = p.toDoc(e)
+      const img = session.pixels()
+      const x = Math.floor(c.x)
+      const y = Math.floor(c.y)
+      if (x >= 0 && y >= 0 && x < img.width && y < img.height) {
+        const i = (y * img.width + x) * 4
+        const key = '#' + [0, 1, 2].map((j) => img.data[i + j].toString(16).padStart(2, '0')).join('')
+        if (img.data[i + 3]) setValues((v) => ({ ...v, key, v: { ...v.v, mode: 2 } }))
+      }
     }
     drag.current = null
   }
@@ -427,6 +438,12 @@ export function FilterControls({ id, values, onChange, histogram: hist0 }: { id:
             />
           </div>
         )}
+        {id === 'valueAlpha' && values.v.mode === 2 && (
+          <label className="sketch-row">
+            <span className="adjust-label">{VA.key}</span>
+            <input type="color" value={values.key ?? '#ffffff'} onChange={(e) => onChange({ ...values, key: e.target.value })} aria-label={VA.key} />
+          </label>
+        )}
         {id === 'gradient' && <GradientEditor stops={values.gradient} onChange={(gradient) => setValues((x) => ({ ...x, gradient }))} />}
         <div className="adjust-params">
           {params.filter((q) => !q.more).map(control)}
@@ -443,6 +460,7 @@ export function FilterControls({ id, values, onChange, histogram: hist0 }: { id:
             </button>
           )}
         </div>
+        {def.hint && <p className="adjust-hint">{def.hint}</p>}
     </>
   )
 }

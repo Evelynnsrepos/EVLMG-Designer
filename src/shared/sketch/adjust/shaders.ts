@@ -72,14 +72,14 @@ void main() {
 
 /** Values to opacity: see cpu.ts valueAlpha. */
 export const VALUE_ALPHA = `${HEAD}
-uniform float mode, amount;
+uniform float amount, reach, soft, keep, kr, kg, kb;
+float dist(float c, float k) { return c > k ? (c - k) / (1.0 - k) : c < k ? (k - c) / k : 0.0; }
 void main() {
   vec4 c = unpre(texture(src, uv));
-  vec3 k = mode > 0.5 ? c.rgb : 1.0 - c.rgb;
-  float na = max(k.r, max(k.g, k.b));
-  vec3 nk = na > 0.0 ? k / na : vec3(0.0);
-  vec3 un = mode > 0.5 ? nk : 1.0 - nk;
-  o = pre(mix(c.rgb, un, amount), c.a * mix(1.0, na, amount));
+  vec3 k = vec3(kr, kg, kb);
+  float t = clamp((max(dist(c.r, k.r), max(dist(c.g, k.g), dist(c.b, k.b))) - reach) / max(soft, 1e-4), 0.0, 1.0);
+  vec3 un = keep > 0.5 || t <= 0.0 ? c.rgb : clamp(k + (c.rgb - k) / t, 0.0, 1.0);
+  o = pre(mix(c.rgb, un, amount), c.a * mix(1.0, t, amount));
 }`
 
 /** One direction of a Gaussian blur (run twice). */
