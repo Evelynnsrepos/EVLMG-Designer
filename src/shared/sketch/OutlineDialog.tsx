@@ -1,32 +1,65 @@
 import { useEffect, useRef, useState } from 'react'
+import { localized } from '../i18n'
 import { Modal } from '../ui'
 import { defaultOutline, MAX_OUTLINE, outlineCpu, type OutlineSettings } from './outline'
 
-const UI = {
-  layerTitle: 'Outline layer',
-  layerIntro: 'Everything on this layer gets an outline that follows as you draw, erase or add pictures. Crossing strokes share one outline. Your drawing itself is never changed.',
-  toolTitle: 'Outliner',
-  toolIntro: 'Draws an outline around the selection or the drawing on this layer, onto a new layer. Your drawing is not changed.',
-  presets: 'Quick looks',
-  size: 'Size',
-  color: 'Colour',
-  gradient: 'Fade to',
-  where: 'Where',
-  wheres: { outside: 'Outside', center: 'On the edge', inside: 'Inside' } as Record<OutlineSettings['where'], string>,
-  sharpness: 'Sharpness',
-  roundness: 'Roundness',
-  source: 'Outline',
-  sources: { selection: 'The selection', drawing: 'The drawing on this layer' },
-  ok: 'OK',
-  apply: 'Draw outline',
-  cancel: 'Cancel',
-  off: 'Turn outline off',
-  rasterize: 'Rasterize',
-  rasterizeHint: 'Paint the outline into the layer: it becomes a normal layer again',
-}
+const UI = localized(
+  {
+    layerTitle: 'Outline layer',
+    layerIntro: 'Everything on this layer (or in this group) gets an outline that follows as you draw, erase or add pictures. Crossing strokes share one outline. Your drawing itself is never changed, and the canvas shows each change right away. For a fixed outline on a layer of its own, use the Outliner in the toolbar.',
+    toolTitle: 'Outliner',
+    toolIntro: 'Draws an outline around the selection or the drawing on this layer, onto a new layer. Your drawing is not changed. For an outline that keeps following as you draw, use an Outline layer (Layers panel).',
+    presets: 'Quick looks',
+    size: 'Size',
+    color: 'Colour',
+    gradient: 'Fade to',
+    opacity: 'Opacity',
+    second: 'Second line',
+    secondSize: 'Second size',
+    secondColor: 'Second line colour',
+    where: 'Where',
+    wheres: { outside: 'Outside', center: 'On the edge', inside: 'Inside' } as Record<OutlineSettings['where'], string>,
+    sharpness: 'Sharpness',
+    roundness: 'Roundness',
+    source: 'Outline',
+    sources: { selection: 'The selection', drawing: 'The drawing on this layer' },
+    ok: 'OK',
+    apply: 'Draw outline',
+    cancel: 'Cancel',
+    off: 'Turn outline off',
+    rasterize: 'Paint it in',
+    rasterizeHint: 'Paint the outline into the layer: it becomes a normal layer again (Rasterize)',
+  },
+  {
+    layerTitle: 'Umriss-Ebene',
+    layerIntro: 'Alles auf dieser Ebene (oder in dieser Gruppe) bekommt einen Umriss, der mitgeht, wenn du malst, radierst oder Bilder einfügst. Sich kreuzende Striche teilen sich einen Umriss. Deine Zeichnung selbst bleibt unverändert, und die Leinwand zeigt jede Änderung sofort. Für einen festen Umriss auf einer eigenen Ebene nimm den Umrisser in der Werkzeugleiste.',
+    toolTitle: 'Umrisser',
+    toolIntro: 'Zeichnet einen Umriss um die Auswahl oder die Zeichnung auf dieser Ebene, auf eine neue Ebene. Deine Zeichnung bleibt unverändert. Für einen Umriss, der beim Weitermalen mitgeht, nimm eine Umriss-Ebene (Ebenen-Leiste).',
+    presets: 'Schnelle Looks',
+    size: 'Größe',
+    color: 'Farbe',
+    gradient: 'Übergang zu',
+    opacity: 'Deckkraft',
+    second: 'Zweite Linie',
+    secondSize: 'Zweite Größe',
+    secondColor: 'Farbe der zweiten Linie',
+    where: 'Wo',
+    wheres: { outside: 'Außen', center: 'Auf der Kante', inside: 'Innen' },
+    sharpness: 'Schärfe',
+    roundness: 'Rundung',
+    source: 'Umriss um',
+    sources: { selection: 'Die Auswahl', drawing: 'Die Zeichnung auf dieser Ebene' },
+    ok: 'OK',
+    apply: 'Umriss zeichnen',
+    cancel: 'Abbrechen',
+    off: 'Umriss ausschalten',
+    rasterize: 'Einmalen',
+    rasterizeHint: 'Den Umriss in die Ebene malen: sie wird wieder eine normale Ebene (Rastern)',
+  },
+)
 
 const PRESETS: { name: string; o: Partial<OutlineSettings> }[] = [
-  { name: 'Sticker', o: { size: 14, color: '#ffffff', color2: null, where: 'outside', sharpness: 1, roundness: 1 } },
+  { name: 'Sticker', o: { size: 14, color: '#ffffff', color2: null, where: 'outside', sharpness: 1, roundness: 1, second: { size: 3, color: '#111111' } } },
   { name: 'Comic', o: { size: 5, color: '#111111', color2: null, where: 'outside', sharpness: 1, roundness: 1 } },
   { name: 'Glow', o: { size: 24, color: '#ffe066', color2: '#ff3fa0', where: 'outside', sharpness: 0, roundness: 1 } },
   { name: 'Pixel', o: { size: 1, color: '#111111', color2: null, where: 'outside', sharpness: 1, roundness: 0 } },
@@ -42,6 +75,7 @@ export function OutlineDialog({
   onClose,
   onOff,
   onRasterize,
+  onChange,
 }: {
   initial?: OutlineSettings
   mode: 'layer' | 'tool'
@@ -50,10 +84,20 @@ export function OutlineDialog({
   onClose: () => void
   onOff?: () => void
   onRasterize?: () => void
+  /** Every change while the dialog is open, so the canvas can show it right away. */
+  onChange?: (o: OutlineSettings, source: 'selection' | 'drawing') => void
 }) {
   const [o, setO] = useState<OutlineSettings>(initial ?? lastUsed ?? defaultOutline())
   const [source, setSource] = useState<'selection' | 'drawing'>(hasSelection ? 'selection' : 'drawing')
-  const set = (p: Partial<OutlineSettings>) => setO((x) => ({ ...x, ...p }))
+  const set = (p: Partial<OutlineSettings>) => {
+    const next = { ...o, ...p }
+    setO(next)
+    onChange?.(next, source)
+  }
+  const pick = (s: 'selection' | 'drawing') => {
+    setSource(s)
+    onChange?.(o, s)
+  }
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
     const c = ref.current
@@ -88,7 +132,7 @@ export function OutlineDialog({
         <canvas ref={ref} width={300} height={130} className="sketch-outline-preview" />
         <div className="sketch-outline-presets" aria-label={UI.presets}>
           {PRESETS.map((p) => (
-            <button key={p.name} className="btn btn-ghost sketch-small" onClick={() => set(p.o)}>
+            <button key={p.name} className="btn btn-ghost sketch-small" onClick={() => set({ second: null, opacity: 1, ...p.o })}>
               {p.name}
             </button>
           ))}
@@ -102,6 +146,14 @@ export function OutlineDialog({
           </label>
           {o.color2 && <input type="color" value={o.color2} onChange={(e) => set({ color2: e.target.value })} aria-label={UI.gradient} />}
         </div>
+        {slider(UI.opacity, o.opacity ?? 1, 0, 1, 0.01, `${Math.round((o.opacity ?? 1) * 100)}%`, (opacity) => set({ opacity }))}
+        <div className="sketch-outline-row">
+          <label>
+            <input type="checkbox" checked={!!o.second} onChange={(e) => set({ second: e.target.checked ? { size: Math.max(2, Math.round(o.size / 3)), color: o.color === '#ffffff' ? '#111111' : '#ffffff' } : null })} /> {UI.second}
+          </label>
+          {o.second && <input type="color" value={o.second.color} onChange={(e) => set({ second: { ...o.second!, color: e.target.value } })} aria-label={UI.secondColor} />}
+        </div>
+        {o.second && slider(UI.secondSize, o.second.size, 1, MAX_OUTLINE, 1, `${o.second.size} px`, (size) => set({ second: { ...o.second!, size } }))}
         <div className="sketch-outline-row" role="radiogroup" aria-label={UI.where}>
           <span>{UI.where}</span>
           {(['outside', 'center', 'inside'] as const).map((w) => (
@@ -116,7 +168,7 @@ export function OutlineDialog({
           <div className="sketch-outline-row" role="radiogroup" aria-label={UI.source}>
             <span>{UI.source}</span>
             {(['selection', 'drawing'] as const).map((s) => (
-              <button key={s} role="radio" aria-checked={source === s} className={`btn btn-ghost sketch-small${source === s ? ' is-active' : ''}`} onClick={() => setSource(s)}>
+              <button key={s} role="radio" aria-checked={source === s} className={`btn btn-ghost sketch-small${source === s ? ' is-active' : ''}`} onClick={() => pick(s)}>
                 {UI.sources[s]}
               </button>
             ))}

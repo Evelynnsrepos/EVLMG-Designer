@@ -54,7 +54,23 @@ export function collectIds(value: unknown): Map<Id, Set<string>> {
   return found
 }
 
-function addSource(index: ReferenceIndex, source: ReferenceSource, value: unknown) {
+/** Ids of the records kept inside `value` (wiki articles, assets, nodes): every UUID under a key named `id`. */
+export function collectOwnIds(value: unknown): Id[] {
+  const out: Id[] = []
+  const walk = (v: unknown) => {
+    if (Array.isArray(v)) v.forEach(walk)
+    else if (v && typeof v === 'object')
+      for (const [k, child] of Object.entries(v)) {
+        if (k === 'id' && typeof child === 'string' && IS_UUID.test(child)) out.push(child.toLowerCase())
+        else walk(child)
+      }
+  }
+  walk(value)
+  return out
+}
+
+function addSource(index: ReferenceIndex, source: ReferenceSource, value: unknown, owned?: Map<Id, ReferenceSource>) {
+  if (owned) for (const id of collectOwnIds(value)) if (!owned.has(id)) owned.set(id, source)
   for (const [id, fields] of collectIds(value)) {
     let list = index.get(id)
     if (!list) index.set(id, (list = []))
@@ -82,14 +98,17 @@ async function listJsonFiles(dir: string): Promise<{ id: string; path: string }[
   return out
 }
 
-/** Scan every entity and component document saved in the project. */
-export async function buildReferenceIndex(root: string): Promise<ReferenceIndex> {
+/**
+ * Scan every entity and component document saved in the project. `owned`, if given, is filled with
+ * every record id found inside a source (lower case) and the source that keeps it.
+ */
+export async function buildReferenceIndex(root: string, owned?: Map<Id, ReferenceSource>): Promise<ReferenceIndex> {
   const index: ReferenceIndex = new Map()
   const { meta, entities } = await loadProject(root)
 
   for (const type of ENTITY_TYPES) {
     for (const e of entities[type] as Entity[]) {
-      addSource(index, { kind: 'entity', entityType: type, entityId: e.id, name: e.name }, e)
+      addSource(index, { kind: 'entity', entityType: type, entityId: e.id, name: e.name }, e, owned)
     }
   }
 
@@ -103,7 +122,7 @@ export async function buildReferenceIndex(root: string): Promise<ReferenceIndex>
         continue // a broken document should not block deleting
       }
       const title = titles.get(file.id) ?? titleOf(data)
-      addSource(index, { kind: 'document', componentType: type, documentId: file.id, title }, data)
+      addSource(index, { kind: 'document', componentType: type, documentId: file.id, title }, data, owned)
     }
   }
   return index

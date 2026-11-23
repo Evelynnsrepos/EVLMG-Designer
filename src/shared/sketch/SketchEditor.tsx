@@ -70,13 +70,15 @@ import './sketch.css'
 // Sketch Pro: layers, selections (feat/sketch-layers)
 import { addMask, exportLayers, hasPixels, insertAbove, isGroup, lockedInTree, moveSibling } from './layers'
 import { OutlineDialog } from './OutlineDialog'
-import { outlineInto, outlineReach } from './outline'
+import { outlineInto, outlineReach, type OutlineSettings } from './outline'
 import { LayersPanel, type LayerHost } from './LayersPanel'
 import { SelectionBar, SelectionMaskView, SelectionOutline } from './SelectionTools'
 import { useSelector } from './selector'
 import { copyPixels } from './clipboard'
-import { TransformBar, TransformOverlay } from './TransformTools'
+import { TurnAgainNote, TransformBar, TransformOverlay } from './TransformTools'
 import { useTransformer } from './transformer'
+import { pngOf } from './encode'
+import type { LayerModel3d } from './model'
 import { ColorDropBar, ColorDropView, ColorPanel } from './ColorPanel'
 import { useColorDrop } from './colordrop'
 // Sketch Pro: pen input, view turning, guides, QuickMenu.
@@ -158,9 +160,25 @@ interface ShapeOffer {
   editing: boolean
 }
 
+/** 0.35 Outliner texts, in English and German. */
+const OUTLINER_UI = localized(
+  {
+    outliner: 'Outliner: draw a fixed outline onto a new layer, around the selection or the drawing on this layer',
+    outlineName: 'Outline',
+    nothingTitle: 'Nothing to outline',
+    nothing: 'There is no drawing here to outline. Draw something on this layer first, or select a part of it.',
+    fullTitle: 'No room for another layer',
+  },
+  {
+    outliner: 'Umrisser: einen festen Umriss auf eine neue Ebene zeichnen, um die Auswahl oder die Zeichnung auf dieser Ebene',
+    outlineName: 'Umriss',
+    nothingTitle: 'Nichts zum Umranden',
+    nothing: 'Hier gibt es keine Zeichnung zum Umranden. Zeichne zuerst etwas auf diese Ebene oder wähle einen Teil davon aus.',
+    fullTitle: 'Kein Platz für eine weitere Ebene',
+  },
+)
+
 const UI = {
-  outliner: 'Outliner: draw an outline around the selection or the drawing on this layer',
-  outlineName: 'Outline',
   beyondCanvas: 'Draw beyond the canvas',
   beyondCanvasTitle: 'Draw beyond the canvas?',
   beyondCanvasNote: 'Painting or moving far past the edge, or doing it on a big canvas, needs a lot more memory and can make drawing slower. Exports still only take what is on the canvas. You can turn it off again any time.',
@@ -515,6 +533,16 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const [editingGuide, setEditingGuide] = useState(false)
   const [inputOpen, setInputOpen] = useState(false)
   const [outlinerOpen, setOutlinerOpen] = useState(false)
+  /**
+   * The Outliner's live preview: the active layer shown as an outline layer while the dialog is open (not an undo
+   * step; null takes it away). Only when that looks the same as the result: no selection, and no outline of its own.
+   */
+  const outlinerPlain = useRef(false)
+  const outlinerPreview = (o: OutlineSettings | null) => {
+    const l = activeLayer
+    if (!l || !outlinerPlain.current || engine.selectionMask) return
+    save((d) => ({ ...d, layers: d.layers.map((x) => (x.id !== l.id ? x : o ? { ...x, outline: o } : (({ outline: _, ...rest }) => rest)(x))) }))
+  }
   const [shapeOffer, setShapeOffer] = useState<ShapeOffer | null>(null)
   const [hoverEraser, setHoverEraser] = useState(false)
   const [touch] = useState(() => new TouchGestures())
@@ -528,7 +556,29 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const refresh = useCallback(() => setVersion(engine.version), [engine])
 
   const activeLayer = doc.layers.find((l) => l.id === activeLayerId) ?? doc.layers[doc.layers.length - 1]
-  const xf = useTransformer(engine, sel, { active, tool, layerId: activeLayer?.id, done: (id) => markDirty(id) })
+  const droppedRef = useRef<(id: Id | null) => void>(() => {})
+  const xf = useTransformer(engine, sel, { active, tool, layerId: activeLayer?.id, done: (id) => droppedRef.current(id) })
+  /** The active layer's dropped 3D object, loaded while Rotate object is picked, so a click turns it again. */
+  const reopen = useRef<(Omit<LayerModel3d, 'src' | 'image'> & { layerId: Id; source: ImageBitmap; placed: ImageBitmap }) | null>(null)
+  const model3d = tool === 'rotate3d' ? activeLayer?.model3d : undefined
+  const reopenLayer = activeLayer?.id
+  const [canReopen, setCanReopen] = useState(false)
+  useEffect(() => {
+    reopen.current = null
+    setCanReopen(false)
+    if (!model3d || !root || !reopenLayer) return
+    let live = true
+    const layerId = reopenLayer
+    const load = (path: string) => resolveAssetPath(root, path).then((abs) => getFs().readBinary(abs)).then((bytes) => createImageBitmap(new Blob([bytes as BlobPart])))
+    void Promise.all([load(model3d.src), load(model3d.image)])
+      .then(([source, placed]) => {
+        if (!live) return
+        reopen.current = { ...model3d, layerId, source, placed }
+        setCanReopen(true)
+      })
+      .catch(() => {})
+    return () => void (live = false)
+  }, [model3d, root, reopenLayer])
   const lib = useBrushLibrary()
   useEffect(() => {
     void useBrushLibrary.getState().load()
@@ -669,12 +719,37 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const markDirty = useCallback(
     (id: Id | null) => {
       if (!id) return
+      // A 3D object can be turned again only while its layer is unchanged since it was dropped.
+      const m3 = docRef.current.layers.find((l) => l.id === id)?.model3d
+      if (m3) {
+        save((d) => ({ ...d, layers: d.layers.map((l) => (l.id === id ? { ...l, model3d: undefined } : l)) }))
+        if (root) void retireAssets(root, [m3.src, m3.image])
+      }
       dirty.current.add(id)
       setVersion(engine.version)
       scheduleSave(saveKey, flush, IDLE_SAVE_MS)
     },
-    [engine, flush, saveKey],
+    [engine, flush, saveKey, root],
   )
+
+  /** A transform was dropped: a 3D object also keeps what it needs to be turned again (saved next to the layer). */
+  const dropped = (id: Id | null) => {
+    markDirty(id)
+    const d3 = xf.last3d
+    xf.last3d = null
+    if (!d3 || d3.layerId !== id || !root) return
+    void (async () => {
+      const [src, image] = await Promise.all([pngOf(d3.source, colorSpace), pngOf(d3.placed, colorSpace)].map((b) => b.then((blob) => importAssetFromBlob(root, blob, 'image', '3d-object.png'))))
+      if (!src || !image) return
+      // Painted on (or undone) while saving: the saved drawing no longer matches, so it is not kept.
+      if (engine.layerVersion(id!) !== d3.version || !docRef.current.layers.some((l) => l.id === id)) return void retireAssets(root, [src.path, image.path])
+      const model3d = { src: src.path, image: image.path, first: d3.first, base: d3.base, turn: d3.turn, shape: d3.shape }
+      save((d) => ({ ...d, layers: d.layers.map((l) => (l.id === id ? { ...l, model3d } : l)) }))
+    })()
+  }
+  useEffect(() => {
+    droppedRef.current = dropped
+  })
 
   /**
    * 0.31: make room past the canvas's edge before paint or moved pixels reach the working area's edge.
@@ -992,7 +1067,12 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
       if (!activeLayer.visible || !hasPixels(activeLayer) || lockedInTree(doc.layers, activeLayer.id)) return
       if (activeLayer.text) return t === 'move' ? textTool.down(p, true) : undefined
       // Transform: the first press lifts the pixels; later presses move, scale, turn or bend them.
-      if (!xf.active && !xf.begin(activeLayer.id)) return
+      if (!xf.active) {
+        // Rotate object on a layer with a dropped 3D object (and nothing selected): turn that object again.
+        const again = t === 'rotate3d' && !sel.active && reopen.current?.layerId === activeLayer.id ? reopen.current : null
+        if (!(again ? xf.reopen(activeLayer.id, again) : xf.begin(activeLayer.id))) return
+        if (again) sel.clear()
+      }
       xf.down(p, view.scale, e.altKey, e.shiftKey)
       gesture.current = { kind: 'move', from: p, to: p }
     }
@@ -1216,6 +1296,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const layerHost: LayerHost = {
     doc,
     update,
+    preview: save,
     engine,
     activeId: activeLayer?.id,
     setActive: setActiveLayerId,
@@ -1647,7 +1728,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         <ToolButton icon={FlipVertical2} label={UI.flipX} onClick={(e) => runAction(e?.shiftKey ? 'flipLayerX' : 'flipCanvasX')} />
         <ToolButton icon={FlipHorizontal2} label={UI.flipY} onClick={(e) => runAction(e?.shiftKey ? 'flipLayerY' : 'flipCanvasY')} />
         <AdjustMenu open={adjustMenu} onOpen={setAdjustMenu} onPick={setAdjust} />
-        <ToolButton icon={CircleDashed} label={UI.outliner} onClick={() => setOutlinerOpen(true)} disabled={!activeLayer || !hasPixels(activeLayer)} />
+        <ToolButton icon={CircleDashed} label={OUTLINER_UI.outliner} onClick={() => ((outlinerPlain.current = !activeLayer?.outline), setOutlinerOpen(true))} disabled={!activeLayer || !hasPixels(activeLayer)} />
         {sel.active && (
           <>
             <button className={`btn sketch-move-sel${tool === 'move' ? ' is-active' : ''}`} title={UI.moveSelection} onClick={() => setTool('move')}>
@@ -1711,7 +1792,8 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
           <ColorDropView drop={drop} view={view} />
           <div className="sketch-floatbars">
             <ColorDropBar drop={drop} color={color} />
-            <TransformBar xf={xf} onDone={() => markDirty(xf.commit(sel))} onCancel={() => xf.cancel()} />
+            <TransformBar xf={xf} layers={doc.layers} onDone={() => dropped(xf.commit(sel))} onCancel={() => xf.cancel()} />
+            {canReopen && !xf.active && !sel.active && <TurnAgainNote />}
             <SelectionBar
               sel={sel}
               tool={tool === 'lasso' || tool === 'rect'}
@@ -1881,10 +1963,12 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         <OutlineDialog
           mode="tool"
           hasSelection={!!engine.selectionMask}
-          onClose={() => setOutlinerOpen(false)}
+          onChange={(o) => outlinerPreview(o)}
+          onClose={() => (outlinerPreview(null), setOutlinerOpen(false))}
           onOk={(o, source) => {
+            outlinerPreview(null)
             setOutlinerOpen(false)
-            if (doc.layers.filter((l) => !isGroup(l)).length >= layerLimit) return
+            if (doc.layers.filter((l) => !isGroup(l)).length >= layerLimit) return void confirmDialog({ title: OUTLINER_UI.fullTitle, message: UI.layerLimit(layerLimit) })
             // What gets the outline: the selection's shape, or this layer's drawing (inside the selection, if any).
             const src = engine.canvas()
             const mask = engine.selectionMask
@@ -1897,12 +1981,12 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
               }
             }
             const b = alphaBounds(src.ctx.getImageData(0, 0, engine.width, engine.height), 0, 0)
-            if (!b) return
+            if (!b) return void confirmDialog({ title: OUTLINER_UI.nothingTitle, message: OUTLINER_UI.nothing })
             const m = outlineReach(o)
             const ring = engine.canvas()
             outlineInto(src.canvas, ring.ctx, o, { x: b.x - m, y: b.y - m, w: b.w + 2 * m, h: b.h + 2 * m }, true)
             // A new layer: under the drawing it outlines, or over everything for a selection's shape.
-            const layer = newLayer(UI.outlineName)
+            const layer = newLayer(OUTLINER_UI.outlineName)
             loaded.current.set(layer.id, null)
             engine.setLayerImage(layer.id, ring.canvas)
             update((d) => {

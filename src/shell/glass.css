@@ -122,7 +122,7 @@
 :root[data-glass] :is(
     .px-toolbar, .px-timeline-bar, .sketch-topbar, .lv-toolbar, .ss-toolbar, .sb-toolbar, .richtext-toolbar,
     .elist-toolbar, .ld-toolbar, .item-toolbar, .pool-toolbar, .cosmos-toolbar, .dlg-toolbar, .gl-toolbar,
-    .wp-toolbar, .quests-toolbar, .reviews-toolbar, .skills-toolbar, .tp-bar, .cal-bar, .cb-bar
+    .wp-toolbar, .quests-toolbar, .reviews-toolbar, .skills-toolbar, .tp-bar, .cal-bar, .cb-bar, .bh-top
   ) {
   background: var(--glass-chip);
   border-radius: var(--radius);
@@ -130,7 +130,7 @@
 }
 :root[data-glass] :is(
     .px-side, .sketch-panel, .wiki-side, .vec-side, .sb-side, .gl-side, .ft-side, .pc-side, .pi-side,
-    .reviews-side, .sc-side, .skills-side, .tk-side, .lv-dock, .cd-panel, .sketch-text-panel, .wiki-infobox
+    .reviews-side, .sc-side, .skills-side, .tk-side, .lv-dock, .cd-panel, .sketch-text-panel, .wiki-infobox, .bh-side
   ) {
   background: var(--glass-chip);
   border-color: var(--glass-border);
@@ -158,7 +158,7 @@
 
 /* --- 4. Cards ---------------------------------------------------------------------------------------- */
 :root[data-glass] :is(
-    .project-card, .item-card, .elist-card, .kb-card, .pc-card, .wp-card, .reviews-card, .richtext-refcard
+    .project-card, .item-card, .elist-card, .kb-card, .pc-card, .wp-card, .reviews-card, .richtext-refcard, .bh-card
   ) {
   background: var(--glass-chip);
   border-color: var(--glass-border);
@@ -171,6 +171,17 @@
 }
 :root[data-glass] .project-card:hover {
   border-color: color-mix(in srgb, var(--accent) 60%, var(--glass-border));
+}
+
+/* Behaviour Designer: the routine strip, condition boxes and the arrow hint over the canvas (colours only, no blur over a canvas). */
+:root[data-glass] :is(.bh-strip, .bh-cond, .bh-pending, .bh-chip) {
+  background: var(--glass-chip);
+  border-color: var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+}
+:root[data-glass] .bh-block {
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 1px 0 var(--glass-hi), inset 0 0 0 1px var(--glass-border);
 }
 
 /* --- 5. Buttons, inputs ------------------------------------------------------------------------------ */

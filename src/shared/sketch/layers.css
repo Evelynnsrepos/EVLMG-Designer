@@ -276,8 +276,48 @@
   align-items: center;
 }
 .sketch-xf-num {
-  min-width: 34px;
+  width: 52px;
+  padding: 1px 4px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+.sketch-xf-unit {
+  margin-right: 4px;
+}
+.sketch-xf-color {
+  width: 26px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: none;
+  cursor: pointer;
+}
+/* Rotate object's orbit ring and axes */
+.sketch-xf-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.2;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+}
+.sketch-xf-axis {
+  stroke-width: 2;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.sketch-xf-axis.is-x {
+  stroke: var(--danger);
+}
+.sketch-xf-axis.is-y {
+  stroke: var(--accent);
+}
+.sketch-xf-axis.is-z {
+  stroke: var(--text);
+  opacity: 0.7;
+}
+.sketch-xf-again {
+  max-width: 460px;
 }
 .sketch-xf-title {
   font-weight: 600;

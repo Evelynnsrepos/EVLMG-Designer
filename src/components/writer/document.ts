@@ -19,7 +19,7 @@ export interface WriterPage {
   numbers?: boolean
 }
 
-export const TRACK_CHANGES_DEFAULT = false
+export const TRACK_CHANGES_DEFAULT = true
 
 export const createWriterDoc = (): WriterDoc => ({
   body: { type: 'doc', content: [{ type: 'paragraph' }] },

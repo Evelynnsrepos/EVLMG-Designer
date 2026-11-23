@@ -2,6 +2,7 @@ import { Clock, ExternalLink, MapPin, Package, Plus, Shield, Swords, TrendingUp,
 import { useState } from 'react'
 import type { DropRow, Enemy, StatGrowth } from '@/core/model'
 import { useProjectStore } from '@/core/state'
+import { BehaviourSection } from '@/components/behaviour/BehaviourSection'
 import { NumberInput } from '@/shared/categories'
 import { DetailFrame, EntityPicker, enemyStatsAtLevel, formatStat, Section, StatsEditor, type DetailContext, type ListText } from '@/shared/entityList'
 import { enemyActions as actions, goTo, newDropRow, openWiki } from './actions'
@@ -16,6 +17,7 @@ export function EnemyDetail({ enemy, ctx, text }: { enemy: Enemy; ctx: DetailCon
       <DropSection enemy={enemy} update={update} />
       <TimeSection enemy={enemy} update={update} />
       <FoundInSection enemy={enemy} update={update} />
+      <BehaviourSection type="enemy" id={enemy.id} />
     </DetailFrame>
   )
 }

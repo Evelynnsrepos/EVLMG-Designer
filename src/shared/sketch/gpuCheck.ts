@@ -154,13 +154,17 @@ const OUTLINES: Record<string, OutlineSettings> = {
   outside: { size: 6, color: '#202020', where: 'outside', sharpness: 1, roundness: 1 },
   'center-soft-square': { size: 10, color: '#ff0000', color2: '#0000ff', where: 'center', sharpness: 0.3, roundness: 0 },
   inside: { size: 5, color: '#00a040', where: 'inside', sharpness: 1, roundness: 0.5 },
+  'group second-faded': { size: 4, color: '#ffffff', where: 'outside', sharpness: 1, roundness: 1, opacity: 0.6, second: { size: 3, color: '#101010' } },
+  'second-faded': { size: 4, color: '#ffffff', where: 'outside', sharpness: 1, roundness: 1, opacity: 0.6, second: { size: 3, color: '#101010' } },
 }
 
 /** An outline layer painted on (the outline follows while painting), then the same pixels outlined from scratch. */
 function outlined(name: string, gpu: boolean) {
   const e = engine(gpu)
-  const layer = { ...newLayer('O'), outline: OUTLINES[name] }
-  const doc = { layers: [layer], backgroundColor: '#ffffff' }
+  // 'group …': a plain layer in a group that has the outline.
+  const group = name.startsWith('group') ? { ...newLayer('G'), kind: 'group' as const, outline: OUTLINES[name] } : null
+  const layer = group ? { ...newLayer('O'), parent: group.id } : { ...newLayer('O'), outline: OUTLINES[name] }
+  const doc = { layers: group ? [layer, group] : [layer], backgroundColor: '#ffffff' }
   e.edit(layer.id, (c) => {
     c.fillStyle = '#3080c0'
     c.fillRect(150, 30, 50, 90)

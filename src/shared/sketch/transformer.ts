@@ -3,7 +3,7 @@ import type { Id } from '@/core/model'
 import type { SketchEngine } from './engine'
 import type { Growth } from './growth'
 import { renderMesh, type Interpolation } from './meshRender'
-import { buildModel, depthField, ModelRenderer, type DepthField, type Shape3d } from './model3d'
+import { buildModel, depthField, ModelRenderer, SHAPE_DEFAULT, type DepthField, type Shape3d } from './model3d'
 import { alphaBounds } from './selection'
 import type { Selector } from './selector'
 import {
@@ -65,8 +65,11 @@ export class Transformer {
   /** 3D turn (mode 'turn'): angles, applied to `turnBase`, the shape when the mode was picked. */
   turn: Turn = { ...FLAT }
   private turnBase: XfState | null = null
-  /** Rotate object as a 3D model: thickness, roundness, light. Thickness 0 is a flat card. */
-  shape: Shape3d = { thick: 0.6, round: 1, light: 0.5 }
+  /** Rotate object as a 3D model: thickness, edge, light, back. Thickness 0 is a flat card. */
+  shape: Shape3d = { ...SHAPE_DEFAULT }
+  /** The last Rotate object that was dropped (Done), so it can be saved with its layer and turned again later. */
+  last3d: Dropped3d | null = null
+  private backKey: string | null = null
   private field3d: DepthField | null = null
   private gl3d: ModelRenderer | null | undefined
   private uploaded3d = false
@@ -92,8 +95,8 @@ export class Transformer {
   version = 0
   private first: XfState | null = null
   /** Steps inside one transform (Ctrl+Z before Done): the shape and turn before each change. */
-  private past: { s: XfState; turn: Turn; base: XfState | null }[] = []
-  private future: { s: XfState; turn: Turn; base: XfState | null }[] = []
+  private past: Step[] = []
+  private future: Step[] = []
   private drag: Drag | null = null
   private out: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null = null
   private uploaded = false
@@ -122,6 +125,26 @@ export class Transformer {
     if (this.engine.refuseEdit?.(layerId)) return false
     if (this.engine.moving) this.engine.cancelMove()
     this.engine.beginMove(layerId)
+    return this.lifted(layerId)
+  }
+
+  /**
+   * Turn a dropped 3D object again: its turned picture comes off the layer and the flat drawing it was made from is
+   * lifted instead, with the turn and shape it had. One undo step, like any transform.
+   */
+  reopen(layerId: Id, saved: { source: CanvasImageSource; placed: CanvasImageSource; first: XfState; base: XfState; turn: Turn; shape: Shape3d }): boolean {
+    if (this.engine.refuseEdit?.(layerId)) return false
+    if (this.engine.moving) this.engine.cancelMove()
+    this.engine.beginMoveFrom(layerId, saved.source, saved.placed)
+    if (!this.lifted(layerId, saved.first)) return false
+    this.shape = { ...SHAPE_DEFAULT, ...saved.shape }
+    this.turnBase = saved.base
+    this.turn = saved.turn
+    this.set(turn3d(saved.base, saved.turn))
+    return true
+  }
+
+  private lifted(layerId: Id, first?: XfState): boolean {
     const piece = this.engine.floatingPiece!
     const data = piece.getContext('2d')!.getImageData(0, 0, piece.width, piece.height).data
     const b = alphaBounds((p) => data[p * 4 + 3], piece.width, piece.height)
@@ -130,7 +153,7 @@ export class Transformer {
       return false
     }
     this.layerId = layerId
-    this.state = this.first = initialState(b)
+    this.state = this.first = first ?? initialState(b)
     this.field3d = null
     this.model3d = null
     this.uploaded3d = false
@@ -173,7 +196,11 @@ export class Transformer {
     this.uploaded3d = !upload
     const m = this.model3d
     if (!m || m.base !== base || m.shape !== this.shape) this.model3d = { base, shape: this.shape, model: buildModel(base, this.field3d, this.shape) }
-    gl.draw(this.model3d!.model, base.src, this.turn, this.shape.light, this.engine.width, this.engine.height)
+    const back = this.shape.back.mode === 'layer' ? this.shape.back.layerId : null
+    const key = back ? `${back}:${this.engine.layerVersion(back)}` : null
+    if (back && key !== this.backKey) gl.upload(this.engine.layerCanvas(back), true)
+    this.backKey = key
+    gl.draw(this.model3d!.model, base.src, this.turn, this.shape, this.engine.width, this.engine.height)
     out.clearRect(0, 0, this.engine.width, this.engine.height)
     out.drawImage(gl.canvas, 0, 0)
     return true
@@ -227,7 +254,21 @@ export class Transformer {
     if (s && pose) this.setMold((m) => pastePose(m, s.src, pose))
   }
 
-  /** Change the 3D model's thickness, roundness or light. */
+  /** False when this computer can't draw the 3D model (no WebGL2): Rotate object then turns a flat card. */
+  get can3d(): boolean {
+    if (this.gl3d === undefined) this.gl3d = ModelRenderer.create()
+    return !!this.gl3d
+  }
+
+  /** Let the graphics card go (the drawing closed). */
+  dispose() {
+    this.gl3d?.dispose()
+    this.gl3d = undefined
+    this.model3d = null
+    this.backKey = null
+  }
+
+  /** Change the 3D model's thickness, edge, light or back. */
   setShape(p: Partial<Shape3d>) {
     this.shape = { ...this.shape, ...p }
     if (this.state) this.show()
@@ -284,7 +325,7 @@ export class Transformer {
   /** Remember the shape before a change, for Ctrl+Z while transforming. */
   mark() {
     if (!this.state) return
-    this.past.push({ s: this.state, turn: this.turn, base: this.turnBase })
+    this.past.push({ s: this.state, turn: this.turn, base: this.turnBase, shape: this.shape })
     if (this.past.length > 100) this.past.shift()
     this.future = []
   }
@@ -292,9 +333,10 @@ export class Transformer {
   private step(from: Transformer['past'], to: Transformer['past']): boolean {
     const e = from.pop()
     if (!e || !this.state) return false
-    to.push({ s: this.state, turn: this.turn, base: this.turnBase })
+    to.push({ s: this.state, turn: this.turn, base: this.turnBase, shape: this.shape })
     this.turn = e.turn
     this.turnBase = e.base
+    this.shape = e.shape
     this.set(e.s)
     return true
   }
@@ -333,10 +375,15 @@ export class Transformer {
     const s = this.state!
     // Lost the GPU while moving: make the picture to drop the usual way.
     if (this.engine.floatingOnGpu && !this.engine.gpuActive) this.bake()
+    const piece = this.engine.floatingPiece
+    const as3d = this.shown3d
     const id = this.engine.endMove()
+    this.last3d =
+      id && as3d && piece && this.out && this.turnBase
+        ? { layerId: id, source: piece, placed: this.out.canvas, first: this.first!, base: this.turnBase, turn: this.turn, shape: this.shape, version: this.engine.layerVersion(id) }
+        : null
     if (sel && id) {
       const first = this.first!
-      const as3d = this.shown3d
       sel.transformed((mask) => {
         const out = this.engine.canvas()
         // The selection follows the pixels through the same mapping.
@@ -603,6 +650,21 @@ export class Transformer {
 
 const XF_TOOLS = new Set(['move', 'rotate3d', 'mold'])
 
+type Step = { s: XfState; turn: Turn; base: XfState | null; shape: Shape3d }
+
+/** A 3D object just dropped: the flat drawing, its turned picture as it landed, and how it was turned. */
+export interface Dropped3d {
+  layerId: Id
+  source: HTMLCanvasElement
+  placed: HTMLCanvasElement
+  first: XfState
+  base: XfState
+  turn: Turn
+  shape: Shape3d
+  /** The layer's version right after the drop: it is only saved if nothing changed the layer since. */
+  version: number
+}
+
 /**
  * One Transformer per engine. It lifts pixels when the Move tool is used and drops them
  * (one undo step) when another tool or layer is picked, on Enter, or Done; Escape puts them back.
@@ -616,6 +678,7 @@ export function useTransformer(engine: SketchEngine, sel: Selector, opts: { acti
   })
   useEffect(() => {
     xf.listen(() => setVersion(xf.version))
+    return () => xf.dispose()
   }, [xf])
   useEffect(() => {
     // Move, Rotate object and Mold object share one lifted picture: switching between them keeps working on it.
