@@ -312,7 +312,7 @@ beginner guides.
 | **Level Calculator** | XP curves, stat growth, and damage per level against a fixed defense or an enemy from your Enemy List. |
 | **Resource Calculator** | How many resources and how much play time a goal takes, using level-up costs and enemy drop rates. |
 | **Combat Simulator** | Two teams fight many times with a damage formula: win rates, fight length, damage and an example fight. |
-| **Economy Simulator** | Currency sources and sinks simulated over hours of play: balances, purchases and inflation warnings, plus meters like hunger and stamina that change over time. |
+| **Economy Simulator** | Currency sources and sinks simulated over hours of play: balances, purchases and inflation warnings, plus a meter simulator: bars like hunger, mood, fuel or energy with formulas, levels (below, above, empty, full) that add Status Effects or drain other meters, actions on a clock or when needed, and offline refills per player type. |
 | **Gacha & Loot Simulator** | Banner rates, hard and soft pity and 50/50s simulated over thousands of players, chest and drop table chances, and pick-1-of-N offers for shops and level-ups. |
 | **Balance Dashboard** | Item and enemy numbers that stick out, the enemy difficulty curve and gaps in your data. |
 | **Spreadsheet** | Excel-style sheets: hundreds of Excel functions, formulas across sheets, a fill handle, cell formatting, Damage Calculator results in cells, `=STAT("Iron Sword", "Damage")` and live tables that read your lists (type over a STAT cell to change the entry), CSV import and export, charts, and frozen rows and columns. |
