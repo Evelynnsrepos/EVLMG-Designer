@@ -70,7 +70,7 @@ import './sketch.css'
 // Sketch Pro: layers, selections (feat/sketch-layers)
 import { addMask, exportLayers, hasPixels, insertAbove, isGroup, lockedInTree, moveSibling } from './layers'
 import { OutlineDialog } from './OutlineDialog'
-import { outlineInto, outlineReach } from './outline'
+import { outlineInto, outlineReach, type OutlineSettings } from './outline'
 import { LayersPanel, type LayerHost } from './LayersPanel'
 import { SelectionBar, SelectionMaskView, SelectionOutline } from './SelectionTools'
 import { useSelector } from './selector'
@@ -158,9 +158,25 @@ interface ShapeOffer {
   editing: boolean
 }
 
+/** 0.35 Outliner texts, in English and German. */
+const OUTLINER_UI = localized(
+  {
+    outliner: 'Outliner: draw a fixed outline onto a new layer, around the selection or the drawing on this layer',
+    outlineName: 'Outline',
+    nothingTitle: 'Nothing to outline',
+    nothing: 'There is no drawing here to outline. Draw something on this layer first, or select a part of it.',
+    fullTitle: 'No room for another layer',
+  },
+  {
+    outliner: 'Umrisser: einen festen Umriss auf eine neue Ebene zeichnen, um die Auswahl oder die Zeichnung auf dieser Ebene',
+    outlineName: 'Umriss',
+    nothingTitle: 'Nichts zum Umranden',
+    nothing: 'Hier gibt es keine Zeichnung zum Umranden. Zeichne zuerst etwas auf diese Ebene oder wähle einen Teil davon aus.',
+    fullTitle: 'Kein Platz für eine weitere Ebene',
+  },
+)
+
 const UI = {
-  outliner: 'Outliner: draw an outline around the selection or the drawing on this layer',
-  outlineName: 'Outline',
   beyondCanvas: 'Draw beyond the canvas',
   beyondCanvasTitle: 'Draw beyond the canvas?',
   beyondCanvasNote: 'Painting or moving far past the edge, or doing it on a big canvas, needs a lot more memory and can make drawing slower. Exports still only take what is on the canvas. You can turn it off again any time.',
@@ -515,6 +531,16 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const [editingGuide, setEditingGuide] = useState(false)
   const [inputOpen, setInputOpen] = useState(false)
   const [outlinerOpen, setOutlinerOpen] = useState(false)
+  /**
+   * The Outliner's live preview: the active layer shown as an outline layer while the dialog is open (not an undo
+   * step; null takes it away). Only when that looks the same as the result: no selection, and no outline of its own.
+   */
+  const outlinerPlain = useRef(false)
+  const outlinerPreview = (o: OutlineSettings | null) => {
+    const l = activeLayer
+    if (!l || !outlinerPlain.current || engine.selectionMask) return
+    save((d) => ({ ...d, layers: d.layers.map((x) => (x.id !== l.id ? x : o ? { ...x, outline: o } : (({ outline: _, ...rest }) => rest)(x))) }))
+  }
   const [shapeOffer, setShapeOffer] = useState<ShapeOffer | null>(null)
   const [hoverEraser, setHoverEraser] = useState(false)
   const [touch] = useState(() => new TouchGestures())
@@ -1216,6 +1242,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
   const layerHost: LayerHost = {
     doc,
     update,
+    preview: save,
     engine,
     activeId: activeLayer?.id,
     setActive: setActiveLayerId,
@@ -1647,7 +1674,7 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         <ToolButton icon={FlipVertical2} label={UI.flipX} onClick={(e) => runAction(e?.shiftKey ? 'flipLayerX' : 'flipCanvasX')} />
         <ToolButton icon={FlipHorizontal2} label={UI.flipY} onClick={(e) => runAction(e?.shiftKey ? 'flipLayerY' : 'flipCanvasY')} />
         <AdjustMenu open={adjustMenu} onOpen={setAdjustMenu} onPick={setAdjust} />
-        <ToolButton icon={CircleDashed} label={UI.outliner} onClick={() => setOutlinerOpen(true)} disabled={!activeLayer || !hasPixels(activeLayer)} />
+        <ToolButton icon={CircleDashed} label={OUTLINER_UI.outliner} onClick={() => ((outlinerPlain.current = !activeLayer?.outline), setOutlinerOpen(true))} disabled={!activeLayer || !hasPixels(activeLayer)} />
         {sel.active && (
           <>
             <button className={`btn sketch-move-sel${tool === 'move' ? ' is-active' : ''}`} title={UI.moveSelection} onClick={() => setTool('move')}>
@@ -1881,10 +1908,12 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
         <OutlineDialog
           mode="tool"
           hasSelection={!!engine.selectionMask}
-          onClose={() => setOutlinerOpen(false)}
+          onChange={(o) => outlinerPreview(o)}
+          onClose={() => (outlinerPreview(null), setOutlinerOpen(false))}
           onOk={(o, source) => {
+            outlinerPreview(null)
             setOutlinerOpen(false)
-            if (doc.layers.filter((l) => !isGroup(l)).length >= layerLimit) return
+            if (doc.layers.filter((l) => !isGroup(l)).length >= layerLimit) return void confirmDialog({ title: OUTLINER_UI.fullTitle, message: UI.layerLimit(layerLimit) })
             // What gets the outline: the selection's shape, or this layer's drawing (inside the selection, if any).
             const src = engine.canvas()
             const mask = engine.selectionMask
@@ -1897,12 +1926,12 @@ export function SketchEditor({ doc, update: save, active, title, actions, swatch
               }
             }
             const b = alphaBounds(src.ctx.getImageData(0, 0, engine.width, engine.height), 0, 0)
-            if (!b) return
+            if (!b) return void confirmDialog({ title: OUTLINER_UI.nothingTitle, message: OUTLINER_UI.nothing })
             const m = outlineReach(o)
             const ring = engine.canvas()
             outlineInto(src.canvas, ring.ctx, o, { x: b.x - m, y: b.y - m, w: b.w + 2 * m, h: b.h + 2 * m }, true)
             // A new layer: under the drawing it outlines, or over everything for a selection's shape.
-            const layer = newLayer(UI.outlineName)
+            const layer = newLayer(OUTLINER_UI.outlineName)
             loaded.current.set(layer.id, null)
             engine.setLayerImage(layer.id, ring.canvas)
             update((d) => {

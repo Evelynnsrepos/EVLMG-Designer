@@ -44,6 +44,22 @@ describe('outline engine', () => {
     expect(at(grad, 23, 20)[0]).toBeLessThan(at(grad, 26, 20)[0])
   })
 
+  it('ring only leaves solid paint empty, opacity fades only the outline, a second line rings the first', () => {
+    const ring = outlineCpu(square(), o({}), true)
+    expect(at(ring, 20, 20)[3]).toBe(0)
+    expect(at(ring, 25, 20)).toEqual([0, 0, 255, 255])
+    const half = outlineCpu(square(), o({ opacity: 0.5 }))
+    expect(at(half, 20, 20)).toEqual([200, 0, 0, 255])
+    expect(at(half, 25, 20)[3]).toBe(128)
+    const two = outlineCpu(square(), o({ second: { size: 3, color: '#00ff00' } }))
+    expect(at(two, 25, 20)).toEqual([0, 0, 255, 255]) // first line, 3 px out
+    expect(at(two, 28, 20)).toEqual([0, 255, 0, 255]) // second line, 6 px out
+    expect(at(two, 31, 20)[3]).toBe(0) // past both
+    const twoRings = outlineCpu(square(), o({ second: { size: 3, color: '#00ff00' } }), true)
+    expect(at(twoRings, 20, 20)[3]).toBe(0)
+    expect(at(twoRings, 28, 20)).toEqual([0, 255, 0, 255])
+  })
+
   it('is fast enough for a stroke-sized piece', () => {
     const img = new FakeImageData(400, 400) as unknown as ImageData
     for (let i = 0; i < img.data.length; i += 4 * 7) img.data[i + 3] = 255
