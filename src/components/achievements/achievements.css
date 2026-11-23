@@ -37,8 +37,7 @@
 .ach-fix {
   color: var(--warning, #f5a623);
 }
-.ach-wide .btn.on,
-.ld-toolbar .btn.on {
+.ach-wide .btn.on {
   background: var(--bg-hover);
 }
 .ach-checks {

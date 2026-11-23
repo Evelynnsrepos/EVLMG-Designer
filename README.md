@@ -250,7 +250,7 @@ beginner guides.
 | **Wiki** | Articles with `[[links]]`, articles made from any item, character, town or enemy (with a live info box), backlinks and a connection map. |
 | **Factions** | Factions with leaders, members and towns, and a matrix of how they feel about each other. |
 | **Family Tree** | Characters from the Character List as a family tree with parents, children and partners. |
-| **Relationships** | Friendship, romance and loyalty ranks per character: points per rank, loved and hated gifts, what each rank unlocks, when they're free and how many days it takes. |
+| **Relationships** | Bonds between the player, characters and factions: ranks above and below zero with their own names, points per rank, decay and a cap, your own gift moods, what each rank unlocks and needs, pick-one groups, a network view, when they're free and how many days (or missions, turns…) it takes. |
 | **Map Creator** | Cities, streets, terrain stamps and zones (like the land of a faction) on a blank map, with PNG export. Cities are linked to the Town List; zones link to factions, characters, documents and more. |
 | **Cosmos Creator** | Universes, galaxies, solar systems, planets, moons and more in an isometric view, with your own pictures for any body. |
 | **Names & Languages** | Generate names in about 50 real-world styles (German, Polish, Japanese…) or from a made-up language's sounds, and build that language with a dictionary and translator. |

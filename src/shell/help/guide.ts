@@ -660,11 +660,14 @@ export const TOOL_GUIDE: Record<ComponentType, GuideTopic> = {
   relationships: {
     title: 'Relationships',
     body: [
-      'A bond is one character\'s friendship, romance, rivalry or loyalty with the player. New bond picks the next character from the Character List; change it at the top of the page.',
-      'Set how many ranks the bond has and how many points each rank needs: the same for every rank, a bit more each rank, growing by a percent, or typed by hand in the Ranks table.',
-      'Gifts marks items from the Item List as loved, liked, neutral, disliked or hated. Points & actions sets the points for each, plus actions like Talk or Hang out and how often a player does them per in-game day.',
-      'What each rank unlocks holds a line per rank; Link points it at a quest, dialogue, ability or anything else, and clicking it opens it. When they\'re free lists the days and times the character can be met.',
-      'The Plan shows the points a player earns per day and on which day each rank is reached. Make a flag adds a number flag like bond_mira that the Dialogue Editor and Quests can check, for example bond_mira >= 300.',
+      'A bond is how someone feels about someone else: friendship, romance, rivalry, loyalty, trust or reputation, or your own word. Towards (at the top) is a character from the Character List or a faction from Factions. Who feels it is the player unless you pick a character or faction, so two characters can have a bond with each other too.',
+      'Ranks & plan: set the ranks above zero and, for dislike, hate or a nemesis, the ranks below zero. Points per rank are the same for every rank, a bit more each rank, growing by a percent, or typed by hand in the table, where every rank can also get its own name. Points lost per day makes a bond fade when the player does nothing; Most points per day caps how fast it can grow.',
+      'Gifts & actions: mark items from the Item List with a mood, and give this bond its own points for an action (empty = the points under Points & actions).',
+      'Unlocks & needs: what each rank unlocks, and what a player needs before a rank (a quest, a story point, a flag). Link points a line at a quest, dialogue, ability or anything else. When they’re free lists the days and times the character can be met; the weekdays come from the Calendar tool when it has some.',
+      'Pick-one group: bonds with the same group name shut each other out, so only one of them can go past the rank you set (for example only one romance). The page warns which bonds share the group.',
+      'Points & actions (toolbar) holds what counts for every bond: actions and how often a player does them, your own gift moods with their points and colours, and the time unit the plan counts in: day, mission, turn, hour or your own word.',
+      'Network (toolbar) draws everyone in a bond as a circle and every bond as a line in the colour of its kind; click a line to open the bond. Dashed lines show how factions feel about each other in Factions.',
+      'Flag & notes: Make a flag adds a number flag like bond_mira that the Dialogue Editor and Quests can check, for example bond_mira >= 300. When the character changes, Rename puts the flag in step. The engine export writes names next to every id.',
     ],
   },
   'status-effects': {
