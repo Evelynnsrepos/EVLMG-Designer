@@ -1,7 +1,7 @@
 {
   "name": "evelopment-games-designer",
   "private": true,
-  "version": "0.35.0-4",
+  "version": "0.35.0-5",
   "type": "module",
   "scripts": {
     "dev": "vite",
