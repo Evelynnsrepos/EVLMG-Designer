@@ -5,6 +5,10 @@
 name: Flatpak
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release to build for, like 0.35.0-6 (empty = the version in package.json)'
+        required: false
   workflow_call:
   push:
     branches: [main]
@@ -32,7 +36,8 @@ jobs:
       - name: Point the recipe at this version's .deb
         id: version
         run: |
-          v=$(sed -n 's/.*"version": "\(.*\)".*/\1/p' package.json | head -1)
+          v="${{ inputs.version }}"
+          [ -n "$v" ] || v=$(sed -n 's/.*"version": "\(.*\)".*/\1/p' package.json | head -1)
           echo "version=$v" >> "$GITHUB_OUTPUT"
           url="https://github.com/${{ github.repository }}/releases/download/v$v/Evelopment.Games.Designer_${v}_amd64.deb"
           # A push to main can come before the release has its .deb; the release run builds it later.
@@ -46,6 +51,13 @@ jobs:
           m=packaging/flatpak/io.github.Evelynnsrepos.Evelopment-Games-Designer.yml
           sed -i "s#url: .*\.deb#url: $url#; s#sha256: .*#sha256: '$sha'#" "$m"
           grep -n "url:\|sha256:" "$m"
+      # The image's runtimes sit in a read-only image layer: when Flathub has a newer SDK, updating it there fails
+      # with "Invalid cross-device link". A copy on the runner's disk can be updated.
+      - name: Runtimes on a disk Flatpak can update
+        if: steps.version.outputs.ready == 'true'
+        run: |
+          cp -a /var/lib/flatpak "$RUNNER_TEMP/flatpak"
+          echo "FLATPAK_SYSTEM_DIR=$RUNNER_TEMP/flatpak" >> "$GITHUB_ENV"
       - name: Build
         if: steps.version.outputs.ready == 'true'
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
