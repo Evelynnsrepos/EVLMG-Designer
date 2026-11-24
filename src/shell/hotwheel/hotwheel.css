@@ -23,10 +23,13 @@
     transform: translate(-50%, -50%) scale(calc(var(--s) * 0.75)) rotate(10deg);
   }
 }
-/* Linux: no compositor scale/turn animations, they squash the Draw GPU canvas there (Hotwheel.tsx webkitGtk). */
+/* Linux: no animations or filters over the Draw GPU canvas, they squash or blank it there (Hotwheel.tsx webkitGtk). */
 .hotwheel.still,
 .hotwheel.still .hw-drop {
   animation: none !important;
+}
+.hotwheel.still > svg {
+  filter: none !important;
 }
 @media (prefers-reduced-motion: reduce) {
   .hotwheel,

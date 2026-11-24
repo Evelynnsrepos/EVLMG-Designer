@@ -15,7 +15,8 @@ import { leaves } from '../workspace/layoutTree'
 import { BOARD_TOOLS, setScale } from '../workspace/ToolHelp'
 import './hotwheel.css'
 
-/** WebKitGTK's fast screen handover (DMA-BUF) squashes the Draw GPU canvas while the wheel's scale/turn animations run. */
+/** WebKitGTK's fast screen handover (DMA-BUF) squashes or blanks the Draw GPU canvas while the wheel's animations,
+ *  SVG goo filter or drop shadow repaint over it (opening it, dragging its size and opacity sliders). */
 const webkitGtk = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent)
 
 // ---- Where the actions come from ---------------------------------------------------
@@ -532,7 +533,7 @@ function Wheel({ open }: { open: Open }) {
             </defs>
             {/* One goo layer for the middle and every ring, so the drops flow out of (and back into) the middle. */}
             <g transform={`scale(${g})`}>
-              <g className="hotwheel-goo" filter="url(#hotwheel-goo)">
+              <g className="hotwheel-goo" filter={webkitGtk ? undefined : 'url(#hotwheel-goo)'}>
                 <circle r={HOLE + 4} className="hotwheel-core" />
                 {inner.drops}
                 {outer?.drops}
