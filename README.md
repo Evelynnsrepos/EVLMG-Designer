@@ -6,11 +6,6 @@
 
 <p align="center"><i>EVLMG Designer for short</i></p>
 
-> **Unstable branch.** This branch has changes that are not released yet and are not fully tested.
-> The latest release is v0.34.0 on the [Releases page](https://github.com/Evelynnsrepos/EVLMG-Designer/releases).
-> Tools and features described below may not be in it yet.
-
-
 <p align="center">
   <img src="https://img.shields.io/badge/%F0%9F%9A%A7%20status-UNDER%20CONSTRUCTION-FFC800?style=for-the-badge&labelColor=1a1a1a" alt="Under construction">
 </p>
